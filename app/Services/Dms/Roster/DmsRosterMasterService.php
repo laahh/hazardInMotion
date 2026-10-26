@@ -44,13 +44,12 @@ final class DmsRosterMasterService
 {
     /**
      * kode => [keterangan, warna isi (RGB), jam check-in bawaan, jam check-out bawaan].
-     * Jam null = bukan hari kerja. DS/NS mengikuti Shift 1/2 di docs/overshift.md;
-     * OF (jam kantor, dibedakan dari OFF) 08:00–17:00 adalah asumsi — ubah di sini.
+     * Jam null = bukan hari kerja. DS/NS mengikuti Shift 1/2 di docs/overshift.md.
+     * Kode OF (Office) dihapus atas permintaan user 2026-10-26.
      */
     public const KODE = [
         'DS' => ['Day Shift', 'FFE699', '07:00', '19:00'],
         'NS' => ['Night Shift', '9DC3E6', '19:00', '07:00'],
-        'OF' => ['Office (jam kantor)', 'C6E0B4', '08:00', '17:00'],
         'OFF' => ['Off / libur', 'D9D9D9', null, null],
         'CT' => ['Cuti', 'F4B183', null, null],
         'S' => ['Sakit', 'FF9999', null, null],
@@ -419,8 +418,11 @@ final class DmsRosterMasterService
 
     /**
      * Template "ROSTER KERJA KARYAWAN" satu bulan, tata letak sama dengan
-     * format yang diminta user: kepala periode, legenda kode, judul tiga baris,
-     * hari Minggu merah, dropdown kode, dan warna sel otomatis per kode.
+     * format yang diminta user: judul, legenda kode & jam, judul kolom tiga
+     * baris (tanggal asli / hari / bulan), hari Minggu merah, dropdown kode,
+     * dan warna sel otomatis per kode. Tanpa sel "Tanggal Awal Periode" dan
+     * "Departemen / Site" (dihapus atas permintaan user) — pembaca tetap
+     * menerima file lama yang masih memuatnya.
      */
     public function template(CarbonImmutable $bulan): Spreadsheet
     {
@@ -436,25 +438,14 @@ final class DmsRosterMasterService
         $navy = '1F3864';
         $merah = 'C00000';
 
-        // Kepala.
+        // Kepala: judul + keterangan periode (informasi saja, tidak dibaca saat upload).
         $sh->setCellValue('A1', 'ROSTER KERJA KARYAWAN');
         $sh->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB($navy);
-        $sh->setCellValue('A2', 'Tanggal Awal Periode:');
-        $sh->setCellValue('D2', ExcelDate::PHPToExcel($awal->toDateTime()));
-        $sh->getStyle('D2')->getNumberFormat()->setFormatCode('dd/mm/yyyy');
-        $sh->setCellValue('E2', 'Periode: '.$awal->format('d/m/Y').' s/d '.$akhir->format('d/m/Y'));
-        $sh->setCellValue('A3', 'Departemen / Site:');
+        $sh->setCellValue('A2', 'Periode: '.$awal->format('d/m/Y').' s/d '.$akhir->format('d/m/Y')
+            .' · ubah tanggal pertama (sel '.$this->kolom($kolomAwalHari - 1).'4) untuk bulan lain');
         $sh->mergeCells('A1:I1');
-        $sh->mergeCells('E2:I2');
-        $sh->mergeCells('A2:C2');
-        $sh->mergeCells('A3:C3');
-        $sh->mergeCells('D3:I3');
-        $sh->getStyle('A2:A3')->getFont()->setBold(true);
-        $sh->getStyle('D2')->getFont()->setBold(true);
-        $sh->getStyle('D2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sh->getStyle('E2')->getFont()->setItalic(true)->getColor()->setRGB('595959');
-        $sh->getStyle('D2:D3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF2CC');
-        $sh->getStyle('D3')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF2CC');
+        $sh->mergeCells('A2:I2');
+        $sh->getStyle('A2')->getFont()->setItalic(true)->getColor()->setRGB('595959');
 
         // Legenda kode di baris 2, mulai kolom hari pertama.
         $c = $kolomAwalHari;
@@ -493,29 +484,42 @@ final class DmsRosterMasterService
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
 
-        // Judul kolom hari: tanggal / nama hari / bulan; Minggu merah.
+        // Judul kolom hari. Tanpa "Tanggal Awal Periode", baris 4 berisi tanggal
+        // Excel asli (tampil "dd"): sel pertama tanggal, sisanya =sebelumnya+1.
+        // Nama hari & bulan dirumus dari tanggal itu (CHOOSE, bukan format "ddd"
+        // supaya selalu bahasa Indonesia), dan Minggu merah lewat conditional
+        // formatting — mengganti tanggal pertama memperbarui semuanya.
+        $hariRumus = '"'.implode('","', self::HARI).'"';
+        $bulanRumus = '"'.implode('","', self::BULAN).'"';
+        $kolPertama = $this->kolom($kolomAwalHari - 1);
         for ($i = 0; $i < $jumlahHari; $i++) {
-            $t = $awal->addDays($i);
             $kol = $this->kolom($kolomAwalHari + $i - 1);
-            $sh->setCellValueExplicit($kol.'4', $t->format('d'), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sh->setCellValue($kol.'5', self::HARI[$t->dayOfWeek]);
-            $sh->setCellValue($kol.'6', self::BULAN[$t->month]);
-            $minggu = $t->dayOfWeek === 0;
-            $sh->getStyle($kol.'4')->applyFromArray([
-                'font' => ['bold' => true, 'color' => ['rgb' => $minggu ? 'FFFFFF' : $merah]],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $minggu ? $merah : 'FFFFFF']],
-            ]);
-            $sh->getStyle($kol.'5:'.$kol.'6')->getFont()->setBold(true)->getColor()->setRGB($minggu ? 'FFFFFF' : $navy);
-            $sh->getStyle($kol.'5:'.$kol.'6')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($minggu ? $merah : 'D9E1F2');
+            $sh->setCellValue($kol.'4', $i === 0
+                ? ExcelDate::PHPToExcel($awal->toDateTime())
+                : '='.$this->kolom($kolomAwalHari + $i - 2).'4+1');
+            $sh->setCellValue($kol.'5', '=CHOOSE(WEEKDAY('.$kol.'4),'.$hariRumus.')');
+            $sh->setCellValue($kol.'6', '=CHOOSE(MONTH('.$kol.'4),'.$bulanRumus.')');
             $sh->getColumnDimension($kol)->setWidth(5.2);
         }
-        $sh->getStyle($this->kolom($kolomAwalHari - 1).'4:'.$kolomAkhir.'6')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $judulHari = $kolPertama.'4:'.$kolomAkhir.'6';
+        $sh->getStyle($kolPertama.'4:'.$kolomAkhir.'4')->getNumberFormat()->setFormatCode('dd');
+        $sh->getStyle($kolPertama.'4:'.$kolomAkhir.'4')->getFont()->setBold(true)->getColor()->setRGB($merah);
+        $sh->getStyle($kolPertama.'5:'.$kolomAkhir.'6')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => $navy]],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D9E1F2']],
+        ]);
+        $minggu = new Conditional();
+        $minggu->setConditionType(Conditional::CONDITION_EXPRESSION)->addCondition('WEEKDAY('.$kolPertama.'$4)=1');
+        $minggu->getStyle()->getFont()->getColor()->setRGB('FFFFFF');
+        $minggu->getStyle()->getFill()->setFillType(Fill::FILL_SOLID)->getEndColor()->setRGB($merah);
+        $sh->getStyle($judulHari)->setConditionalStyles([$minggu]);
+        $sh->getStyle($judulHari)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Baris contoh.
         $contoh = [
             ['10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', ['DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'OFF', 'NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'OFF']],
             ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'NS', 'OFF', 'DS', 'DS', 'DS', 'DS', 'DS', 'DS', 'OFF'], '06:00', '18:00'],
-            ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['OF', 'OF', 'OF', 'OF', 'OF', 'OFF', 'OFF'], '07:30', '16:30'],
+            ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['DS', 'DS', 'DS', 'DS', 'DS', 'OFF', 'OFF'], '07:30', '16:30'],
         ];
         $barisAkhir = 6 + max(50, count($contoh));
         foreach ($contoh as $i => $c0) {
@@ -577,11 +581,11 @@ final class DmsRosterMasterService
         $ket = $buku->createSheet()->setTitle('Petunjuk');
         $isi = [
             ['Petunjuk pengisian Roster Kerja Karyawan'],
-            ['1. Isi "Tanggal Awal Periode" (DD/MM/YYYY). Kolom tanggal harus berurutan mulai tanggal itu, maks '.self::MAKS_HARI.' hari.'],
+            ['1. Baris tanggal (01, 02, …) berisi tanggal asli. Untuk bulan lain cukup ganti tanggal pertama; tanggal, hari & bulan lainnya ikut. Maks '.self::MAKS_HARI.' hari, harus berurutan.'],
             ['2. Satu baris = satu karyawan, mulai baris 7. Kolom SID wajib; No boleh kosong.'],
             ['3. Isi tiap hari dengan salah satu kode di bawah; sel kosong = tidak dijadwalkan.'],
             ['4. Jangan ubah judul kolom (No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Check-in, Jam Check-out, Total Jam Kerja). Hapus baris contoh sebelum upload.'],
-            ['5. Jam Check-in / Check-out (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode di tabel bawah. Bila diisi, berlaku untuk semua hari kerja (DS/NS/OF) orang itu.'],
+            ['5. Jam Check-in / Check-out (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode di tabel bawah. Bila diisi, berlaku untuk semua hari kerja (DS/NS) orang itu.'],
             ['   Total Jam Kerja terhitung otomatis dari jam check-in & check-out (lintas tengah malam diperhitungkan); bila diisi manual harus sama.'],
             ['6. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.'],
             [''],

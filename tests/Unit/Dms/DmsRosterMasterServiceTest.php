@@ -54,7 +54,7 @@ class DmsRosterMasterServiceTest extends TestCase
     {
         $hasil = $this->svc->bacaSheet($this->sheet([
             [1, '10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', null, null, null, 'ds', 'NS', 'OFF', ''],
-            [2, 'C5BXK', 'Ifa', 'PT BCE', 'Safety Evaluator', 'HO', null, null, null, 'OF', 'CT', 's', 'I'],
+            [2, 'C5BXK', 'Ifa', 'PT BCE', 'Safety Evaluator', 'HO', null, null, null, 'OFF', 'CT', 's', 'I'],
         ]));
 
         $this->assertSame([], $hasil['galat']);
@@ -66,7 +66,14 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame(['kode' => 'NS', 'masuk' => '19:00', 'keluar' => '07:00', 'menit' => 720], $a['jadwal']['2026-11-02']);
         $this->assertSame(['kode' => 'OFF', 'masuk' => null, 'keluar' => null, 'menit' => null], $a['jadwal']['2026-11-03']);
         $this->assertArrayNotHasKey('2026-11-04', $a['jadwal']);
-        $this->assertSame(['OF', 'CT', 'S', 'I'], array_column($hasil['karyawan'][1]['jadwal'], 'kode'));
+        $this->assertSame(['OFF', 'CT', 'S', 'I'], array_column($hasil['karyawan'][1]['jadwal'], 'kode'));
+    }
+
+    public function test_kode_of_tidak_lagi_diterima(): void
+    {
+        $hasil = $this->svc->bacaSheet($this->sheet([[1, 'A1', '', '', '', '', null, null, null, 'OF', 'DS', 'DS', 'DS']]));
+
+        $this->assertStringContainsString('kode "OF" tidak dikenal', $hasil['galat'][0]);
     }
 
     public function test_jam_per_karyawan_menimpa_jam_kode_dan_total_dicek(): void

@@ -65,10 +65,10 @@
         </form>
 
         <div class="alert alert-info bg-info-100 text-info-600 border-info-100 px-16 py-12 mt-24 mb-0 radius-8 text-sm">
-          <strong>Format "ROSTER KERJA KARYAWAN":</strong> isi <b>Tanggal Awal Periode</b> dan <b>Departemen / Site</b> di atas;
-          judul kolom No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Check-in, Jam Check-out, Total Jam Kerja,
+          <strong>Format "ROSTER KERJA KARYAWAN":</strong> baris tanggal di judul kolom berisi tanggal asli
+          (untuk bulan lain cukup ganti tanggal pertama di template); judul kolom No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Check-in, Jam Check-out, Total Jam Kerja,
           lalu satu kolom per tanggal berurutan. Kolom jam boleh kosong = ikut jam bawaan kode
-          (@foreach (\App\Services\Dms\Roster\DmsRosterMasterService::KODE as $kodeJam => [, , $mJam, $kJam])@if ($mJam){{ $kodeJam }} {{ $mJam }}–{{ $kJam }}{{ $kodeJam === 'OF' ? '' : ', ' }}@endif @endforeach).
+          ({{ collect(\App\Services\Dms\Roster\DmsRosterMasterService::KODE)->filter(fn ($k) => $k[2] !== null)->map(fn ($k, $kode) => $kode.' '.$k[2].'–'.$k[3])->implode(', ') }}).
           Kode: @foreach (\App\Services\Dms\Roster\DmsRosterMasterService::KODE as $kodeInfo => [$ketInfo])<b>{{ $kodeInfo }}</b> ({{ $ketInfo }}){{ $loop->last ? '' : ', ' }}@endforeach;
           sel kosong = tidak dijadwalkan. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.
         </div>
