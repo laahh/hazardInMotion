@@ -30,7 +30,7 @@
     <footer class="d-footer">
         <div class="row align-items-center justify-content-between">
             <div class="col-auto">
-                <p class="mb-0">&copy; {{ date('Y') }} BeSentry &middot; Driver Monitoring System.</p>
+                <p class="mb-0">&copy; {{ date('Y') }} BeSentry &middot; Sistem Manajemen Roster.</p>
             </div>
             <div class="col-auto">
                 <p class="mb-0">Berau Coal</p>

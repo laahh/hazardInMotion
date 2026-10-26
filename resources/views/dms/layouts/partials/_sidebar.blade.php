@@ -185,7 +185,7 @@
   </div>
   <div class="sidebar-menu-area">
     <ul class="sidebar-menu" id="sidebar-menu">
-      <li class="sidebar-menu-group-title">Driver Monitoring System</li>
+      <li class="sidebar-menu-group-title">Sistem Manajemen Roster</li>
 
       @foreach ($groups as $group)
       <li class="dms-node" data-dms-key="{{ $group['key'] }}">

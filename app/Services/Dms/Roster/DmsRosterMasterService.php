@@ -726,18 +726,20 @@ final class DmsRosterMasterService
             ['2. Satu baris = satu karyawan, mulai baris 7. Kolom SID wajib; No boleh kosong.'],
             ['3. Isi tiap hari dengan salah satu kode di bawah (pilih dari dropdown): D1–D13 = hari ke-1 s/d 13 blok Day, N1–N7 = hari ke-1 s/d 7 blok Night; sel kosong = tidak dijadwalkan.'],
             ['4. Jangan ubah judul kolom (No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Kerja Awal, Jam Kerja Akhir). Hapus baris contoh sebelum upload.'],
-            ['5. Jam Kerja Awal / Akhir (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode di tabel bawah. Bila diisi, berlaku untuk semua hari kerja (D1–D13 / N1–N7) orang itu;'],
+            ['5. Jam Kerja Awal / Akhir (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode ('
+                .collect(self::legenda())->filter(fn (array $l): bool => $l[3] !== null)->map(fn (array $l): string => $l[0].' '.$l[3].'–'.$l[4])->implode(', ')
+                .'). Bila diisi, berlaku untuk semua hari kerja (D1–D13 / N1–N7) orang itu;'],
             ['   jam akhir lebih kecil dari jam awal berarti lewat tengah malam (mis. 18:00–06:00 = 12 jam).'],
             ['6. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.'],
             [''],
-            ['Kode', 'Keterangan', 'Jam Kerja Awal', 'Jam Kerja Akhir', 'Total Jam Kerja'],
+            ['Kode', 'Keterangan'],
         ];
-        foreach (self::KODE as $kode => [$ket2, , $masuk, $keluar]) {
-            $isi[] = [$kode, $ket2, $masuk ?? '-', $keluar ?? '-', $masuk ? round($this->selisihMenit($masuk, $keluar) / 60, 2) : 0];
+        foreach (self::KODE as $kode => [$ket2]) {
+            $isi[] = [$kode, $ket2];
         }
         $ket->fromArray($isi);
         $ket->getStyle('A1')->getFont()->setBold(true)->setSize(12);
-        $ket->getStyle('A9:E9')->getFont()->setBold(true);
+        $ket->getStyle('A9:B9')->getFont()->setBold(true);
         $r = 10;
         foreach (self::KODE as [, $warna]) {
             $ket->getStyle('A'.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($warna);
@@ -745,9 +747,6 @@ final class DmsRosterMasterService
         }
         $ket->getColumnDimension('A')->setWidth(10);
         $ket->getColumnDimension('B')->setWidth(24);
-        foreach (['C', 'D', 'E'] as $kol) {
-            $ket->getColumnDimension($kol)->setWidth(15);
-        }
         $buku->setActiveSheetIndex(0);
 
         return $buku;
