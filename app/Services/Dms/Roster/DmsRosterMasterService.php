@@ -519,6 +519,134 @@ final class DmsRosterMasterService
      * @param  array<string, array{kode:string,masuk:?string,keluar:?string,menit:?int}>  $jadwal
      * @return array{0:?string,1:?string}
      */
+    /** Label perusahaan untuk baris jadwal yang kolom perusahaannya kosong. */
+    public const TANPA_PERUSAHAAN = '(tanpa perusahaan)';
+
+    /**
+     * Overview Roster: perusahaan yang sudah meng-upload roster (yang ditolak
+     * tidak dihitung) beserta ringkasannya.
+     *
+     * @return list<array{perusahaan:string,karyawan:int,upload:int,disetujui:int,menunggu:int,dari:string,sampai:string,terakhir:?string,site:list<string>}>
+     */
+    public function perusahaanTerupload(): array
+    {
+        $pt = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
+
+        return DB::table('dms_roster_master_jadwal as j')
+            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
+            ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
+            ->selectRaw("{$pt} AS perusahaan,
+                COUNT(DISTINCT j.kode_sid) AS karyawan,
+                COUNT(DISTINCT j.upload_id) AS upload,
+                COUNT(DISTINCT CASE WHEN u.status = 'APPROVED' THEN j.upload_id END) AS disetujui,
+                COUNT(DISTINCT CASE WHEN u.status = 'PENDING' THEN j.upload_id END) AS menunggu,
+                MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai, MAX(u.created_at) AS terakhir,
+                GROUP_CONCAT(DISTINCT NULLIF(TRIM(j.site), '') ORDER BY j.site SEPARATOR '|') AS site")
+            ->groupByRaw($pt)
+            ->orderByRaw($pt)
+            ->get()
+            ->map(static fn (object $r): array => [
+                'perusahaan' => (string) $r->perusahaan,
+                'karyawan' => (int) $r->karyawan,
+                'upload' => (int) $r->upload,
+                'disetujui' => (int) $r->disetujui,
+                'menunggu' => (int) $r->menunggu,
+                'dari' => (string) $r->dari,
+                'sampai' => (string) $r->sampai,
+                'terakhir' => $r->terakhir === null ? null : (string) $r->terakhir,
+                'site' => $r->site === null || $r->site === '' ? [] : explode('|', (string) $r->site),
+            ])
+            ->all();
+    }
+
+    /**
+     * Jadwal BERLAKU satu perusahaan pada rentang tanggal, gabungan semua
+     * roster: hanya yang disetujui (opsional + yang menunggu approval). Untuk
+     * (SID, tanggal) yang ada di beberapa roster, roster disetujui yang paling
+     * akhir menang (sama dengan aturan tumpuk di halaman approval); jadwal
+     * dari roster yang masih menunggu ditandai 'menunggu' => true dan hanya
+     * mengisi tanggal yang belum punya jadwal disetujui.
+     *
+     * @return array{karyawan: list<array<string, mixed>>, total: int}
+     */
+    public function jadwalBerlaku(
+        string $perusahaan,
+        CarbonImmutable $dari,
+        CarbonImmutable $sampai,
+        string $site = '',
+        string $cari = '',
+        bool $termasukMenunggu = false,
+        int $halaman = 1,
+        int $perHalaman = 25,
+    ): array {
+        $status = $termasukMenunggu
+            ? [DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_PENDING]
+            : [DmsRosterMasterUpload::STATUS_APPROVED];
+
+        $dasar = DB::table('dms_roster_master_jadwal as j')
+            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
+            ->whereIn('u.status', $status)
+            ->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()]);
+        if ($perusahaan === self::TANPA_PERUSAHAAN) {
+            $dasar->where(static fn ($q) => $q->whereNull('j.perusahaan')->orWhereRaw("TRIM(j.perusahaan) = ''"));
+        } else {
+            $dasar->whereRaw('TRIM(j.perusahaan) = ?', [trim($perusahaan)]);
+        }
+        if ($site !== '') {
+            $dasar->whereRaw('TRIM(j.site) = ?', [trim($site)]);
+        }
+        if ($cari !== '') {
+            $mirip = '%'.addcslashes($cari, '%_\\').'%';
+            $dasar->where(static fn ($q) => $q->where('j.kode_sid', 'like', $mirip)->orWhere('j.nama', 'like', $mirip));
+        }
+
+        $total = (clone $dasar)->distinct()->count('j.kode_sid');
+        $sids = (clone $dasar)->groupBy('j.kode_sid')->selectRaw('j.kode_sid, MAX(j.nama) AS nm')
+            ->orderBy('nm')->orderBy('j.kode_sid')
+            ->offset(max(0, $halaman - 1) * $perHalaman)->limit($perHalaman)
+            ->pluck('j.kode_sid')->all();
+        if ($sids === []) {
+            return ['karyawan' => [], 'total' => $total];
+        }
+
+        // Urutan naik prioritas: menunggu dulu, lalu disetujui; di dalamnya yang
+        // lebih akhir belakangan — baris belakangan menimpa yang sebelumnya.
+        $rows = (clone $dasar)->whereIn('j.kode_sid', $sids)
+            ->select('j.*', 'u.status as status_upload')
+            ->orderByRaw("CASE WHEN u.status = 'APPROVED' THEN 1 ELSE 0 END")
+            ->orderByRaw('COALESCE(u.direview_pada, u.created_at)')
+            ->orderBy('u.id')
+            ->get();
+
+        $karyawan = array_fill_keys($sids, null);
+        foreach ($rows as $r) {
+            $sid = (string) $r->kode_sid;
+            $karyawan[$sid] ??= ['sid' => $sid, 'jadwal' => []];
+            // Identitas dari baris paling akhir (prioritas tertinggi).
+            $karyawan[$sid] = array_merge($karyawan[$sid], [
+                'nama' => $r->nama, 'perusahaan' => $r->perusahaan, 'jabatan' => $r->jabatan, 'site' => $r->site,
+            ]);
+            $karyawan[$sid]['jadwal'][CarbonImmutable::parse((string) $r->tanggal)->toDateString()] = [
+                'kode' => (string) $r->kode,
+                'masuk' => $r->jam_masuk === null ? null : substr((string) $r->jam_masuk, 0, 5),
+                'keluar' => $r->jam_keluar === null ? null : substr((string) $r->jam_keluar, 0, 5),
+                'menit' => $r->menit_kerja === null ? null : (int) $r->menit_kerja,
+                'menunggu' => $r->status_upload !== DmsRosterMasterUpload::STATUS_APPROVED,
+            ];
+        }
+
+        $hasil = [];
+        foreach ($karyawan as $k) {
+            if ($k === null) {
+                continue;
+            }
+            [$k['jam_awal'], $k['jam_akhir']] = self::jamKaryawanDariJadwal($k['jadwal']);
+            $hasil[] = $k;
+        }
+
+        return ['karyawan' => $hasil, 'total' => $total];
+    }
+
     /** Jam bawaan kode lama (upload sebelum D1–D13 / N1–N7) — hanya untuk membaca data lama. */
     private const JAM_KODE_LAMA = ['DS' => ['07:00', '19:00'], 'NS' => ['19:00', '07:00']];
 

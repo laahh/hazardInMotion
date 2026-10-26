@@ -53,6 +53,12 @@
                     'url' => route('dms.master-roster.approval'),
                     'active' => request()->routeIs('dms.master-roster.approval') || request()->routeIs('dms.master-roster.show'),
                 ],
+                [
+                    'label' => 'Overview Roster',
+                    'icon' => 'solar:widget-5-outline',
+                    'url' => route('dms.master-roster.overview'),
+                    'active' => request()->routeIs('dms.master-roster.overview'),
+                ],
             ],
         ],
         [
