@@ -817,6 +817,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             Route::get('/template', 'template')->name('template');
             Route::get('/approval', 'approval')->name('approval');
             Route::get('/overview', 'overview')->name('overview');
+            Route::get('/overview/jadwal', 'overviewJadwal')->name('overview.jadwal');
             Route::get('/{id}', 'show')->whereNumber('id')->name('show');
             Route::get('/{id}/file', 'file')->whereNumber('id')->name('file');
             Route::get('/{id}/ttd', 'ttd')->whereNumber('id')->name('ttd');

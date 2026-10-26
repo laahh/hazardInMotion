@@ -53,46 +53,54 @@ final class RosterMasterController extends Controller
      * Halaman Approval Roster: daftar upload, bawaan yang menunggu approval.
      */
     /**
-     * Overview Roster: semua perusahaan yang sudah meng-upload roster, dan
-     * jadwal berlaku perusahaan terpilih per bulan dalam tabel bergaya Excel.
+     * Overview Roster: daftar semua perusahaan yang sudah meng-upload roster.
+     * Jadwal tiap perusahaan dibuka per baris (collapse, seperti tabel
+     * Scorecard Ringkasan Roster) dan dimuat dari overviewJadwal() saat dibuka.
+     * ?pt= membuka perusahaan itu sejak awal.
      */
     public function overview(Request $request): View
     {
-        $perusahaan = $this->service->perusahaanTerupload();
-        $pilih = (string) $request->query('pt', '');
-        $terpilih = collect($perusahaan)->firstWhere('perusahaan', $pilih) ?? ($perusahaan[0] ?? null);
+        return view('dms.roster-master.overview', [
+            'perusahaan' => $this->service->perusahaanTerupload(),
+            'buka' => (string) $request->query('pt', ''),
+        ]);
+    }
 
-        $grid = ['karyawan' => [], 'total' => 0];
-        $tanggal = [];
-        $bulan = null;
+    /**
+     * Isi panel jadwal satu perusahaan (fragmen HTML) — tabel bergaya Excel
+     * per bulan dengan filter site, cari, dan "termasuk menunggu approval".
+     */
+    public function overviewJadwal(Request $request): View
+    {
+        $terpilih = collect($this->service->perusahaanTerupload())->firstWhere('perusahaan', (string) $request->query('pt', ''));
+        abort_if($terpilih === null, 404);
+
         $halaman = max(1, (int) $request->query('hal', 1));
         $site = mb_substr(trim((string) $request->query('site', '')), 0, 60);
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
         $menunggu = $request->boolean('menunggu');
-
-        if ($terpilih !== null) {
-            // Bulan bawaan: bulan ini bila masuk rentang roster perusahaan, kalau tidak bulan terakhirnya.
-            $dariData = CarbonImmutable::parse($terpilih['dari'])->startOfMonth();
-            $sampaiData = CarbonImmutable::parse($terpilih['sampai'])->startOfMonth();
-            $minta = (string) $request->query('bulan', '');
-            $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : null;
-            if ($bulan === null) {
-                $kini = CarbonImmutable::now()->startOfMonth();
-                $bulan = $kini->betweenIncluded($dariData, $sampaiData) ? $kini : $sampaiData;
-            }
-            if (! in_array($site, $terpilih['site'], true)) {
-                $site = '';
-            }
-
-            for ($t = $bulan->startOfMonth(); $t->lte($bulan->endOfMonth()); $t = $t->addDay()) {
-                $tanggal[] = $t;
-            }
-            $grid = $this->service->jadwalBerlaku($terpilih['perusahaan'], $bulan->startOfMonth(), $bulan->endOfMonth(),
-                $site, $cari, $menunggu, $halaman, self::PER_HALAMAN_GRID);
+        if (! in_array($site, $terpilih['site'], true)) {
+            $site = '';
         }
 
-        return view('dms.roster-master.overview', [
-            'perusahaan' => $perusahaan,
+        // Bulan bawaan: bulan ini bila masuk rentang roster perusahaan, kalau tidak bulan terakhirnya.
+        $dariData = CarbonImmutable::parse($terpilih['dari'])->startOfMonth();
+        $sampaiData = CarbonImmutable::parse($terpilih['sampai'])->startOfMonth();
+        $minta = (string) $request->query('bulan', '');
+        $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : null;
+        if ($bulan === null) {
+            $kini = CarbonImmutable::now()->startOfMonth();
+            $bulan = $kini->betweenIncluded($dariData, $sampaiData) ? $kini : $sampaiData;
+        }
+
+        $tanggal = [];
+        for ($t = $bulan->startOfMonth(); $t->lte($bulan->endOfMonth()); $t = $t->addDay()) {
+            $tanggal[] = $t;
+        }
+        $grid = $this->service->jadwalBerlaku($terpilih['perusahaan'], $bulan->startOfMonth(), $bulan->endOfMonth(),
+            $site, $cari, $menunggu, $halaman, self::PER_HALAMAN_GRID);
+
+        return view('dms.roster-master._overview-jadwal', [
             'terpilih' => $terpilih,
             'bulan' => $bulan,
             'site' => $site,
