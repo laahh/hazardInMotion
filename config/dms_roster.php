@@ -243,6 +243,15 @@ return [
         // ter-unban)". FAILED/PROCESSING sengaja tidak termasuk.
         'status_unban_selesai' => ['SUCCESS', 'SKIPPED'],
 
+        // Peringatan dini: periode kerja hari ke-onsite_dari s/d onsite_maks
+        // (60–70) yang belum melanggar. Tiap putaran dms:sync-roster-rfid
+        // menyimpannya ke dms_roster_peringatan (satu baris per SID per hari)
+        // sebagai sumber notifikasi.
+        'peringatan' => [
+            'onsite_dari' => 60,
+            'simpan' => (bool) env('DMS_PERINGATAN_SIMPAN', true),
+        ],
+
         // Penyisipan otomatis "Pelanggaran periode kerja > 70 hari" ke
         // sid_roster_banned_master (menu Master Roster Banned), dijalankan
         // command dms:sync-roster-rfid tiap 30 menit.

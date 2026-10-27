@@ -6,6 +6,7 @@ namespace App\Console\Commands\Dms;
 
 use App\Services\Dms\Roster\DmsLongShiftService;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
+use App\Services\Dms\Roster\DmsRosterPeringatanStore;
 use App\Services\Dms\Roster\DmsRosterAutoBannedService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterSyncService;
@@ -124,9 +125,42 @@ final class SyncRosterRfidCommand extends Command
         }
 
         $this->line('  '.$this->angka((int) $hasil['populasi']).' karyawan dinilai; '
-            .$this->angka(count($hasil['daftar']['onsite'])).' periode kerja > 70 hari.');
+            .$this->angka(count($hasil['daftar']['onsite'])).' periode kerja > 70 hari; '
+            .$this->angka(count($hasil['mendekati'] ?? [])).' periode kerja 60–70 hari.');
 
+        $this->simpanPeringatan($hasil);
         $this->masukkanKeMasterBanned($live, $hasil);
+    }
+
+    /**
+     * Tahap 5b — periode kerja 60–70 hari (belum melanggar) disimpan ke
+     * dms_roster_peringatan sebagai sumber notifikasi. Gagal di tahap ini
+     * tidak menggagalkan sinkronisasi.
+     *
+     * @param  array<string, mixed>  $hasil  Hasil DmsRosterRegLiveService::segarkan().
+     */
+    private function simpanPeringatan(array $hasil): void
+    {
+        if (! config('dms_roster.reg_live.peringatan.simpan', true)) {
+            return;
+        }
+
+        $store = app(DmsRosterPeringatanStore::class);
+        try {
+            if (! $store->siap()) {
+                $this->warn('Tahap 5b — tabel '.DmsRosterPeringatanStore::TABEL.' belum ada (jalankan migrasinya).');
+
+                return;
+            }
+            $r = $store->simpan($hasil);
+        } catch (Throwable $e) {
+            $this->warn('Tahap 5b — gagal simpan peringatan: '.$e->getMessage());
+
+            return;
+        }
+
+        $this->line(sprintf('Tahap 5b — %s peringatan 60–70 hari disimpan, %s dihapus (keluar rentang).',
+            $this->angka($r['disimpan']), $this->angka($r['dihapus'])));
     }
 
     /**

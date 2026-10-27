@@ -64,6 +64,27 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertNull($hasil['onsite']);
     }
 
+    public function test_mendekati_hari_ke_60_sampai_70_dengan_off_pendek_ikut_dihitung(): void
+    {
+        // Cuti 0..19 lalu on-site 20..84 = 65 hari, off pendek tiap kelipatan 7.
+        $onsite = array_filter(range(20, 84), static fn (int $i): bool => $i % 7 !== 0 || $i === 84);
+
+        $this->assertSame(['hari' => 65, 'mulai' => 20, 'selesai' => 84], $this->svc->mendekati($this->pagi($onsite), 85, 'Operator A2B'));
+    }
+
+    public function test_mendekati_batas_bawah_60_dan_batas_atas_70(): void
+    {
+        $this->assertSame(60, $this->svc->mendekati($this->pagi(range(20, 79)), 80, 'Operator A2B')['hari']);
+        $this->assertNull($this->svc->mendekati($this->pagi(range(20, 78)), 79, 'Operator A2B'));   // 59 hari
+        $this->assertSame(70, $this->svc->mendekati($this->pagi(range(20, 89)), 90, 'Operator A2B')['hari']);
+        $this->assertNull($this->svc->mendekati($this->pagi(range(20, 90)), 91, 'Operator A2B'));   // 71 = sudah melanggar
+    }
+
+    public function test_mendekati_tidak_berlaku_untuk_kategori_longgar(): void
+    {
+        $this->assertNull($this->svc->mendekati($this->pagi(range(20, 84)), 85, 'Mekanik'));
+    }
+
     public function test_onsite_yang_menyentuh_awal_jendela_ditandai_terpotong(): void
     {
         $hasil = $this->nilai($this->pagi(array_filter(range(0, 99), static fn (int $i): bool => $i % 5 !== 0)));

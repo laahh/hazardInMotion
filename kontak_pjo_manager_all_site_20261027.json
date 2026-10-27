@@ -1,0 +1,2771 @@
+{
+  "sumber": "Sumber: OBDS bcsid.bep_vw_safety_karyawan_aktif + m_karyawan.telp, diambil 27 Okt 2026. Kategori dari kata kunci jabatan (PJO/Penanggung Jawab, Manager/GM/Dept Head).",
+  "ringkasan": [
+    {
+      "Site": "-",
+      "PJO": 0,
+      "Manager": 0,
+      "Total": 0,
+      "Ada No HP": 0
+    },
+    {
+      "Site": "BMO 1",
+      "PJO": 32,
+      "Manager": 16,
+      "Total": 48,
+      "Ada No HP": 48
+    },
+    {
+      "Site": "BMO 2",
+      "PJO": 24,
+      "Manager": 20,
+      "Total": 44,
+      "Ada No HP": 44
+    },
+    {
+      "Site": "BMO 3",
+      "PJO": 3,
+      "Manager": 0,
+      "Total": 3,
+      "Ada No HP": 3
+    },
+    {
+      "Site": "EKSPLORASI",
+      "PJO": 10,
+      "Manager": 0,
+      "Total": 10,
+      "Ada No HP": 10
+    },
+    {
+      "Site": "GMO",
+      "PJO": 19,
+      "Manager": 23,
+      "Total": 42,
+      "Ada No HP": 42
+    },
+    {
+      "Site": "HO",
+      "PJO": 14,
+      "Manager": 3,
+      "Total": 17,
+      "Ada No HP": 17
+    },
+    {
+      "Site": "JAKARTA",
+      "PJO": 0,
+      "Manager": 0,
+      "Total": 0,
+      "Ada No HP": 0
+    },
+    {
+      "Site": "LMO",
+      "PJO": 33,
+      "Manager": 22,
+      "Total": 55,
+      "Ada No HP": 55
+    },
+    {
+      "Site": "MARINE",
+      "PJO": 13,
+      "Manager": 9,
+      "Total": 22,
+      "Ada No HP": 22
+    },
+    {
+      "Site": "SMO",
+      "PJO": 14,
+      "Manager": 13,
+      "Total": 27,
+      "Ada No HP": 27
+    },
+    {
+      "Site": "TOTAL",
+      "PJO": 162,
+      "Manager": 106,
+      "Total": 268,
+      "Ada No HP": 268
+    }
+  ],
+  "kontak": [
+    {
+      "No": 1,
+      "Site": "BMO 1",
+      "Perusahaan": "CV Bukit Manimbora",
+      "Kategori": "PJO",
+      "Nama": "ANGGA WAHYU TRI BASUKI",
+      "SID": "BEQVM",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082358806724"
+    },
+    {
+      "No": 2,
+      "Site": "BMO 1",
+      "Perusahaan": "CV Hulu Putra Banua",
+      "Kategori": "PJO",
+      "Nama": "CHRISTY TANIA ISABELA RIMBING",
+      "SID": "UNYBQ",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082255510471"
+    },
+    {
+      "No": 3,
+      "Site": "BMO 1",
+      "Perusahaan": "CV Triana Jaya",
+      "Kategori": "PJO",
+      "Nama": "M ARIF RAHMAN",
+      "SID": "N6JVJ",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081351700618"
+    },
+    {
+      "No": 4,
+      "Site": "BMO 1",
+      "Perusahaan": "Koperasi Maju Bersama",
+      "Kategori": "PJO",
+      "Nama": "QOWIM DWI ISWANTO",
+      "SID": "BE22A",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085828437733"
+    },
+    {
+      "No": 5,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Alpha Omega Semesta",
+      "Kategori": "PJO",
+      "Nama": "HENDRIX FEBRUANDA PURBA",
+      "SID": "8N4B6",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085276561210"
+    },
+    {
+      "No": 6,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Andhita Asri Borneo",
+      "Kategori": "PJO",
+      "Nama": "ANDERIAS",
+      "SID": "WS7U8",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081251307755"
+    },
+    {
+      "No": 7,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Apex Mitra Prima",
+      "Kategori": "PJO",
+      "Nama": "IKBAL",
+      "SID": "KH3L7",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085341569762"
+    },
+    {
+      "No": 8,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Arexas Indonesia",
+      "Kategori": "PJO",
+      "Nama": "KIKI NURYANTO",
+      "SID": "Q7CIH",
+      "Jabatan": "PJO",
+      "No HP": "081346302832"
+    },
+    {
+      "No": 9,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Arexas Indonesia",
+      "Kategori": "Manager",
+      "Nama": "GILANG ASWAN BAGASWARA",
+      "SID": "W43BT",
+      "Jabatan": "Manager",
+      "No HP": "08115442291"
+    },
+    {
+      "No": 14,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Bukit Makmur Mandiri Utama",
+      "Kategori": "PJO",
+      "Nama": "DATU BUDI SETIA RACHMAN",
+      "SID": "5G6LW",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085349083359"
+    },
+    {
+      "No": 15,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Cahaya Trijaya Sentosa",
+      "Kategori": "PJO",
+      "Nama": "RIZKYI ROMANSYAH SANTOSO",
+      "SID": "IL5JF",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082141856052"
+    },
+    {
+      "No": 16,
+      "Site": "BMO 1",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "PJO",
+      "Nama": "RARANTEZA NOPERU",
+      "SID": "9SD25",
+      "Jabatan": "PJO BMO",
+      "No HP": "081377641133"
+    },
+    {
+      "No": 17,
+      "Site": "BMO 1",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "PJO",
+      "Nama": "RARANTEZA NOPERU",
+      "SID": "9SD25",
+      "Jabatan": "PJO BMO",
+      "No HP": "081377641133"
+    },
+    {
+      "No": 18,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Eka Dharma Jaya Sakti",
+      "Kategori": "PJO",
+      "Nama": "ANANG SUSANTO",
+      "SID": "E39XO",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081250000410"
+    },
+    {
+      "No": 19,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Eka Dharma Jaya Sakti",
+      "Kategori": "PJO",
+      "Nama": "NUGROHO HARRY SUSANTO",
+      "SID": "NFWXP",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085246699934"
+    },
+    {
+      "No": 20,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Eka Dharma Jaya Sakti",
+      "Kategori": "PJO",
+      "Nama": "RICKO DWI ARY SANTOSO",
+      "SID": "DZW96",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082250095285"
+    },
+    {
+      "No": 21,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Elektrik Visi Indonesia",
+      "Kategori": "PJO",
+      "Nama": "DEKI RIJKI",
+      "SID": "BP93L",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08137817417"
+    },
+    {
+      "No": 22,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Energi Indonesia Berkarya",
+      "Kategori": "PJO",
+      "Nama": "ANDI ACHMAD RIFAI",
+      "SID": "K75ZL",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082255013509"
+    },
+    {
+      "No": 23,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Etam Wira Utama",
+      "Kategori": "PJO",
+      "Nama": "IRFAN",
+      "SID": "7CM4X",
+      "Jabatan": "Penanggung Jawab Oprasional",
+      "No HP": "081346684233"
+    },
+    {
+      "No": 24,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Eurotruk Trasindo",
+      "Kategori": "PJO",
+      "Nama": "AMRIN",
+      "SID": "TRSPX",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082152323324"
+    },
+    {
+      "No": 25,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Harmoni Mitra Utama",
+      "Kategori": "PJO",
+      "Nama": "TURROHMANUDDIN",
+      "SID": "W872F",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082250840887"
+    },
+    {
+      "No": 26,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Kaltim Diamond Coal",
+      "Kategori": "PJO",
+      "Nama": "M HARIS HADIANTO",
+      "SID": "8RSCS",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081350333006"
+    },
+    {
+      "No": 27,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Kaltim Diamond Coal",
+      "Kategori": "Manager",
+      "Nama": "JIMMY MART LESTER",
+      "SID": "8YI22",
+      "Jabatan": "GENERAL MANAGER",
+      "No HP": "082159245678"
+    },
+    {
+      "No": 28,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Lintech Duta Pratama",
+      "Kategori": "PJO",
+      "Nama": "AKHMAD HISYAM",
+      "SID": "OI1QI",
+      "Jabatan": "PJO",
+      "No HP": "081615653075"
+    },
+    {
+      "No": 29,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Lintech Duta Pratama",
+      "Kategori": "Manager",
+      "Nama": "MADE ENDRA PURWATA",
+      "SID": "7PXAM",
+      "Jabatan": "CONSTRUCTION MANAGER",
+      "No HP": "0801234095336"
+    },
+    {
+      "No": 30,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Menara Borneo Jaya",
+      "Kategori": "PJO",
+      "Nama": "ISHAK SUGIANTO SH",
+      "SID": "KSZ1G",
+      "Jabatan": "PJO",
+      "No HP": "082258476678"
+    },
+    {
+      "No": 31,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mitra Sukses Raharja",
+      "Kategori": "Manager",
+      "Nama": "ALFONZO ADITYA KELLEN",
+      "SID": "5Y8RB",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "085156318283"
+    },
+    {
+      "No": 32,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mulya Jatra",
+      "Kategori": "PJO",
+      "Nama": "ARROKHMAN BAGUS DHARMAWAN",
+      "SID": "8IKQ6",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "08774109381"
+    },
+    {
+      "No": 33,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mulya Jatra",
+      "Kategori": "Manager",
+      "Nama": "DIDIK BUDI SATRIYO",
+      "SID": "UUCXY",
+      "Jabatan": "HSE MANAGER",
+      "No HP": "081233315915"
+    },
+    {
+      "No": 34,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mulya Jatra",
+      "Kategori": "Manager",
+      "Nama": "MAULANA MUSLIMIN",
+      "SID": "KBRJY",
+      "Jabatan": "DEPUTY PROJECT MANAGER",
+      "No HP": "083811383303"
+    },
+    {
+      "No": 35,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mulya Jatra",
+      "Kategori": "Manager",
+      "Nama": "NURHADI",
+      "SID": "E50PM",
+      "Jabatan": "CONSTRUCTION MANAGER",
+      "No HP": "087859916922"
+    },
+    {
+      "No": 36,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mutiara Tanjung Lestari",
+      "Kategori": "Manager",
+      "Nama": "DEVIT FRIGA ST",
+      "SID": "PZ3RB",
+      "Jabatan": "Road Infrastructure Maintenance Dept. Head",
+      "No HP": "081330619916"
+    },
+    {
+      "No": 37,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mutiara Tanjung Lestari",
+      "Kategori": "Manager",
+      "Nama": "MOHAMMAD GANDHI ISTOWO",
+      "SID": "GMYT7",
+      "Jabatan": "Coal Hauling & CPP Manager",
+      "No HP": "0812456"
+    },
+    {
+      "No": 38,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mutiara Tanjung Lestari",
+      "Kategori": "Manager",
+      "Nama": "R ADITYA SUBAGYANTO",
+      "SID": "MRY0U",
+      "Jabatan": "HR Expert Manager",
+      "No HP": "08159039072"
+    },
+    {
+      "No": 39,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mutiara Tanjung Lestari",
+      "Kategori": "Manager",
+      "Nama": "RM DINO ADITYA ARIBUDI",
+      "SID": "YW0AU",
+      "Jabatan": "HR PROJECT SENIOR MANAGER",
+      "No HP": "08129935696"
+    },
+    {
+      "No": 40,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mutiara Tanjung Lestari",
+      "Kategori": "Manager",
+      "Nama": "RUDY FAHMI ARTADI",
+      "SID": "KTVGX",
+      "Jabatan": "Fixed Plan Maintenance Manager",
+      "No HP": "081234686300"
+    },
+    {
+      "No": 41,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Mutiara Tanjung Lestari",
+      "Kategori": "Manager",
+      "Nama": "ZULFA KURNIAWAN NUGROHO",
+      "SID": "HJESU",
+      "Jabatan": "MINE SUPPORT DIV HEAD",
+      "No HP": "081332294252"
+    },
+    {
+      "No": 42,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Pancaran Teknologi Transportasi Indonesia",
+      "Kategori": "Manager",
+      "Nama": "BIMO BAYU SAMUDRO",
+      "SID": "KTZTK",
+      "Jabatan": "Project Manager",
+      "No HP": "081286273932"
+    },
+    {
+      "No": 43,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Rareendo Mulia Abadi",
+      "Kategori": "PJO",
+      "Nama": "HEBISED TITTING",
+      "SID": "S3AVI",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085250388161"
+    },
+    {
+      "No": 44,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Samburakat Jaya Utama",
+      "Kategori": "PJO",
+      "Nama": "TEGUH UPERYANTO SAPUTRA",
+      "SID": "6Q3QW",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082211801505"
+    },
+    {
+      "No": 45,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Semesta Quantum Eterniti",
+      "Kategori": "PJO",
+      "Nama": "JEKI SUMILAT",
+      "SID": "SBOND",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082233344543"
+    },
+    {
+      "No": 46,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Sucofindo",
+      "Kategori": "PJO",
+      "Nama": "JANING ANDI PALIMBONG",
+      "SID": "QZFQ7",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081346382056"
+    },
+    {
+      "No": 47,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Sumber Mitra Binungan",
+      "Kategori": "PJO",
+      "Nama": "DODDY YULIADI PRAYITNO",
+      "SID": "AB2WK",
+      "Jabatan": "PJO",
+      "No HP": "082154509977"
+    },
+    {
+      "No": 48,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Taubah Berlian Jaya",
+      "Kategori": "PJO",
+      "Nama": "ANDI DARMAWAN",
+      "SID": "C1M1K",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085350289959"
+    },
+    {
+      "No": 49,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Taubah Berlian Jaya",
+      "Kategori": "PJO",
+      "Nama": "ANDI DARMAWAN",
+      "SID": "C1M1K",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085350289959"
+    },
+    {
+      "No": 50,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Triatra Sinergia Pratama",
+      "Kategori": "Manager",
+      "Nama": "ARIEF RAHMAN SYAHRIJA",
+      "SID": "S0TVT",
+      "Jabatan": "Project Manager",
+      "No HP": "0812959355"
+    },
+    {
+      "No": 51,
+      "Site": "BMO 1",
+      "Perusahaan": "PT United Tractors",
+      "Kategori": "Manager",
+      "Nama": "I NYOMAN MUDANA",
+      "SID": "S2LA4",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "0811555901"
+    },
+    {
+      "No": 52,
+      "Site": "BMO 1",
+      "Perusahaan": "PT Yerry Primatama Hosindo",
+      "Kategori": "PJO",
+      "Nama": "RONY MUTAKHIR",
+      "SID": "8J3KO",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081295562795"
+    },
+    {
+      "No": 53,
+      "Site": "BMO 2",
+      "Perusahaan": "CV Haryda Oto",
+      "Kategori": "PJO",
+      "Nama": "SUDIRMAN",
+      "SID": "0Q19T",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085163107092"
+    },
+    {
+      "No": 54,
+      "Site": "BMO 2",
+      "Perusahaan": "Koperasi Konsumen Pamandiri",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD SOFYAN ISNIAN",
+      "SID": "TNGVE",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08125345740"
+    },
+    {
+      "No": 55,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Abadi Raya Commerce",
+      "Kategori": "Manager",
+      "Nama": "HIDAYAT  SAEPULLAH",
+      "SID": "VG0U5",
+      "Jabatan": "AM",
+      "No HP": "082155748341"
+    },
+    {
+      "No": 56,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Bagong Dekaka Makmur",
+      "Kategori": "PJO",
+      "Nama": "RONAL MASSOLO",
+      "SID": "5OTU2",
+      "Jabatan": "PENANGGUNG JAWAB OPERATION",
+      "No HP": "082358280614"
+    },
+    {
+      "No": 57,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Bagong Dekaka Makmur",
+      "Kategori": "PJO",
+      "Nama": "RONAL MASSOLO",
+      "SID": "5OTU2",
+      "Jabatan": "PENANGGUNG JAWAB OPERATION",
+      "No HP": "082358280614"
+    },
+    {
+      "No": 58,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Bandang Mining Coal",
+      "Kategori": "PJO",
+      "Nama": "DIDI KURNIAWAN",
+      "SID": "NGLTG",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081250043597"
+    },
+    {
+      "No": 61,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Berkat Teman Sejati",
+      "Kategori": "PJO",
+      "Nama": "HERMAN HIDAYAT",
+      "SID": "DCLRJ",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085350561462"
+    },
+    {
+      "No": 62,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Bina Pertiwi",
+      "Kategori": "Manager",
+      "Nama": "DAFA REZY PRATAMA",
+      "SID": "0YG6Y",
+      "Jabatan": "Manager",
+      "No HP": "081295202927"
+    },
+    {
+      "No": 63,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Bluepac Services",
+      "Kategori": "PJO",
+      "Nama": "MERLY RAHMITA ",
+      "SID": "DKT6P",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081348586797"
+    },
+    {
+      "No": 64,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Distribusi Ammo Nusantara",
+      "Kategori": "PJO",
+      "Nama": "DEDDI FIRGINIAN",
+      "SID": "3BUV3",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08113339310"
+    },
+    {
+      "No": 65,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Distribusi Ammo Nusantara",
+      "Kategori": "PJO",
+      "Nama": "HENDI PRAYOGO                              ",
+      "SID": "U19D4",
+      "Jabatan": "Wakil Penanggung Jawab Operasional",
+      "No HP": "085251119296"
+    },
+    {
+      "No": 66,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Garuda Bakti Nusantara",
+      "Kategori": "PJO",
+      "Nama": "TOTOK EFENDI",
+      "SID": "E2GU3",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081351555400"
+    },
+    {
+      "No": 67,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Hutan Rindang Banua",
+      "Kategori": "PJO",
+      "Nama": "HANDOKO SUSILO",
+      "SID": "OTRRI",
+      "Jabatan": "PJO",
+      "No HP": "081257728855"
+    },
+    {
+      "No": 68,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Kanitra Mitra Jaya Utama",
+      "Kategori": "PJO",
+      "Nama": "EVIN RIZKI ROMADON F",
+      "SID": "ZW5HO",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082141789165"
+    },
+    {
+      "No": 69,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Kemitraan MNK BME",
+      "Kategori": "PJO",
+      "Nama": "ANDRE AMARTA",
+      "SID": "427ML",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081221399533"
+    },
+    {
+      "No": 70,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Kemitraan MNK BME",
+      "Kategori": "PJO",
+      "Nama": "YOGA ASMARA ALAM",
+      "SID": "LGN2X",
+      "Jabatan": "Wakil Penanggung Jawab Operasional",
+      "No HP": "085175387920"
+    },
+    {
+      "No": 71,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Majau Inti Jaya",
+      "Kategori": "Manager",
+      "Nama": "NASRUDDIN",
+      "SID": "42B8J",
+      "Jabatan": "Project Manager",
+      "No HP": "085390921762"
+    },
+    {
+      "No": 72,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Megah Mutiara Sakti",
+      "Kategori": "PJO",
+      "Nama": "YOSFONI",
+      "SID": "0OPEZ",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08115384007"
+    },
+    {
+      "No": 73,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Multi Ardecon",
+      "Kategori": "Manager",
+      "Nama": "CHAYATAMA RAMADHAN BOIMAN",
+      "SID": "679UT",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "081907767072"
+    },
+    {
+      "No": 74,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "AGUS DWI SANTOSO",
+      "SID": "731C0",
+      "Jabatan": "COAL MINING & HAULING DEPT. HEAD",
+      "No HP": "081348429004"
+    },
+    {
+      "No": 75,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "AMRIL",
+      "SID": "D18A8",
+      "Jabatan": "DRILLING & BLASTING DEPT. HEAD",
+      "No HP": "082255771599"
+    },
+    {
+      "No": 76,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "ANJU RIVELINO SIRAIT",
+      "SID": "RXRMX",
+      "Jabatan": "PRODUCTION AREA 1 DEPT. HEAD",
+      "No HP": "081347858674"
+    },
+    {
+      "No": 77,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "APRIAN KRISNA BAKTI",
+      "SID": "YTB8K",
+      "Jabatan": "DEPUTY PROJECT MANAGER 3",
+      "No HP": "081328830541"
+    },
+    {
+      "No": 78,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "ARYNANDO SUPONO",
+      "SID": "ZS9TP",
+      "Jabatan": "OPERATIONAL TRAINING DEPT. HEAD",
+      "No HP": "081226217235"
+    },
+    {
+      "No": 79,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "B FREDY JUNI PRASETYO",
+      "SID": "Y6MU5",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "08115410977"
+    },
+    {
+      "No": 80,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "ERLAN ERLANGGA",
+      "SID": "U97WC",
+      "Jabatan": "PIT SERVICE DEPT. HEAD",
+      "No HP": "085220518330"
+    },
+    {
+      "No": 81,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "HABUDIN ST",
+      "SID": "ZECOU",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "081325265553"
+    },
+    {
+      "No": 82,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "HANDRI WIYANTO",
+      "SID": "S74KF",
+      "Jabatan": "DEPUTY PROJECT MANAGER 2",
+      "No HP": "081351498866"
+    },
+    {
+      "No": 83,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "LERRY HARIANDO HUTA LUMBAN RAJA",
+      "SID": "QKL54",
+      "Jabatan": "DEPUTY PROJECT MANAGER 1",
+      "No HP": "081321461055"
+    },
+    {
+      "No": 84,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "MUHAMMAD SAKTIAWAN RIFAI",
+      "SID": "3P6W8",
+      "Jabatan": "SAFETY, HEALTH & ENVIRONMENT DEPT. HEAD",
+      "No HP": "081329493238"
+    },
+    {
+      "No": 85,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "RIZQI SUMINAR NURHANI",
+      "SID": "H0AIQ",
+      "Jabatan": "SUPPLY MANAGEMENT DEPT. HEAD",
+      "No HP": "081347932699"
+    },
+    {
+      "No": 86,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "SAFRIL RIZKI WALUYO ST",
+      "SID": "P021T",
+      "Jabatan": "HUMAN CAPITAL DEPT. HEAD",
+      "No HP": "082255160963"
+    },
+    {
+      "No": 87,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "SAMSUL KHAIRI",
+      "SID": "QXV1L",
+      "Jabatan": "SRGS DEPT. HEAD",
+      "No HP": "082251224968"
+    },
+    {
+      "No": 88,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "SHOLEH HADI HARMOKO                        ",
+      "SID": "56NX2",
+      "Jabatan": "PRODUCTION AREA 2 DEPT. HEAD",
+      "No HP": "082237175432"
+    },
+    {
+      "No": 89,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "WIDIANTO NOVIANSAH",
+      "SID": "8IIMC",
+      "Jabatan": "PRODUCTION AREA 1 DEPT. HEAD",
+      "No HP": "082148157172"
+    },
+    {
+      "No": 90,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Partsindo Servicatama",
+      "Kategori": "PJO",
+      "Nama": "BENNY STENLY TETENGEAN",
+      "SID": "PRK06",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082154520911"
+    },
+    {
+      "No": 91,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Puncak Makmur Jaya",
+      "Kategori": "PJO",
+      "Nama": "ACHMAD SOFYAN",
+      "SID": "27BVB",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085231541641"
+    },
+    {
+      "No": 92,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Puncak Makmur Jaya",
+      "Kategori": "PJO",
+      "Nama": "ARIE DHARMAWAN M",
+      "SID": "3YWBW",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081559551922"
+    },
+    {
+      "No": 93,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Rentokil Indonesia",
+      "Kategori": "PJO",
+      "Nama": "SUMARDI",
+      "SID": "GU4KX",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "088227851347"
+    },
+    {
+      "No": 94,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Segara Persada Nusantara",
+      "Kategori": "PJO",
+      "Nama": "SYUPIAN RAYA",
+      "SID": "VM6Y4",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082253602846"
+    },
+    {
+      "No": 95,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Sehati Mandiri Utama",
+      "Kategori": "PJO",
+      "Nama": "PUTRI ANUGRAH SUCI F",
+      "SID": "30XH5",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085299163301"
+    },
+    {
+      "No": 96,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Shield On Service",
+      "Kategori": "PJO",
+      "Nama": "RONNY SUNARYO",
+      "SID": "XBZ04",
+      "Jabatan": "PJO",
+      "No HP": "08115997165"
+    },
+    {
+      "No": 97,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Transkon Jaya",
+      "Kategori": "PJO",
+      "Nama": "DADI SUSANTO",
+      "SID": "0GZO0",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081346312612"
+    },
+    {
+      "No": 98,
+      "Site": "BMO 2",
+      "Perusahaan": "PT Trigana Abadi Swakarsa",
+      "Kategori": "PJO",
+      "Nama": "ANDY MATTANGKILANG",
+      "SID": "ZSFPX",
+      "Jabatan": "PENANGGUNG JAWAB OPERATIONAL",
+      "No HP": "085393344456"
+    },
+    {
+      "No": 100,
+      "Site": "BMO 3",
+      "Perusahaan": "PT Bumi Artlantis Raya",
+      "Kategori": "PJO",
+      "Nama": "ZULFIKAR ANSORY",
+      "SID": "F7EKP",
+      "Jabatan": "PJO",
+      "No HP": "081347160838"
+    },
+    {
+      "No": 101,
+      "Site": "BMO 3",
+      "Perusahaan": "PT Menara Borneo Jaya",
+      "Kategori": "PJO",
+      "Nama": "DIO ADITYA ARDHINDRA PUTRA",
+      "SID": "E3WJG",
+      "Jabatan": "PJO",
+      "No HP": "087744837110"
+    },
+    {
+      "No": 102,
+      "Site": "BMO 3",
+      "Perusahaan": "PT Puncak Makmur Jaya",
+      "Kategori": "PJO",
+      "Nama": "SALOMO PANGIHUTAN HUTAPEA ST",
+      "SID": "A4YSE",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081327359735"
+    },
+    {
+      "No": 103,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Duta Borneo Mining",
+      "Kategori": "PJO",
+      "Nama": "AGUS SUPARJAN",
+      "SID": "K3OBV",
+      "Jabatan": "PENANGGUNG JAWAB AREA (PJA)",
+      "No HP": "081250295445"
+    },
+    {
+      "No": 104,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Duta Borneo Mining",
+      "Kategori": "PJO",
+      "Nama": "MOCH SATRIANSYAH",
+      "SID": "02ZC2",
+      "Jabatan": "PENANGGUNG JAWAB AREA (PJA)",
+      "No HP": "082155038220"
+    },
+    {
+      "No": 105,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Duta Borneo Mining",
+      "Kategori": "PJO",
+      "Nama": "MUHAMAD AMIN FADILAH",
+      "SID": "D0DPW",
+      "Jabatan": "PENANGGUNG JAWAB AREA (PJA)",
+      "No HP": "081352463408"
+    },
+    {
+      "No": 106,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Duta Borneo Mining",
+      "Kategori": "PJO",
+      "Nama": "SATRIA WIRA UTAMA",
+      "SID": "HDICT",
+      "Jabatan": "PENANGGUNG JAWAB AREA (PJA)",
+      "No HP": "082292449354"
+    },
+    {
+      "No": 107,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Duta Borneo Mining",
+      "Kategori": "PJO",
+      "Nama": "SUNARKO",
+      "SID": "FTY64",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082250631136"
+    },
+    {
+      "No": 108,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Frasta Survey Indonesia",
+      "Kategori": "PJO",
+      "Nama": "AHMAD AGUS KRISTANTO",
+      "SID": "DVEK7",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082299000794"
+    },
+    {
+      "No": 109,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Indonesia Carbon Energy",
+      "Kategori": "PJO",
+      "Nama": "TANGGUH PAMUNGKAS",
+      "SID": "WJQ7A",
+      "Jabatan": "PJO",
+      "No HP": "081328676094"
+    },
+    {
+      "No": 110,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Kasam",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD SYAHRUDIN IRFANDIE",
+      "SID": "86R9K",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081233945545"
+    },
+    {
+      "No": 111,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Kasam",
+      "Kategori": "PJO",
+      "Nama": "RUSWANTO",
+      "SID": "2NVE6",
+      "Jabatan": "Penanggung Jawab Area",
+      "No HP": "082323200617"
+    },
+    {
+      "No": 112,
+      "Site": "EKSPLORASI",
+      "Perusahaan": "PT Velseis Indonesia",
+      "Kategori": "PJO",
+      "Nama": "AHMADI",
+      "SID": "UL2IV",
+      "Jabatan": "Penanggung Jawab Operasi",
+      "No HP": "081254262082"
+    },
+    {
+      "No": 113,
+      "Site": "GMO",
+      "Perusahaan": "CV Juwita",
+      "Kategori": "PJO",
+      "Nama": "BENYAMIN NOBER",
+      "SID": "1IP1A",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08115984740"
+    },
+    {
+      "No": 114,
+      "Site": "GMO",
+      "Perusahaan": "CV Rangga",
+      "Kategori": "PJO",
+      "Nama": "DEDE ARIFIN",
+      "SID": "LXUL6",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082159034043"
+    },
+    {
+      "No": 115,
+      "Site": "GMO",
+      "Perusahaan": "PT Abadi Raya Commerce",
+      "Kategori": "Manager",
+      "Nama": "JOKO SUWANTO",
+      "SID": "R5O4F",
+      "Jabatan": "Site Manager",
+      "No HP": "081219540046"
+    },
+    {
+      "No": 116,
+      "Site": "GMO",
+      "Perusahaan": "PT Ambar Borneo",
+      "Kategori": "PJO",
+      "Nama": "AFRULY VIRDUS JUNIOR",
+      "SID": "U1GQL",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081224285485"
+    },
+    {
+      "No": 117,
+      "Site": "GMO",
+      "Perusahaan": "PT Arcistec International",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD HASRIL",
+      "SID": "9T87A",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085391194209"
+    },
+    {
+      "No": 118,
+      "Site": "GMO",
+      "Perusahaan": "PT Arcistec International",
+      "Kategori": "Manager",
+      "Nama": "ULFA ELVIA BAROROH",
+      "SID": "02ZZT",
+      "Jabatan": "MANAGER HRD",
+      "No HP": "08118857600"
+    },
+    {
+      "No": 119,
+      "Site": "GMO",
+      "Perusahaan": "PT Asian Berdikari Cemerlang",
+      "Kategori": "PJO",
+      "Nama": "ALFONSO ROLAND ARIESTO",
+      "SID": "JZG2F",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081319812115"
+    },
+    {
+      "No": 120,
+      "Site": "GMO",
+      "Perusahaan": "PT Bandang Mining Coal",
+      "Kategori": "Manager",
+      "Nama": "BAYYUMI",
+      "SID": "X37UL",
+      "Jabatan": "MANAGER OPERASIONAL",
+      "No HP": "081274166073"
+    },
+    {
+      "No": 121,
+      "Site": "GMO",
+      "Perusahaan": "PT Bandang Mining Coal",
+      "Kategori": "Manager",
+      "Nama": "DEDY LUPU KONDOLELE",
+      "SID": "MOGCT",
+      "Jabatan": "MANAGER OPERASIONAL",
+      "No HP": "085654106551"
+    },
+    {
+      "No": 123,
+      "Site": "GMO",
+      "Perusahaan": "PT Bluepac Services",
+      "Kategori": "PJO",
+      "Nama": "RAHMAT",
+      "SID": "83HG9",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081364641983"
+    },
+    {
+      "No": 124,
+      "Site": "GMO",
+      "Perusahaan": "PT Bogasari Sarana Surya",
+      "Kategori": "PJO",
+      "Nama": "HENDRA MUSLIHAT",
+      "SID": "6B0H2",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082118746332"
+    },
+    {
+      "No": 125,
+      "Site": "GMO",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "PJO",
+      "Nama": "FERDY AGSAH",
+      "SID": "B5G72",
+      "Jabatan": "PJO GMO",
+      "No HP": "081224440666"
+    },
+    {
+      "No": 126,
+      "Site": "GMO",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "PJO",
+      "Nama": "FERDY AGSAH",
+      "SID": "B5G72",
+      "Jabatan": "PJO GMO",
+      "No HP": "081224440666"
+    },
+    {
+      "No": 127,
+      "Site": "GMO",
+      "Perusahaan": "PT Gurimbang Mandiri Utama",
+      "Kategori": "PJO",
+      "Nama": "NURSAFITRI",
+      "SID": "PKMZG",
+      "Jabatan": "PJO",
+      "No HP": "081350258507"
+    },
+    {
+      "No": 128,
+      "Site": "GMO",
+      "Perusahaan": "PT Joymar Abadi Indonesia",
+      "Kategori": "PJO",
+      "Nama": "SUPRIANTO",
+      "SID": "ZLTM0",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "08115409007"
+    },
+    {
+      "No": 129,
+      "Site": "GMO",
+      "Perusahaan": "PT Kalimantan Teknik Utama",
+      "Kategori": "PJO",
+      "Nama": "SAMUEL RUDYANTO THIO",
+      "SID": "JNPO1",
+      "Jabatan": "PJO",
+      "No HP": "085397502391"
+    },
+    {
+      "No": 130,
+      "Site": "GMO",
+      "Perusahaan": "PT Kaliraya Sari",
+      "Kategori": "Manager",
+      "Nama": "BAYU BUDHY RATNOKO ST",
+      "SID": "4EPXH",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "085387741337"
+    },
+    {
+      "No": 131,
+      "Site": "GMO",
+      "Perusahaan": "PT Kaliraya Sari",
+      "Kategori": "Manager",
+      "Nama": "BUDI KARYONO ",
+      "SID": "AOIQA",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "081347306007"
+    },
+    {
+      "No": 132,
+      "Site": "GMO",
+      "Perusahaan": "PT Kaliraya Sari",
+      "Kategori": "Manager",
+      "Nama": "HENDRA BAYU ",
+      "SID": "SA56E",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "081367362124"
+    },
+    {
+      "No": 133,
+      "Site": "GMO",
+      "Perusahaan": "PT Kaltim Diamond Coal",
+      "Kategori": "PJO",
+      "Nama": "AMRY WAHYUDIN",
+      "SID": "J935F",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082350322289"
+    },
+    {
+      "No": 134,
+      "Site": "GMO",
+      "Perusahaan": "PT Majau Inti Jaya",
+      "Kategori": "Manager",
+      "Nama": "JUNAEDY RATELA",
+      "SID": "XWP18",
+      "Jabatan": "Project Manager",
+      "No HP": "082152959374"
+    },
+    {
+      "No": 135,
+      "Site": "GMO",
+      "Perusahaan": "PT Majau Inti Jaya",
+      "Kategori": "Manager",
+      "Nama": "SUYADI",
+      "SID": "JB24I",
+      "Jabatan": "Project Manager",
+      "No HP": "081254543239"
+    },
+    {
+      "No": 136,
+      "Site": "GMO",
+      "Perusahaan": "PT Manghayu Anugrah Nusantara",
+      "Kategori": "PJO",
+      "Nama": "BIMA PRASETYO",
+      "SID": "E5XAX",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082250534476"
+    },
+    {
+      "No": 137,
+      "Site": "GMO",
+      "Perusahaan": "PT Mitra Sistematika Global",
+      "Kategori": "PJO",
+      "Nama": "BAYU SETYAWAN",
+      "SID": "WUDGK",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085166912184"
+    },
+    {
+      "No": 138,
+      "Site": "GMO",
+      "Perusahaan": "PT Mulia Oto Partindo",
+      "Kategori": "PJO",
+      "Nama": "NUGROHO WIDI HASTOMO",
+      "SID": "CXLE7",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082180114650"
+    },
+    {
+      "No": 139,
+      "Site": "GMO",
+      "Perusahaan": "PT Multi Ardecon",
+      "Kategori": "Manager",
+      "Nama": "FAURIZA TRISNAWARMAN",
+      "SID": "2RRAU",
+      "Jabatan": "SITE COORDINATOR",
+      "No HP": "08111175128"
+    },
+    {
+      "No": 140,
+      "Site": "GMO",
+      "Perusahaan": "PT Multi Ardecon",
+      "Kategori": "Manager",
+      "Nama": "SULISTIYONO",
+      "SID": "SDQHY",
+      "Jabatan": "SENIOR SITE MANAGER",
+      "No HP": "082137064347"
+    },
+    {
+      "No": 141,
+      "Site": "GMO",
+      "Perusahaan": "PT Nusantara Tehnik Gemilang",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD IQBAL",
+      "SID": "8OL6U",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082254661200"
+    },
+    {
+      "No": 142,
+      "Site": "GMO",
+      "Perusahaan": "PT Orecon Putra Perkasa",
+      "Kategori": "Manager",
+      "Nama": "BAYU AJI SANJAYA",
+      "SID": "P56A6",
+      "Jabatan": "Deputy Project Manager",
+      "No HP": "081227387236"
+    },
+    {
+      "No": 143,
+      "Site": "GMO",
+      "Perusahaan": "PT Orecon Putra Perkasa",
+      "Kategori": "Manager",
+      "Nama": "BOBBY SULAIMAN MALIK PARINDURI ST",
+      "SID": "1SAC7",
+      "Jabatan": "DH OPR",
+      "No HP": "082165120580"
+    },
+    {
+      "No": 144,
+      "Site": "GMO",
+      "Perusahaan": "PT Orecon Putra Perkasa",
+      "Kategori": "Manager",
+      "Nama": "FAHRUL ABDI WICAKSONO",
+      "SID": "JUIEE",
+      "Jabatan": "Penaggung Jawab Operasional",
+      "No HP": "082227714646"
+    },
+    {
+      "No": 145,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "DANI EKO KRISTIANTO",
+      "SID": "VRK9Y",
+      "Jabatan": "SAFETY, HEALTH & ENVIRONMENT DEPT. HEAD",
+      "No HP": "081313565696"
+    },
+    {
+      "No": 146,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "ENDRIYANTO SETIABUDHI",
+      "SID": "89XOL",
+      "Jabatan": "PIT SERVICE DEPT. HEAD",
+      "No HP": "081286397567"
+    },
+    {
+      "No": 147,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "HERIBERTUS YUDHA MAHENDRA",
+      "SID": "CWNWC",
+      "Jabatan": "DEPUTY PROJECT MANAGER 1",
+      "No HP": "082152999001"
+    },
+    {
+      "No": 148,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "KUSHARTANTO",
+      "SID": "3WJX8",
+      "Jabatan": "DEPUTY PROJECT MANAGER 1",
+      "No HP": "08123126681"
+    },
+    {
+      "No": 149,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "SEPTIANTA RAHARJA",
+      "SID": "V1L0K",
+      "Jabatan": "SUPPLY MANAGEMENT DEPT. HEAD",
+      "No HP": "085228114996"
+    },
+    {
+      "No": 150,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "WINDARTO",
+      "SID": "BNLMV",
+      "Jabatan": "PRODUCTION AREA 1 DEPT. HEAD",
+      "No HP": "08125304954"
+    },
+    {
+      "No": 151,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "WINNER BINO SEPTINO SINAGA",
+      "SID": "4FQTL",
+      "Jabatan": "PRODUCTION AREA 1 DEPT. HEAD",
+      "No HP": "081370880228"
+    },
+    {
+      "No": 152,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "YANUAR MUHTAAT PRASTYANA",
+      "SID": "PE9Z3",
+      "Jabatan": "HUMAN CAPITAL DEPT. HEAD",
+      "No HP": "081166991"
+    },
+    {
+      "No": 153,
+      "Site": "GMO",
+      "Perusahaan": "PT Pamapersada Nusantara",
+      "Kategori": "Manager",
+      "Nama": "YOHANES YUDO HARSANTO",
+      "SID": "8H1H6",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "08115900518"
+    },
+    {
+      "No": 154,
+      "Site": "GMO",
+      "Perusahaan": "PT Satya Energi Solusi",
+      "Kategori": "PJO",
+      "Nama": "FICKY RANDY",
+      "SID": "8UWBF",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "08984367299"
+    },
+    {
+      "No": 155,
+      "Site": "GMO",
+      "Perusahaan": "PT Transkon Jaya",
+      "Kategori": "PJO",
+      "Nama": "WAHYU AMARTA",
+      "SID": "3OJPI",
+      "Jabatan": "PENANGGUNG JAWAB OPERASION",
+      "No HP": "087743168519"
+    },
+    {
+      "No": 156,
+      "Site": "HO",
+      "Perusahaan": "PT Agung Buana Rejeki",
+      "Kategori": "PJO",
+      "Nama": "AMOS TENDENG",
+      "SID": "UWTRP",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08125777401"
+    },
+    {
+      "No": 157,
+      "Site": "HO",
+      "Perusahaan": "PT Agung Buana Rejeki",
+      "Kategori": "Manager",
+      "Nama": "AMINUDDIN ST",
+      "SID": "WHW8S",
+      "Jabatan": "Manager",
+      "No HP": "085391899985"
+    },
+    {
+      "No": 158,
+      "Site": "HO",
+      "Perusahaan": "PT Andalan Duta Eka Nusantara",
+      "Kategori": "PJO",
+      "Nama": "AMBRI APRIANTO SIMANJUNTAK",
+      "SID": "XXP2F",
+      "Jabatan": "PJO",
+      "No HP": "08115008815"
+    },
+    {
+      "No": 159,
+      "Site": "HO",
+      "Perusahaan": "PT Andalan Duta Eka Nusantara",
+      "Kategori": "PJO",
+      "Nama": "PHRABU HARYA KESUMA",
+      "SID": "P7MSQ",
+      "Jabatan": "PJO",
+      "No HP": "081325412100"
+    },
+    {
+      "No": 209,
+      "Site": "HO",
+      "Perusahaan": "PT Cipta Krida Bahari",
+      "Kategori": "PJO",
+      "Nama": "TAKWIN",
+      "SID": "6BMRO",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085345605041"
+    },
+    {
+      "No": 210,
+      "Site": "HO",
+      "Perusahaan": "PT Elektrik Visi Indonesia",
+      "Kategori": "PJO",
+      "Nama": "JOKO SUPRIYO",
+      "SID": "22R1Y",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082136630316"
+    },
+    {
+      "No": 211,
+      "Site": "HO",
+      "Perusahaan": "PT Elektrik Visi Indonesia",
+      "Kategori": "Manager",
+      "Nama": "BUDI WAHYONO",
+      "SID": "CUQUJ",
+      "Jabatan": "Fleet Manager",
+      "No HP": "082136630316"
+    },
+    {
+      "No": 212,
+      "Site": "HO",
+      "Perusahaan": "PT Energi Nuansa Jaya",
+      "Kategori": "PJO",
+      "Nama": "ERICH SIAHAAN",
+      "SID": "AJA92",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081255661803"
+    },
+    {
+      "No": 213,
+      "Site": "HO",
+      "Perusahaan": "PT Gatra Kaltim Jaya",
+      "Kategori": "PJO",
+      "Nama": "RIAN HUSLAN",
+      "SID": "GK34U",
+      "Jabatan": "Penanggung Jawab Oprasional",
+      "No HP": "082247802769"
+    },
+    {
+      "No": 214,
+      "Site": "HO",
+      "Perusahaan": "PT Interprima Indocom",
+      "Kategori": "PJO",
+      "Nama": "ARDINE MANNUELA PANGKEY",
+      "SID": "NJ0AU",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085753240720"
+    },
+    {
+      "No": 215,
+      "Site": "HO",
+      "Perusahaan": "PT Meica Indo Teknik",
+      "Kategori": "PJO",
+      "Nama": "SONY SOESILO PRAMONO",
+      "SID": "K3JAN",
+      "Jabatan": "PJO",
+      "No HP": "081253339696"
+    },
+    {
+      "No": 216,
+      "Site": "HO",
+      "Perusahaan": "PT Nityo Infotech",
+      "Kategori": "Manager",
+      "Nama": "EBEN SADANA PANE",
+      "SID": "SKB62",
+      "Jabatan": "Penangung Jawab Operasi",
+      "No HP": "082213326125"
+    },
+    {
+      "No": 217,
+      "Site": "HO",
+      "Perusahaan": "PT Serasi Autoraya",
+      "Kategori": "PJO",
+      "Nama": "FEVBRI MANAN",
+      "SID": "H6IDU",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082256614117"
+    },
+    {
+      "No": 218,
+      "Site": "HO",
+      "Perusahaan": "PT Smartfren Telecom Tbk",
+      "Kategori": "PJO",
+      "Nama": "HANSEN RUBA BALIK",
+      "SID": "SZZP9",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "0881149108"
+    },
+    {
+      "No": 219,
+      "Site": "HO",
+      "Perusahaan": "PT Suprima Mitra Adihusada",
+      "Kategori": "PJO",
+      "Nama": "RIZKIA ADHADIAWAN                          ",
+      "SID": "0QKFC",
+      "Jabatan": "Penanggung Jawab Operational",
+      "No HP": "082278333422"
+    },
+    {
+      "No": 220,
+      "Site": "HO",
+      "Perusahaan": "PT Tidung Jaya Mandiri",
+      "Kategori": "PJO",
+      "Nama": "RIYAN TRI LESTARI",
+      "SID": "IM8B1",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081238006679"
+    },
+    {
+      "No": 221,
+      "Site": "HO",
+      "Perusahaan": "PT Transkon Jaya",
+      "Kategori": "PJO",
+      "Nama": "MARWANTO",
+      "SID": "6CDXR",
+      "Jabatan": "PENANGGUNG JAWAB OPERASION",
+      "No HP": "081364496550"
+    },
+    {
+      "No": 249,
+      "Site": "LMO",
+      "Perusahaan": "CV Elang Maju Mapan",
+      "Kategori": "PJO",
+      "Nama": "WAHYU RIFANI",
+      "SID": "J1DGY",
+      "Jabatan": "PJO",
+      "No HP": "081334544541"
+    },
+    {
+      "No": 250,
+      "Site": "LMO",
+      "Perusahaan": "CV Maju Makmur Tehnik",
+      "Kategori": "PJO",
+      "Nama": "TAJUDDIN",
+      "SID": "WE3CK",
+      "Jabatan": "PJO",
+      "No HP": "085249680886"
+    },
+    {
+      "No": 251,
+      "Site": "LMO",
+      "Perusahaan": "CV Teguh Harapan",
+      "Kategori": "PJO",
+      "Nama": "AGUS FAISAL",
+      "SID": "OIXIS",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085250913551"
+    },
+    {
+      "No": 252,
+      "Site": "LMO",
+      "Perusahaan": "Koperasi Bersama Kita Bisa",
+      "Kategori": "PJO",
+      "Nama": "SUGIANTO",
+      "SID": "XVKVT",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081255457446"
+    },
+    {
+      "No": 253,
+      "Site": "LMO",
+      "Perusahaan": "PT Altrak",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD NIRWAN M",
+      "SID": "XQO0C",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08125339346"
+    },
+    {
+      "No": 254,
+      "Site": "LMO",
+      "Perusahaan": "PT Altrak",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD NIRWAN M",
+      "SID": "XQO0C",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08125339346"
+    },
+    {
+      "No": 255,
+      "Site": "LMO",
+      "Perusahaan": "PT Altrak",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD NIRWAN M",
+      "SID": "XQO0C",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08125339346"
+    },
+    {
+      "No": 256,
+      "Site": "LMO",
+      "Perusahaan": "PT Altros Teknologi",
+      "Kategori": "Manager",
+      "Nama": "DARUL IMAN",
+      "SID": "OTR18",
+      "Jabatan": "Network Engineer",
+      "No HP": "081298349006"
+    },
+    {
+      "No": 257,
+      "Site": "LMO",
+      "Perusahaan": "PT Bagong Dekaka Makmur",
+      "Kategori": "PJO",
+      "Nama": "KUNCORO HUDA",
+      "SID": "6FIZH",
+      "Jabatan": "PENANGGUNG JAWAB OPERATION",
+      "No HP": "082144488319"
+    },
+    {
+      "No": 258,
+      "Site": "LMO",
+      "Perusahaan": "PT Bagong Dekaka Makmur",
+      "Kategori": "PJO",
+      "Nama": "MOHAMAD SYAHRUL PRAYOGO",
+      "SID": "MESJY",
+      "Jabatan": "PENANGGUNG JAWAB OPERATION",
+      "No HP": "082233634560"
+    },
+    {
+      "No": 259,
+      "Site": "LMO",
+      "Perusahaan": "PT Bagong Dekaka Makmur",
+      "Kategori": "PJO",
+      "Nama": "MOHAMAD SYAHRUL PRAYOGO",
+      "SID": "MESJY",
+      "Jabatan": "PENANGGUNG JAWAB OPERATION",
+      "No HP": "082233634560"
+    },
+    {
+      "No": 260,
+      "Site": "LMO",
+      "Perusahaan": "PT Bagong Dekaka Makmur",
+      "Kategori": "PJO",
+      "Nama": "WISNU PRAMUNDITO",
+      "SID": "5TLHD",
+      "Jabatan": "PENANGGUNG JAWAB AREA",
+      "No HP": "082333798439"
+    },
+    {
+      "No": 266,
+      "Site": "LMO",
+      "Perusahaan": "PT Berkat Jaya Sukses",
+      "Kategori": "PJO",
+      "Nama": "ABDUL AZIZ ANSAHRI",
+      "SID": "E2FY5",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08115405944"
+    },
+    {
+      "No": 267,
+      "Site": "LMO",
+      "Perusahaan": "PT Berkat Teman Sejati",
+      "Kategori": "PJO",
+      "Nama": "SAIFUL",
+      "SID": "IBS1A",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082256613727"
+    },
+    {
+      "No": 268,
+      "Site": "LMO",
+      "Perusahaan": "PT Buana Indah Lalebata",
+      "Kategori": "PJO",
+      "Nama": "ABDUL RAHMAN",
+      "SID": "B961C",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081350229204"
+    },
+    {
+      "No": 269,
+      "Site": "LMO",
+      "Perusahaan": "PT Bukit Makmur Mandiri Utama",
+      "Kategori": "Manager",
+      "Nama": "AGUNG INDRIATMOKO",
+      "SID": "T9XBN",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "081247667478"
+    },
+    {
+      "No": 270,
+      "Site": "LMO",
+      "Perusahaan": "PT Bukit Makmur Mandiri Utama",
+      "Kategori": "Manager",
+      "Nama": "HERY KAMRANI",
+      "SID": "UUFYT",
+      "Jabatan": "MANAGER - MAINTENANCE OPERATION",
+      "No HP": "08125885862"
+    },
+    {
+      "No": 271,
+      "Site": "LMO",
+      "Perusahaan": "PT Bukit Makmur Mandiri Utama",
+      "Kategori": "Manager",
+      "Nama": "SRIYANTA",
+      "SID": "9HYGY",
+      "Jabatan": "Manager - Business Support",
+      "No HP": "08125143636"
+    },
+    {
+      "No": 272,
+      "Site": "LMO",
+      "Perusahaan": "PT Cahaya Sakti Jaya",
+      "Kategori": "PJO",
+      "Nama": "RISKY NUR",
+      "SID": "BMDT5",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081251307934"
+    },
+    {
+      "No": 273,
+      "Site": "LMO",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "PJO",
+      "Nama": "SUSENO",
+      "SID": "O5FAB",
+      "Jabatan": "PJO LMO",
+      "No HP": "081282057471"
+    },
+    {
+      "No": 274,
+      "Site": "LMO",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "Manager",
+      "Nama": "MULYADI A MD",
+      "SID": "IEHHT",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "0811518083"
+    },
+    {
+      "No": 275,
+      "Site": "LMO",
+      "Perusahaan": "PT Epiroc Southern Asia",
+      "Kategori": "PJO",
+      "Nama": "DWI PURWANTO",
+      "SID": "A6IRB",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08111973616"
+    },
+    {
+      "No": 276,
+      "Site": "LMO",
+      "Perusahaan": "PT Fajar Anugerah Dinamika",
+      "Kategori": "Manager",
+      "Nama": "BINTORO",
+      "SID": "UOHBX",
+      "Jabatan": "DEPT HEAD",
+      "No HP": "085227705253"
+    },
+    {
+      "No": 277,
+      "Site": "LMO",
+      "Perusahaan": "PT Fajar Anugerah Dinamika",
+      "Kategori": "Manager",
+      "Nama": "DENNY ROSYADI",
+      "SID": "X8JME",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "081281070711"
+    },
+    {
+      "No": 278,
+      "Site": "LMO",
+      "Perusahaan": "PT Fajar Anugerah Dinamika",
+      "Kategori": "Manager",
+      "Nama": "FAKHRINNUR",
+      "SID": "WMLHL",
+      "Jabatan": "DEPUTY PROJECT MANAGER",
+      "No HP": "082340029996"
+    },
+    {
+      "No": 279,
+      "Site": "LMO",
+      "Perusahaan": "PT Fajar Anugerah Dinamika",
+      "Kategori": "Manager",
+      "Nama": "RINALDY PUTRA PRATAMA",
+      "SID": "6B5FE",
+      "Jabatan": "SHE DEPT HEAD",
+      "No HP": "081321440411"
+    },
+    {
+      "No": 280,
+      "Site": "LMO",
+      "Perusahaan": "PT Fajar Anugerah Dinamika",
+      "Kategori": "Manager",
+      "Nama": "SARWADI",
+      "SID": "SGW3C",
+      "Jabatan": "DEPT HEAD",
+      "No HP": "085329012888"
+    },
+    {
+      "No": 281,
+      "Site": "LMO",
+      "Perusahaan": "PT Fajar Anugerah Dinamika",
+      "Kategori": "Manager",
+      "Nama": "YOTO",
+      "SID": "NCOZV",
+      "Jabatan": "DEPT HEAD",
+      "No HP": "082352899089"
+    },
+    {
+      "No": 282,
+      "Site": "LMO",
+      "Perusahaan": "PT Fitama Putri Mandiri",
+      "Kategori": "PJO",
+      "Nama": "AJI MAHENDRA",
+      "SID": "QL8EW",
+      "Jabatan": "PJO IPAL DOMESTIK",
+      "No HP": "081398287919"
+    },
+    {
+      "No": 283,
+      "Site": "LMO",
+      "Perusahaan": "PT Geoservices",
+      "Kategori": "Manager",
+      "Nama": "ADITYA DESKA RAMADHAN",
+      "SID": "L1VIW",
+      "Jabatan": "DEPUTY MANAGER TEKNIS",
+      "No HP": "081342893484"
+    },
+    {
+      "No": 284,
+      "Site": "LMO",
+      "Perusahaan": "PT Geoservices",
+      "Kategori": "Manager",
+      "Nama": "WISNU HERRYANTO",
+      "SID": "XV5XV",
+      "Jabatan": "MANAGER TEKNIS",
+      "No HP": "08115405395"
+    },
+    {
+      "No": 285,
+      "Site": "LMO",
+      "Perusahaan": "PT Global Arrow",
+      "Kategori": "PJO",
+      "Nama": "BANGSAWAN AZIS",
+      "SID": "XCW5A",
+      "Jabatan": "PJO",
+      "No HP": "082394703713"
+    },
+    {
+      "No": 286,
+      "Site": "LMO",
+      "Perusahaan": "PT Global Arrow",
+      "Kategori": "PJO",
+      "Nama": "BANGSAWAN AZIS",
+      "SID": "XCW5A",
+      "Jabatan": "PJO",
+      "No HP": "082394703713"
+    },
+    {
+      "No": 287,
+      "Site": "LMO",
+      "Perusahaan": "PT Global Arrow",
+      "Kategori": "PJO",
+      "Nama": "BANGSAWAN AZIS",
+      "SID": "XCW5A",
+      "Jabatan": "PJO",
+      "No HP": "082394703713"
+    },
+    {
+      "No": 288,
+      "Site": "LMO",
+      "Perusahaan": "PT Global Arrow",
+      "Kategori": "PJO",
+      "Nama": "SULISTYO BUDI PRABOWO",
+      "SID": "4JWWN",
+      "Jabatan": "PJO",
+      "No HP": "082255954403"
+    },
+    {
+      "No": 289,
+      "Site": "LMO",
+      "Perusahaan": "PT Gunung Giri Perkasa",
+      "Kategori": "PJO",
+      "Nama": "MUSTOFA FAJARYANTO",
+      "SID": "L40G9",
+      "Jabatan": "PJO",
+      "No HP": "085385150000"
+    },
+    {
+      "No": 290,
+      "Site": "LMO",
+      "Perusahaan": "PT Gunung Giri Perkasa",
+      "Kategori": "Manager",
+      "Nama": "BUSTOMI",
+      "SID": "OZPWS",
+      "Jabatan": "MANAGER OPERASIONAL",
+      "No HP": "081284234958"
+    },
+    {
+      "No": 291,
+      "Site": "LMO",
+      "Perusahaan": "PT Hexindo Adiperkasa",
+      "Kategori": "Manager",
+      "Nama": "ROCHMAT ARIYADI",
+      "SID": "NEMMF",
+      "Jabatan": "PROJECT HEAD",
+      "No HP": "085245322240"
+    },
+    {
+      "No": 292,
+      "Site": "LMO",
+      "Perusahaan": "PT Imelda Teknik Mandiri",
+      "Kategori": "PJO",
+      "Nama": "FREDY SOMBA BANGKE",
+      "SID": "AY6XO",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085246411598"
+    },
+    {
+      "No": 293,
+      "Site": "LMO",
+      "Perusahaan": "PT Intecs Teknikatama Industri",
+      "Kategori": "PJO",
+      "Nama": "ADHITYA RUFI TIFANA",
+      "SID": "DJEPU",
+      "Jabatan": "PJO",
+      "No HP": "08118281520"
+    },
+    {
+      "No": 294,
+      "Site": "LMO",
+      "Perusahaan": "PT Kaliraya Sari",
+      "Kategori": "Manager",
+      "Nama": "WENDY ANDRI YANDHI",
+      "SID": "T2BNK",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "081368447102"
+    },
+    {
+      "No": 295,
+      "Site": "LMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "AZHAR ABDUL RASDJID",
+      "SID": "EH90F",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "085250771720"
+    },
+    {
+      "No": 296,
+      "Site": "LMO",
+      "Perusahaan": "PT Nawakara Perkasa Nusantara",
+      "Kategori": "PJO",
+      "Nama": "AMRIL WIJAYA",
+      "SID": "NEIHJ",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085338544375"
+    },
+    {
+      "No": 297,
+      "Site": "LMO",
+      "Perusahaan": "PT Orecon Putra Perkasa",
+      "Kategori": "Manager",
+      "Nama": "FAJRI RAMADHANI",
+      "SID": "IY5E0",
+      "Jabatan": "DH SHE",
+      "No HP": "085266630544"
+    },
+    {
+      "No": 298,
+      "Site": "LMO",
+      "Perusahaan": "PT Orecon Putra Perkasa",
+      "Kategori": "Manager",
+      "Nama": "HOT MAZMULOH SITUMORANG",
+      "SID": "7OXR3",
+      "Jabatan": "Deputy Project Manager",
+      "No HP": "081320954040"
+    },
+    {
+      "No": 299,
+      "Site": "LMO",
+      "Perusahaan": "PT Orecon Putra Perkasa",
+      "Kategori": "Manager",
+      "Nama": "MUHAMMAD HATTA",
+      "SID": "DBLK6",
+      "Jabatan": "DH HCGS",
+      "No HP": "081333917816"
+    },
+    {
+      "No": 300,
+      "Site": "LMO",
+      "Perusahaan": "PT Putra Daerah Mandiri Jaya",
+      "Kategori": "PJO",
+      "Nama": "DESI YULIANA AQNI",
+      "SID": "IOE8E",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082148867717"
+    },
+    {
+      "No": 301,
+      "Site": "LMO",
+      "Perusahaan": "PT Sambakungan Makmur Bersama",
+      "Kategori": "PJO",
+      "Nama": "SITI ROSNANI",
+      "SID": "3EX4V",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082359439072"
+    },
+    {
+      "No": 302,
+      "Site": "LMO",
+      "Perusahaan": "PT Sambakungan Samburakat Maluang Lati",
+      "Kategori": "PJO",
+      "Nama": "ARBAING",
+      "SID": "ARDVB",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085248429755"
+    },
+    {
+      "No": 303,
+      "Site": "LMO",
+      "Perusahaan": "PT Sanggar Sarana Baja",
+      "Kategori": "PJO",
+      "Nama": "MARTHINUS LIMBONG",
+      "SID": "FJUBW",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082352476009"
+    },
+    {
+      "No": 304,
+      "Site": "LMO",
+      "Perusahaan": "PT Surveyor Carbon Consulting Indonesia",
+      "Kategori": "PJO",
+      "Nama": "FERDY RENALDY",
+      "SID": "E1GUX",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085250042010"
+    },
+    {
+      "No": 305,
+      "Site": "LMO",
+      "Perusahaan": "PT Trakindo Utama",
+      "Kategori": "Manager",
+      "Nama": "SHODIQ ARHAMI",
+      "SID": "FG8MA",
+      "Jabatan": "SITE LEADER",
+      "No HP": "08115451342"
+    },
+    {
+      "No": 306,
+      "Site": "LMO",
+      "Perusahaan": "PT Transkon Jaya",
+      "Kategori": "PJO",
+      "Nama": "ROBIYAN GUSTARINO",
+      "SID": "DIQUA",
+      "Jabatan": "PENANGGUNG JAWAB OPERASION",
+      "No HP": "085246379611"
+    },
+    {
+      "No": 307,
+      "Site": "LMO",
+      "Perusahaan": "PT Transkon Jaya",
+      "Kategori": "PJO",
+      "Nama": "ROBIYAN GUSTARINO",
+      "SID": "DIQUA",
+      "Jabatan": "PENANGGUNG JAWAB OPERASION",
+      "No HP": "085246379611"
+    },
+    {
+      "No": 308,
+      "Site": "LMO",
+      "Perusahaan": "PT United Tractors",
+      "Kategori": "Manager",
+      "Nama": "ACHMAD MUSLIMIN",
+      "SID": "7LNS5",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "08127100104"
+    },
+    {
+      "No": 309,
+      "Site": "MARINE",
+      "Perusahaan": "CV Damayanti",
+      "Kategori": "PJO",
+      "Nama": "ACHMAD FARIZ FATHONI",
+      "SID": "41TCF",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082141620524"
+    },
+    {
+      "No": 310,
+      "Site": "MARINE",
+      "Perusahaan": "CV Harapanku Family",
+      "Kategori": "PJO",
+      "Nama": "ANIK KUSRINI",
+      "SID": "4LN98",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08134820369"
+    },
+    {
+      "No": 311,
+      "Site": "MARINE",
+      "Perusahaan": "PT Aneka Cahaya Karunia",
+      "Kategori": "PJO",
+      "Nama": "SONNY DWI SOELISTIJONO",
+      "SID": "7RNNF",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081250170114"
+    },
+    {
+      "No": 312,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Berdikari Cemerlang",
+      "Kategori": "PJO",
+      "Nama": "GANANG RAMADHAN",
+      "SID": "RA3R5",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081225696373"
+    },
+    {
+      "No": 313,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "PJO",
+      "Nama": "YUSMAN",
+      "SID": "XHHM3",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081254767423"
+    },
+    {
+      "No": 314,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "ABDUL MUIN",
+      "SID": "L0YDS",
+      "Jabatan": "MASTER",
+      "No HP": "08115010816"
+    },
+    {
+      "No": 315,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "AGUSTINUS SAMPE",
+      "SID": "UMCQM",
+      "Jabatan": "TECHNICAL MANAGER",
+      "No HP": "082312022270"
+    },
+    {
+      "No": 316,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "CAHYO PUJI LEKSANA",
+      "SID": "L3FGZ",
+      "Jabatan": "MASTER",
+      "No HP": "085245895851"
+    },
+    {
+      "No": 317,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "CAHYO PUJI LEKSANA",
+      "SID": "L3FGZ",
+      "Jabatan": "MASTER",
+      "No HP": "085245895851"
+    },
+    {
+      "No": 318,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "DONI RAMDANI",
+      "SID": "7YP18",
+      "Jabatan": "MASTER",
+      "No HP": "085891040555"
+    },
+    {
+      "No": 319,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "HENDRA YUDISTIRA",
+      "SID": "A695I",
+      "Jabatan": "MASTER",
+      "No HP": "081311148929"
+    },
+    {
+      "No": 320,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "MUHAMMAD DIINUL ISLAAMI R",
+      "SID": "BN9BF",
+      "Jabatan": "DEPT HEAD TRAINING",
+      "No HP": "081253453123"
+    },
+    {
+      "No": 321,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "NANANG SYARIFUDIN",
+      "SID": "IFJQ9",
+      "Jabatan": "MASTER",
+      "No HP": "081212889094"
+    },
+    {
+      "No": 322,
+      "Site": "MARINE",
+      "Perusahaan": "PT Asian Bulk Logistics",
+      "Kategori": "Manager",
+      "Nama": "RUDY DARMANTO",
+      "SID": "Y09R2",
+      "Jabatan": "MASTER",
+      "No HP": "081361723847"
+    },
+    {
+      "No": 323,
+      "Site": "MARINE",
+      "Perusahaan": "PT Dian Ciptamas Agung",
+      "Kategori": "PJO",
+      "Nama": "AKHIRUDDIN",
+      "SID": "NF2N2",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082344662229"
+    },
+    {
+      "No": 324,
+      "Site": "MARINE",
+      "Perusahaan": "PT Pancaran Samudera Transport",
+      "Kategori": "PJO",
+      "Nama": "SUHARMAN",
+      "SID": "VG06V",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085246652348"
+    },
+    {
+      "No": 325,
+      "Site": "MARINE",
+      "Perusahaan": "PT PBM Dharma Lautan Nusantara",
+      "Kategori": "PJO",
+      "Nama": "HELMI SMITH",
+      "SID": "U8RPL",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081372525152"
+    },
+    {
+      "No": 326,
+      "Site": "MARINE",
+      "Perusahaan": "PT Pelayaran Daya Samudera Mandiri",
+      "Kategori": "PJO",
+      "Nama": "MUHAMMAD KASIM",
+      "SID": "B8XZC",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081347175174"
+    },
+    {
+      "No": 327,
+      "Site": "MARINE",
+      "Perusahaan": "PT Pelayaran Kartika Samudera Adijaya",
+      "Kategori": "PJO",
+      "Nama": "ICHSAN FIRMANSYAH",
+      "SID": "0XTN3",
+      "Jabatan": "PENANGGUNG JAWAB ARMADA",
+      "No HP": "081251121686"
+    },
+    {
+      "No": 328,
+      "Site": "MARINE",
+      "Perusahaan": "PT Samudera Berkah Adhiguna",
+      "Kategori": "PJO",
+      "Nama": "JUMAN",
+      "SID": "NA09L",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081258178520"
+    },
+    {
+      "No": 329,
+      "Site": "MARINE",
+      "Perusahaan": "PT Surya Nusantara Perkasa",
+      "Kategori": "PJO",
+      "Nama": "BRIAN FANDI SITORUS",
+      "SID": "OGTQN",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081352135343"
+    },
+    {
+      "No": 330,
+      "Site": "MARINE",
+      "Perusahaan": "PT Tirta Sarana Borneo",
+      "Kategori": "PJO",
+      "Nama": "DULAJIS",
+      "SID": "0FG8A",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081250153722"
+    },
+    {
+      "No": 331,
+      "Site": "SMO",
+      "Perusahaan": "CV Sambaliung Fiber",
+      "Kategori": "PJO",
+      "Nama": "MUHAJIR TAUHID",
+      "SID": "GKIHX",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082256702626"
+    },
+    {
+      "No": 332,
+      "Site": "SMO",
+      "Perusahaan": "CV Santoso Putra Mandiri",
+      "Kategori": "PJO",
+      "Nama": "TRIYONO",
+      "SID": "2MRGX",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "08125886020"
+    },
+    {
+      "No": 333,
+      "Site": "SMO",
+      "Perusahaan": "PT Akatara Bintang Perwira",
+      "Kategori": "Manager",
+      "Nama": "MUZDALIFAH",
+      "SID": "M4FKN",
+      "Jabatan": "MANAGER",
+      "No HP": "082144516493"
+    },
+    {
+      "No": 335,
+      "Site": "SMO",
+      "Perusahaan": "PT Chitra Paratama",
+      "Kategori": "PJO",
+      "Nama": "ZULFIKAR",
+      "SID": "IC500",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "08115993204"
+    },
+    {
+      "No": 336,
+      "Site": "SMO",
+      "Perusahaan": "PT Cipta Krida Bahari",
+      "Kategori": "PJO",
+      "Nama": "AJIE CHRYSTAL ANGGORO PUTRA",
+      "SID": "N2AJB",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081350944697"
+    },
+    {
+      "No": 337,
+      "Site": "SMO",
+      "Perusahaan": "PT Cominco Mitra Perkasa",
+      "Kategori": "PJO",
+      "Nama": "AL HADI",
+      "SID": "8WWWF",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085212111457"
+    },
+    {
+      "No": 338,
+      "Site": "SMO",
+      "Perusahaan": "PT DNX Indonesia",
+      "Kategori": "PJO",
+      "Nama": "DIYAN NOVRIADI",
+      "SID": "TL3IL",
+      "Jabatan": "PJO SMO",
+      "No HP": "082312323456"
+    },
+    {
+      "No": 339,
+      "Site": "SMO",
+      "Perusahaan": "PT Epiroc Southern Asia",
+      "Kategori": "PJO",
+      "Nama": "NURHUDA",
+      "SID": "JTF1E",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081350372164"
+    },
+    {
+      "No": 340,
+      "Site": "SMO",
+      "Perusahaan": "PT Geoservices",
+      "Kategori": "Manager",
+      "Nama": "LENA SUMARINA",
+      "SID": "17JIB",
+      "Jabatan": "DEPUTY MANAGER SUPPORT",
+      "No HP": "08115388996"
+    },
+    {
+      "No": 341,
+      "Site": "SMO",
+      "Perusahaan": "PT Kanitra Mitra Jaya Utama",
+      "Kategori": "PJO",
+      "Nama": "BUCHORI FIRDAUS",
+      "SID": "92EL3",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "085391787474"
+    },
+    {
+      "No": 342,
+      "Site": "SMO",
+      "Perusahaan": "PT Liebherr Indonesia Perkasa",
+      "Kategori": "PJO",
+      "Nama": "SYARIFUDIN IRAWAN",
+      "SID": "NFR7B",
+      "Jabatan": "PJO",
+      "No HP": "081256562794"
+    },
+    {
+      "No": 343,
+      "Site": "SMO",
+      "Perusahaan": "PT Limbah Bina Sejahtera",
+      "Kategori": "PJO",
+      "Nama": "NAZARSYAH",
+      "SID": "63Z8C",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "082154196661"
+    },
+    {
+      "No": 344,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "ADITYA ALAM PERMANA",
+      "SID": "MJK03",
+      "Jabatan": "DEPUTI PROJECT MANAGER",
+      "No HP": "082225976588"
+    },
+    {
+      "No": 345,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "AFRI EFFENDI",
+      "SID": "CEM1N",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "082155412546"
+    },
+    {
+      "No": 346,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "BAMBANG MUHAMMAD SHAFAR",
+      "SID": "INLAW",
+      "Jabatan": "DEPUTI PROJECT MANAGER",
+      "No HP": "081547245747"
+    },
+    {
+      "No": 347,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "HARDJUNADI",
+      "SID": "GSBP3",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "081332982300"
+    },
+    {
+      "No": 348,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "JOHN BENJAMIN MIRON",
+      "SID": "1QYYF",
+      "Jabatan": "PLANT MANAGER",
+      "No HP": "081352604390"
+    },
+    {
+      "No": 349,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "MOCH YASAK",
+      "SID": "UNMDJ",
+      "Jabatan": "DEPUTY MINING IMPROVEMENT MANAGER",
+      "No HP": "08123498860"
+    },
+    {
+      "No": 350,
+      "Site": "SMO",
+      "Perusahaan": "PT Madhani Talatah Nusantara",
+      "Kategori": "Manager",
+      "Nama": "YUDA ARIANGGA",
+      "SID": "A4EDN",
+      "Jabatan": "PROJECT MANAGER",
+      "No HP": "08115382450"
+    },
+    {
+      "No": 351,
+      "Site": "SMO",
+      "Perusahaan": "PT Multitama Indonesia",
+      "Kategori": "PJO",
+      "Nama": "TAUFIK KURAHMAN",
+      "SID": "YVUVX",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "081348080650"
+    },
+    {
+      "No": 352,
+      "Site": "SMO",
+      "Perusahaan": "PT Nusantara Tehnik Gemilang",
+      "Kategori": "Manager",
+      "Nama": "MUHAMMAD TAHIR",
+      "SID": "B1HHB",
+      "Jabatan": "General Manager",
+      "No HP": "085250777003"
+    },
+    {
+      "No": 353,
+      "Site": "SMO",
+      "Perusahaan": "PT Primac Perkasa Indonesia",
+      "Kategori": "Manager",
+      "Nama": "ABDULLAH YUSUF KALLA",
+      "SID": "IUX20",
+      "Jabatan": "Manager",
+      "No HP": "082155732402"
+    },
+    {
+      "No": 354,
+      "Site": "SMO",
+      "Perusahaan": "PT Puncak Makmur Jaya",
+      "Kategori": "PJO",
+      "Nama": "ARIEF ADI WICAKSONO",
+      "SID": "I9V9S",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "081335319447"
+    },
+    {
+      "No": 355,
+      "Site": "SMO",
+      "Perusahaan": "PT Resty Nur",
+      "Kategori": "PJO",
+      "Nama": "FAOZAN CHUMAESI",
+      "SID": "KSLFL",
+      "Jabatan": "Penanggung Jawab Operasional",
+      "No HP": "085293600740"
+    },
+    {
+      "No": 356,
+      "Site": "SMO",
+      "Perusahaan": "PT Terusan Raya",
+      "Kategori": "Manager",
+      "Nama": "EUGENIUS IRVANNO COREBIMA",
+      "SID": "TXFVF",
+      "Jabatan": "MANAGER OPERASIONAL",
+      "No HP": "082353410601"
+    },
+    {
+      "No": 357,
+      "Site": "SMO",
+      "Perusahaan": "PT Trakindo Utama",
+      "Kategori": "Manager",
+      "Nama": "ABDUL ROCHIM",
+      "SID": "4ZHQK",
+      "Jabatan": "SITE MANAGER",
+      "No HP": "08113945061"
+    },
+    {
+      "No": 358,
+      "Site": "SMO",
+      "Perusahaan": "PT Tunas Artha Gardatama",
+      "Kategori": "PJO",
+      "Nama": "PURWANTO",
+      "SID": "JM4QV",
+      "Jabatan": "PENANGGUNG JAWAB OPERASIONAL",
+      "No HP": "082149269137"
+    }
+  ]
+}
