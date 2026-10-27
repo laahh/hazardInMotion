@@ -535,9 +535,6 @@
                               <div class="ro-hm-ylabel">{{ $namaHari }}</div>
                               <div class="ro-hm-row">{!! $selBaris($pola['grid'][$baris], $pola['kolom']) !!}</div>
                             @endforeach
-
-                            <div class="ro-hm-corner"></div>
-                            <div class="ro-hm-xlabels">@for ($c = 0; $c < $pola['kolom']; $c++)<div class="ro-hm-xlabel"><span>{{ $c % 4 === 0 ? 'W' . ($c + 1) : '' }}</span></div>@endfor</div>
                           </div>
                         </div>
                       </div>
@@ -819,9 +816,6 @@
             for (var c = 0; c < nKolom; c++) { sel += baris[r][c] || '<span class="ro-hm-cell is-empty"></span>'; }
             grid += '<div class="ro-hm-ylabel">' + nama + '</div><div class="ro-hm-row">' + sel + '</div>';
         });
-        var xl = '';
-        for (var c = 0; c < nKolom; c++) { xl += '<div class="ro-hm-xlabel"><span>' + (c % 2 === 0 ? 'W' + (c + 1) : '') + '</span></div>'; }
-        grid += '<div class="ro-hm-corner"></div><div class="ro-hm-xlabels">' + xl + '</div>';
 
         var fmt = function (iso) { return new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); };
         var rentang = fmt(d.awal) + ' – ' + fmt(d.akhir);

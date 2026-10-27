@@ -9,13 +9,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Memasukkan "Pelanggaran periode kerja > 70 hari" (daftar onsite dari
- * DmsRosterRegLiveService) ke sid_roster_banned_master — menu Master Roster
- * Banned di /pra-operasi/roster-banned.
+ * Memasukkan pelanggaran dari DmsRosterRegLiveService ke
+ * sid_roster_banned_master — menu Master Roster Banned di
+ * /pra-operasi/roster-banned:
+ *   onsite    periode kerja > 70 hari       (tanggal_pelanggaran = hari ke-71)
+ *   beruntun  bekerja > 13 hari berturut-turut (tanggal_pelanggaran = hari ke-14)
  *
  * Isi baris mengikuti baris yang sudah ada di master: nik, sid, nama,
- * perusahaan = kode PT (BUMA, BAR, …), site_dedicated = site, alasan baku,
- * tanggal_pelanggaran = hari pertama melewati 70 hari (hari ke-71).
+ * perusahaan = kode PT (BUMA, BAR, …), site_dedicated = site, alasan baku.
+ * Orang yang melanggar keduanya cukup satu baris (onsite didahulukan).
  *
  * Penanganan duplikat: orang yang SID ATAU NIK-nya masih punya kasus banned
  * AKTIF (belum di-unban, lihat DmsRosterBannedAktif) dilewati — sama dengan
@@ -27,15 +29,25 @@ use Illuminate\Support\Facades\Log;
 final class DmsRosterAutoBannedService
 {
     /**
-     * Calon baris master dari daftar onsite, sudah dibuang yang tidak punya
-     * NIK (wajib di master) atau sudah tercatat.
+     * Calon baris master dari daftar onsite (dan beruntun), sudah dibuang
+     * yang tidak punya NIK (wajib di master) atau sudah tercatat.
      *
      * @param  list<array<string, mixed>>  $onsite  $hasil['daftar']['onsite'] dari DmsRosterRegLiveService.
+     * @param  list<array<string, mixed>>  $beruntun  $hasil['daftar']['beruntun'] (kosong = tidak ikut).
      * @return array{calon: list<array<string, mixed>>, dilewati: list<array{sid:string,nama:string,alasan:string}>}
      */
-    public function calon(array $onsite): array
+    public function calon(array $onsite, array $beruntun = []): array
     {
-        $sids = array_values(array_unique(array_map(static fn (array $r): string => (string) $r['sid'], $onsite)));
+        $alasanAturan = [
+            'onsite' => (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'),
+            'beruntun' => (string) config('dms_roster.reg_live.auto_banned.alasan_beruntun', 'BAN SID - Kepatuhan Roster Karyawan'),
+        ];
+        $baris = array_merge(
+            array_map(static fn (array $r): array => $r + ['_aturan' => 'onsite'], $onsite),
+            array_map(static fn (array $r): array => $r + ['_aturan' => 'beruntun'], $beruntun),
+        );
+
+        $sids = array_values(array_unique(array_map(static fn (array $r): string => (string) $r['sid'], $baris)));
         if ($sids === []) {
             return ['calon' => [], 'dilewati' => []];
         }
@@ -45,11 +57,13 @@ final class DmsRosterAutoBannedService
 
         $calon = [];
         $dilewati = [];
-        foreach ($onsite as $r) {
+        $dipilih = [];
+        foreach ($baris as $r) {
             $sid = (string) $r['sid'];
             $n = trim((string) ($nik[$sid] ?? ''));
 
             $alasan = match (true) {
+                isset($dipilih[$sid]) => 'sudah masuk calon (pelanggaran lain / baris ganda)',
                 isset($sidAda[$sid]) => 'SID masih punya kasus banned aktif (belum di-unban)',
                 $n === '' => 'NIK kosong di master karyawan',
                 isset($nikAda[$n]) => 'NIK masih punya kasus banned aktif (belum di-unban)',
@@ -67,13 +81,15 @@ final class DmsRosterAutoBannedService
                 'nama' => (string) $r['nama'],
                 'perusahaan' => (string) $r['pt'] !== '' ? (string) $r['pt'] : null,
                 'site_dedicated' => (string) $r['site'] !== '—' ? (string) $r['site'] : null,
-                'alasan_pelanggaran' => (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'),
+                'alasan_pelanggaran' => $alasanAturan[$r['_aturan']],
                 'tanggal_pelanggaran' => $r['tgl_pelanggaran_iso'] ?? null,
                 'created_by' => (string) config('dms_roster.reg_live.auto_banned.created_by', 'Sistem (RFID otomatis)'),
                 // Hanya untuk ditampilkan saat pratinjau; tidak disimpan.
                 '_periode' => (string) $r['nilai'],
+                '_aturan' => $r['_aturan'],
             ];
-            // Satu orang cukup sekali walau muncul ganda di daftar.
+            // Satu orang cukup sekali walau muncul ganda / di dua aturan.
+            $dipilih[$sid] = true;
             $sidAda[$sid] = true;
             $nikAda[$n] = true;
         }
@@ -101,13 +117,13 @@ final class DmsRosterAutoBannedService
                 if (isset($sidAda[$c['sid']]) || isset($nikAda[$c['nik']])) {
                     continue;
                 }
-                unset($c['_periode']);
+                unset($c['_periode'], $c['_aturan']);
                 SidRosterBannedMaster::create($c);
                 $ditambah++;
             }
 
             if ($ditambah > 0) {
-                Log::info("DmsRoster auto-banned: {$ditambah} karyawan periode kerja > 70 hari dimasukkan ke sid_roster_banned_master.");
+                Log::info("DmsRoster auto-banned: {$ditambah} karyawan (periode kerja > 70 hari / kerja > 13 hari berturut-turut) dimasukkan ke sid_roster_banned_master.");
             }
 
             return $ditambah;

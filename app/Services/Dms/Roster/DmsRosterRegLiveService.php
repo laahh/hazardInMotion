@@ -581,7 +581,8 @@ final class DmsRosterRegLiveService
                     // Sudah pernah di-banned & di-unban: periode on-site yang
                     // dimulai sebelum/pada tanggal unban itu adalah pelanggaran
                     // yang SAMA yang sudah ditindak — jangan dihitung lagi.
-                    if ($kode === 'onsite' && isset($unbanTerakhir[$sid]) && $iso($run['mulai']) <= $unbanTerakhir[$sid]) {
+                    // Berlaku juga untuk kerja beruntun: run yang sama tidak di-banned dua kali.
+                    if (in_array($kode, ['onsite', 'beruntun'], true) && isset($unbanTerakhir[$sid]) && $iso($run['mulai']) <= $unbanTerakhir[$sid]) {
                         continue;
                     }
                     $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal, $iso);
@@ -698,6 +699,12 @@ final class DmsRosterRegLiveService
             // jadi dipakai hari pertama jendela.
             $baris['tgl_pelanggaran_iso'] = $iso(
                 $run['terpotong'] ? $run['mulai'] : $run['mulai'] + $aturan['onsite_maks'],
+            );
+        }
+        if ($kode === 'beruntun') {
+            // Hari pertama melewati 13 hari berturut-turut (hari ke-14).
+            $baris['tgl_pelanggaran_iso'] = $iso(
+                $run['terpotong'] ? $run['mulai'] : $run['mulai'] + $aturan['beruntun_maks'],
             );
         }
 

@@ -268,6 +268,15 @@ return [
             // penyaringan/otomasi yang bergantung pada teks ini tetap jalan.
             'alasan' => 'BAN SID - Kepatuhan Roster Karyawan',
             'created_by' => 'Sistem (RFID otomatis)',
+
+            // Ikut masukkan "Bekerja > 13 hari berturut-turut" (tanggal
+            // pelanggaran = hari ke-14). Saklar terpisah & MATI bawaan: begitu
+            // dinyalakan, putaran sync berikutnya membuat banned SID sungguhan.
+            // Pratinjau: php artisan dms:roster-auto-banned --beruntun
+            'beruntun' => (bool) env('DMS_AUTO_BANNED_BERUNTUN', false),
+            // Teks alasan sengaja sama dengan aturan > 70 hari (lihat catatan
+            // 'alasan' di atas); ganti bila modul AutoBanned tidak bergantung pada teksnya.
+            'alasan_beruntun' => 'BAN SID - Kepatuhan Roster Karyawan',
         ],
 
         // Tabel "Penegakan Aturan & Alur Banned/Unban". Angka di sini angka

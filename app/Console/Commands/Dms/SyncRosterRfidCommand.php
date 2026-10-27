@@ -179,11 +179,16 @@ final class SyncRosterRfidCommand extends Command
             return;
         }
 
-        $this->info('Tahap 6 — masukkan periode kerja > 70 hari ke Master Roster Banned ...');
+        $beruntun = (bool) config('dms_roster.reg_live.auto_banned.beruntun', false);
+        $this->info('Tahap 6 — masukkan periode kerja > 70 hari'.($beruntun ? ' & kerja > 13 hari berturut-turut' : '')
+            .' ke Master Roster Banned ...');
 
         try {
             $banned = app(DmsRosterAutoBannedService::class);
-            $ditambah = $banned->masukkan($banned->calon($hasil['daftar']['onsite'])['calon']);
+            $ditambah = $banned->masukkan($banned->calon(
+                $hasil['daftar']['onsite'],
+                $beruntun ? $hasil['daftar']['beruntun'] : [],
+            )['calon']);
         } catch (Throwable $e) {
             $this->warn('  Gagal: '.$e->getMessage());
 
