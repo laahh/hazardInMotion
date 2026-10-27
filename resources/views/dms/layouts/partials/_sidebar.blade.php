@@ -17,6 +17,12 @@
             'icon' => 'solar:calendar-add-outline',
             'items' => [
                 [
+                    'label' => 'Overview Roster',
+                    'icon' => 'solar:widget-5-outline',
+                    'url' => route('dms.master-roster.overview'),
+                    'active' => request()->routeIs('dms.master-roster.overview'),
+                ],
+                [
                     'label' => 'Upload Roster',
                     'icon' => 'solar:upload-outline',
                     'url' => route('dms.master-roster.upload'),
@@ -27,12 +33,6 @@
                     'icon' => 'solar:checklist-minimalistic-outline',
                     'url' => route('dms.master-roster.approval'),
                     'active' => request()->routeIs('dms.master-roster.approval') || request()->routeIs('dms.master-roster.show'),
-                ],
-                [
-                    'label' => 'Overview Roster',
-                    'icon' => 'solar:widget-5-outline',
-                    'url' => route('dms.master-roster.overview'),
-                    'active' => request()->routeIs('dms.master-roster.overview'),
                 ],
                 // Assign Role hanya untuk admin (halamannya juga 403 untuk non-admin).
                 ...(auth()->user()?->isAdmin() ? [[
