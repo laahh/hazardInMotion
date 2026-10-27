@@ -19,6 +19,19 @@
 </div>
 
 @include('dms.roster-master._alert')
+
+{{-- Assign Role: cakupan perusahaan akun ini (null = semua). --}}
+@if ($cakupan === [])
+  <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8" role="alert">
+    Akun Anda belum di-assign ke perusahaan mana pun, jadi belum ada roster yang bisa Anda approve.
+    Minta admin menambahkan perusahaan Anda di menu <b>Assign Role</b>.
+  </div>
+@elseif ($cakupan !== null)
+  <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+    Anda hanya melihat roster perusahaan: <b>{{ implode(', ', $cakupan) }}</b>.
+  </div>
+@endif
+
 @include('dms.roster-master._ringkas')
 
 <div class="card radius-8 border-0 shadow-sm">

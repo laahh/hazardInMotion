@@ -6,6 +6,8 @@ namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
 use App\Models\DmsRosterMasterUpload;
+use App\Models\User;
+use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
@@ -30,6 +32,7 @@ final class RosterMasterController extends Controller
     public function __construct(
         private readonly DmsRosterMasterService $service,
         private readonly DmsRosterKaryawanAktif $karyawanAktif,
+        private readonly DmsRosterAksesPerusahaan $akses,
     ) {}
 
     /**
@@ -119,11 +122,14 @@ final class RosterMasterController extends Controller
     public function approval(Request $request): View
     {
         $status = (string) $request->query('status', DmsRosterMasterUpload::STATUS_PENDING);
+        // Assign Role: hanya roster perusahaan yang di-assign ke user ini.
+        $cakupan = $this->cakupan();
 
         return view('dms.roster-master.approval', [
-            'daftar' => $this->daftar($request, $status),
-            'ringkas' => $this->ringkas(),
+            'daftar' => $this->daftar($request, $status, $cakupan, true),
+            'ringkas' => $this->ringkas($cakupan, true),
             'status' => $status,
+            'cakupan' => $cakupan,
         ]);
     }
 
@@ -156,6 +162,9 @@ final class RosterMasterController extends Controller
     public function show(Request $request, int $id): View
     {
         $upload = DmsRosterMasterUpload::findOrFail($id);
+        $cakupan = $this->cakupan();
+        $ptUpload = $this->akses->perusahaanUpload($upload->id);
+        abort_unless(DmsRosterAksesPerusahaan::terlihat($cakupan, $ptUpload), 403, 'Roster ini bukan perusahaan yang di-assign ke akun Anda.');
         $halaman = max(1, (int) $request->query('hal', 1));
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
         $grid = $this->service->grid($upload, $halaman, 25, $cari);
@@ -173,6 +182,8 @@ final class RosterMasterController extends Controller
             'totalHalaman' => max(1, (int) ceil($grid['total'] / 25)),
             'cari' => $cari,
             'tumpang' => $upload->isPending() ? $this->service->jumlahTumpang($upload) : 0,
+            'ptUpload' => $ptUpload,
+            'bolehReview' => DmsRosterAksesPerusahaan::mencakup($cakupan, $ptUpload),
         ]);
     }
 
@@ -285,6 +296,10 @@ final class RosterMasterController extends Controller
             'ttd_file.max' => 'File tanda tangan maksimal 2 MB.',
         ]);
         $upload = DmsRosterMasterUpload::findOrFail($id);
+        if (! DmsRosterAksesPerusahaan::mencakup($this->cakupan(), $this->akses->perusahaanUpload($upload->id))) {
+            return back()->with('error', 'Anda hanya boleh '.($setuju ? 'menyetujui' : 'menolak')
+                .' roster yang seluruh perusahaannya di-assign ke akun Anda (menu Assign Role).');
+        }
 
         try {
             $ttd = null;
@@ -308,9 +323,15 @@ final class RosterMasterController extends Controller
             ->with('success', 'Roster "'.$upload->judul.'" '.($setuju ? 'disetujui.' : 'ditolak.'));
     }
 
-    private function daftar(Request $request, string $status): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    /**
+     * @param  list<string>|null  $cakupan  dipakai bila $batasi (halaman Approval)
+     */
+    private function daftar(Request $request, string $status, ?array $cakupan = null, bool $batasi = false): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
         $q = DmsRosterMasterUpload::query()->orderByDesc('created_at');
+        if ($batasi) {
+            $this->akses->batasiUpload($q, $cakupan);
+        }
         if (in_array($status, [DmsRosterMasterUpload::STATUS_PENDING, DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_REJECTED], true)) {
             $q->where('status', $status);
         }
@@ -321,15 +342,29 @@ final class RosterMasterController extends Controller
     /**
      * @return array<string, int>
      */
-    private function ringkas(): array
+    private function ringkas(?array $cakupan = null, bool $batasi = false): array
     {
-        $n = DmsRosterMasterUpload::query()->selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status');
+        $q = DmsRosterMasterUpload::query();
+        if ($batasi) {
+            $this->akses->batasiUpload($q, $cakupan);
+        }
+        $n = $q->selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status');
 
         return [
             DmsRosterMasterUpload::STATUS_PENDING => (int) ($n[DmsRosterMasterUpload::STATUS_PENDING] ?? 0),
             DmsRosterMasterUpload::STATUS_APPROVED => (int) ($n[DmsRosterMasterUpload::STATUS_APPROVED] ?? 0),
             DmsRosterMasterUpload::STATUS_REJECTED => (int) ($n[DmsRosterMasterUpload::STATUS_REJECTED] ?? 0),
         ];
+    }
+
+    /**
+     * @return list<string>|null null = semua perusahaan
+     */
+    private function cakupan(): ?array
+    {
+        $user = Auth::user();
+
+        return $this->akses->cakupan($user instanceof User ? $user : null);
     }
 
     private function pengguna(): string

@@ -94,6 +94,7 @@
         <p class="text-sm text-secondary-light mb-0">
           {{ $upload->judul }} &middot; {{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}
           &middot; {{ number_format($upload->jumlah_karyawan, 0, ',', '.') }} karyawan
+          &middot; {{ implode(', ', $ptUpload) }}
           &middot; diupload {{ $upload->diupload_oleh }} {{ $upload->created_at?->format('d/m/Y H:i') }}
           &middot; <a href="{{ route('dms.master-roster.file', $upload->id) }}" class="text-primary-600">file asli</a>
         </p>
@@ -109,7 +110,14 @@
     </div>
   </div>
   <div class="card-body p-24">
-    @if ($upload->isPending())
+    @if ($upload->isPending() && ! $bolehReview)
+      {{-- Assign Role: approve berlaku untuk seluruh isi file, jadi semua perusahaannya harus di-assign. --}}
+      <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-16 py-12 mb-0 radius-8 text-sm">
+        Roster ini memuat perusahaan yang tidak di-assign ke akun Anda
+        ({{ implode(', ', $ptUpload) }}), jadi Anda hanya bisa melihatnya.
+        Approval dilakukan oleh user yang di-assign ke seluruh perusahaan tersebut.
+      </div>
+    @elseif ($upload->isPending())
       @if ($tumpang > 0)
         <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-12 py-8 mb-16 radius-8 text-sm">
           {{ number_format($tumpang, 0, ',', '.') }} jadwal di roster ini bertumpuk dengan roster lain yang sudah disetujui
@@ -234,7 +242,7 @@
 @endsection
 
 @section('page-scripts')
-@if ($upload->isPending())
+@if ($upload->isPending() && $bolehReview)
 {{-- signature_pad (szimek) — tanda tangan digambar di canvas, disimpan PNG. --}}
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
 <script>

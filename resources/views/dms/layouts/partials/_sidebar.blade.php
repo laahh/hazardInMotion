@@ -59,6 +59,13 @@
                     'url' => route('dms.master-roster.overview'),
                     'active' => request()->routeIs('dms.master-roster.overview'),
                 ],
+                // Assign Role hanya untuk admin (halamannya juga 403 untuk non-admin).
+                ...(auth()->user()?->isAdmin() ? [[
+                    'label' => 'Assign Role',
+                    'icon' => 'solar:user-check-rounded-outline',
+                    'url' => route('dms.master-roster.assign-role'),
+                    'active' => request()->routeIs('dms.master-roster.assign-role*'),
+                ]] : []),
             ],
         ],
         [

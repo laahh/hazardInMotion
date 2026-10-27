@@ -818,6 +818,10 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             Route::get('/approval', 'approval')->name('approval');
             Route::get('/overview', 'overview')->name('overview');
             Route::get('/overview/jadwal', 'overviewJadwal')->name('overview.jadwal');
+            // Assign Role (admin): perusahaan yang boleh di-approve tiap user.
+            Route::get('/assign-role', [\App\Http\Controllers\DMS\RosterMasterAksesController::class, 'index'])->name('assign-role');
+            Route::post('/assign-role', [\App\Http\Controllers\DMS\RosterMasterAksesController::class, 'store'])->name('assign-role.store');
+            Route::delete('/assign-role/{user}', [\App\Http\Controllers\DMS\RosterMasterAksesController::class, 'destroy'])->whereNumber('user')->name('assign-role.destroy');
             Route::get('/{id}', 'show')->whereNumber('id')->name('show');
             Route::get('/{id}/file', 'file')->whereNumber('id')->name('file');
             Route::get('/{id}/ttd', 'ttd')->whereNumber('id')->name('ttd');
