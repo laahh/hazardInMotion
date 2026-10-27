@@ -47,7 +47,7 @@
             <tr>
               <td class="rm-c-id rm-c-no rm-s1 rm-hp-sembunyi">{{ $nomorAwal + $loop->iteration }}</td>
               <td class="rm-c-id rm-c-sid rm-s2 rm-hp-sembunyi">{{ $k['sid'] }}</td>
-              <td class="rm-c-id rm-s3">
+              <td class="rm-c-id rm-c-nama rm-s3">
                 <span class="rm-nama" title="{{ $k['nama'] }}">{{ $k['nama'] ?? '—' }}</span>
                 {{-- Layar sempit: kolom identitas lain disembunyikan, isinya diringkas di sini. --}}
                 <span class="rm-ringkas">
