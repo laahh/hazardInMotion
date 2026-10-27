@@ -27,6 +27,9 @@
   }
   #rbTable { width: 100% !important; }
   #rbTable th, #rbTable td { vertical-align: middle; }
+  #rbTable td.rb-col-karyawan { white-space: normal; min-width: 220px; }
+  #rbTable .rb-karyawan-nama { font-weight: 600; color: var(--text-primary-light, #0F172A); }
+  #rbTable .rb-karyawan-id { display: block; font-size: 12px; color: var(--text-secondary-light, #64748B); margin-top: 2px; }
   #rbTable td.rb-col-alasan { white-space: normal; min-width: 220px; }
   #rbTable td.rb-col-log { white-space: normal; min-width: 180px; }
   #rbTable .rb-log-error { max-width: 260px; word-break: break-word; }
@@ -142,9 +145,7 @@
         <thead>
           <tr>
             <th>No</th>
-            <th>NIK</th>
-            <th>SID</th>
-            <th>Nama</th>
+            <th>Karyawan</th>
             <th>Perusahaan</th>
             <th>Site</th>
             <th>Alasan Pelanggaran</th>
@@ -183,7 +184,7 @@
         ordering: true,
         pageLength: 25,
         lengthMenu: [10, 25, 50, 100],
-        order: [[3, 'asc']],
+        order: [[1, 'asc']],
         autoWidth: false,
         ajax: {
             url: @json(route('pra-operasi.roster-banned.data')),
@@ -195,9 +196,8 @@
         },
         columns: [
             { data: 'DT_RowIndex', orderable: false, searchable: false, className: 'text-center' },
-            { data: 'nik' },
-            { data: 'sid' },
-            { data: 'nama' },
+            // Nama + SID · NIK dalam satu kolom; diurutkan menurut nama.
+            { data: 'karyawan', className: 'rb-col-karyawan' },
             { data: 'perusahaan' },
             { data: 'site_dedicated' },
             { data: 'alasan_pelanggaran', className: 'rb-col-alasan' },

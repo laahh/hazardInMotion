@@ -73,19 +73,18 @@ class SidRosterBannedMasterController extends Controller
         if ($length < 1 || $length > 100) {
             $length = 25;
         }
-        $orderColIndex = (int) $request->input('order.0.column', 3);
+        $orderColIndex = (int) $request->input('order.0.column', 1);
         $orderDir = strtolower((string) $request->input('order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
 
+        // Indeks = urutan kolom tabel (kolom 1 "Karyawan" = nama + SID + NIK, urut menurut nama).
         $orderColumns = [
-            1 => 'm.nik',
-            2 => 'm.sid',
-            3 => 'm.nama',
-            4 => 'm.perusahaan',
-            5 => 'm.site_dedicated',
-            6 => 'm.alasan_pelanggaran',
-            7 => 'm.tanggal_pelanggaran',
-            9 => 'bl.automation_status',
-            10 => 'm.created_by',
+            1 => 'm.nama',
+            2 => 'm.perusahaan',
+            3 => 'm.site_dedicated',
+            4 => 'm.alasan_pelanggaran',
+            5 => 'm.tanggal_pelanggaran',
+            7 => 'bl.automation_status',
+            8 => 'm.created_by',
         ];
         $orderBy = $orderColumns[$orderColIndex] ?? 'm.nama';
 
@@ -116,9 +115,8 @@ class SidRosterBannedMasterController extends Controller
 
             $data[] = [
                 'DT_RowIndex' => $start + $idx + 1,
-                'nik' => $item->nik ?? '-',
-                'sid' => $item->sid ?: '-',
-                'nama' => $item->nama ?? '-',
+                'karyawan' => '<span class="rb-karyawan-nama">'.e($item->nama ?: '-').'</span>'
+                    .'<span class="rb-karyawan-id">SID '.e($item->sid ?: '-').' &middot; NIK '.e($item->nik ?: '-').'</span>',
                 'perusahaan' => $item->perusahaan ?: '-',
                 'site_dedicated' => $item->site_dedicated ?: '-',
                 'alasan_pelanggaran' => e($item->alasan_pelanggaran ?? '-').$this->badgeAturan($item),
