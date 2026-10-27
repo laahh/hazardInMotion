@@ -16,6 +16,7 @@ class DmsRosterPeringatanStoreTest extends TestCase
     private function mendekati(array $ubah = []): array
     {
         return $ubah + [
+            'kode' => 'onsite',
             'sid' => ' we3ck ',
             'nama' => 'TAJUDDIN',
             'jabatan' => 'PJO',
@@ -56,6 +57,18 @@ class DmsRosterPeringatanStoreTest extends TestCase
             'created_at' => '2026-10-27 10:00:00',
             'updated_at' => '2026-10-27 10:00:00',
         ], $baris[0]);
+    }
+
+    public function test_satu_sid_boleh_punya_peringatan_onsite_dan_beruntun(): void
+    {
+        $baris = DmsRosterPeringatanStore::baris([
+            $this->mendekati(),
+            $this->mendekati(['kode' => 'beruntun', 'hari_ke' => 11, 'sisa_hari' => 2]),
+            $this->mendekati(['kode' => 'jam12']),   // bukan aturan peringatan
+        ], '2026-10-27', '2026-10-27 10:00:00');
+
+        $this->assertSame(['onsite', 'beruntun'], array_column($baris, 'kode'));
+        $this->assertSame([65, 11], array_column($baris, 'hari_ke'));
     }
 
     public function test_sid_kosong_dan_ganda_dilewati(): void

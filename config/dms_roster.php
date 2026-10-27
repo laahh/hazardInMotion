@@ -243,12 +243,14 @@ return [
         // ter-unban)". FAILED/PROCESSING sengaja tidak termasuk.
         'status_unban_selesai' => ['SUCCESS', 'SKIPPED'],
 
-        // Peringatan dini: periode kerja hari ke-onsite_dari s/d onsite_maks
-        // (60–70) yang belum melanggar. Tiap putaran dms:sync-roster-rfid
-        // menyimpannya ke dms_roster_peringatan (satu baris per SID per hari)
-        // sebagai sumber notifikasi.
+        // Peringatan dini, belum melanggar: periode kerja hari ke-onsite_dari
+        // s/d onsite_maks (60–70) dan kerja beruntun hari ke-beruntun_dari
+        // s/d beruntun_maks (10–13). Tiap putaran dms:sync-roster-rfid
+        // menyimpannya ke dms_roster_peringatan (satu baris per aturan per SID
+        // per hari) sebagai sumber notifikasi.
         'peringatan' => [
             'onsite_dari' => 60,
+            'beruntun_dari' => 10,
             'simpan' => (bool) env('DMS_PERINGATAN_SIMPAN', true),
         ],
 

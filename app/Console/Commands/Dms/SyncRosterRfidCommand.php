@@ -125,15 +125,15 @@ final class SyncRosterRfidCommand extends Command
         }
 
         $this->line('  '.$this->angka((int) $hasil['populasi']).' karyawan dinilai; '
-            .$this->angka(count($hasil['daftar']['onsite'])).' periode kerja > 70 hari; '
-            .$this->angka(count($hasil['mendekati'] ?? [])).' periode kerja 60–70 hari.');
+            .$this->angka(count($hasil['daftar']['onsite'])).' periode kerja > 70 hari.');
 
         $this->simpanPeringatan($hasil);
         $this->masukkanKeMasterBanned($live, $hasil);
     }
 
     /**
-     * Tahap 5b — periode kerja 60–70 hari (belum melanggar) disimpan ke
+     * Tahap 5b — mendekati batas (belum melanggar): periode kerja 60–70 hari
+     * dan kerja beruntun 10–13 hari, disimpan ke
      * dms_roster_peringatan sebagai sumber notifikasi. Gagal di tahap ini
      * tidak menggagalkan sinkronisasi.
      *
@@ -159,8 +159,9 @@ final class SyncRosterRfidCommand extends Command
             return;
         }
 
-        $this->line(sprintf('Tahap 5b — %s peringatan 60–70 hari disimpan, %s dihapus (keluar rentang).',
-            $this->angka($r['disimpan']), $this->angka($r['dihapus'])));
+        $per = array_count_values(array_column($hasil['mendekati'] ?? [], 'kode'));
+        $this->line(sprintf('Tahap 5b — peringatan disimpan: %s periode kerja 60–70 hari, %s kerja beruntun 10–13 hari; %s dihapus (keluar rentang).',
+            $this->angka($per['onsite'] ?? 0), $this->angka($per['beruntun'] ?? 0), $this->angka($r['dihapus'])));
     }
 
     /**

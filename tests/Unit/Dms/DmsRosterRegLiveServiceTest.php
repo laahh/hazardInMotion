@@ -69,20 +69,43 @@ class DmsRosterRegLiveServiceTest extends TestCase
         // Cuti 0..19 lalu on-site 20..84 = 65 hari, off pendek tiap kelipatan 7.
         $onsite = array_filter(range(20, 84), static fn (int $i): bool => $i % 7 !== 0 || $i === 84);
 
-        $this->assertSame(['hari' => 65, 'mulai' => 20, 'selesai' => 84], $this->svc->mendekati($this->pagi($onsite), 85, 'Operator A2B'));
+        $this->assertSame(['hari' => 65, 'mulai' => 20, 'selesai' => 84], $this->onsiteDekat($this->pagi($onsite), 85));
     }
 
     public function test_mendekati_batas_bawah_60_dan_batas_atas_70(): void
     {
-        $this->assertSame(60, $this->svc->mendekati($this->pagi(range(20, 79)), 80, 'Operator A2B')['hari']);
-        $this->assertNull($this->svc->mendekati($this->pagi(range(20, 78)), 79, 'Operator A2B'));   // 59 hari
-        $this->assertSame(70, $this->svc->mendekati($this->pagi(range(20, 89)), 90, 'Operator A2B')['hari']);
-        $this->assertNull($this->svc->mendekati($this->pagi(range(20, 90)), 91, 'Operator A2B'));   // 71 = sudah melanggar
+        // Off pendek tiap kelipatan 7 supaya run kerja beruntun tidak ikut panjang.
+        $kerja = static fn (int $sampai): array => array_filter(range(20, $sampai), static fn (int $i): bool => $i % 7 !== 0 || $i === $sampai);
+
+        $this->assertSame(60, $this->onsiteDekat($this->pagi($kerja(79)), 80)['hari']);
+        $this->assertNull($this->onsiteDekat($this->pagi($kerja(78)), 79));   // 59 hari
+        $this->assertSame(70, $this->onsiteDekat($this->pagi($kerja(89)), 90)['hari']);
+        $this->assertNull($this->onsiteDekat($this->pagi($kerja(90)), 91));   // 71 = sudah melanggar
+    }
+
+    public function test_mendekati_beruntun_hari_ke_10_sampai_13(): void
+    {
+        $dekat = fn (int $hari): ?array => $this->svc->mendekati($this->pagi(range(100 - $hari, 99)), self::JENDELA, 'Operator A2B')['beruntun'];
+
+        $this->assertNull($dekat(9));
+        $this->assertSame(['hari' => 10, 'mulai' => 90, 'selesai' => 99], $dekat(10));
+        $this->assertSame(13, $dekat(13)['hari']);
+        $this->assertNull($dekat(14));   // sudah melanggar
+    }
+
+    public function test_mendekati_beruntun_putus_oleh_satu_hari_off(): void
+    {
+        // Kerja 80..92, off 93, kerja 94..99 = run beruntun terkini 6 hari.
+        $scan = $this->pagi(array_merge(range(80, 92), range(94, 99)));
+
+        $this->assertNull($this->svc->mendekati($scan, self::JENDELA, 'Operator A2B')['beruntun']);
     }
 
     public function test_mendekati_tidak_berlaku_untuk_kategori_longgar(): void
     {
-        $this->assertNull($this->svc->mendekati($this->pagi(range(20, 84)), 85, 'Mekanik'));
+        $hasil = $this->svc->mendekati($this->pagi(range(20, 84)), 85, 'Mekanik');
+
+        $this->assertSame(['onsite' => null, 'beruntun' => null], $hasil);
     }
 
     public function test_onsite_yang_menyentuh_awal_jendela_ditandai_terpotong(): void
@@ -296,6 +319,11 @@ class DmsRosterRegLiveServiceTest extends TestCase
      * @param  array<int, string>  $scan
      * @return array<string, mixed>
      */
+    private function onsiteDekat(array $scan, int $panjang): ?array
+    {
+        return $this->svc->mendekati($scan, $panjang, 'Operator A2B')['onsite'];
+    }
+
     private function nilai(array $scan, string $kategori = 'Operator Hauler', string $perusahaan = ''): array
     {
         return $this->svc->nilai($scan, self::JENDELA, $kategori, $perusahaan);

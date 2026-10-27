@@ -152,25 +152,35 @@ final class DmsRosterRegLiveService
     }
 
     /**
-     * Periode kerja (on-site) yang BELUM melanggar tapi sudah mendekati batas:
-     * hari ke-N masa on-site berjalan dengan peringatan.onsite_dari <= N <=
-     * onsite_maks (bawaan 60–70). Hitungannya sama persis dengan aturan banned
-     * (off pendek ikut dihitung, cuti >5 hari memutus) — hanya ambangnya yang
-     * diturunkan. Murni, tanpa DB.
+     * Run yang BELUM melanggar tapi sudah mendekati batas banned — hitungannya
+     * sama persis dengan aturan banned, hanya ambangnya yang diturunkan:
+     *   onsite    periode kerja hari ke-N, peringatan.onsite_dari <= N <= onsite_maks (60–70)
+     *             (off pendek ikut dihitung, cuti >5 hari memutus)
+     *   beruntun  kerja tanpa off hari ke-N, peringatan.beruntun_dari <= N <= beruntun_maks (10–13)
+     * Murni, tanpa DB.
      *
      * @param  array<int, string>  $hariScan
-     * @return array{hari:int,mulai:int,selesai:int}|null
+     * @return array{onsite: ?array{hari:int,mulai:int,selesai:int}, beruntun: ?array{hari:int,mulai:int,selesai:int}}
      */
-    public function mendekati(array $hariScan, int $panjang, string $kategori, string $perusahaan = ''): ?array
+    public function mendekati(array $hariScan, int $panjang, string $kategori, string $perusahaan = ''): array
     {
         $aturan = $this->aturan();
-        $dari = (int) config('dms_roster.reg_live.peringatan.onsite_dari', 60);
+        $dari = [
+            'onsite' => (int) config('dms_roster.reg_live.peringatan.onsite_dari', 60),
+            'beruntun' => (int) config('dms_roster.reg_live.peringatan.beruntun_dari', 10),
+        ];
         $param = $this->engine->paramPerusahaan($perusahaan);
         $eval = $this->engine->evaluasi($this->rakitDeret($hariScan, $panjang), $kategori, $param['thr'], $param['map']);
 
-        $run = $this->engine->pelanggaranTerkini($eval, ['onsite' => $dari - 1])['reg2'];
+        $reg = $this->engine->pelanggaranTerkini($eval, [
+            'onsite' => $dari['onsite'] - 1,
+            'kerja_beruntun' => $dari['beruntun'] - 1,
+        ]);
 
-        return $run !== null && $run['hari'] <= $aturan['onsite_maks'] ? $run : null;
+        return [
+            'onsite' => $reg['reg2'] !== null && $reg['reg2']['hari'] <= $aturan['onsite_maks'] ? $reg['reg2'] : null,
+            'beruntun' => $reg['reg1'] !== null && $reg['reg1']['hari'] <= $aturan['beruntun_maks'] ? $reg['reg1'] : null,
+        ];
     }
 
     /**
@@ -577,9 +587,15 @@ final class DmsRosterRegLiveService
                     $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal, $iso);
                 }
 
-                $dekat = $this->mendekati($hariScan, $panjang, (string) $k->kategori, (string) $k->perusahaan);
-                if ($dekat !== null && ! (isset($unbanTerakhir[$sid]) && $iso($dekat['mulai']) <= $unbanTerakhir[$sid])) {
-                    $mendekati[] = $dasar + $this->barisMendekati($dekat, $iso) + [
+                foreach ($this->mendekati($hariScan, $panjang, (string) $k->kategori, (string) $k->perusahaan) as $kode => $dekat) {
+                    if ($dekat === null) {
+                        continue;
+                    }
+                    // Sama dengan kartu banned: periode on-site yang sudah ditindak (di-unban) tidak diingatkan lagi.
+                    if ($kode === 'onsite' && isset($unbanTerakhir[$sid]) && $iso($dekat['mulai']) <= $unbanTerakhir[$sid]) {
+                        continue;
+                    }
+                    $mendekati[] = $dasar + $this->barisMendekati($kode, $dekat, $iso) + [
                         'scan_terakhir_iso' => $iso(max(array_keys($hariScan))),
                     ];
                 }
@@ -595,7 +611,7 @@ final class DmsRosterRegLiveService
             usort($baris, static fn (array $a, array $b): int => $b['urut'] <=> $a['urut']);
         }
         unset($baris);
-        usort($mendekati, static fn (array $a, array $b): int => $b['hari_ke'] <=> $a['hari_ke']);
+        usort($mendekati, static fn (array $a, array $b): int => [$a['kode'], $b['hari_ke']] <=> [$b['kode'], $a['hari_ke']]);
 
         return [
             'per' => $hariIni->translatedFormat('j M Y'),
@@ -605,30 +621,37 @@ final class DmsRosterRegLiveService
             // Karyawan yang dinilai (7 PT, tanpa master banned) — pembagi persen tile.
             'populasi' => $karyawan->count(),
             'daftar' => $daftar,
-            // Periode kerja 60–70 hari (belum melanggar) — disimpan ke
-            // dms_roster_peringatan oleh DmsRosterPeringatanStore untuk notifikasi.
+            // Mendekati batas (belum melanggar): periode kerja 60–70 hari dan
+            // kerja beruntun 10–13 hari — disimpan ke dms_roster_peringatan
+            // oleh DmsRosterPeringatanStore untuk notifikasi.
             'mendekati' => $mendekati,
         ];
     }
 
     /**
      * Kolom baris "mendekati batas": hari ke-N, sisa hari, dan tanggal
-     * perkiraan melanggar (hari ke-71) & banned (hari ke-74) bila tidak cuti.
+     * perkiraan melanggar & banned bila tidak cuti/off:
+     *   onsite    melanggar hari ke-71, banned hari ke-74
+     *   beruntun  melanggar hari ke-14, banned (1 hari off) hari ke-14
      *
      * @param  array{hari:int,mulai:int,selesai:int}  $run
      * @param  callable(int): string  $iso
      * @return array<string, mixed>
      */
-    private function barisMendekati(array $run, callable $iso): array
+    private function barisMendekati(string $kode, array $run, callable $iso): array
     {
         $aturan = $this->aturan();
+        [$maks, $bannedKe] = $kode === 'onsite'
+            ? [$aturan['onsite_maks'], $aturan['onsite_banned_hari_ke']]
+            : [$aturan['beruntun_maks'], $aturan['beruntun_banned_hari_ke']];
 
         return [
+            'kode' => $kode,
             'hari_ke' => $run['hari'],
-            'sisa_hari' => $aturan['onsite_maks'] - $run['hari'],
+            'sisa_hari' => $maks - $run['hari'],
             'mulai_iso' => $iso($run['mulai']),
-            'tgl_melanggar_iso' => $iso($run['mulai'] + $aturan['onsite_maks']),
-            'tgl_banned_iso' => $iso($run['mulai'] + $aturan['onsite_banned_hari_ke'] - 1),
+            'tgl_melanggar_iso' => $iso($run['mulai'] + $maks),
+            'tgl_banned_iso' => $iso($run['mulai'] + $bannedKe - 1),
         ];
     }
 

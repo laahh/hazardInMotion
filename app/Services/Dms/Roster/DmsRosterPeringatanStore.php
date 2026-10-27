@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Simpan daftar "periode kerja 60–70 hari" (DmsRosterRegLiveService, kunci
- * 'mendekati') ke dms_roster_peringatan sebagai sumber notifikasi.
+ * Simpan daftar "mendekati batas banned" (DmsRosterRegLiveService, kunci
+ * 'mendekati') ke dms_roster_peringatan sebagai sumber notifikasi:
+ *   onsite    periode kerja hari ke-60 s/d 70
+ *   beruntun  kerja tanpa off hari ke-10 s/d 13
  *
  * Satu baris per (tanggal, kode, SID). Putaran per jam pada hari yang sama
  * memperbarui baris yang ada tanpa menyentuh kolom notif_*, jadi status
@@ -22,6 +24,10 @@ final class DmsRosterPeringatanStore
     public const TABEL = 'dms_roster_peringatan';
 
     public const KODE_ONSITE = 'onsite';
+
+    public const KODE_BERUNTUN = 'beruntun';
+
+    public const KODE = [self::KODE_ONSITE, self::KODE_BERUNTUN];
 
     private const CHUNK = 500;
 
@@ -47,15 +53,20 @@ final class DmsRosterPeringatanStore
                 ]);
             }
 
-            $hapus = DB::table(self::TABEL)
-                ->where('tanggal', $tanggal)
-                ->where('kode', self::KODE_ONSITE)
-                ->whereNull('notif_dikirim_pada');
-            if ($baris !== []) {
-                $hapus->whereNotIn('kode_sid', array_column($baris, 'kode_sid'));
+            $dihapus = 0;
+            foreach (self::KODE as $kode) {
+                $sid = array_column(array_filter($baris, static fn (array $b): bool => $b['kode'] === $kode), 'kode_sid');
+                $hapus = DB::table(self::TABEL)
+                    ->where('tanggal', $tanggal)
+                    ->where('kode', $kode)
+                    ->whereNull('notif_dikirim_pada');
+                if ($sid !== []) {
+                    $hapus->whereNotIn('kode_sid', $sid);
+                }
+                $dihapus += $hapus->delete();
             }
 
-            return ['disimpan' => count($baris), 'dihapus' => $hapus->delete()];
+            return ['disimpan' => count($baris), 'dihapus' => $dihapus];
         });
     }
 
@@ -76,12 +87,13 @@ final class DmsRosterPeringatanStore
         $out = [];
         foreach ($mendekati as $m) {
             $sid = strtoupper(trim((string) ($m['sid'] ?? '')));
-            if ($sid === '' || isset($out[$sid])) {
+            $kode = (string) ($m['kode'] ?? self::KODE_ONSITE);
+            if ($sid === '' || ! in_array($kode, self::KODE, true) || isset($out[$kode.'|'.$sid])) {
                 continue;
             }
-            $out[$sid] = [
+            $out[$kode.'|'.$sid] = [
                 'tanggal' => $tanggal,
-                'kode' => self::KODE_ONSITE,
+                'kode' => $kode,
                 'kode_sid' => mb_substr($sid, 0, 20),
                 'nama' => $teks($m['nama'] ?? null, 150),
                 'jabatan' => $teks($m['jabatan'] ?? null, 150),
