@@ -1,6 +1,6 @@
 {{--
-  Sidebar DMS — menu dikelompokkan jadi pohon satu tingkat (Kesesuaian Roster,
-  Fatigue Monitoring). Tampilan dan perilakunya mengikuti sidebar OHS Score Card
+  Sidebar DMS — menu dikelompokkan jadi pohon satu tingkat (Master Roster,
+  Kesesuaian Roster, Fatigue Monitoring). Tampilan dan perilakunya mengikuti sidebar OHS Score Card
   (ohs-score-card/partials/_sidebar): penanda ⊞/⊟, garis pohon, status buka/tutup
   diingat di localStorage. Kelas .dropdown bawaan tema sengaja tidak dipakai —
   lihat catatan di sidebar OHS Score Card.
@@ -11,31 +11,6 @@
 --}}
 @php
     $groups = [
-        [
-            'key' => 'kesesuaian-roster',
-            'label' => 'Kesesuaian Roster',
-            'icon' => 'solar:calendar-mark-outline',
-            'items' => [
-                [
-                    'label' => 'Ringkasan Roster',
-                    'icon' => 'solar:chart-square-outline',
-                    'url' => route('dms.roster-compliance-static.overview'),
-                    'active' => request()->routeIs('dms.roster-compliance-static.overview'),
-                ],
-                [
-                    'label' => 'Master Roster Banned',
-                    'icon' => 'solar:forbidden-circle-outline',
-                    'url' => route('pra-operasi.roster-banned.index'),
-                    'active' => request()->routeIs('pra-operasi.roster-banned.*') && ! request()->routeIs('pra-operasi.roster-banned.treatment.*'),
-                ],
-                [
-                    'label' => 'Review Bukti Treatment',
-                    'icon' => 'solar:shield-check-outline',
-                    'url' => route('pra-operasi.roster-banned.treatment.index'),
-                    'active' => request()->routeIs('pra-operasi.roster-banned.treatment.*'),
-                ],
-            ],
-        ],
         [
             'key' => 'master-roster',
             'label' => 'Master Roster',
@@ -66,6 +41,31 @@
                     'url' => route('dms.master-roster.assign-role'),
                     'active' => request()->routeIs('dms.master-roster.assign-role*'),
                 ]] : []),
+            ],
+        ],
+        [
+            'key' => 'kesesuaian-roster',
+            'label' => 'Kesesuaian Roster',
+            'icon' => 'solar:calendar-mark-outline',
+            'items' => [
+                [
+                    'label' => 'Ringkasan Roster',
+                    'icon' => 'solar:chart-square-outline',
+                    'url' => route('dms.roster-compliance-static.overview'),
+                    'active' => request()->routeIs('dms.roster-compliance-static.overview'),
+                ],
+                [
+                    'label' => 'Master Roster Banned',
+                    'icon' => 'solar:forbidden-circle-outline',
+                    'url' => route('pra-operasi.roster-banned.index'),
+                    'active' => request()->routeIs('pra-operasi.roster-banned.*') && ! request()->routeIs('pra-operasi.roster-banned.treatment.*'),
+                ],
+                [
+                    'label' => 'Review Bukti Treatment',
+                    'icon' => 'solar:shield-check-outline',
+                    'url' => route('pra-operasi.roster-banned.treatment.index'),
+                    'active' => request()->routeIs('pra-operasi.roster-banned.treatment.*'),
+                ],
             ],
         ],
         [
