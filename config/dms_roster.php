@@ -439,4 +439,25 @@ return [
         'cache_ttl' => 4500,
         'timeout_ms' => 20000,
     ],
+
+    /*
+    | Plan Kesesuaian Roster (tab ketiga Scorecard Ringkasan Roster).
+    |
+    | Plan roster yang DISETUJUI (Master Roster) disambung riwayat tap RFID ke
+    | belakang, lalu dinilai dengan aturan banned reg_live.aturan (> 70 hari
+    | on-site, > 13 hari kerja berturut-turut): sudah melanggar, akan melanggar
+    | menurut plan (beserta tanggalnya), aman, atau plan segera habis. Hari
+    | lampau juga dicocokkan plan vs tap (kepatuhan). Dihitung dms:sync-roster-rfid
+    | (Tahap 9) — hanya tampilan, tidak memicu banned.
+    |
+    | Kode plan → deret: D1–D13 / DS = P, N1–N7 / NS = M, OFF/S/I = off, CT = cuti. Off
+    | > ambang.off_ke_cuti hari berturut tetap dianggap cuti, sama dengan RFID.
+    */
+    'plan_kesesuaian' => [
+        // Plan yang berakhir dalam N hari dari hari ini = perlu plan lanjutan.
+        'segera_habis_hari' => 7,
+        // Jumlah hari lampau yang ikut dikirim ke timeline per karyawan.
+        'timeline_mundur_hari' => 21,
+        'cache_ttl' => 4500,
+    ],
 ];

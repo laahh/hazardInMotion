@@ -832,6 +832,9 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
         // Panel Long Shift pengawas (docs/overshift.md) di kartu Scorecard.
         Route::get('/roster-compliance/long-shift.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'longShift'])
             ->name('roster-compliance.long-shift');
+        // Tab Plan Kesesuaian Roster: plan disetujui + RFID vs aturan > 70 / > 13 hari.
+        Route::get('/roster-compliance/plan-kesesuaian.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'planKesesuaian'])
+            ->name('roster-compliance.plan-kesesuaian');
         Route::get('/roster-compliance/terkini/{kode}.json', [\App\Http\Controllers\DMS\RosterComplianceController::class, 'detailTerkini'])
             ->whereIn('kode', \App\Services\Dms\Roster\DmsRosterRegLiveService::KODE)
             ->name('roster-compliance.terkini.detail');

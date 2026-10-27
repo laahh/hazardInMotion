@@ -404,12 +404,14 @@
 
 /* ── Saklar geser Scorecard: Roster karyawan ⇄ Long Shift pengawas ───── */
 .ro-switch {
-  position: relative; display: inline-grid; grid-template-columns: 1fr 1fr;
-  background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 999px; padding: 3px;
+  /* --ro-n = jumlah opsi, --ro-i = indeks opsi aktif (diisi JS). */
+  position: relative; display: inline-grid; grid-template-columns: repeat(var(--ro-n, 2), 1fr);
+  background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 999px; padding: 3px; max-width: 100%;
 }
 .ro-switch__thumb {
-  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px);
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / var(--ro-n, 2));
   background: #fff; border-radius: 999px; box-shadow: 0 1px 4px rgba(15, 23, 42, .14);
+  transform: translateX(calc(100% * var(--ro-i, 0)));
   transition: transform .22s ease;
 }
 .ro-switch.is-kanan .ro-switch__thumb { transform: translateX(100%); }
@@ -451,3 +453,37 @@
 .ro-ls-chart__tgl { font-size: 10px; fill: #94A3B8; text-anchor: middle; }
 .ro-ls-chart__bar:hover path { filter: brightness(1.08); }
 .ro-ls-chart__bar:hover rect { fill: rgba(15, 23, 42, .04); }
+
+/* ── Panel Plan Kesesuaian Roster ─────────────────────────────────────── */
+.ro-pk-bar { position: relative; height: 6px; width: 110px; border-radius: 3px; background: #F1F5F9; margin-top: 5px; overflow: hidden; }
+.ro-pk-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: #6366F1; }
+.ro-pk-bar > span.is-dekat { background: #F59E0B; }
+.ro-pk-bar > span.is-lewat { background: #DC2626; }
+.ro-pk-tgl { display: block; font-size: 11px; margin-top: 3px; color: #64748B; white-space: nowrap; }
+.ro-pk-tgl b { color: #B91C1C; }
+.ro-pk-patuh { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ro-pk-patuh.is-rendah { color: #B91C1C; }
+.ro-pk-patuh.is-sedang { color: #B45309; }
+.ro-pk-patuh.is-baik { color: #047857; }
+
+/* Timeline gabungan: tap RFID (isi penuh) → plan (garis putus-putus). */
+.ro-pk-tl { display: flex; gap: 2px; padding: 18px 2px 4px; min-width: max-content; }
+.ro-pk-hari { position: relative; width: 22px; text-align: center; flex: none; }
+.ro-pk-sel { height: 24px; border-radius: 5px; font-size: 9.5px; font-weight: 700; line-height: 24px; color: #334155; }
+.ro-pk-sel.k-P { background: #FDE68A; color: #92400E; }
+.ro-pk-sel.k-M { background: #C7D2FE; color: #3730A3; }
+.ro-pk-sel.k-o { background: #F1F5F9; color: #94A3B8; }
+.ro-pk-sel.k-c { background: #CCFBF1; color: #0F766E; }
+.ro-pk-sel.is-plan { background: #fff !important; border: 1.5px dashed currentColor; line-height: 21px; }
+.ro-pk-sel.is-plan.k-P { color: #B45309; }
+.ro-pk-sel.is-plan.k-M { color: #4338CA; }
+.ro-pk-sel.is-plan.k-c { color: #0F766E; }
+.ro-pk-sel.is-langgar { box-shadow: 0 0 0 2px #DC2626; }
+.ro-pk-hari.is-kini::before { content: 'hari ini'; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: #0F172A; white-space: nowrap; }
+.ro-pk-hari.is-kini .ro-pk-sel { outline: 2px solid #0F172A; outline-offset: 1px; }
+.ro-pk-n { font-size: 9px; color: #94A3B8; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.ro-pk-n.is-batas { color: #DC2626; font-weight: 700; }
+.ro-pk-lbl { font-size: 9px; color: #64748B; height: 12px; white-space: nowrap; }
+.ro-pk-ket { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 12px; }
+.ro-pk-ket > div { background: #F8FAFC; border: 1px solid #EEF2F6; border-radius: 10px; padding: 8px 12px; font-size: 12px; color: #475569; }
+.ro-pk-ket b { display: block; font-size: 15px; color: #0F172A; }

@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Dms\Roster\DmsLongShiftService;
 use App\Services\Dms\Roster\DmsRosterBannedStatus;
 use App\Services\Dms\Roster\DmsRosterComplianceService;
+use App\Services\Dms\Roster\DmsRosterPlanKesesuaianService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
@@ -263,6 +264,42 @@ final class RosterComplianceController extends Controller
             'basi' => (bool) $data['basi'],
             'dari' => $data['dari'],
             'sampai' => $data['sampai'],
+            'diambil' => $data['diambil'],
+            'parameter' => $data['parameter'],
+            'ringkas' => $data['ringkas'],
+        ] + $halaman);
+    }
+
+    /**
+     * Tab Plan Kesesuaian Roster: plan disetujui disambung RFID, dinilai
+     * dengan aturan > 70 hari on-site / > 13 hari berturut-turut.
+     */
+    public function planKesesuaian(Request $request, DmsRosterPlanKesesuaianService $plan): JsonResponse
+    {
+        $data = $plan->ambil();
+        if ($data === null) {
+            return response()->json([
+                'up' => false,
+                'pesan' => 'Data Plan Kesesuaian belum tersedia — menunggu sinkronisasi RFID berikutnya'
+                    .($plan->galatTerakhir() ? ' ('.$plan->galatTerakhir().')' : '').'.',
+            ], 503);
+        }
+
+        $status = (string) $request->query('status', '');
+        $status = in_array($status, DmsRosterPlanKesesuaianService::STATUS, true) ? $status : '';
+        $halaman = $plan->saring(
+            $data['baris'],
+            $status,
+            mb_substr((string) $request->query('q', ''), 0, 100),
+            mb_substr((string) $request->query('pt', ''), 0, 255),
+            (int) $request->query('hal', 1),
+            25,
+        );
+
+        return response()->json([
+            'up' => true,
+            'basi' => (bool) $data['basi'],
+            'hari_ini' => $data['hari_ini'],
             'diambil' => $data['diambil'],
             'parameter' => $data['parameter'],
             'ringkas' => $data['ringkas'],
