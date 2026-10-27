@@ -63,10 +63,87 @@ final class RosterMasterController extends Controller
      */
     public function overview(Request $request): View
     {
+        $perusahaan = $this->service->perusahaanTerupload();
+
         return view('dms.roster-master.overview', [
-            'perusahaan' => $this->service->perusahaanTerupload(),
+            'perusahaan' => $this->statusPeriode($perusahaan),
+            'ringkas' => $this->ringkasOverview($perusahaan),
             'buka' => (string) $request->query('pt', ''),
         ]);
+    }
+
+    /** Batas "segera habis" di Overview Roster: periode roster tinggal sekian hari. */
+    private const SEGERA_HABIS_HARI = 7;
+
+    /**
+     * Tambahkan status periode terhadap hari ini + posisi bar garis waktu
+     * (persen dari rentang gabungan semua perusahaan).
+     *
+     * @param  list<array<string, mixed>>  $perusahaan
+     * @return list<array<string, mixed>>
+     */
+    private function statusPeriode(array $perusahaan): array
+    {
+        if ($perusahaan === []) {
+            return [];
+        }
+        $hariIni = CarbonImmutable::today();
+        $awal = CarbonImmutable::parse(min(array_column($perusahaan, 'dari')));
+        $akhir = CarbonImmutable::parse(max(array_column($perusahaan, 'sampai')));
+        $total = max(1, $awal->diffInDays($akhir) + 1);
+        $maksKaryawan = max(1, ...array_column($perusahaan, 'karyawan'));
+
+        return array_map(function (array $p) use ($hariIni, $awal, $total, $maksKaryawan): array {
+            $dari = CarbonImmutable::parse($p['dari']);
+            $sampai = CarbonImmutable::parse($p['sampai']);
+            $sisa = (int) $hariIni->diffInDays($sampai, false);
+
+            [$status, $label] = match (true) {
+                $sampai->lt($hariIni) => ['berakhir', 'Berakhir '.$sampai->format('d/m')],
+                $dari->gt($hariIni) => ['belum', 'Mulai '.$dari->format('d/m')],
+                $sisa < self::SEGERA_HABIS_HARI => ['segera', $sisa === 0 ? 'Habis hari ini' : 'Habis '.$sisa.' hari lagi'],
+                default => ['berlaku', 'Berlaku · sisa '.$sisa.' hari'],
+            };
+
+            return $p + [
+                'status' => $status,
+                'status_label' => $label,
+                'bar_kiri' => round($awal->diffInDays($dari) / $total * 100, 2),
+                'bar_lebar' => max(1.5, round(($dari->diffInDays($sampai) + 1) / $total * 100, 2)),
+                'karyawan_persen' => round($p['karyawan'] / $maksKaryawan * 100, 1),
+            ];
+        }, $perusahaan);
+    }
+
+    /**
+     * Angka KPI Overview Roster.
+     *
+     * @param  list<array<string, mixed>>  $perusahaan
+     * @return array<string, mixed>
+     */
+    private function ringkasOverview(array $perusahaan): array
+    {
+        $hariIni = CarbonImmutable::today();
+        $awal = $perusahaan === [] ? $hariIni : CarbonImmutable::parse(min(array_column($perusahaan, 'dari')));
+        $akhir = $perusahaan === [] ? $hariIni : CarbonImmutable::parse(max(array_column($perusahaan, 'sampai')));
+        $total = max(1, $awal->diffInDays($akhir) + 1);
+        $berlaku = array_filter($perusahaan, static fn (array $p): bool => $p['dari'] <= $hariIni->toDateString() && $p['sampai'] >= $hariIni->toDateString());
+        $segera = array_filter($berlaku, fn (array $p): bool => (int) $hariIni->diffInDays(CarbonImmutable::parse($p['sampai']), false) < self::SEGERA_HABIS_HARI);
+
+        return [
+            'perusahaan' => count($perusahaan),
+            'berlaku' => count($berlaku),
+            'karyawan' => array_sum(array_column($perusahaan, 'karyawan')),
+            'karyawan_berlaku' => array_sum(array_column($berlaku, 'karyawan')),
+            'disetujui' => array_sum(array_column($perusahaan, 'disetujui')),
+            'menunggu' => array_sum(array_column($perusahaan, 'menunggu')),
+            'pt_menunggu' => array_values(array_column(array_filter($perusahaan, static fn (array $p): bool => $p['menunggu'] > 0), 'perusahaan')),
+            'pt_segera' => array_values(array_column($segera, 'perusahaan')),
+            'segera_hari' => self::SEGERA_HABIS_HARI,
+            'rentang_awal' => $awal,
+            'rentang_akhir' => $akhir,
+            'hari_ini_persen' => $hariIni->between($awal, $akhir) ? round($awal->diffInDays($hariIni) / $total * 100, 2) : null,
+        ];
     }
 
     /**
