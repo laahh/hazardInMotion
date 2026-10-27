@@ -63,6 +63,23 @@
     <textarea class="form-control @error('alasan_pelanggaran') is-invalid @enderror" id="alasan_pelanggaran" name="alasan_pelanggaran" required maxlength="500" rows="2">{{ $val('alasan_pelanggaran') }}</textarea>
     @error('alasan_pelanggaran')<div class="invalid-feedback">{{ $message }}</div>@enderror
   </div>
+  @if (\App\Models\SidRosterBannedMaster::adaKolomAturan())
+  <div class="col-md-4">
+    <label for="aturan_pelanggaran" class="form-label">Aturan</label>
+    <select class="form-select @error('aturan_pelanggaran') is-invalid @enderror" id="aturan_pelanggaran" name="aturan_pelanggaran">
+      <option value="">Manual / tidak diketahui</option>
+      @foreach (\App\Models\SidRosterBannedMaster::LABEL_ATURAN as $kodeAturan => $labelAturan)
+        <option value="{{ $kodeAturan }}" @selected($val('aturan_pelanggaran') === $kodeAturan)>{{ $labelAturan }}</option>
+      @endforeach
+    </select>
+    @error('aturan_pelanggaran')<div class="invalid-feedback">{{ $message }}</div>@enderror
+  </div>
+  <div class="col-md-4">
+    <label for="lama_banned_hari" class="form-label">Lama Banned (hari)</label>
+    <input type="number" min="1" max="365" class="form-control @error('lama_banned_hari') is-invalid @enderror" id="lama_banned_hari" name="lama_banned_hari" value="{{ $val('lama_banned_hari') }}" placeholder="14 / 1">
+    @error('lama_banned_hari')<div class="invalid-feedback">{{ $message }}</div>@enderror
+  </div>
+  @endif
 
   @if ($isEdit)
   <div class="col-12">

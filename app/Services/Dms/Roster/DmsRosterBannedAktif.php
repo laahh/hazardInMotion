@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Dms\Roster;
 
+use App\Models\SidRosterBannedMaster;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -51,6 +52,32 @@ final class DmsRosterBannedAktif
     }
 
     /**
+     * menungguEksekusi() untuk satu aturan kartu ('onsite' | 'beruntun'):
+     *   onsite    aturan_pelanggaran = ONSITE_70, atau kosong (baris lama /
+     *             import) beralasan kepatuhan roster
+     *   beruntun  aturan_pelanggaran = BERUNTUN_13
+     * Sebelum kolom aturan dimigrasi: onsite = semua baris beralasan kepatuhan
+     * roster, beruntun = null (tidak bisa dibedakan). null juga untuk kartu lain.
+     */
+    public static function menungguPerAturan(string $kartu): ?Builder
+    {
+        $alasan = (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan');
+        $q = self::menungguEksekusi();
+
+        if (! SidRosterBannedMaster::adaKolomAturan()) {
+            return $kartu === 'onsite' ? $q->where('m.alasan_pelanggaran', $alasan) : null;
+        }
+
+        return match ($kartu) {
+            'onsite' => $q->where(static fn (Builder $w) => $w
+                ->where('m.aturan_pelanggaran', SidRosterBannedMaster::ATURAN_ONSITE)
+                ->orWhere(static fn (Builder $l) => $l->whereNull('m.aturan_pelanggaran')->where('m.alasan_pelanggaran', $alasan))),
+            'beruntun' => $q->where('m.aturan_pelanggaran', SidRosterBannedMaster::ATURAN_BERUNTUN),
+            default => null,
+        };
+    }
+
+    /**
      * Sidik ringkas isi master + log unban — berubah begitu ada orang
      * di-banned, diubah, atau di-unban. Dipakai sebagai bagian kunci cache.
      */
@@ -68,10 +95,14 @@ final class DmsRosterBannedAktif
      * tidak dihukum dua kali: setelah di-unban, seseorang baru dihitung
      * melanggar lagi bila periode on-site barunya dimulai SESUDAH tanggal ini.
      *
+     * $hanyaOnsite: hanya kasus > 70 hari (aturan ONSITE_70 atau kosong). Unban
+     * kasus > 13 hari beruntun (banned 1 hari) TIDAK boleh menutup periode
+     * on-site yang sedang berjalan — 1 hari off tidak memutus on-site.
+     *
      * @param  list<string>  $sids
      * @return array<string, string>  SID => Y-m-d
      */
-    public static function unbanTerakhir(array $sids): array
+    public static function unbanTerakhir(array $sids, bool $hanyaOnsite = false): array
     {
         if ($sids === []) {
             return [];
@@ -81,6 +112,9 @@ final class DmsRosterBannedAktif
             ->join('sid_roster_banned_master as m', 'm.id', '=', 'u.master_id')
             ->whereIn('m.sid', $sids)
             ->whereIn('u.automation_status', self::statusSelesai())
+            ->when($hanyaOnsite && SidRosterBannedMaster::adaKolomAturan(), static fn (Builder $q) => $q->where(
+                static fn (Builder $w) => $w->whereNull('m.aturan_pelanggaran')->orWhere('m.aturan_pelanggaran', SidRosterBannedMaster::ATURAN_ONSITE),
+            ))
             ->groupBy('m.sid')
             ->selectRaw('m.sid AS sid, DATE(MAX(COALESCE(u.completed_at, u.updated_at, u.created_at))) AS tgl')
             ->pluck('tgl', 'sid')

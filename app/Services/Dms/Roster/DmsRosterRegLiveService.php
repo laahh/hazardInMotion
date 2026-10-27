@@ -535,9 +535,12 @@ final class DmsRosterRegLiveService
             $sids = $karyawan->pluck('kode_sid')->map(static fn ($s): string => trim((string) $s))
                 ->filter()->unique()->values()->all();
 
-            $unbanTerakhir = config('dms_roster.reg_live.kecualikan_master_banned', true)
-                ? DmsRosterBannedAktif::unbanTerakhir($sids)
-                : [];
+            $kecualikan = (bool) config('dms_roster.reg_live.kecualikan_master_banned', true);
+            // Beruntun: unban kasus apa pun menutup run kerja-nya. On-site: hanya
+            // unban kasus > 70 hari — unban banned 1 hari (beruntun) tidak
+            // menutup periode on-site yang masih berjalan.
+            $unbanTerakhir = $kecualikan ? DmsRosterBannedAktif::unbanTerakhir($sids) : [];
+            $unbanOnsite = $kecualikan ? DmsRosterBannedAktif::unbanTerakhir($sids, true) : [];
             $scan = $sids === [] ? [] : $this->rfid->kodeHarian($awal, $hariIni, $sids, $lapor);
             $mulai = microtime(true);
             $shift = $sids === [] ? [] : $this->rfid->shiftTerakhir(
@@ -582,7 +585,8 @@ final class DmsRosterRegLiveService
                     // dimulai sebelum/pada tanggal unban itu adalah pelanggaran
                     // yang SAMA yang sudah ditindak — jangan dihitung lagi.
                     // Berlaku juga untuk kerja beruntun: run yang sama tidak di-banned dua kali.
-                    if (in_array($kode, ['onsite', 'beruntun'], true) && isset($unbanTerakhir[$sid]) && $iso($run['mulai']) <= $unbanTerakhir[$sid]) {
+                    $unban = $kode === 'onsite' ? ($unbanOnsite[$sid] ?? null) : ($kode === 'beruntun' ? ($unbanTerakhir[$sid] ?? null) : null);
+                    if ($unban !== null && $iso($run['mulai']) <= $unban) {
                         continue;
                     }
                     $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal, $iso);
@@ -593,7 +597,7 @@ final class DmsRosterRegLiveService
                         continue;
                     }
                     // Sama dengan kartu banned: periode on-site yang sudah ditindak (di-unban) tidak diingatkan lagi.
-                    if ($kode === 'onsite' && isset($unbanTerakhir[$sid]) && $iso($dekat['mulai']) <= $unbanTerakhir[$sid]) {
+                    if ($kode === 'onsite' && isset($unbanOnsite[$sid]) && $iso($dekat['mulai']) <= $unbanOnsite[$sid]) {
                         continue;
                     }
                     $mendekati[] = $dasar + $this->barisMendekati($kode, $dekat, $iso) + [

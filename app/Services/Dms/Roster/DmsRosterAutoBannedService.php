@@ -28,6 +28,12 @@ use Illuminate\Support\Facades\Log;
  */
 final class DmsRosterAutoBannedService
 {
+    /** Kunci daftar live => isi kolom sid_roster_banned_master.aturan_pelanggaran. */
+    private const KODE_ATURAN = [
+        'onsite' => SidRosterBannedMaster::ATURAN_ONSITE,
+        'beruntun' => SidRosterBannedMaster::ATURAN_BERUNTUN,
+    ];
+
     /**
      * Calon baris master dari daftar onsite (dan beruntun), sudah dibuang
      * yang tidak punya NIK (wajib di master) atau sudah tercatat.
@@ -41,6 +47,10 @@ final class DmsRosterAutoBannedService
         $alasanAturan = [
             'onsite' => (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'),
             'beruntun' => (string) config('dms_roster.reg_live.auto_banned.alasan_beruntun', 'BAN SID - Kepatuhan Roster Karyawan'),
+        ];
+        $lamaBanned = [
+            'onsite' => (int) config('dms_roster.reg_live.aturan.onsite_banned_lama', 14),
+            'beruntun' => (int) config('dms_roster.reg_live.aturan.beruntun_banned_lama', 1),
         ];
         $baris = array_merge(
             array_map(static fn (array $r): array => $r + ['_aturan' => 'onsite'], $onsite),
@@ -82,6 +92,9 @@ final class DmsRosterAutoBannedService
                 'perusahaan' => (string) $r['pt'] !== '' ? (string) $r['pt'] : null,
                 'site_dedicated' => (string) $r['site'] !== '—' ? (string) $r['site'] : null,
                 'alasan_pelanggaran' => $alasanAturan[$r['_aturan']],
+                // Pembeda aturan (disimpan hanya bila kolomnya sudah dimigrasi, lihat masukkan()).
+                'aturan_pelanggaran' => self::KODE_ATURAN[$r['_aturan']],
+                'lama_banned_hari' => $lamaBanned[$r['_aturan']],
                 'tanggal_pelanggaran' => $r['tgl_pelanggaran_iso'] ?? null,
                 'created_by' => (string) config('dms_roster.reg_live.auto_banned.created_by', 'Sistem (RFID otomatis)'),
                 // Hanya untuk ditampilkan saat pratinjau; tidak disimpan.
@@ -118,6 +131,9 @@ final class DmsRosterAutoBannedService
                     continue;
                 }
                 unset($c['_periode'], $c['_aturan']);
+                if (! SidRosterBannedMaster::adaKolomAturan()) {
+                    unset($c['aturan_pelanggaran'], $c['lama_banned_hari']);
+                }
                 SidRosterBannedMaster::create($c);
                 $ditambah++;
             }

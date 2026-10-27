@@ -36,14 +36,14 @@
             <div class="d-none" data-ro-view-detail></div>
 
             <div data-ro-view-daftar>
-              {{-- > 70 hari: yang sudah masuk Master Roster Banned keluar dari daftar
-                   RFID di bawah; yang belum dieksekusi (belum ada log) ditampilkan di sini
-                   supaya isi modal sama dengan angka tile. --}}
-              @if ($kartu['id'] === 'onsite')
+              {{-- > 70 hari & > 13 hari beruntun: yang sudah masuk Master Roster Banned
+                   keluar dari daftar RFID di bawah; yang belum dieksekusi (belum ada log)
+                   untuk aturan ini ditampilkan di sini supaya isi modal sama dengan angka tile. --}}
+              @if (in_array($kartu['id'], ['onsite', 'beruntun'], true))
                 @php
                   try {
-                      $masterTunggu = \App\Services\Dms\Roster\DmsRosterBannedAktif::menungguEksekusi()
-                          ->where('m.alasan_pelanggaran', (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'))
+                      $qTunggu = \App\Services\Dms\Roster\DmsRosterBannedAktif::menungguPerAturan($kartu['id']);
+                      $masterTunggu = $qTunggu === null ? collect() : $qTunggu
                           ->orderBy('m.tanggal_pelanggaran')->orderBy('m.nama')
                           ->limit(300)
                           ->get(['m.sid', 'm.nik', 'm.nama', 'm.perusahaan', 'm.site_dedicated', 'm.tanggal_pelanggaran', 'm.created_at']);

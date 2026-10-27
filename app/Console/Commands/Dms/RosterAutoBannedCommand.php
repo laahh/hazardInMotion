@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Dms;
 
+use App\Models\SidRosterBannedMaster;
 use App\Services\Dms\Roster\DmsRosterAutoBannedService;
 use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use Illuminate\Console\Command;
@@ -17,6 +18,10 @@ use Illuminate\Console\Command;
  *   php artisan dms:roster-auto-banned --uji                 # sama: pratinjau, tidak menulis
  *   php artisan dms:roster-auto-banned --beruntun            # pratinjau + kerja > 13 hari
  *   php artisan dms:roster-auto-banned --beruntun --jalankan # benar-benar menyimpan keduanya
+ *   php artisan dms:roster-auto-banned --hanya-beruntun      # pratinjau kerja > 13 hari saja
+ *
+ * Setiap baris diberi aturan_pelanggaran ONSITE_70 / BERUNTUN_13 dan
+ * lama_banned_hari 14 / 1 — bila migrasi 2026_10_28_110000 sudah dijalankan.
  *
  * Versi otomatisnya berjalan di Tahap 6 dms:sync-roster-rfid bila
  * DMS_AUTO_BANNED=true (dan DMS_AUTO_BANNED_BERUNTUN=true untuk > 13 hari).
@@ -26,7 +31,8 @@ final class RosterAutoBannedCommand extends Command
     protected $signature = 'dms:roster-auto-banned
         {--uji : Pratinjau saja, tidak menulis ke database (bawaan)}
         {--jalankan : Simpan ke sid_roster_banned_master}
-        {--beruntun : Ikutkan pelanggaran kerja > 13 hari berturut-turut}';
+        {--beruntun : Ikutkan pelanggaran kerja > 13 hari berturut-turut}
+        {--hanya-beruntun : Hanya pelanggaran kerja > 13 hari berturut-turut (tanpa > 70 hari)}';
 
     protected $description = 'Masukkan pelanggaran periode kerja > 70 hari / kerja > 13 hari berturut-turut (RFID) ke Master Roster Banned';
 
@@ -40,11 +46,25 @@ final class RosterAutoBannedCommand extends Command
             return self::FAILURE;
         }
 
-        $beruntun = $this->option('beruntun') ? $hasil['daftar']['beruntun'] : [];
-        ['calon' => $calon, 'dilewati' => $dilewati] = $banned->calon($hasil['daftar']['onsite'], $beruntun);
+        $hanyaBeruntun = (bool) $this->option('hanya-beruntun');
+        $pakaiBeruntun = $hanyaBeruntun || $this->option('beruntun');
+        $onsite = $hanyaBeruntun ? [] : $hasil['daftar']['onsite'];
+        $beruntun = $pakaiBeruntun ? $hasil['daftar']['beruntun'] : [];
+        ['calon' => $calon, 'dilewati' => $dilewati] = $banned->calon($onsite, $beruntun);
 
-        $this->line(count($hasil['daftar']['onsite']).' karyawan periode kerja > 70 hari'
-            .($this->option('beruntun') ? ', '.count($beruntun).' kerja > 13 hari berturut-turut' : '').'; '
+        if (! SidRosterBannedMaster::adaKolomAturan()) {
+            // Tanpa kolom pembeda, baris beruntun tak bisa dibedakan dari > 70 hari
+            // (teks alasannya sama) — jangan disimpan.
+            if ($pakaiBeruntun && $this->option('jalankan')) {
+                $this->error('Kolom aturan_pelanggaran belum ada: jalankan dulu migrasi 2026_10_28_110000, '
+                    .'supaya baris > 13 hari beruntun bisa dibedakan dari > 70 hari.');
+
+                return self::FAILURE;
+            }
+            $this->warn('Kolom aturan_pelanggaran belum ada (migrasi 2026_10_28_110000 belum dijalankan) — baris tanpa pembeda aturan.');
+        }
+        $this->line(($hanyaBeruntun ? '' : count($onsite).' karyawan periode kerja > 70 hari')
+            .($pakaiBeruntun ? ($hanyaBeruntun ? '' : ', ').count($beruntun).' kerja > 13 hari berturut-turut' : '').'; '
             .count($calon).' akan dimasukkan, '.count($dilewati).' dilewati.');
 
         if ($calon !== []) {

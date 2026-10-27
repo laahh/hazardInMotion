@@ -292,6 +292,8 @@ return [
             // Bekerja > 13 hari berturut-turut → banned 1 hari off di hari ke-14.
             'beruntun_maks' => 13,
             'beruntun_banned_hari_ke' => 14,
+            // Lama banned yang ditulis ke sid_roster_banned_master.lama_banned_hari.
+            'beruntun_banned_lama' => 1,
 
             // Waktu kerja (check-in → check-out gate) maksimal 12 jam → highlight.
             // Dinilai pada shift lengkap terakhir yang check-in-nya dalam

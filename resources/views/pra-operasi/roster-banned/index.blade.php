@@ -124,6 +124,18 @@
           <option value="NONE">Belum Ada Log</option>
         </select>
       </div>
+      @if (\App\Models\SidRosterBannedMaster::adaKolomAturan())
+      <div>
+        <label for="rbFilterAturan" class="form-label text-sm fw-medium mb-4">Aturan</label>
+        <select id="rbFilterAturan" class="form-select form-select-sm">
+          <option value="">Semua</option>
+          @foreach (\App\Models\SidRosterBannedMaster::LABEL_ATURAN as $kodeAturan => $labelAturan)
+            <option value="{{ $kodeAturan }}">{{ $labelAturan }}</option>
+          @endforeach
+          <option value="MANUAL">Manual / tidak diketahui</option>
+        </select>
+      </div>
+      @endif
     </div>
     <div class="table-responsive">
       <table id="rbTable" class="table bordered-table mb-0 w-100">
@@ -160,6 +172,7 @@
 
     var filterBanned = document.getElementById('rbFilterBanned');
     var filterLog = document.getElementById('rbFilterLog');
+    var filterAturan = document.getElementById('rbFilterAturan');
     var exportBtn = document.getElementById('rbExportBtn');
     var exportBase = @json(route('pra-operasi.roster-banned.export'));
 
@@ -177,6 +190,7 @@
             data: function (d) {
                 d.status_banned = filterBanned.value;
                 d.status_log = filterLog.value;
+                d.aturan = filterAturan ? filterAturan.value : '';
             },
         },
         columns: [
@@ -205,7 +219,7 @@
         },
     });
 
-    [filterBanned, filterLog].forEach(function (el) {
+    [filterBanned, filterLog, filterAturan].filter(Boolean).forEach(function (el) {
         el.addEventListener('change', function () { table.ajax.reload(); });
     });
 
@@ -216,6 +230,7 @@
             search: table.search() || '',
             status_banned: filterBanned.value,
             status_log: filterLog.value,
+            aturan: filterAturan ? filterAturan.value : '',
         });
         window.location.href = exportBase + '?' + params.toString();
     });

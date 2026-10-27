@@ -70,16 +70,19 @@
         'border border-top-0 border-bottom-0',
         'border border-top-0 border-bottom-0 border-start-0 border-end-0',
     ];
-    // Tile > 70 hari: orang yang sudah dimasukkan ke Master Roster Banned
-    // dikeluarkan dari hitungan RFID live, jadi angkanya diambil dari master —
-    // baris beralasan kepatuhan roster yang "Belum Banned" + "Belum Ada Log"
-    // (menunggu dieksekusi) — ditambah pelanggar live yang belum masuk master.
-    try {
-        $menungguMaster = \App\Services\Dms\Roster\DmsRosterBannedAktif::menungguEksekusi()
-            ->where('m.alasan_pelanggaran', (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'))
-            ->distinct()->count('m.sid');
-    } catch (\Throwable) {
-        $menungguMaster = null;
+    // Tile > 70 hari & > 13 hari beruntun: orang yang sudah dimasukkan ke
+    // Master Roster Banned dikeluarkan dari hitungan RFID live, jadi angkanya
+    // = baris master aturan itu yang "Belum Banned" + "Belum Ada Log"
+    // (menunggu dieksekusi, dipisah lewat aturan_pelanggaran) + pelanggar
+    // live yang belum masuk master.
+    $menungguMaster = [];
+    foreach (['onsite', 'beruntun'] as $kodeAturan) {
+        try {
+            $qTunggu = \App\Services\Dms\Roster\DmsRosterBannedAktif::menungguPerAturan($kodeAturan);
+            $menungguMaster[$kodeAturan] = $qTunggu === null ? null : $qTunggu->distinct()->count('m.sid');
+        } catch (\Throwable) {
+            $menungguMaster[$kodeAturan] = null;
+        }
     }
     $tiles = [];
     foreach (\App\Services\Dms\Roster\DmsRosterAturanKartu::daftar() as $i => $k) {
@@ -93,10 +96,11 @@
             'border' => $borderTile[$i] ?? 'border',
             'master' => null,
         ];
-        if ($k['id'] === 'onsite' && $menungguMaster !== null) {
-            $tile['jumlah'] = number_format($menungguMaster + (int) $n, 0, ',', '.');
+        $tunggu = $menungguMaster[$k['id']] ?? null;
+        if ($tunggu !== null && ($tunggu > 0 || $k['id'] === 'onsite')) {
+            $tile['jumlah'] = number_format($tunggu + (int) $n, 0, ',', '.');
             $tile['persen'] = null;
-            $tile['master'] = number_format($menungguMaster, 0, ',', '.').' menunggu banned di Master (belum ada log)'
+            $tile['master'] = number_format($tunggu, 0, ',', '.').' menunggu banned di Master (belum ada log)'
                 .((int) $n > 0 ? ' + '.number_format((int) $n, 0, ',', '.').' baru dari RFID' : '');
         }
         $tiles[] = $tile;

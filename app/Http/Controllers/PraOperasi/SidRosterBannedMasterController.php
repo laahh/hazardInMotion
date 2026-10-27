@@ -121,7 +121,7 @@ class SidRosterBannedMasterController extends Controller
                 'nama' => $item->nama ?? '-',
                 'perusahaan' => $item->perusahaan ?: '-',
                 'site_dedicated' => $item->site_dedicated ?: '-',
-                'alasan_pelanggaran' => $item->alasan_pelanggaran ?? '-',
+                'alasan_pelanggaran' => e($item->alasan_pelanggaran ?? '-').$this->badgeAturan($item),
                 'tanggal_pelanggaran' => $item->tanggal_pelanggaran ? $item->tanggal_pelanggaran->format('d/m/Y') : '-',
                 'status_banned' => '<span class="badge bg-'.$bannedColor.'-focus text-'.$bannedColor.'-main">'.e($bannedLabel).'</span>',
                 'status_log' => $logHtml,
@@ -150,7 +150,7 @@ class SidRosterBannedMasterController extends Controller
             ->get();
 
         $headers = [
-            'No', 'NIK', 'SID', 'Nama', 'Perusahaan', 'Site Dedicated', 'Alasan Pelanggaran', 'Tanggal Pelanggaran',
+            'No', 'NIK', 'SID', 'Nama', 'Perusahaan', 'Site Dedicated', 'Alasan Pelanggaran', 'Aturan', 'Lama Banned (hari)', 'Tanggal Pelanggaran',
             'Status Banned', 'Status Log Banned', 'Step Terakhir', 'Pesan Error', 'Waktu Log',
             'Dibuat Oleh', 'Tanggal Dibuat',
         ];
@@ -170,6 +170,8 @@ class SidRosterBannedMasterController extends Controller
                 (string) $item->perusahaan,
                 (string) $item->site_dedicated,
                 (string) $item->alasan_pelanggaran,
+                SidRosterBannedMaster::LABEL_ATURAN[(string) ($item->aturan_pelanggaran ?? '')] ?? 'Manual / tidak diketahui',
+                $item->lama_banned_hari === null ? '' : (string) $item->lama_banned_hari,
                 $item->tanggal_pelanggaran ? $item->tanggal_pelanggaran->format('d/m/Y') : '',
                 self::STATUS_BANNED[$this->statusBanned($item)][0],
                 (self::STATUS_LOG[$item->ban_status ?? self::LOG_NONE] ?? [(string) $item->ban_status])[0],
@@ -265,6 +267,16 @@ class SidRosterBannedMasterController extends Controller
             });
         }
 
+        // Pembeda aturan: ONSITE_70 / BERUNTUN_13 / MANUAL (kosong).
+        $aturan = (string) $request->input('aturan', '');
+        if (SidRosterBannedMaster::adaKolomAturan()) {
+            if (array_key_exists($aturan, SidRosterBannedMaster::LABEL_ATURAN)) {
+                $query->where('m.aturan_pelanggaran', $aturan);
+            } elseif ($aturan === 'MANUAL') {
+                $query->whereNull('m.aturan_pelanggaran');
+            }
+        }
+
         $statusLog = (string) $request->input('status_log', '');
         if ($statusLog === self::LOG_NONE) {
             $query->whereNull('bl.id');
@@ -344,6 +356,20 @@ class SidRosterBannedMasterController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /** Badge aturan (> 70 hari / > 13 hari beruntun) di bawah alasan; kosong untuk input manual. */
+    private function badgeAturan(SidRosterBannedMaster $item): string
+    {
+        $kode = (string) ($item->aturan_pelanggaran ?? '');
+        if (! isset(SidRosterBannedMaster::LABEL_ATURAN[$kode])) {
+            return '';
+        }
+        $warna = $kode === SidRosterBannedMaster::ATURAN_ONSITE ? 'danger' : 'warning';
+
+        return '<div class="mt-4"><span class="badge bg-'.$warna.'-focus text-'.$warna.'-main">'
+            .e(SidRosterBannedMaster::LABEL_ATURAN[$kode])
+            .($item->lama_banned_hari ? ' · banned '.(int) $item->lama_banned_hari.' hari' : '').'</span></div>';
+    }
+
     private function validatePayload(Request $request): array
     {
         return $request->validate([
@@ -354,7 +380,10 @@ class SidRosterBannedMasterController extends Controller
             'site_dedicated' => ['nullable', 'string', 'max:50'],
             'alasan_pelanggaran' => ['required', 'string', 'max:500'],
             'tanggal_pelanggaran' => ['nullable', 'date'],
-        ], [
+        ] + (SidRosterBannedMaster::adaKolomAturan() ? [
+            'aturan_pelanggaran' => ['nullable', 'in:'.implode(',', array_keys(SidRosterBannedMaster::LABEL_ATURAN))],
+            'lama_banned_hari' => ['nullable', 'integer', 'min:1', 'max:365'],
+        ] : []), [
             'nik.required' => 'NIK wajib diisi.',
             'nama.required' => 'Nama wajib diisi.',
             'alasan_pelanggaran.required' => 'Alasan pelanggaran wajib diisi.',

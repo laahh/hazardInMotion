@@ -182,6 +182,11 @@ final class SyncRosterRfidCommand extends Command
         }
 
         $beruntun = (bool) config('dms_roster.reg_live.auto_banned.beruntun', false);
+        // Tanpa kolom aturan_pelanggaran baris beruntun tak bisa dibedakan dari > 70 hari.
+        if ($beruntun && ! \App\Models\SidRosterBannedMaster::adaKolomAturan()) {
+            $this->warn('  > 13 hari beruntun dilewati: migrasi 2026_10_28_110000 (aturan_pelanggaran) belum dijalankan.');
+            $beruntun = false;
+        }
         $this->info('Tahap 6 — masukkan periode kerja > 70 hari'.($beruntun ? ' & kerja > 13 hari berturut-turut' : '')
             .' ke Master Roster Banned ...');
 
