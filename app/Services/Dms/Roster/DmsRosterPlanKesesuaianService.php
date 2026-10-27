@@ -94,6 +94,15 @@ final class DmsRosterPlanKesesuaianService
             $banned = $sids === [] ? [] : array_flip(DmsRosterBannedAktif::query()->whereIn('m.sid', $sids)
                 ->pluck('m.sid')->map(static fn ($s): string => strtoupper(trim((string) $s)))->all());
             $scan = $sids === [] ? [] : $this->rfid->kodeHarian($awal, $hariIni, $sids);
+            // Durasi IN→OUT hanya untuk rentang timeline (aturan jam kerja).
+            $awalJam = $hariIni->subDays($this->mundurMaks());
+            $geser = (int) $awal->diffInDays($awalJam);
+            $durasi = [];
+            foreach ($this->rfid->durasiHarian($awalJam, $hariIni, $sids) as $sidJam => $hari) {
+                foreach ($hari as $o => $menit) {
+                    $durasi[strtoupper(trim((string) $sidJam))][$o + $geser] = $menit;
+                }
+            }
             $detik = microtime(true) - $mulai;
         } catch (Throwable $e) {
             $this->galat = mb_substr($e->getMessage(), 0, 200);
@@ -112,7 +121,7 @@ final class DmsRosterPlanKesesuaianService
                 'pt' => (string) ($m->kode_pt ?? ''),
                 'kategori' => $kategori,
                 'banned_aktif' => isset($banned[$sid]),
-            ] + $this->nilai($scan[$sid] ?? [], $awal, $hariIni, $p['jadwal'], $this->engine->isLonggar($kategori));
+            ] + $this->nilai($scan[$sid] ?? [], $awal, $hariIni, $p['jadwal'], $this->engine->isLonggar($kategori), $p['menit'], $durasi[$sid] ?? []);
         }
         usort($baris, static fn (array $a, array $b): int => [array_search($a['status'], self::STATUS, true), $a['tgl_langgar'] ?? '9999', -$a['hari_onsite'], $a['nama']]
             <=> [array_search($b['status'], self::STATUS, true), $b['tgl_langgar'] ?? '9999', -$b['hari_onsite'], $b['nama']]);
@@ -122,7 +131,7 @@ final class DmsRosterPlanKesesuaianService
             'hari_ini' => $hariIni->toDateString(),
             'diambil' => CarbonImmutable::now()->toDateTimeString(),
             'detik' => round($detik, 1),
-            'parameter' => $this->aturan() + ['segera_habis_hari' => $this->segeraHabis()],
+            'parameter' => $this->aturan() + ['segera_habis_hari' => $this->segeraHabis(), 'jam_kerja_maks' => $this->jamMaks()],
             'ringkas' => $this->ringkas($baris),
             'baris' => $baris,
         ];
@@ -144,10 +153,19 @@ final class DmsRosterPlanKesesuaianService
      *
      * @param  array<int, string>  $hariScan  offset dari $awal => 'P'|'M' (hasil DmsRosterRfidReader::kodeHarian).
      * @param  array<string, string>  $jadwal  tanggal ISO => kode plan.
+     * @param  array<string, int|null>  $menitPlan  tanggal ISO => menit kerja di plan.
+     * @param  array<int, int>  $menitRfid  offset dari $awal => menit IN→OUT (DmsRosterRfidReader::durasiHarian).
      * @return array<string, mixed>
      */
-    public function nilai(array $hariScan, CarbonImmutable $awal, CarbonImmutable $hariIni, array $jadwal, bool $longgar = false): array
-    {
+    public function nilai(
+        array $hariScan,
+        CarbonImmutable $awal,
+        CarbonImmutable $hariIni,
+        array $jadwal,
+        bool $longgar = false,
+        array $menitPlan = [],
+        array $menitRfid = [],
+    ): array {
         $aturan = $this->aturan();
         $idxHariIni = (int) $awal->diffInDays($hariIni);
         $iso = static fn (int $i): string => $awal->addDays($i)->toDateString();
@@ -223,8 +241,13 @@ final class DmsRosterPlanKesesuaianService
             default => ['AMAN', null],
         };
 
+        // Timeline mundur sampai awal masa on-site berjalan (+3 hari konteks),
+        // minimal timeline_mundur_hari, maksimal timeline_mundur_maks.
         $mundur = max(0, (int) config('dms_roster.plan_kesesuaian.timeline_mundur_hari', 21));
-        $tlAwal = max(0, $kini - $mundur);
+        $runMulai = $kini - $hariOnsite + 1;
+        $tlAwal = max(0, $kini - $this->mundurMaks(), min($kini - $mundur, $runMulai - 3));
+
+        $jam = $this->nilaiJam($menitRfid, $menitPlan, $jadwal, $tlAwal, $kini, $n, $iso);
 
         return [
             'status' => $status,
@@ -243,6 +266,11 @@ final class DmsRosterPlanKesesuaianService
             'plan_dari' => $tanggalPlan === [] ? null : $tanggalPlan[0],
             'plan_sampai' => $planSampai,
             'kepatuhan' => self::kepatuhan($hariScan, $awal, $hariIni, $jadwal),
+            // Tiga pengecekan: sudah ATAU akan (menurut plan) melewati batas.
+            'lebih_70' => ! $longgar && ($sudahOnsite || $tgl71 !== null),
+            'lebih_13' => ! $longgar && ($sudahBeruntun || $tgl14 !== null),
+            'lebih_jam' => $jam['rfid_lebih'] > 0 || $jam['plan_lebih'] > 0,
+            'jam' => $jam,
             // Timeline: sebagian hari lampau + seluruh proyeksi plan.
             'tl_awal' => $n > 0 ? $iso($tlAwal) : null,
             'tl_kini' => $kini - $tlAwal,
@@ -252,7 +280,63 @@ final class DmsRosterPlanKesesuaianService
             'tl_pola' => $n > 0 ? substr($pola, $tlAwal) : '',
             'tl_sumber' => $n > 0 ? substr($sumber, $tlAwal) : '',
             'tl_plan' => array_map(static fn (int $i): string => (string) ($jadwal[$iso($i)] ?? ''), $n > 0 ? range($tlAwal, $n - 1) : []),
+            // Menit kerja per sel: tap IN→OUT untuk hari lampau, jam plan untuk proyeksi.
+            'tl_menit' => array_map(
+                static fn (int $i): ?int => $i <= $kini ? ($menitRfid[$i] ?? null) : ($menitPlan[$iso($i)] ?? null),
+                $n > 0 ? range($tlAwal, $n - 1) : [],
+            ),
         ];
+    }
+
+    /**
+     * Aturan jam kerja > plan_kesesuaian.jam_kerja_maks: tap IN→OUT di rentang
+     * timeline (hari lampau) dan jam kerja plan untuk hari kerja sesudah hari ini.
+     *
+     * @param  array<int, int>  $menitRfid
+     * @param  array<string, int|null>  $menitPlan
+     * @param  array<string, string>  $jadwal
+     * @param  callable(int): string  $iso
+     * @return array<string, mixed>
+     */
+    private function nilaiJam(array $menitRfid, array $menitPlan, array $jadwal, int $dari, int $kini, int $n, callable $iso): array
+    {
+        $maks = $this->jamMaks() * 60;
+        $out = [
+            'maks_jam' => $this->jamMaks(),
+            'rfid_dinilai' => 0, 'rfid_lebih' => 0, 'rfid_terakhir' => null, 'rfid_terakhir_menit' => null, 'rfid_maks_menit' => null,
+            'plan_dinilai' => 0, 'plan_lebih' => 0, 'plan_pertama' => null, 'plan_maks_menit' => null,
+        ];
+
+        for ($i = max(0, $dari); $i <= $kini; $i++) {
+            $m = $menitRfid[$i] ?? null;
+            if ($m === null) {
+                continue;
+            }
+            $out['rfid_dinilai']++;
+            $out['rfid_maks_menit'] = max($out['rfid_maks_menit'] ?? 0, $m);
+            if ($m > $maks) {
+                $out['rfid_lebih']++;
+                $out['rfid_terakhir'] = $iso($i);
+                $out['rfid_terakhir_menit'] = $m;
+            }
+        }
+
+        for ($i = $kini + 1; $i < $n; $i++) {
+            $tgl = $iso($i);
+            $c = self::kodeDeret($jadwal[$tgl] ?? null);
+            $m = $menitPlan[$tgl] ?? null;
+            if (($c !== 'P' && $c !== 'M') || $m === null) {
+                continue;
+            }
+            $out['plan_dinilai']++;
+            $out['plan_maks_menit'] = max($out['plan_maks_menit'] ?? 0, $m);
+            if ($m > $maks) {
+                $out['plan_lebih']++;
+                $out['plan_pertama'] ??= $tgl;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -311,11 +395,15 @@ final class DmsRosterPlanKesesuaianService
      * @param  list<array<string, mixed>>  $baris
      * @return array{baris: list<array<string, mixed>>, total: int, halaman: int, total_halaman: int}
      */
-    public function saring(array $baris, string $status, string $q, string $pt, int $halaman, int $perHalaman): array
+    public function saring(array $baris, string $status, string $q, string $pt, int $halaman, int $perHalaman, string $cek = ''): array
     {
         $q = mb_strtolower(trim($q));
-        $hasil = array_values(array_filter($baris, static function (array $r) use ($status, $q, $pt): bool {
+        $hasil = array_values(array_filter($baris, static function (array $r) use ($status, $q, $pt, $cek): bool {
             if ($status !== '' && $r['status'] !== $status) {
+                return false;
+            }
+            // cek = '70' | '13' | 'jam' → hanya yang melewati batas itu.
+            if (in_array($cek, ['70', '13', 'jam'], true) && ! ($r['lebih_'.$cek] ?? false)) {
                 return false;
             }
             if ($pt !== '' && $r['perusahaan'] !== $pt) {
@@ -352,7 +440,7 @@ final class DmsRosterPlanKesesuaianService
             ->where('j.tanggal', '>=', $awal->toDateString())
             ->orderByRaw('COALESCE(u.direview_pada, u.created_at)')
             ->orderBy('u.id')
-            ->get(['j.kode_sid', 'j.nama', 'j.perusahaan', 'j.jabatan', 'j.site', 'j.tanggal', 'j.kode']);
+            ->get(['j.kode_sid', 'j.nama', 'j.perusahaan', 'j.jabatan', 'j.site', 'j.tanggal', 'j.kode', 'j.jam_masuk', 'j.jam_keluar', 'j.menit_kerja']);
 
         $plan = [];
         foreach ($rows as $r) {
@@ -360,7 +448,7 @@ final class DmsRosterPlanKesesuaianService
             if ($sid === '') {
                 continue;
             }
-            $plan[$sid] ??= ['identitas' => [], 'jadwal' => []];
+            $plan[$sid] ??= ['identitas' => [], 'jadwal' => [], 'menit' => []];
             // Identitas dari baris paling akhir (prioritas tertinggi).
             $plan[$sid]['identitas'] = [
                 'nama' => (string) ($r->nama ?? ''),
@@ -368,7 +456,9 @@ final class DmsRosterPlanKesesuaianService
                 'jabatan' => (string) ($r->jabatan ?? ''),
                 'site' => (string) ($r->site ?? ''),
             ];
-            $plan[$sid]['jadwal'][CarbonImmutable::parse((string) $r->tanggal)->toDateString()] = (string) $r->kode;
+            $tgl = CarbonImmutable::parse((string) $r->tanggal)->toDateString();
+            $plan[$sid]['jadwal'][$tgl] = (string) $r->kode;
+            $plan[$sid]['menit'][$tgl] = self::menitPlan($r->menit_kerja, $r->jam_masuk, $r->jam_keluar);
         }
 
         return $plan;
@@ -380,9 +470,12 @@ final class DmsRosterPlanKesesuaianService
      */
     private function ringkas(array $baris): array
     {
-        $out = array_fill_keys(self::STATUS, 0) + ['karyawan' => count($baris), 'dinilai' => 0, 'sesuai' => 0];
+        $out = array_fill_keys(self::STATUS, 0) + ['karyawan' => count($baris), 'dinilai' => 0, 'sesuai' => 0, 'lebih_70' => 0, 'lebih_13' => 0, 'lebih_jam' => 0];
         foreach ($baris as $r) {
             $out[$r['status']]++;
+            foreach (['lebih_70', 'lebih_13', 'lebih_jam'] as $k) {
+                $out[$k] += ($r[$k] ?? false) ? 1 : 0;
+            }
             $out['dinilai'] += $r['kepatuhan']['dinilai'];
             $out['sesuai'] += $r['kepatuhan']['sesuai'];
         }
@@ -404,6 +497,38 @@ final class DmsRosterPlanKesesuaianService
             'onsite_maks' => (int) ($a['onsite_maks'] ?? 70),
             'beruntun_maks' => (int) ($a['beruntun_maks'] ?? 13),
         ];
+    }
+
+    private function jamMaks(): int
+    {
+        return max(1, (int) config('dms_roster.plan_kesesuaian.jam_kerja_maks', 9));
+    }
+
+    private function mundurMaks(): int
+    {
+        return max(7, (int) config('dms_roster.plan_kesesuaian.timeline_mundur_maks', 90));
+    }
+
+    /**
+     * Menit kerja satu baris plan: menit_kerja bila ada, kalau tidak dari
+     * jam masuk–keluar (keluar lebih awal = lewat tengah malam).
+     */
+    public static function menitPlan(mixed $menit, mixed $masuk, mixed $keluar): ?int
+    {
+        if ($menit !== null && $menit !== '') {
+            return (int) $menit;
+        }
+        if ($masuk === null || $keluar === null || $masuk === '' || $keluar === '') {
+            return null;
+        }
+        $keMenit = static function (string $jam): int {
+            $b = explode(':', $jam);
+
+            return (int) $b[0] * 60 + (int) ($b[1] ?? 0);
+        };
+        $selisih = $keMenit((string) $keluar) - $keMenit((string) $masuk);
+
+        return $selisih <= 0 ? $selisih + 1440 : $selisih;
     }
 
     private function segeraHabis(): int

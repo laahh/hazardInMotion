@@ -487,3 +487,12 @@
 .ro-pk-ket { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 12px; }
 .ro-pk-ket > div { background: #F8FAFC; border: 1px solid #EEF2F6; border-radius: 10px; padding: 8px 12px; font-size: 12px; color: #475569; }
 .ro-pk-ket b { display: block; font-size: 15px; color: #0F172A; }
+
+/* Plan Kesesuaian: badge Ya/Tidak per pengecekan + penanda jam kerja panjang. */
+.ro-pk-cek { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.ro-pk-cek.is-ya { background: #FEE2E2; color: #B91C1C; }
+.ro-pk-cek.is-tidak { background: #DCFCE7; color: #15803D; }
+.ro-pk-sel.is-lama { box-shadow: inset 0 -3px 0 #EA580C; }
+.ro-pk-sel.is-lama.is-langgar { box-shadow: inset 0 -3px 0 #EA580C, 0 0 0 2px #DC2626; }
+.ro-pk-jam { color: #64748B; }
+.ro-pk-jam.is-lama { color: #EA580C; font-weight: 700; }

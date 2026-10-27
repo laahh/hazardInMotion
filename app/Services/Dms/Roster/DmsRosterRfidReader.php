@@ -213,6 +213,59 @@ final class DmsRosterRfidReader
     }
 
     /**
+     * Durasi kerja per hari per SID: CHECK IN yang langsung disusul CHECK OUT
+     * (< 24 jam), sama dengan pemasangan di shiftTerakhir(). Hari dengan
+     * beberapa shift memakai yang terpanjang.
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array<int, int>>  SID => [offset hari dari $awal => menit]
+     */
+    public function durasiHarian(CarbonImmutable $awal, CarbonImmutable $hariIni, array $sids): array
+    {
+        if ($sids === []) {
+            return [];
+        }
+
+        $rows = $this->pilih(
+            "SELECT p.kode_sid, (p.t::date - ?::date) AS o,
+                    MAX(EXTRACT(EPOCH FROM (p.nt - p.t)) / 60)::int AS menit
+             FROM (
+                 SELECT trim(s.kode_sid) AS kode_sid,
+                        s.tanggal_checkinout AS t, s.jenis_checkinout AS j,
+                        lead(s.tanggal_checkinout) OVER (PARTITION BY s.kode_sid ORDER BY s.tanggal_checkinout) AS nt,
+                        lead(s.jenis_checkinout)  OVER (PARTITION BY s.kode_sid ORDER BY s.tanggal_checkinout) AS nj
+                 FROM bcsid.mv_checkinout_rfid s
+                 WHERE upper(trim(coalesce(s.status_lolos, ''))) = ?
+                   AND s.jenis_checkinout IN ('CHECK IN', 'CHECK OUT')
+                   AND s.tanggal_checkinout >= ?
+                   -- Sehari lebih supaya check-out shift malam hari ini ikut terbaca.
+                   AND s.tanggal_checkinout < ?
+                   AND trim(s.kode_sid) = ANY(?::text[])
+             ) p
+             WHERE p.j = 'CHECK IN'
+               AND p.nj = 'CHECK OUT'
+               AND p.nt - p.t < interval '24 hours'
+               AND p.t < ?
+             GROUP BY 1, 2",
+            [
+                $awal->toDateString(),
+                $this->statusLolos(),
+                $awal->toDateTimeString(),
+                $hariIni->addDays(2)->toDateTimeString(),
+                $this->arrayPg($sids),
+                $hariIni->addDay()->toDateTimeString(),
+            ],
+        );
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->kode_sid][(int) $row->o] = (int) $row->menit;
+        }
+
+        return $out;
+    }
+
+    /**
      * Seluruh tap satu SID (±2 tap/hari). kode_sid dibandingkan apa adanya
      * supaya indeksnya terpakai (±80 ms).
      *

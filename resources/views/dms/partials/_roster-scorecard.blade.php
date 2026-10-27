@@ -688,6 +688,12 @@
             <option value="AMAN">Aman</option>
             <option value="LONGGAR">Dikecualikan (kategori longgar)</option>
           </select>
+          <select class="form-select form-select-sm w-auto" data-pk-cek>
+            <option value="">Semua pengecekan</option>
+            <option value="70">Melanggar &gt; 70 hari</option>
+            <option value="13">Melanggar &gt; 13 hari beruntun</option>
+            <option value="jam">Melanggar jam kerja</option>
+          </select>
           <select class="form-select form-select-sm w-auto" style="max-width:280px" data-pk-pt>
             <option value="">Semua perusahaan</option>
           </select>
@@ -700,8 +706,9 @@
                 <th>Nama</th>
                 <th>Perusahaan / site</th>
                 <th>Periode plan</th>
-                <th>On-site</th>
-                <th class="num">Beruntun</th>
+                <th>&gt; 70 hari on-site</th>
+                <th>&gt; 13 hari beruntun</th>
+                <th data-pk-h-jam>Jam kerja</th>
                 <th>Status plan</th>
                 <th class="num">Kepatuhan</th>
                 <th></th>
@@ -990,6 +997,8 @@
 <script>
 // Panel Plan Kesesuaian Roster (saklar ketiga Scorecard). Data dihitung
 // dms:sync-roster-rfid (Tahap 9) dan baru dimuat saat panel pertama dibuka.
+// Tiga pengecekan per karyawan: > 70 hari on-site, > 13 hari kerja beruntun,
+// jam kerja > N jam (tap IN→OUT yang sudah terjadi + jam kerja di plan).
 (function () {
     'use strict';
 
@@ -999,11 +1008,13 @@
     var url = @json(route('dms.roster-compliance.plan-kesesuaian'));
     var q = panel.querySelector('[data-pk-q]');
     var status = panel.querySelector('[data-pk-status]');
+    var cek = panel.querySelector('[data-pk-cek]');
     var pt = panel.querySelector('[data-pk-pt]');
+    var KOLOM = 10;
     var dimuat = false;
     var halaman = 1;
     var minta = 0;
-    var aturan = { onsite_maks: 70, beruntun_maks: 13, segera_habis_hari: 7 };
+    var aturan = { onsite_maks: 70, beruntun_maks: 13, segera_habis_hari: 7, jam_kerja_maks: 9 };
     var hariIni = '';
     var bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     var label = {
@@ -1023,12 +1034,14 @@
     function tgl(iso) { var d = parse(iso); return d ? d.getDate() + ' ' + bulan[d.getMonth()] : '—'; }
     function tambahHari(iso, n) { var d = parse(iso); d.setDate(d.getDate() + n); return d; }
     function isoDari(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+    function durasi(m) { return m == null ? '—' : Math.floor(m / 60) + 'j' + (m % 60 ? ' ' + (m % 60) + 'm' : ''); }
+    function kosong(teks, kelas) { return '<tr><td colspan="' + KOLOM + '" class="' + (kelas || 'text-secondary-light') + ' text-sm">' + teks + '</td></tr>'; }
 
     function muat() {
         var no = ++minta;
         var body = panel.querySelector('[data-pk-body]');
-        body.innerHTML = '<tr><td colspan="9" class="text-secondary-light text-sm">Memuat…</td></tr>';
-        var p = new URLSearchParams({ status: status.value, q: q.value.trim(), pt: pt.value, hal: halaman });
+        body.innerHTML = kosong('Memuat…');
+        var p = new URLSearchParams({ status: status.value, cek: cek.value, q: q.value.trim(), pt: pt.value, hal: halaman });
         fetch(url + '?' + p.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json().catch(function () { return { up: false, pesan: 'Respons server tidak valid (' + r.status + ').' }; }); })
             .then(function (d) {
@@ -1041,12 +1054,15 @@
                 render(d);
             })
             .catch(function () {
-                if (no === minta) { body.innerHTML = '<tr><td colspan="9" class="text-danger-600 text-sm">Gagal terhubung ke server.</td></tr>'; }
+                if (no === minta) { body.innerHTML = kosong('Gagal terhubung ke server.', 'text-danger-600'); }
             });
     }
 
-    function tile(kode, judulT, nilai, sub, warna) {
-        return '<button type="button" class="ro-ls-tile' + (status.value === kode ? ' is-aktif' : '') + (warna ? ' is-' + warna : '') + '" data-pk-tile="' + kode + '">'
+    // Tile filter: data-pk-tile="status:KODE" atau "cek:70|13|jam" (kosong = reset).
+    function tile(filter, judulT, nilai, sub, warna) {
+        var aktif = filter === '' ? (status.value === '' && cek.value === '')
+            : (filter === 'status:' + status.value || filter === 'cek:' + cek.value);
+        return '<button type="button" class="ro-ls-tile' + (aktif ? ' is-aktif' : '') + (warna ? ' is-' + warna : '') + '" data-pk-tile="' + filter + '">'
             + '<span class="ro-ls-tile__judul">' + judulT + '</span><span class="ro-ls-tile__nilai">' + nilai + '</span>'
             + '<span class="ro-ls-tile__sub">' + sub + '</span></button>';
     }
@@ -1055,20 +1071,22 @@
         aturan = d.parameter;
         hariIni = d.hari_ini;
         var r = d.ringkas;
+        var jamMaks = aturan.jam_kerja_maks;
+        panel.querySelector('[data-pk-h-jam]').innerHTML = 'Jam kerja &gt; ' + jamMaks + ' jam';
         panel.querySelector('[data-pk-info]').innerHTML =
             (d.basi ? '<div class="text-warning-main text-sm fw-medium mb-4">⚠ Sinkronisasi terakhir gagal — menampilkan hasil ' + esc(d.diambil) + '.</div>' : '')
             + '<div class="text-sm">Plan roster <b>disetujui</b> (Master Roster) disambung tap RFID s/d hari ini (' + esc(tgl(d.hari_ini)) + ') · diambil ' + esc(d.diambil) + '</div>'
             + '<div class="text-xs text-secondary-light mt-4">Hari lampau = tap RFID, sesudah hari ini = kode plan (D/DS = kerja pagi, N/NS = malam, OFF/S/I = off, CT = cuti; off &gt; 5 hari berturut = cuti). '
-            + 'Batas: on-site &gt; ' + aturan.onsite_maks + ' hari dan kerja &gt; ' + aturan.beruntun_maks + ' hari berturut-turut. '
-            + '"Plan segera habis" = plan berakhir dalam ' + aturan.segera_habis_hari + ' hari. Hanya monitoring — tidak memicu banned.</div>';
+            + '<b>Ya</b> = sudah atau akan (menurut plan) melewati batas: on-site &gt; ' + aturan.onsite_maks + ' hari, kerja &gt; ' + aturan.beruntun_maks
+            + ' hari berturut-turut, jam kerja &gt; ' + jamMaks + ' jam (tap IN→OUT yang sudah terjadi, atau jam kerja di plan). Hanya monitoring — tidak memicu banned.</div>';
 
         panel.querySelector('[data-pk-kpi]').innerHTML =
             tile('', 'Karyawan ber-plan', angka(r.karyawan), angka(r.perusahaan.length) + ' perusahaan', '')
-            + tile('SUDAH_MELANGGAR', 'Sudah melanggar', angka(r.SUDAH_MELANGGAR) + ' <small>orang</small>', 'per hari ini (RFID)', 'danger')
-            + tile('AKAN_70', 'Akan > ' + aturan.onsite_maks + ' hari', angka(r.AKAN_70) + ' <small>orang</small>', 'plan tanpa cuti tepat waktu', 'danger')
-            + tile('AKAN_13', 'Akan > ' + aturan.beruntun_maks + ' hari beruntun', angka(r.AKAN_13) + ' <small>orang</small>', 'plan tanpa off cukup', 'warning')
-            + tile('PLAN_HABIS', 'Plan segera habis', angka(r.PLAN_HABIS) + ' <small>orang</small>', 'perlu upload plan lanjutan', 'warning')
-            + tile('AMAN', 'Aman', angka(r.AMAN) + ' <small>orang</small>', 'sampai akhir plan', 'success')
+            + tile('cek:70', '&gt; ' + aturan.onsite_maks + ' hari on-site', angka(r.lebih_70) + ' <small>orang</small>', angka(r.SUDAH_MELANGGAR) + ' sudah melanggar · ' + angka(r.AKAN_70) + ' akan', 'danger')
+            + tile('cek:13', '&gt; ' + aturan.beruntun_maks + ' hari beruntun', angka(r.lebih_13) + ' <small>orang</small>', 'sudah / akan menurut plan', 'warning')
+            + tile('cek:jam', 'Jam kerja &gt; ' + jamMaks + ' jam', angka(r.lebih_jam) + ' <small>orang</small>', 'tap RFID atau jam di plan', 'warning')
+            + tile('status:PLAN_HABIS', 'Plan segera habis', angka(r.PLAN_HABIS) + ' <small>orang</small>', 'perlu upload plan lanjutan', '')
+            + tile('status:AMAN', 'Aman', angka(r.AMAN) + ' <small>orang</small>', 'sampai akhir plan', 'success')
             + '<div class="ro-ls-tile" style="cursor:default"><span class="ro-ls-tile__judul">Kepatuhan plan</span>'
             + '<span class="ro-ls-tile__nilai">' + (r.persen_patuh == null ? '—' : String(r.persen_patuh).replace('.', ',') + '<small>%</small>') + '</span>'
             + '<span class="ro-ls-tile__sub">' + angka(r.sesuai) + ' dari ' + angka(r.dinilai) + ' hari sesuai tap</span></div>';
@@ -1081,7 +1099,7 @@
         var mulaiNo = (d.halaman - 1) * 25;
         var body = panel.querySelector('[data-pk-body]');
         body.innerHTML = d.baris.length === 0
-            ? '<tr><td colspan="9" class="text-secondary-light text-sm">' + (r.karyawan === 0 ? 'Belum ada plan roster yang disetujui.' : 'Tidak ada karyawan yang cocok.') + '</td></tr>'
+            ? kosong(r.karyawan === 0 ? 'Belum ada plan roster yang disetujui.' : 'Tidak ada karyawan yang cocok.')
             : d.baris.map(function (b, i) { return baris(b, i, mulaiNo); }).join('');
 
         panel.querySelector('[data-pk-ket]').innerHTML = d.total === 0 ? '' :
@@ -1093,16 +1111,53 @@
 
     function hariOnsite(b) { return (b.onsite_terpotong ? '≥ ' : '') + b.hari_onsite; }
 
+    // Sel pengecekan: badge Ya/Tidak + keterangan singkat di bawahnya.
+    function selCek(ya, ket) {
+        return '<span class="ro-pk-cek ' + (ya ? 'is-ya' : 'is-tidak') + '">' + (ya ? 'Ya' : 'Tidak') + '</span><span class="ro-pk-tgl">' + ket + '</span>';
+    }
+
+    function cek70(b) {
+        if (b.status === 'LONGGAR') { return '<span class="ro-sc-muted">tidak dinilai</span>'; }
+        var persen = Math.min(100, b.hari_onsite / aturan.onsite_maks * 100);
+        var kelas = b.hari_onsite > aturan.onsite_maks ? 'is-lewat' : (b.hari_onsite >= 60 ? 'is-dekat' : '');
+        var ket = b.sudah_onsite ? 'sudah · hari ke-<b>' + hariOnsite(b) + '</b>'
+            : b.tgl_71 ? 'akan · hari ke-' + (aturan.onsite_maks + 1) + ' <b>' + tgl(b.tgl_71) + '</b>'
+            : 'hari ke-' + hariOnsite(b) + (b.proyeksi_sampai ? ' · ' + b.onsite_akhir + ' di akhir plan' : '');
+        return selCek(b.lebih_70, ket) + '<div class="ro-pk-bar" title="' + b.hari_onsite + ' dari ' + aturan.onsite_maks + ' hari"><span class="' + kelas + '" style="width:' + persen + '%"></span></div>';
+    }
+
+    function cek13(b) {
+        if (b.status === 'LONGGAR') { return '<span class="ro-sc-muted">tidak dinilai</span>'; }
+        var ket = b.sudah_beruntun ? 'sudah · <b>' + b.hari_beruntun + '</b> hari berturut'
+            : b.tgl_14 ? 'akan · hari ke-' + (aturan.beruntun_maks + 1) + ' <b>' + tgl(b.tgl_14) + '</b>'
+            : 'kini ' + b.hari_beruntun + ' hari berturut';
+        return selCek(b.lebih_13, ket);
+    }
+
+    function cekJam(b) {
+        var j = b.jam, bagian = [];
+        if (j.rfid_lebih > 0) {
+            bagian.push('RFID <b>' + j.rfid_lebih + '</b>/' + j.rfid_dinilai + ' hari · terakhir ' + durasi(j.rfid_terakhir_menit) + ' (' + tgl(j.rfid_terakhir) + ')');
+        }
+        if (j.plan_lebih > 0) {
+            bagian.push('plan <b>' + j.plan_lebih + '</b> hari &gt; ' + j.maks_jam + 'j (mulai ' + tgl(j.plan_pertama) + ', ' + durasi(j.plan_maks_menit) + ')');
+        }
+        if (!bagian.length) {
+            bagian.push(j.rfid_dinilai + j.plan_dinilai === 0 ? 'belum ada data jam'
+                : 'maks RFID ' + durasi(j.rfid_maks_menit) + ' · plan ' + durasi(j.plan_maks_menit));
+        }
+        return selCek(b.lebih_jam, bagian.join('<br>'));
+    }
+
     function keteranganStatus(b) {
         var cuti = b.cuti_plan ? ' · cuti di plan mulai ' + tgl(b.cuti_plan) : '';
         switch (b.status) {
             case 'SUDAH_MELANGGAR':
-                return [b.sudah_onsite ? 'on-site hari ke-<b>' + hariOnsite(b) + '</b>' : '', b.sudah_beruntun ? 'kerja <b>' + b.hari_beruntun + '</b> hari berturut' : '']
-                    .filter(Boolean).join(' · ') + (cuti || ' · <b>belum ada cuti di plan</b>');
+                return cuti ? cuti.slice(3) : '<b>belum ada cuti di plan</b>';
             case 'AKAN_70':
-                return 'hari ke-' + (aturan.onsite_maks + 1) + ': <b>' + tgl(b.tgl_71) + '</b> · cuti paling lambat ' + tgl(b.tgl_71);
+                return 'cuti paling lambat <b>' + tgl(b.tgl_71) + '</b>';
             case 'AKAN_13':
-                return 'hari ke-' + (aturan.beruntun_maks + 1) + ': <b>' + tgl(b.tgl_14) + '</b> · jadwalkan off sebelumnya';
+                return 'jadwalkan off sebelum ' + tgl(b.tgl_14);
             case 'PLAN_HABIS':
                 if (b.proyeksi_sampai) { return 'plan s/d ' + tgl(b.proyeksi_sampai) + ' · upload plan lanjutan'; }
                 // Plan baru mulai nanti: hari di antaranya belum ada plan.
@@ -1110,7 +1165,7 @@
                     ? 'plan baru mulai ' + tgl(b.plan_dari) + ' · ' + tgl(isoDari(tambahHari(hariIni, 1))) + '–' + tgl(isoDari(tambahHari(b.plan_dari, -1))) + ' belum ada plan'
                     : 'tidak ada plan sesudah hari ini';
             case 'AMAN':
-                return 'plan s/d ' + tgl(b.proyeksi_sampai) + ' · hari ke-' + b.onsite_akhir + ' di akhir plan' + cuti;
+                return 'plan s/d ' + tgl(b.proyeksi_sampai) + cuti;
             default:
                 return 'kategori ' + esc(b.kategori || '—') + ' tidak dinilai';
         }
@@ -1118,8 +1173,6 @@
 
     function baris(b, i, mulaiNo) {
         var st = label[b.status] || [b.status, 'secondary'];
-        var persen = Math.min(100, b.hari_onsite / aturan.onsite_maks * 100);
-        var kelasBar = b.hari_onsite > aturan.onsite_maks ? ' is-lewat' : (b.hari_onsite >= 60 ? ' is-dekat' : '');
         var k = b.kepatuhan;
         var kelasPatuh = k.persen == null ? '' : (k.persen < 70 ? ' is-rendah' : (k.persen < 90 ? ' is-sedang' : ' is-baik'));
         return '<tr>'
@@ -1128,44 +1181,51 @@
             + (b.banned_aktif ? '<span class="badge bg-danger-focus text-danger-main mt-4">Banned aktif</span>' : '') + '</td>'
             + '<td>' + esc(b.perusahaan || '—') + '<span class="ro-sc-sub">' + esc(b.jabatan || '—') + ' · ' + esc(b.site || '—') + '</span></td>'
             + '<td class="text-nowrap">' + tgl(b.plan_dari) + ' – ' + tgl(b.plan_sampai) + '</td>'
-            + '<td>hari ke-<b>' + hariOnsite(b) + '</b><div class="ro-pk-bar" title="' + b.hari_onsite + ' dari ' + aturan.onsite_maks + ' hari"><span class="' + kelasBar.trim() + '" style="width:' + persen + '%"></span></div></td>'
-            + '<td class="num' + (b.hari_beruntun > aturan.beruntun_maks ? ' ro-sc-bad' : '') + '">' + b.hari_beruntun + '</td>'
+            + '<td>' + cek70(b) + '</td>'
+            + '<td>' + cek13(b) + '</td>'
+            + '<td>' + cekJam(b) + '</td>'
             + '<td><span class="badge bg-' + st[1] + '-focus text-' + st[1] + '-main">' + st[0] + '</span><span class="ro-pk-tgl">' + keteranganStatus(b) + '</span></td>'
             + '<td class="num">' + (k.persen == null ? '<span class="ro-sc-muted">—</span>'
                 : '<span class="ro-pk-patuh' + kelasPatuh + '">' + String(k.persen).replace('.', ',') + '%</span><span class="ro-sc-sub">' + k.sesuai + '/' + k.dinilai + ' hari</span>') + '</td>'
             + '<td><button type="button" class="ro-sc-toggle" aria-expanded="false" data-pk-detail="' + i + '"><iconify-icon icon="solar:alt-arrow-down-linear"></iconify-icon>Timeline</button></td>'
             + '</tr>'
-            + '<tr hidden data-pk-detail-row="' + i + '"><td colspan="9" class="ro-ls-detail">' + detail(b) + '</td></tr>';
+            + '<tr hidden data-pk-detail-row="' + i + '"><td colspan="' + KOLOM + '" class="ro-ls-detail">' + detail(b) + '</td></tr>';
     }
 
-    // Timeline gabungan: tap RFID (isi penuh) → plan (garis putus-putus).
-    // Angka kecil di bawah sel = hari ke-N on-site; merah di hari ke-71 / ke-14.
+    // Timeline gabungan: tap RFID (isi penuh) → plan (garis putus-putus), mundur
+    // sampai awal masa on-site berjalan. Baris bawah: tanggal, hari ke-N on-site
+    // (merah di hari ke-71 / ke-14), lalu jam kerja (oranye bila > batas).
     function timeline(b) {
         if (!b.tl_awal || !b.tl_pola) { return '<span class="text-secondary-light text-sm">Belum ada tap maupun plan untuk ditampilkan.</span>'; }
-        var on = b.tl_on_awal, ke = b.tl_ke_awal, html = '';
+        var on = b.tl_on_awal, ke = b.tl_ke_awal, html = '', maks = aturan.jam_kerja_maks * 60;
         for (var i = 0; i < b.tl_pola.length; i++) {
             var c = b.tl_pola[i];
             if (i > 0) { on = c !== 'c' ? on + 1 : 0; ke = c === 'P' || c === 'M' ? ke + 1 : 0; }
             var d = tambahHari(b.tl_awal, i), iso = isoDari(d);
             var plan = b.tl_sumber[i] === 'p';
+            var menit = (b.tl_menit || [])[i];
+            var kerja = c === 'P' || c === 'M';
+            var lama = kerja && menit != null && menit > maks;
             var kode = b.tl_plan[i] || (c === 'P' ? 'P' : c === 'M' ? 'M' : c === 'c' ? 'C' : '');
             var langgar = iso === b.tgl_71 || iso === b.tgl_14;
             var batas = on === aturan.onsite_maks + 1 || ke === aturan.beruntun_maks + 1;
             var judulSel = tgl(iso) + ' — ' + (plan ? 'plan ' + (b.tl_plan[i] || '-') : 'RFID ' + (c === 'P' ? 'tap pagi' : c === 'M' ? 'tap malam' : c === 'c' ? 'cuti (tanpa tap)' : 'tidak tap'))
-                + (b.tl_plan[i] && !plan ? ' · plan ' + b.tl_plan[i] : '') + ' · on-site hari ke-' + on + ', beruntun ' + ke;
+                + (b.tl_plan[i] && !plan ? ' · plan ' + b.tl_plan[i] : '') + ' · on-site hari ke-' + on + ', beruntun ' + ke
+                + (kerja && menit != null ? ' · ' + (plan ? 'jam plan ' : 'IN→OUT ') + durasi(menit) : '');
             html += '<div class="ro-pk-hari' + (i === b.tl_kini ? ' is-kini' : '') + '" title="' + esc(judulSel) + '">'
                 + '<div class="ro-pk-lbl">' + (d.getDate() === 1 || i === 0 ? bulan[d.getMonth()] : '') + '</div>'
-                + '<div class="ro-pk-sel k-' + c + (plan ? ' is-plan' : '') + (langgar ? ' is-langgar' : '') + '">' + esc(kode) + '</div>'
+                + '<div class="ro-pk-sel k-' + c + (plan ? ' is-plan' : '') + (langgar ? ' is-langgar' : '') + (lama ? ' is-lama' : '') + '">' + esc(kode) + '</div>'
                 + '<div class="ro-pk-n">' + d.getDate() + '</div>'
-                + '<div class="ro-pk-n' + (batas ? ' is-batas' : '') + '">' + (c === 'c' ? '' : on) + '</div></div>';
+                + '<div class="ro-pk-n' + (batas ? ' is-batas' : '') + '">' + (c === 'c' ? '' : on) + '</div>'
+                + '<div class="ro-pk-n ro-pk-jam' + (lama ? ' is-lama' : '') + '">' + (kerja && menit != null ? Math.round(menit / 6) / 10 : '') + '</div></div>';
         }
         return '<div class="ro-sc-scroll"><div class="ro-pk-tl">' + html + '</div></div>';
     }
 
     function detail(b) {
-        var k = b.kepatuhan;
+        var k = b.kepatuhan, j = b.jam;
         return '<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-8">'
-            + '<div class="ro-sc-detail__title">Timeline RFID + plan · ' + esc(b.nama || b.sid) + '</div>'
+            + '<div class="ro-sc-detail__title">Timeline RFID + plan · ' + esc(b.nama || b.sid) + ' · sejak ' + tgl(b.tl_awal) + '</div>'
             + '<div class="ro-sc-legend">'
             + '<span><i class="ro-sw" style="background:#FDE68A"></i>Tap / plan pagi</span>'
             + '<span><i class="ro-sw" style="background:#C7D2FE"></i>Tap / plan malam</span>'
@@ -1173,18 +1233,21 @@
             + '<span><i class="ro-sw" style="background:#CCFBF1"></i>Cuti</span>'
             + '<span><i class="ro-sw" style="background:#fff;border:1.5px dashed #94A3B8"></i>Dari plan (belum terjadi)</span>'
             + '<span><i class="ro-sw" style="background:#fff;box-shadow:0 0 0 2px #DC2626"></i>Hari melanggar</span>'
+            + '<span><i class="ro-sw" style="background:#fff;box-shadow:inset 0 -3px 0 #EA580C"></i>Jam kerja &gt; ' + aturan.jam_kerja_maks + ' jam</span>'
             + '</div></div>'
             + timeline(b)
-            + '<div class="text-xs text-secondary-light mt-4">Baris angka bawah = hari ke-N on-site sejak cuti terakhir.</div>'
+            + '<div class="text-xs text-secondary-light mt-4">Baris angka di bawah sel: tanggal · hari ke-N on-site sejak cuti terakhir · jam kerja (tap IN→OUT, atau jam di plan).</div>'
             + '<div class="ro-pk-ket">'
             + '<div><b>' + (k.persen == null ? '—' : String(k.persen).replace('.', ',') + '%') + '</b>kepatuhan plan (' + k.sesuai + ' dari ' + k.dinilai + ' hari)</div>'
             + '<div><b>' + k.kerja_tanpa_tap + '</b>hari plan kerja tapi tidak tap</div>'
             + '<div><b>' + k.tap_saat_off + '</b>hari plan off/cuti tapi tap masuk</div>'
-            + '<div><b>' + k.beda_shift + '</b>hari beda shift (plan pagi ⇄ malam)</div>'
+            + '<div><b>' + j.rfid_lebih + ' / ' + j.rfid_dinilai + '</b>hari tap IN→OUT &gt; ' + j.maks_jam + ' jam (terpanjang ' + durasi(j.rfid_maks_menit) + ')</div>'
+            + '<div><b>' + j.plan_lebih + ' / ' + j.plan_dinilai + '</b>hari kerja di plan &gt; ' + j.maks_jam + ' jam</div>'
             + '</div>';
     }
 
     status.addEventListener('change', function () { halaman = 1; muat(); });
+    cek.addEventListener('change', function () { halaman = 1; muat(); });
     pt.addEventListener('change', function () { halaman = 1; muat(); });
     var tunda;
     q.addEventListener('input', function () {
@@ -1193,7 +1256,14 @@
     });
     panel.addEventListener('click', function (e) {
         var t = e.target.closest('[data-pk-tile]');
-        if (t) { status.value = t.dataset.pkTile; halaman = 1; muat(); return; }
+        if (t) {
+            var f = t.dataset.pkTile;
+            status.value = f.indexOf('status:') === 0 ? f.slice(7) : '';
+            cek.value = f.indexOf('cek:') === 0 ? f.slice(4) : '';
+            halaman = 1;
+            muat();
+            return;
+        }
         var ke = e.target.closest('[data-pk-ke]');
         if (ke && !ke.disabled) { halaman = +ke.dataset.pkKe; muat(); return; }
         var dt = e.target.closest('[data-pk-detail]');

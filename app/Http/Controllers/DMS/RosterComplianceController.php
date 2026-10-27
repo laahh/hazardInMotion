@@ -294,6 +294,7 @@ final class RosterComplianceController extends Controller
             mb_substr((string) $request->query('pt', ''), 0, 255),
             (int) $request->query('hal', 1),
             25,
+            (string) $request->query('cek', ''),
         );
 
         return response()->json([

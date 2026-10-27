@@ -456,8 +456,14 @@ return [
     'plan_kesesuaian' => [
         // Plan yang berakhir dalam N hari dari hari ini = perlu plan lanjutan.
         'segera_habis_hari' => 7,
-        // Jumlah hari lampau yang ikut dikirim ke timeline per karyawan.
+        // Timeline per karyawan mundur sampai awal masa on-site berjalan,
+        // minimal timeline_mundur_hari, maksimal timeline_mundur_maks hari.
         'timeline_mundur_hari' => 21,
+        'timeline_mundur_maks' => 90,
+        // Aturan jam kerja tab ini: tap IN→OUT (hari lampau, dalam rentang
+        // timeline) dan jam kerja plan (hari kerja ke depan) > N jam = melanggar.
+        // Sengaja terpisah dari reg_live.aturan.jam_kerja_maks (12) kartu live.
+        'jam_kerja_maks' => 9,
         'cache_ttl' => 4500,
     ],
 ];

@@ -4,7 +4,7 @@
 
 @section('css')
 {{-- Tombol "Lihat …" & panel collapse sama dengan tabel Scorecard Ringkasan Roster. --}}
-<link rel="stylesheet" href="{{ asset('dms-assets/roster-compliance/roster-overview.css') }}?v=17">
+<link rel="stylesheet" href="{{ asset('dms-assets/roster-compliance/roster-overview.css') }}?v=18">
 @include('dms.roster-master._grid-css')
 @include('dms.roster-master._ui-css')
 <style>

@@ -163,6 +163,48 @@ class DmsRosterPlanKesesuaianServiceTest extends TestCase
         $this->assertSame(['dinilai' => 4, 'sesuai' => 2, 'kerja_tanpa_tap' => 1, 'tap_saat_off' => 1, 'beda_shift' => 1, 'persen' => 50.0], $k);
     }
 
+    public function test_jam_kerja_lebih_dari_9_jam_dari_rfid_dan_plan(): void
+    {
+        $menitPlan = [$this->tgl(100) => 540, $this->tgl(101) => 735, $this->tgl(102) => 735];
+        $menitRfid = [97 => 520, 98 => 600, 99 => 541];
+        $hasil = $this->svc->nilai($this->scan(80, 99), $this->awal, $this->hariIni, $this->plan(100, 130), false, $menitPlan, $menitRfid);
+
+        $this->assertTrue($hasil['lebih_jam']);
+        $this->assertSame(3, $hasil['jam']['rfid_dinilai']);
+        $this->assertSame(2, $hasil['jam']['rfid_lebih']);
+        $this->assertSame($this->tgl(99), $hasil['jam']['rfid_terakhir']);
+        // 540 menit = tepat 9 jam, belum melanggar.
+        $this->assertSame(2, $hasil['jam']['plan_lebih']);
+        $this->assertSame($this->tgl(101), $hasil['jam']['plan_pertama']);
+    }
+
+    public function test_jam_kerja_tidak_lebih_dari_9_jam(): void
+    {
+        $hasil = $this->svc->nilai($this->scan(80, 99), $this->awal, $this->hariIni, $this->plan(100, 130), false, [$this->tgl(100) => 480], [99 => 540]);
+
+        $this->assertFalse($hasil['lebih_jam']);
+        $this->assertFalse($hasil['lebih_70']);
+        $this->assertFalse($hasil['lebih_13']);
+    }
+
+    public function test_timeline_mundur_sampai_awal_onsite_berjalan(): void
+    {
+        // On-site mulai offset 40 → timeline mulai 3 hari sebelumnya (37).
+        $hasil = $this->nilai($this->scan(40, 99), $this->plan(100, 125));
+
+        $this->assertSame($this->tgl(37), $hasil['tl_awal']);
+        $this->assertSame(99 - 37, $hasil['tl_kini']);
+        $this->assertTrue($hasil['lebih_70']);
+    }
+
+    public function test_menit_plan_dari_jam_masuk_keluar(): void
+    {
+        $this->assertSame(735, DmsRosterPlanKesesuaianService::menitPlan(null, '06:15', '18:30'));
+        $this->assertSame(720, DmsRosterPlanKesesuaianService::menitPlan(null, '18:00:00', '06:00:00'));
+        $this->assertSame(600, DmsRosterPlanKesesuaianService::menitPlan(600, '06:00', '18:00'));
+        $this->assertNull(DmsRosterPlanKesesuaianService::menitPlan(null, null, '18:00'));
+    }
+
     public function test_kode_plan_ke_deret(): void
     {
         $this->assertSame('P', DmsRosterPlanKesesuaianService::kodeDeret('D13'));
