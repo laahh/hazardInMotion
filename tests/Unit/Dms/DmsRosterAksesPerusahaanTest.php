@@ -53,6 +53,23 @@ class DmsRosterAksesPerusahaanTest extends TestCase
         $this->assertTrue(Akses::mencakup(['PT Pamapersada Nusantara'], ['  PT PAMAPERSADA NUSANTARA ']));
     }
 
+    public function test_singkatan_upload_cocok_dengan_nama_lengkap_yang_di_assign(): void
+    {
+        $cakupan = ['PT Puncak Makmur Jaya'];
+
+        $this->assertTrue(Akses::terlihat($cakupan, ['PT PMJ']));
+        $this->assertTrue(Akses::mencakup($cakupan, ['PT PMJ']));
+        $this->assertTrue(Akses::mencakup($cakupan, ['PMJ']));
+        $this->assertFalse(Akses::mencakup($cakupan, ['PT BMJ']));
+        // Kebalikannya: assign singkatan, upload nama lengkap.
+        $this->assertTrue(Akses::mencakup(['PT PMJ'], ['PT Puncak Makmur Jaya']));
+    }
+
+    public function test_dua_nama_lengkap_berinisial_sama_tidak_tertukar(): void
+    {
+        $this->assertFalse(Akses::terlihat(['PT Puncak Makmur Jaya'], ['PT Prima Mitra Jaya']));
+    }
+
     public function test_rapikan_membuang_kosong_dan_duplikat(): void
     {
         $this->assertSame(

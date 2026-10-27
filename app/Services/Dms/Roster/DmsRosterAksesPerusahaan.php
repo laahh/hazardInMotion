@@ -27,6 +27,13 @@ use Throwable;
  * jadwal). Upload TERLIHAT bila salah satu perusahaannya masuk cakupan, tapi
  * hanya boleh DI-REVIEW bila semua perusahaannya masuk cakupan — approve
  * berlaku untuk seluruh isi file.
+ *
+ * Nama perusahaan di file upload tidak selalu sama dengan nama yang di-assign:
+ * ada yang menulis singkatan ("PT PMJ") untuk "PT Puncak Makmur Jaya". Karena
+ * itu singkatan dicocokkan ke kode PT dari nama lengkap (config
+ * dms_roster.perusahaan, atau inisial — lihat DmsRosterSyncService::kodePt).
+ * Dua nama lengkap tetap harus sama persis, supaya dua PT berbeda yang kebetulan
+ * berinisial sama tidak tertukar.
  */
 final class DmsRosterAksesPerusahaan
 {
@@ -82,9 +89,9 @@ final class DmsRosterAksesPerusahaan
         if ($ptUpload === []) {
             return false;
         }
-        $boleh = array_flip(array_map(self::kunci(...), $cakupan));
+        $indeks = self::indeks($cakupan);
         foreach ($ptUpload as $pt) {
-            if (! isset($boleh[self::kunci($pt)])) {
+            if (! self::masuk($pt, $indeks)) {
                 return false;
             }
         }
@@ -103,9 +110,9 @@ final class DmsRosterAksesPerusahaan
         if ($cakupan === null) {
             return true;
         }
-        $boleh = array_flip(array_map(self::kunci(...), $cakupan));
+        $indeks = self::indeks($cakupan);
         foreach ($ptUpload as $pt) {
-            if (isset($boleh[self::kunci($pt)])) {
+            if (self::masuk($pt, $indeks)) {
                 return true;
             }
         }
@@ -144,13 +151,24 @@ final class DmsRosterAksesPerusahaan
         }
 
         $tanpa = in_array(DmsRosterMasterService::TANPA_PERUSAHAAN, $cakupan, true);
+        // Ejaan perusahaan yang benar-benar ada di jadwal (termasuk singkatan)
+        // yang cocok dengan cakupan; daftar distinct-nya kecil.
+        $indeks = self::indeks($cakupan);
+        $ejaan = DB::table('dms_roster_master_jadwal')
+            ->selectRaw('DISTINCT TRIM(perusahaan) AS pt')
+            ->whereNotNull('perusahaan')
+            ->pluck('pt')
+            ->map(static fn ($p): string => (string) $p)
+            ->filter(static fn (string $p): bool => $p !== '' && self::masuk($p, $indeks))
+            ->values()
+            ->all();
 
-        return $q->whereExists(static function ($sub) use ($cakupan, $tanpa): void {
+        return $q->whereExists(static function ($sub) use ($ejaan, $tanpa): void {
             $sub->selectRaw('1')
                 ->from('dms_roster_master_jadwal as j')
                 ->whereColumn('j.upload_id', 'dms_roster_master_upload.id')
-                ->where(static function ($w) use ($cakupan, $tanpa): void {
-                    $w->whereIn(DB::raw('TRIM(j.perusahaan)'), $cakupan);
+                ->where(static function ($w) use ($ejaan, $tanpa): void {
+                    $w->whereIn(DB::raw('TRIM(j.perusahaan)'), $ejaan === [] ? [''] : $ejaan);
                     if ($tanpa) {
                         $w->orWhereNull('j.perusahaan')->orWhereRaw("TRIM(j.perusahaan) = ''");
                     }
@@ -255,6 +273,63 @@ final class DmsRosterAksesPerusahaan
 
     private static function kunci(string $pt): string
     {
-        return mb_strtoupper(trim($pt));
+        return mb_strtoupper(preg_replace('/\s+/u', ' ', trim($pt)) ?? trim($pt));
+    }
+
+    /**
+     * [nama persis, kode dari nama lengkap, singkatan yang di-assign apa adanya].
+     *
+     * @param  list<string>  $cakupan
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: array<string, true>}
+     */
+    private static function indeks(array $cakupan): array
+    {
+        $nama = [];
+        $kodeNama = [];
+        $singkatan = [];
+        foreach ($cakupan as $pt) {
+            $nama[self::kunci($pt)] = true;
+            [$isSingkatan, $kode] = self::kode($pt);
+            if ($isSingkatan) {
+                $singkatan[$kode] = true;
+            } else {
+                $kodeNama[$kode] = true;
+            }
+        }
+
+        return [$nama, $kodeNama, $singkatan];
+    }
+
+    /**
+     * @param  array{0: array<string, true>, 1: array<string, true>, 2: array<string, true>}  $indeks
+     */
+    private static function masuk(string $pt, array $indeks): bool
+    {
+        [$nama, $kodeNama, $singkatan] = $indeks;
+        if (isset($nama[self::kunci($pt)])) {
+            return true;
+        }
+        [$isSingkatan, $kode] = self::kode($pt);
+
+        // Singkatan cocok dengan nama lengkap mana pun; nama lengkap hanya
+        // cocok dengan singkatan (bukan dengan nama lengkap lain berinisial sama).
+        return $isSingkatan ? isset($kodeNama[$kode]) || isset($singkatan[$kode]) : isset($singkatan[$kode]);
+    }
+
+    /**
+     * "PT PMJ" → [true, 'PMJ']; "PT Puncak Makmur Jaya" → [false, 'PMJ'].
+     *
+     * @return array{0: bool, 1: string}
+     */
+    private static function kode(string $pt): array
+    {
+        $pt = preg_replace('/\s+/u', ' ', trim($pt)) ?? trim($pt);
+        $sisa = trim(preg_replace('/^(PT|CV|UD|KOPERASI)\.?\s+/i', '', $pt) ?? $pt);
+
+        if (preg_match('/^[A-Z0-9&]{2,12}$/', $sisa) === 1) {
+            return [true, $sisa];
+        }
+
+        return [false, mb_strtoupper(DmsRosterSyncService::kodePt($pt))];
     }
 }

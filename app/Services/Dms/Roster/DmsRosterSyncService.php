@@ -397,8 +397,13 @@ final class DmsRosterSyncService
      */
     public static function kodePt(string $perusahaan): string
     {
-        /** @var array<string, array<string, mixed>> $daftar */
-        $daftar = config('dms_roster.perusahaan', []);
+        try {
+            /** @var array<string, array<string, mixed>> $daftar */
+            $daftar = config('dms_roster.perusahaan', []);
+        } catch (Throwable) {
+            // Tanpa aplikasi (unit test murni): cukup singkatan inisial.
+            $daftar = [];
+        }
         if (isset($daftar[$perusahaan]['kode'])) {
             return (string) $daftar[$perusahaan]['kode'];
         }
