@@ -27,6 +27,7 @@
             <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Site</th>
             <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Jam Kerja Awal</th>
             <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Jam Kerja Akhir</th>
+            <th rowspan="3" class="rm-h-id rm-opsional rm-w-kecil">Total Jam Kerja</th>
             @foreach ($tanggal as $t)
               <th class="rm-h-tgl {{ $t->dayOfWeek === 0 ? 'rm-minggu' : '' }} {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}" title="{{ $t->format('d/m/Y') }}">{{ $t->format('d') }}</th>
             @endforeach
@@ -59,6 +60,7 @@
               <td class="rm-c-id rm-opsional">{{ $k['site'] ?? '—' }}</td>
               <td class="rm-c-id rm-c-jam rm-opsional">{{ $k['jam_awal'] ?? '' }}</td>
               <td class="rm-c-id rm-c-jam rm-opsional">{{ $k['jam_akhir'] ?? '' }}</td>
+              <td class="rm-c-id rm-c-jam rm-opsional">{{ isset($k['jam_total']) ? rtrim(rtrim(number_format($k['jam_total'], 2, ',', ''), '0'), ',').' jam' : '' }}</td>
               @foreach ($tanggal as $t)
                 @php
                   $h = $k['jadwal'][$t->toDateString()] ?? null;
@@ -69,7 +71,7 @@
               @endforeach
             </tr>
           @empty
-            <tr><td colspan="{{ count($tanggal) + 8 }}" class="text-secondary-light py-16">Tidak ada karyawan yang cocok.</td></tr>
+            <tr><td colspan="{{ count($tanggal) + 9 }}" class="text-secondary-light py-16">Tidak ada karyawan yang cocok.</td></tr>
           @endforelse
         </tbody>
       </table>

@@ -442,7 +442,11 @@ final class DmsRosterPlanKesesuaianService
             ->where('j.tanggal', '>=', $awal->toDateString())
             ->orderByRaw('COALESCE(u.direview_pada, u.created_at)')
             ->orderBy('u.id')
-            ->get(['j.kode_sid', 'j.nama', 'j.perusahaan', 'j.jabatan', 'j.site', 'j.tanggal', 'j.kode', 'j.jam_masuk', 'j.jam_keluar', 'j.menit_kerja']);
+            ->get(array_merge(
+                ['j.kode_sid', 'j.nama', 'j.perusahaan', 'j.jabatan', 'j.site', 'j.tanggal', 'j.kode', 'j.jam_masuk', 'j.jam_keluar', 'j.menit_kerja'],
+                // Total Jam Kerja (dipotong istirahat) — kolom ada setelah migrasi 2026_10_28_100000.
+                DmsRosterMasterService::adaKolomTotal() ? ['j.menit_total_kerja'] : [],
+            ));
 
         $plan = [];
         foreach ($rows as $r) {
@@ -460,7 +464,10 @@ final class DmsRosterPlanKesesuaianService
             ];
             $tgl = CarbonImmutable::parse((string) $r->tanggal)->toDateString();
             $plan[$sid]['jadwal'][$tgl] = (string) $r->kode;
-            $plan[$sid]['menit'][$tgl] = self::menitPlan($r->menit_kerja, $r->jam_masuk, $r->jam_keluar);
+            // Jam kerja efektif: Total Jam Kerja bila diisi, kalau tidak rentang Awal–Akhir.
+            $plan[$sid]['menit'][$tgl] = isset($r->menit_total_kerja)
+                ? (int) $r->menit_total_kerja
+                : self::menitPlan($r->menit_kerja, $r->jam_masuk, $r->jam_keluar);
         }
 
         return $plan;

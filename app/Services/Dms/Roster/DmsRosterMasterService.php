@@ -97,8 +97,8 @@ final class DmsRosterMasterService
         'jam_keluar' => ['jam check-out'],
     ];
 
-    /** Kolom yang tidak lagi ditulis di template (tetap dibaca bila ada). */
-    private const KOLOM_TANPA_TEMPLATE = ['total'];
+    /** Kolom yang tidak ditulis di template (tetap dibaca bila ada). Total Jam Kerja kembali ditulis sejak 28 Okt 2026. */
+    private const KOLOM_TANPA_TEMPLATE = [];
 
     private const HARI = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
@@ -322,7 +322,11 @@ final class DmsRosterMasterService
             return ['upload' => null, 'galat' => ['Semua sel jadwal kosong — tidak ada yang disimpan.']];
         }
 
-        $upload = DB::transaction(function () use ($file, $judul, $catatan, $oleh, $hasil, $jumlahJadwal): DmsRosterMasterUpload {
+        // Kolom menit_total_kerja baru ada setelah migrasi 2026_10_28_100000
+        // dijalankan (manual); sebelum itu total jam tidak disimpan.
+        $adaTotal = self::adaKolomTotal();
+
+        $upload = DB::transaction(function () use ($file, $judul, $catatan, $oleh, $hasil, $jumlahJadwal, $adaTotal): DmsRosterMasterUpload {
             $upload = DmsRosterMasterUpload::create([
                 'judul' => $judul,
                 'periode_mulai' => $hasil['tanggal'][0],
@@ -352,7 +356,7 @@ final class DmsRosterMasterService
                         'jam_masuk' => $h['masuk'],
                         'jam_keluar' => $h['keluar'],
                         'menit_kerja' => $h['menit'],
-                    ];
+                    ] + ($adaTotal ? ['menit_total_kerja' => $h['total'] ?? null] : []);
                     if (count($baris) >= 1000) {
                         DB::table('dms_roster_master_jadwal')->insert($baris);
                         $baris = [];
@@ -499,11 +503,14 @@ final class DmsRosterMasterService
                 'masuk' => $r->jam_masuk === null ? null : substr((string) $r->jam_masuk, 0, 5),
                 'keluar' => $r->jam_keluar === null ? null : substr((string) $r->jam_keluar, 0, 5),
                 'menit' => $r->menit_kerja === null ? null : (int) $r->menit_kerja,
+                // NULL / belum dimigrasi = sama dengan menit_kerja.
+                'total' => isset($r->menit_total_kerja) ? (int) $r->menit_total_kerja : ($r->menit_kerja === null ? null : (int) $r->menit_kerja),
             ];
         }
 
         foreach ($karyawan as &$k) {
             [$k['jam_awal'], $k['jam_akhir']] = self::jamKaryawanDariJadwal($k['jadwal']);
+            $k['jam_total'] = self::totalKaryawanDariJadwal($k['jadwal']);
         }
         unset($k);
 
@@ -631,6 +638,8 @@ final class DmsRosterMasterService
                 'masuk' => $r->jam_masuk === null ? null : substr((string) $r->jam_masuk, 0, 5),
                 'keluar' => $r->jam_keluar === null ? null : substr((string) $r->jam_keluar, 0, 5),
                 'menit' => $r->menit_kerja === null ? null : (int) $r->menit_kerja,
+                // NULL / belum dimigrasi = sama dengan menit_kerja.
+                'total' => isset($r->menit_total_kerja) ? (int) $r->menit_total_kerja : ($r->menit_kerja === null ? null : (int) $r->menit_kerja),
                 'menunggu' => $r->status_upload !== DmsRosterMasterUpload::STATUS_APPROVED,
             ];
         }
@@ -641,6 +650,7 @@ final class DmsRosterMasterService
                 continue;
             }
             [$k['jam_awal'], $k['jam_akhir']] = self::jamKaryawanDariJadwal($k['jadwal']);
+            $k['jam_total'] = self::totalKaryawanDariJadwal($k['jadwal']);
             $hasil[] = $k;
         }
 
@@ -710,8 +720,8 @@ final class DmsRosterMasterService
         $sh->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB($navy);
         $sh->setCellValue('A2', 'Periode: '.$awal->format('d/m/Y').' s/d '.$akhir->format('d/m/Y')
             .' · ubah tanggal pertama (sel '.$this->kolom($kolomAwalHari - 1).'4) untuk bulan lain');
-        $sh->mergeCells('A1:H1');
-        $sh->mergeCells('A2:H2');
+        $sh->mergeCells('A1:I1');
+        $sh->mergeCells('A2:I2');
         $sh->getStyle('A2')->getFont()->setItalic(true)->getColor()->setRGB('595959');
 
         // Legenda kode di baris 2, mulai kolom hari pertama.
@@ -817,17 +827,25 @@ final class DmsRosterMasterService
             }
         }
 
-        // Kolom Jam Kerja Awal / Akhir (G, H): format jam.
+        // Kolom Jam Kerja Awal / Akhir (G, H): format jam. Total Jam Kerja (I):
+        // rumus bawaan = Akhir − Awal dalam jam (lewat tengah malam ikut
+        // dihitung); boleh ditimpa angka lebih kecil, mis. dipotong istirahat.
         $sh->getStyle('G7:H'.$barisAkhir)->getNumberFormat()->setFormatCode('hh:mm');
-        $sh->getStyle('G7:H'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sh->getStyle('G7:I'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        for ($r = 7; $r <= $barisAkhir; $r++) {
+            $sh->setCellValue('I'.$r, '=IF(AND(G'.$r.'<>"",H'.$r.'<>""),ROUND(MOD(H'.$r.'-G'.$r.',1)*24,2),"")');
+        }
+        $sh->getStyle('I7:I'.$barisAkhir)->getNumberFormat()->setFormatCode('0.##');
+        $sh->getComment('I4')->getText()->createText('Jam kerja efektif per hari (angka jam, mis. 11 atau 10,5). '
+            .'Otomatis = Jam Kerja Akhir − Awal; boleh diganti lebih kecil (dipotong istirahat), tidak boleh lebih besar.');
 
         // Area isian identitas: kuning muda, garis tipis.
-        $sh->getStyle('A7:H'.$barisAkhir)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF2CC');
+        $sh->getStyle('A7:I'.$barisAkhir)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF2CC');
         $sh->getStyle('B7:B'.$barisAkhir)->getNumberFormat()->setFormatCode('@');
         $sh->getStyle('A7:A'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sh->getStyle('B7:B'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $abu = ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'BFBFBF']];
-        $sh->getStyle('A4:H'.$barisAkhir)->getBorders()->applyFromArray(['allBorders' => $abu]);
+        $sh->getStyle('A4:I'.$barisAkhir)->getBorders()->applyFromArray(['allBorders' => $abu]);
         $sh->getStyle($this->kolom($kolomAwalHari - 1).'4:'.$kolomAkhir.'6')->getBorders()->applyFromArray(['allBorders' => $abu]);
 
         // Area kode hari: gaya bawaan KOLOM (xf kolom), bukan gaya per sel —
@@ -879,7 +897,7 @@ final class DmsRosterMasterService
             ->setFormula1('"'.implode(',', array_keys(self::KODE)).'"');
         $sh->setDataValidation($areaKode, $v);
 
-        foreach (['A' => 5, 'B' => 14, 'C' => 26, 'D' => 22, 'E' => 18, 'F' => 9, 'G' => 11, 'H' => 11] as $kol => $lebar) {
+        foreach (['A' => 5, 'B' => 14, 'C' => 26, 'D' => 22, 'E' => 18, 'F' => 9, 'G' => 11, 'H' => 11, 'I' => 11] as $kol => $lebar) {
             $sh->getColumnDimension($kol)->setWidth($lebar);
         }
         $sh->freezePane($this->kolom($kolomAwalHari - 1).'7');
@@ -890,11 +908,12 @@ final class DmsRosterMasterService
             ['1. Baris tanggal (01, 02, …) berisi tanggal asli dan harus berurutan, maks '.self::MAKS_HARI.' hari (setahun). Mengganti tanggal pertama menggeser semua tanggal; jumlah kolom tetap sesuai rentang saat download.'],
             ['2. Satu baris = satu karyawan, mulai baris 7. Kolom SID wajib; No boleh kosong.'],
             ['3. Isi tiap hari dengan salah satu kode di bawah (pilih dari dropdown): D1–D13 = hari ke-1 s/d 13 blok Day, N1–N7 = hari ke-1 s/d 7 blok Night; sel kosong = tidak dijadwalkan.'],
-            ['4. Jangan ubah judul kolom (No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Kerja Awal, Jam Kerja Akhir). Hapus baris contoh sebelum upload.'],
+            ['4. Jangan ubah judul kolom (No, SID, Nama Karyawan, Perusahaan, Jabatan, Site, Jam Kerja Awal, Jam Kerja Akhir, Total Jam Kerja). Hapus baris contoh sebelum upload.'],
             ['5. Jam Kerja Awal / Akhir (HH:MM) per karyawan boleh kosong = ikut jam bawaan kode ('
                 .collect(self::legenda())->filter(fn (array $l): bool => $l[3] !== null)->map(fn (array $l): string => $l[0].' '.$l[3].'–'.$l[4])->implode(', ')
                 .'). Bila diisi, berlaku untuk semua hari kerja (D1–D13 / N1–N7) orang itu;'],
             ['   jam akhir lebih kecil dari jam awal berarti lewat tengah malam (mis. 18:00–06:00 = 12 jam).'],
+            ['   Total Jam Kerja terisi otomatis (= Akhir − Awal). Boleh diganti angka jam yang lebih kecil bila dipotong istirahat (mis. 05:30–17:30 dengan istirahat 1 jam = 11), tidak boleh lebih besar.'],
             ['6. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.'],
             [''],
             ['Kode', 'Keterangan'],
@@ -947,13 +966,15 @@ final class DmsRosterMasterService
     }
 
     /**
-     * Jam per karyawan dari kolom Jam Kerja Awal / Akhir (dan Total Jam Kerja
-     * bila file lama masih memuatnya).
-     * Keduanya kosong = ikut jam bawaan kode (null). Kesalahan ditambahkan ke $galat.
+     * Jam per karyawan dari kolom Jam Kerja Awal / Akhir / Total Jam Kerja.
+     * Awal & Akhir kosong = ikut jam bawaan kode (null). Total Jam Kerja
+     * (jam, desimal) boleh lebih kecil dari Akhir − Awal — mis. dipotong
+     * istirahat — tapi tidak boleh lebih besar; kosong (atau rumus template
+     * yang gagal dihitung) = sama dengan Akhir − Awal. Kesalahan ditambahkan ke $galat.
      *
      * @param  array<string, int>  $kolom
      * @param  list<string>  $galat
-     * @return array{masuk:string,keluar:string,menit:int}|null
+     * @return array{masuk:string,keluar:string,menit:int,total:int}|null
      */
     private function jamKaryawan(array $row, array $kolom, int $no, string $sid, array &$galat): ?array
     {
@@ -962,6 +983,10 @@ final class DmsRosterMasterService
         $mMasuk = $ambil('jam_masuk');
         $mKeluar = $ambil('jam_keluar');
         $mTotal = $ambil('total');
+        // Rumus Total di template yang tidak bisa dihitung (#VALUE! dsb.) = kosong.
+        if (is_string($mTotal) && str_starts_with(trim($mTotal), '#')) {
+            $mTotal = null;
+        }
 
         if ($kosong($mMasuk) && $kosong($mKeluar)) {
             if (! $kosong($mTotal)) {
@@ -986,35 +1011,41 @@ final class DmsRosterMasterService
 
             return null;
         }
+        $totalMenit = $menit;
         if (! $kosong($mTotal)) {
             $total = str_replace(',', '.', trim((string) $mTotal));
-            if (! is_numeric($total) || abs((float) $total * 60 - $menit) > 1) {
-                $galat[] = 'Baris '.$no.' ('.$sid.'): Total Jam Kerja "'.trim((string) $mTotal).'" tidak sama dengan '
-                    .$masuk.'–'.$keluar.' = '.round($menit / 60, 2).' jam.';
+            $totalMenit = is_numeric($total) ? (int) round((float) $total * 60) : null;
+            if ($totalMenit === null || $totalMenit <= 0 || $totalMenit > $menit + 1) {
+                $galat[] = 'Baris '.$no.' ('.$sid.'): Total Jam Kerja "'.trim((string) $mTotal).'" harus angka jam lebih dari 0 dan '
+                    .'tidak lebih dari '.$masuk.'–'.$keluar.' = '.round($menit / 60, 2).' jam.';
+
+                return null;
             }
+            $totalMenit = min($totalMenit, $menit);
         }
 
-        return ['masuk' => $masuk, 'keluar' => $keluar, 'menit' => $menit];
+        return ['masuk' => $masuk, 'keluar' => $keluar, 'menit' => $menit, 'total' => $totalMenit];
     }
 
     /**
      * Jam efektif satu hari: jam karyawan untuk hari kerja bila ada, kalau tidak
      * jam bawaan kodenya; hari bukan kerja tanpa jam.
      *
-     * @param  array{masuk:string,keluar:string,menit:int}|null  $jamOrang
-     * @return array{kode:string,masuk:?string,keluar:?string,menit:?int}
+     * @param  array{masuk:string,keluar:string,menit:int,total:int}|null  $jamOrang
+     * @return array{kode:string,masuk:?string,keluar:?string,menit:?int,total:?int}
      */
     private function jamHari(string $kode, ?array $jamOrang): array
     {
         [, , $masuk, $keluar] = self::KODE[$kode];
         if ($masuk === null) {
-            return ['kode' => $kode, 'masuk' => null, 'keluar' => null, 'menit' => null];
+            return ['kode' => $kode, 'masuk' => null, 'keluar' => null, 'menit' => null, 'total' => null];
         }
         if ($jamOrang !== null) {
             return ['kode' => $kode] + $jamOrang;
         }
+        $menit = $this->selisihMenit($masuk, $keluar);
 
-        return ['kode' => $kode, 'masuk' => $masuk, 'keluar' => $keluar, 'menit' => $this->selisihMenit($masuk, $keluar)];
+        return ['kode' => $kode, 'masuk' => $masuk, 'keluar' => $keluar, 'menit' => $menit, 'total' => $menit];
     }
 
     /** "HH:MM", "H:MM", "HH.MM", atau pecahan hari Excel (0,2916…) → "HH:MM". */
@@ -1042,6 +1073,40 @@ final class DmsRosterMasterService
         $d = $m($keluar) - $m($masuk);
 
         return $d < 0 ? $d + 1440 : $d;
+    }
+
+    private static ?bool $adaKolomTotal = null;
+
+    /** Sudahkah kolom dms_roster_master_jadwal.menit_total_kerja dimigrasi. */
+    public static function adaKolomTotal(): bool
+    {
+        if (self::$adaKolomTotal === null) {
+            try {
+                self::$adaKolomTotal = \Illuminate\Support\Facades\Schema::hasColumn('dms_roster_master_jadwal', 'menit_total_kerja');
+            } catch (Throwable) {
+                self::$adaKolomTotal = false;
+            }
+        }
+
+        return self::$adaKolomTotal;
+    }
+
+    /**
+     * Total jam kerja (jam, desimal) satu karyawan untuk tampilan: dari
+     * menit_total_kerja hari kerjanya bila semuanya sama, kalau tidak null.
+     *
+     * @param  array<string, array<string, mixed>>  $jadwal
+     */
+    public static function totalKaryawanDariJadwal(array $jadwal): ?float
+    {
+        $nilai = [];
+        foreach ($jadwal as $h) {
+            if (($h['total'] ?? null) !== null) {
+                $nilai[(int) $h['total']] = true;
+            }
+        }
+
+        return count($nilai) === 1 ? round(array_key_first($nilai) / 60, 2) : null;
     }
 
     /** "HH:MM" → pecahan hari Excel. */

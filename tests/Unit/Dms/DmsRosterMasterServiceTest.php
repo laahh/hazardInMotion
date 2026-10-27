@@ -67,9 +67,9 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame('GMO', $hasil['departemen_site']);
         $a = $hasil['karyawan'][0];
         $this->assertSame(['10023451', 'Operator HD', null], [$a['sid'], $a['jabatan'], $a['jam']]);
-        $this->assertSame(['kode' => 'D1', 'masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720], $a['jadwal']['2026-11-01']);
-        $this->assertSame(['kode' => 'N1', 'masuk' => '18:00', 'keluar' => '06:00', 'menit' => 720], $a['jadwal']['2026-11-02']);
-        $this->assertSame(['kode' => 'OFF', 'masuk' => null, 'keluar' => null, 'menit' => null], $a['jadwal']['2026-11-03']);
+        $this->assertSame(['kode' => 'D1', 'masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720, 'total' => 720], $a['jadwal']['2026-11-01']);
+        $this->assertSame(['kode' => 'N1', 'masuk' => '18:00', 'keluar' => '06:00', 'menit' => 720, 'total' => 720], $a['jadwal']['2026-11-02']);
+        $this->assertSame(['kode' => 'OFF', 'masuk' => null, 'keluar' => null, 'menit' => null, 'total' => null], $a['jadwal']['2026-11-03']);
         $this->assertArrayNotHasKey('2026-11-04', $a['jadwal']);
         $this->assertSame(['OFF', 'CT', 'S', 'I'], array_column($hasil['karyawan'][1]['jadwal'], 'kode'));
     }
@@ -116,24 +116,26 @@ class DmsRosterMasterServiceTest extends TestCase
         ]));
 
         $this->assertSame([], $hasil['galat']);
-        $this->assertSame(['masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720], $hasil['karyawan'][0]['jam']);
-        $this->assertSame(['kode' => 'N1', 'masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720], $hasil['karyawan'][0]['jadwal']['2026-11-02']);
+        $this->assertSame(['masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720, 'total' => 720], $hasil['karyawan'][0]['jam']);
+        $this->assertSame(['kode' => 'N1', 'masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720, 'total' => 720], $hasil['karyawan'][0]['jadwal']['2026-11-02']);
         $this->assertNull($hasil['karyawan'][0]['jadwal']['2026-11-03']['masuk']);
+        $this->assertNull($hasil['karyawan'][0]['jadwal']['2026-11-03']['total']);
         $this->assertSame(510, $hasil['karyawan'][1]['jadwal']['2026-11-01']['menit']);
+        $this->assertSame(510, $hasil['karyawan'][1]['jadwal']['2026-11-01']['total']);
     }
 
     public function test_kesalahan_jam_dilaporkan(): void
     {
         $hasil = $this->svc->bacaSheet($this->sheet([
             [1, 'A1', '', '', '', '', '07:00', null, null, 'D1', 'D1', 'D1', 'D1'],
-            [2, 'B2', '', '', '', '', '07:00', '19:00', 10, 'D1', 'D1', 'D1', 'D1'],
+            [2, 'B2', '', '', '', '', '07:00', '19:00', 13, 'D1', 'D1', 'D1', 'D1'],
             [3, 'C3', '', '', '', '', null, null, 8, 'D1', 'D1', 'D1', 'D1'],
         ]));
 
         $this->assertSame([], $hasil['karyawan']);
         $this->assertCount(3, $hasil['galat']);
         $this->assertStringContainsString('harus diisi berdua', $hasil['galat'][0]);
-        $this->assertStringContainsString('tidak sama dengan 07:00–19:00 = 12 jam', $hasil['galat'][1]);
+        $this->assertStringContainsString('tidak lebih dari 07:00–19:00 = 12 jam', $hasil['galat'][1]);
         $this->assertStringContainsString('tanpa Jam Kerja Awal', $hasil['galat'][2]);
     }
 
@@ -264,13 +266,43 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame([], $hasil['karyawan'][0]['jadwal'], 'Template perusahaan tidak boleh berisi jadwal contoh.');
     }
 
-    public function test_template_memakai_jam_kerja_awal_akhir_tanpa_kolom_total(): void
+    public function test_template_memuat_kolom_total_jam_kerja_berumus(): void
     {
         $sh = $this->svc->template(CarbonImmutable::create(2026, 11, 1))->getActiveSheet();
 
-        $this->assertSame(['Site', 'Jam Kerja Awal', 'Jam Kerja Akhir'], [$sh->getCell('F4')->getValue(), $sh->getCell('G4')->getValue(), $sh->getCell('H4')->getValue()]);
-        // Kolom tanggal pertama langsung sesudah Jam Kerja Akhir (kolom I).
-        $this->assertSame('2026-11-01', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $sh->getCell('I4')->getValue())->format('Y-m-d'));
+        $this->assertSame(
+            ['Site', 'Jam Kerja Awal', 'Jam Kerja Akhir', 'Total Jam Kerja'],
+            [$sh->getCell('F4')->getValue(), $sh->getCell('G4')->getValue(), $sh->getCell('H4')->getValue(), $sh->getCell('I4')->getValue()],
+        );
+        // Baris contoh 2 (05:30–17:30) → rumus Total = 12; baris contoh 1 tanpa jam → kosong.
+        $this->assertSame(12.0, (float) $sh->getCell('I8')->getCalculatedValue());
+        $this->assertSame('', $sh->getCell('I7')->getCalculatedValue());
+        // Kolom tanggal pertama langsung sesudah Total Jam Kerja (kolom J).
+        $this->assertSame('2026-11-01', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $sh->getCell('J4')->getValue())->format('Y-m-d'));
+    }
+
+    public function test_total_jam_kerja_boleh_lebih_kecil_karena_istirahat(): void
+    {
+        $hasil = $this->svc->bacaSheet($this->sheet([
+            [1, 'A1', '', '', '', '', '05:30', '17:30', '11', 'D1', 'D1', 'OFF', 'D1'],
+            [2, 'B2', '', '', '', '', '05:30', '17:30', '10,5', 'D1', '', '', ''],
+            [3, 'C3', '', '', '', '', '05:30', '17:30', '#VALUE!', 'D1', '', '', ''],
+        ]));
+
+        $this->assertSame([], $hasil['galat']);
+        $this->assertSame(['kode' => 'D1', 'masuk' => '05:30', 'keluar' => '17:30', 'menit' => 720, 'total' => 660], $hasil['karyawan'][0]['jadwal']['2026-11-01']);
+        $this->assertNull($hasil['karyawan'][0]['jadwal']['2026-11-03']['total']);
+        $this->assertSame(630, $hasil['karyawan'][1]['jadwal']['2026-11-01']['total']);
+        // Rumus template yang gagal dihitung = ikut rentang Awal–Akhir.
+        $this->assertSame(720, $hasil['karyawan'][2]['jadwal']['2026-11-01']['total']);
+    }
+
+    public function test_total_jam_kerja_dari_jadwal_untuk_tampilan(): void
+    {
+        $this->assertSame(11.0, DmsRosterMasterService::totalKaryawanDariJadwal([
+            ['kode' => 'D1', 'total' => 660], ['kode' => 'OFF', 'total' => null], ['kode' => 'D2', 'total' => 660],
+        ]));
+        $this->assertNull(DmsRosterMasterService::totalKaryawanDariJadwal([['kode' => 'D1', 'total' => 660], ['kode' => 'D2', 'total' => 720]]));
     }
 
     public function test_judul_jam_lama_check_in_out_tetap_dibaca(): void
@@ -279,7 +311,7 @@ class DmsRosterMasterServiceTest extends TestCase
         $hasil = $this->svc->bacaSheet($this->sheet([[1, 'A1', '', '', '', '', '06:00', '18:00', 12, 'D1', 'D1', 'D1', 'D1']]));
 
         $this->assertSame([], $hasil['galat']);
-        $this->assertSame(['masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720], $hasil['karyawan'][0]['jam']);
+        $this->assertSame(['masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720, 'total' => 720], $hasil['karyawan'][0]['jam']);
     }
 
     public function test_kelompokkan_perusahaan_dan_site(): void
@@ -369,7 +401,9 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame('2026-11-01', $hasil['tanggal'][0]);
         $this->assertSame(['10023451', '10023452', '10023453'], array_column($hasil['karyawan'], 'sid'));
         $this->assertNull($hasil['karyawan'][0]['jam']);
-        $this->assertSame(['masuk' => '05:30', 'keluar' => '17:30', 'menit' => 720], $hasil['karyawan'][1]['jam']);
+        // Rumus Total di template ikut terbaca (= rentang Awal–Akhir).
+        $this->assertSame(['masuk' => '05:30', 'keluar' => '17:30', 'menit' => 720, 'total' => 720], $hasil['karyawan'][1]['jam']);
         $this->assertSame(540, $hasil['karyawan'][2]['jam']['menit']);
+        $this->assertSame(540, $hasil['karyawan'][2]['jam']['total']);
     }
 }
