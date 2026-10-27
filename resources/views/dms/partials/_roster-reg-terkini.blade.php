@@ -36,6 +36,55 @@
             <div class="d-none" data-ro-view-detail></div>
 
             <div data-ro-view-daftar>
+              {{-- > 70 hari: yang sudah masuk Master Roster Banned keluar dari daftar
+                   RFID di bawah; yang belum dieksekusi (belum ada log) ditampilkan di sini
+                   supaya isi modal sama dengan angka tile. --}}
+              @if ($kartu['id'] === 'onsite')
+                @php
+                  try {
+                      $masterTunggu = \App\Services\Dms\Roster\DmsRosterBannedAktif::menungguEksekusi()
+                          ->where('m.alasan_pelanggaran', (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'))
+                          ->orderBy('m.tanggal_pelanggaran')->orderBy('m.nama')
+                          ->limit(300)
+                          ->get(['m.sid', 'm.nik', 'm.nama', 'm.perusahaan', 'm.site_dedicated', 'm.tanggal_pelanggaran', 'm.created_at']);
+                  } catch (\Throwable) {
+                      $masterTunggu = collect();
+                  }
+                @endphp
+                @if ($masterTunggu->isNotEmpty())
+                  <div class="border radius-8 p-16 mb-16 bg-warning-50">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-8">
+                      <div>
+                        <div class="fw-semibold">Menunggu banned di Master Roster Banned
+                          <span class="badge bg-warning-focus text-warning-main ms-1">{{ number_format($masterTunggu->unique('sid')->count(), 0, ',', '.') }} orang</span>
+                        </div>
+                        <div class="text-xs text-secondary-light">Status Belum Banned &middot; Belum Ada Log — sudah dicatat sistem, menunggu dieksekusi modul AutoBanned.</div>
+                      </div>
+                      <a href="{{ route('pra-operasi.roster-banned.index') }}" class="btn btn-sm btn-outline-warning radius-8">Buka Master Roster Banned &rarr;</a>
+                    </div>
+                    <div class="table-responsive" style="max-height:260px">
+                      <table class="table bordered-table sm-table mb-0">
+                        <thead>
+                          <tr><th>No</th><th>Nama</th><th>PT</th><th>Site</th><th>Tgl pelanggaran</th><th>Masuk master</th></tr>
+                        </thead>
+                        <tbody>
+                          @foreach ($masterTunggu as $mi => $m)
+                            <tr>
+                              <td>{{ $mi + 1 }}</td>
+                              <td class="fw-medium">{{ $m->nama }}<span class="d-block text-xs text-secondary-light">{{ $m->sid }} &middot; NIK {{ $m->nik }}</span></td>
+                              <td>{{ $m->perusahaan ?: '—' }}</td>
+                              <td>{{ $m->site_dedicated ?: '—' }}</td>
+                              <td class="text-nowrap">{{ $m->tanggal_pelanggaran ? \Carbon\CarbonImmutable::parse($m->tanggal_pelanggaran)->format('d/m/Y') : '—' }}</td>
+                              <td class="text-nowrap">{{ $m->created_at ? \Carbon\CarbonImmutable::parse($m->created_at)->format('d/m/Y H:i') : '—' }}</td>
+                            </tr>
+                          @endforeach
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                @endif
+              @endif
+
               <ul class="nav nav-pills gap-2 mb-16 {{ count($kartu['item']) === 1 ? 'd-none' : '' }}" role="tablist">
                 @foreach ($kartu['item'] as $kode => [$label, $definisi, $kolomNilai, $kolomMulai, $kolomSelesai])
                   <li class="nav-item" role="presentation">

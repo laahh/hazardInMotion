@@ -266,7 +266,7 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame([], $hasil['karyawan'][0]['jadwal'], 'Template perusahaan tidak boleh berisi jadwal contoh.');
     }
 
-    public function test_template_memuat_kolom_total_jam_kerja_berumus(): void
+    public function test_template_memuat_kolom_total_jam_kerja_diketik_manual(): void
     {
         $sh = $this->svc->template(CarbonImmutable::create(2026, 11, 1))->getActiveSheet();
 
@@ -274,9 +274,10 @@ class DmsRosterMasterServiceTest extends TestCase
             ['Site', 'Jam Kerja Awal', 'Jam Kerja Akhir', 'Total Jam Kerja'],
             [$sh->getCell('F4')->getValue(), $sh->getCell('G4')->getValue(), $sh->getCell('H4')->getValue(), $sh->getCell('I4')->getValue()],
         );
-        // Baris contoh 2 (05:30–17:30) → rumus Total = 12; baris contoh 1 tanpa jam → kosong.
-        $this->assertSame(12.0, (float) $sh->getCell('I8')->getCalculatedValue());
-        $this->assertSame('', $sh->getCell('I7')->getCalculatedValue());
+        // Tanpa rumus: contoh 05:30–17:30 diketik 11 (istirahat), baris tanpa jam kosong.
+        $this->assertSame(11, $sh->getCell('I8')->getValue());
+        $this->assertNull($sh->getCell('I7')->getValue());
+        $this->assertNull($sh->getCell('I20')->getValue());
         // Kolom tanggal pertama langsung sesudah Total Jam Kerja (kolom J).
         $this->assertSame('2026-11-01', \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $sh->getCell('J4')->getValue())->format('Y-m-d'));
     }
@@ -401,9 +402,9 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame('2026-11-01', $hasil['tanggal'][0]);
         $this->assertSame(['10023451', '10023452', '10023453'], array_column($hasil['karyawan'], 'sid'));
         $this->assertNull($hasil['karyawan'][0]['jam']);
-        // Rumus Total di template ikut terbaca (= rentang Awal–Akhir).
-        $this->assertSame(['masuk' => '05:30', 'keluar' => '17:30', 'menit' => 720, 'total' => 720], $hasil['karyawan'][1]['jam']);
+        // Total Jam Kerja contoh yang diketik ikut terbaca.
+        $this->assertSame(['masuk' => '05:30', 'keluar' => '17:30', 'menit' => 720, 'total' => 660], $hasil['karyawan'][1]['jam']);
         $this->assertSame(540, $hasil['karyawan'][2]['jam']['menit']);
-        $this->assertSame(540, $hasil['karyawan'][2]['jam']['total']);
+        $this->assertSame(480, $hasil['karyawan'][2]['jam']['total']);
     }
 }

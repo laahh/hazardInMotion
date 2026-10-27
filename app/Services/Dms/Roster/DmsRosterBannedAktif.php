@@ -39,6 +39,18 @@ final class DmsRosterBannedAktif
     }
 
     /**
+     * Baris master yang menunggu dieksekusi: belum di-unban DAN belum punya
+     * satu pun baris di sid_roster_banned_log — sama dengan filter "Belum
+     * Banned" + "Belum Ada Log" di halaman Master Roster Banned.
+     */
+    public static function menungguEksekusi(): Builder
+    {
+        return self::query()->whereNotExists(static fn (Builder $q) => $q
+            ->from('sid_roster_banned_log as bl')
+            ->whereColumn('bl.master_id', 'm.id'));
+    }
+
+    /**
      * Sidik ringkas isi master + log unban — berubah begitu ada orang
      * di-banned, diubah, atau di-unban. Dipakai sebagai bagian kunci cache.
      */

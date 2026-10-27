@@ -70,17 +70,36 @@
         'border border-top-0 border-bottom-0',
         'border border-top-0 border-bottom-0 border-start-0 border-end-0',
     ];
+    // Tile > 70 hari: orang yang sudah dimasukkan ke Master Roster Banned
+    // dikeluarkan dari hitungan RFID live, jadi angkanya diambil dari master —
+    // baris beralasan kepatuhan roster yang "Belum Banned" + "Belum Ada Log"
+    // (menunggu dieksekusi) — ditambah pelanggar live yang belum masuk master.
+    try {
+        $menungguMaster = \App\Services\Dms\Roster\DmsRosterBannedAktif::menungguEksekusi()
+            ->where('m.alasan_pelanggaran', (string) config('dms_roster.reg_live.auto_banned.alasan', 'BAN SID - Kepatuhan Roster Karyawan'))
+            ->distinct()->count('m.sid');
+    } catch (\Throwable) {
+        $menungguMaster = null;
+    }
     $tiles = [];
     foreach (\App\Services\Dms\Roster\DmsRosterAturanKartu::daftar() as $i => $k) {
         $n = \App\Services\Dms\Roster\DmsRosterAturanKartu::jumlahOrang($k, $regKini);
-        $tiles[] = $k + [
+        $tile = $k + [
             'jumlah' => $n === null ? '—' : number_format($n, 0, ',', '.'),
             'persen' => $n !== null && $populasiAturan > 0
                 ? number_format($n / $populasiAturan * 100, 1, ',', '.').'% dari '.number_format($populasiAturan, 0, ',', '.').' karyawan'
                 : null,
             'tab' => array_key_first($k['item']),
             'border' => $borderTile[$i] ?? 'border',
+            'master' => null,
         ];
+        if ($k['id'] === 'onsite' && $menungguMaster !== null) {
+            $tile['jumlah'] = number_format($menungguMaster + (int) $n, 0, ',', '.');
+            $tile['persen'] = null;
+            $tile['master'] = number_format($menungguMaster, 0, ',', '.').' menunggu banned di Master (belum ada log)'
+                .((int) $n > 0 ? ' + '.number_format((int) $n, 0, ',', '.').' baru dari RFID' : '');
+        }
+        $tiles[] = $tile;
     }
 
     // ── Heatmap kalender harian ───────────────────────────────────────────
@@ -307,7 +326,11 @@
                   </span>
                   <span class="d-block text-sm mb-0">
                     <span class="bg-{{ $t['warna'] }}-focus text-{{ $t['warna'] }}-main px-1 rounded-2 fw-medium text-sm">{{ $t['perlakuan'] }}</span>
-                    {{ $t['persen'] ?? ($regKini ? '' : 'RFID tidak terjangkau saat ini') }}
+                    @if ($t['master'] !== null)
+                      <span class="d-block text-xs text-secondary-light mt-4">{{ $t['master'] }}</span>
+                    @else
+                      {{ $t['persen'] ?? ($regKini ? '' : 'RFID tidak terjangkau saat ini') }}
+                    @endif
                     @if (! $regKini && $regGalat !== '')
                       <span class="d-block text-xs text-danger-main mt-4" title="{{ $regGalat }}">{{ \Illuminate\Support\Str::limit($regGalat, 70) }}</span>
                     @endif
