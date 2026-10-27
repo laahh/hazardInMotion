@@ -39,11 +39,13 @@ final class DmsRosterPlanKesesuaianService
 {
     public const STATUS = ['SUDAH_MELANGGAR', 'AKAN_70', 'AKAN_13', 'PLAN_HABIS', 'AMAN', 'LONGGAR'];
 
-    private const KUNCI_SEGAR = 'dms_roster:plan_kesesuaian:segar:v1';
+    // Naikkan versi setiap bentuk baris berubah, supaya hasil lama di cache
+    // (mis. tanpa 'jam') tidak dikirim ke JS yang sudah baru.
+    private const KUNCI_SEGAR = 'dms_roster:plan_kesesuaian:segar:v2';
 
-    private const KUNCI_TERAKHIR = 'dms_roster:plan_kesesuaian:terakhir:v1';
+    private const KUNCI_TERAKHIR = 'dms_roster:plan_kesesuaian:terakhir:v2';
 
-    private const KUNCI_GAGAL = 'dms_roster:plan_kesesuaian:gagal:v1';
+    private const KUNCI_GAGAL = 'dms_roster:plan_kesesuaian:gagal:v2';
 
     private ?string $galat = null;
 

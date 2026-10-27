@@ -1051,10 +1051,15 @@
                     body.innerHTML = '';
                     return;
                 }
-                render(d);
-            })
-            .catch(function () {
-                if (no === minta) { body.innerHTML = kosong('Gagal terhubung ke server.', 'text-danger-600'); }
+                // Error saat menggambar jangan dilaporkan sebagai gagal koneksi.
+                try {
+                    render(d);
+                } catch (err) {
+                    if (window.console) { console.error('Plan kesesuaian:', err); }
+                    body.innerHTML = kosong('Data diterima tapi gagal ditampilkan (' + esc(err.message) + '). Muat ulang halaman; bila tetap, tunggu sinkronisasi RFID berikutnya.', 'text-danger-600');
+                }
+            }, function (err) {
+                if (no === minta) { body.innerHTML = kosong('Gagal terhubung ke server' + (err && err.message ? ' (' + esc(err.message) + ')' : '') + '.', 'text-danger-600'); }
             });
     }
 
@@ -1068,7 +1073,7 @@
     }
 
     function render(d) {
-        aturan = d.parameter;
+        aturan = Object.assign({ onsite_maks: 70, beruntun_maks: 13, segera_habis_hari: 7, jam_kerja_maks: 9 }, d.parameter || {});
         hariIni = d.hari_ini;
         var r = d.ringkas;
         var jamMaks = aturan.jam_kerja_maks;
@@ -1171,7 +1176,17 @@
         }
     }
 
+    // Bawaan untuk kolom yang belum ada di hasil sinkronisasi versi lama.
+    var JAM_KOSONG = { maks_jam: 9, rfid_dinilai: 0, rfid_lebih: 0, rfid_terakhir: null, rfid_terakhir_menit: null, rfid_maks_menit: null,
+        plan_dinilai: 0, plan_lebih: 0, plan_pertama: null, plan_maks_menit: null };
+    var KEPATUHAN_KOSONG = { dinilai: 0, sesuai: 0, kerja_tanpa_tap: 0, tap_saat_off: 0, beda_shift: 0, persen: null };
+
     function baris(b, i, mulaiNo) {
+        b.jam = b.jam || JAM_KOSONG;
+        b.kepatuhan = b.kepatuhan || KEPATUHAN_KOSONG;
+        if (b.lebih_70 == null) { b.lebih_70 = !!(b.sudah_onsite || b.tgl_71); }
+        if (b.lebih_13 == null) { b.lebih_13 = !!(b.sudah_beruntun || b.tgl_14); }
+        if (b.lebih_jam == null) { b.lebih_jam = b.jam.rfid_lebih > 0 || b.jam.plan_lebih > 0; }
         var st = label[b.status] || [b.status, 'secondary'];
         var k = b.kepatuhan;
         var kelasPatuh = k.persen == null ? '' : (k.persen < 70 ? ' is-rendah' : (k.persen < 90 ? ' is-sedang' : ' is-baik'));
