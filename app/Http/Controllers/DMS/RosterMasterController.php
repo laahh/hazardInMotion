@@ -307,10 +307,13 @@ final class RosterMasterController extends Controller
                 if ($data['ttd_mode'] === 'upload' && ! $request->hasFile('ttd_file')) {
                     throw new RuntimeException('Pilih file gambar tanda tangan untuk di-upload.');
                 }
+                // Mode gambar mengirim PNG hasil canvas lewat ttd_file (ttd_data
+                // hanya cadangan browser lama), jadi file dipakai di kedua mode.
                 $ttd = $this->service->simpanTtd(
                     $upload,
                     $data['ttd_mode'] === 'gambar' ? ($data['ttd_data'] ?? null) : null,
-                    $data['ttd_mode'] === 'upload' ? $request->file('ttd_file') : null,
+                    $request->file('ttd_file'),
+                    $data['ttd_mode'] === 'gambar',
                 );
             }
             $this->service->review($upload, $setuju, $data['catatan_review'] ?? null, $this->pengguna(), $ttd);

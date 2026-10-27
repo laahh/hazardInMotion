@@ -319,15 +319,35 @@
         pratinjau.hidden = false;
     });
 
-    form.addEventListener('submit', function (e) {
-        if (mode.value === 'gambar') {
-            if (pad.isEmpty()) { e.preventDefault(); tampilGalat('Tanda tangan belum digambar.'); return; }
+    // Tanda tangan gambar dikirim sebagai FILE PNG, bukan teks base64 di
+    // ttd_data: WAF server memblokir (403 polos) body berisi data URL panjang.
+    // ttd_data hanya cadangan untuk browser tanpa DataTransfer.
+    function kirimSebagaiFile(blob) {
+        try {
+            var dt = new DataTransfer();
+            dt.items.add(new File([blob], 'ttd.png', { type: 'image/png' }));
+            file.files = dt.files;
+            data.value = '';
+        } catch (err) {
             data.value = pad.toDataURL('image/png');
             file.value = '';
-        } else {
-            if (!file.files || !file.files.length) { e.preventDefault(); tampilGalat('Pilih file gambar tanda tangan.'); return; }
-            data.value = '';
         }
+        form.submit();
+    }
+
+    form.addEventListener('submit', function (e) {
+        if (mode.value === 'gambar') {
+            e.preventDefault();
+            if (pad.isEmpty()) { tampilGalat('Tanda tangan belum digambar.'); return; }
+            if (!window.confirm('Setujui roster ini dengan tanda tangan tersebut?')) { return; }
+            canvas.toBlob(function (blob) {
+                if (!blob) { tampilGalat('Gagal membaca tanda tangan, coba gambar ulang.'); return; }
+                kirimSebagaiFile(blob);
+            }, 'image/png');
+            return;
+        }
+        if (!file.files || !file.files.length) { e.preventDefault(); tampilGalat('Pilih file gambar tanda tangan.'); return; }
+        data.value = '';
         if (!window.confirm('Setujui roster ini dengan tanda tangan tersebut?')) { e.preventDefault(); }
     });
 })();

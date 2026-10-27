@@ -407,11 +407,11 @@ final class DmsRosterMasterService
      *
      * @return array{path:string,sumber:string}
      */
-    public function simpanTtd(DmsRosterMasterUpload $upload, ?string $dataUrl, ?UploadedFile $file): array
+    public function simpanTtd(DmsRosterMasterUpload $upload, ?string $dataUrl, ?UploadedFile $file, bool $digambar = false): array
     {
         if ($file !== null) {
             $isi = (string) file_get_contents($file->getRealPath());
-            $sumber = 'UPLOAD';
+            $sumber = $digambar ? 'GAMBAR' : 'UPLOAD';
         } else {
             if ($dataUrl === null || preg_match('#^data:image/png;base64,([A-Za-z0-9+/=]+)$#', $dataUrl, $m) !== 1) {
                 throw new \RuntimeException('Tanda tangan belum digambar.');
