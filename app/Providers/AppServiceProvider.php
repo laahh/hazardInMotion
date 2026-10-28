@@ -47,8 +47,13 @@ class AppServiceProvider extends ServiceProvider
         $this->ensureOpenSslCaBundle();
         $this->app->make(\App\Services\Besigma\BesigmaTunnelService::class)->applyRuntimeConfig();
 
-        // 🔑 Force HTTPS for asset URLs in production
-        if ($this->app->environment('production')) {
+        // 🔑 Force HTTPS untuk semua URL (asset, action form, redirect) bila
+        // production, APP_URL https, atau FORCE_HTTPS=true. Di belakang
+        // proxy/WAF yang memutus TLS, request terbaca http dan action form
+        // ikut http → Chrome memberi peringatan "information ... not secure".
+        if ($this->app->environment('production')
+            || str_starts_with((string) config('app.url'), 'https://')
+            || config('app.force_https')) {
             URL::forceScheme('https');
         }
 

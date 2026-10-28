@@ -14,6 +14,16 @@ class TrustProxies extends Middleware
      */
     protected $proxies;
 
+    public function __construct()
+    {
+        // Proxy/WAF di depan aplikasi (pemutus TLS): TRUSTED_PROXIES=* atau
+        // daftar IP dipisah koma, supaya X-Forwarded-Proto: https dipercaya.
+        $env = trim((string) config('app.trusted_proxies', ''));
+        if ($env !== '') {
+            $this->proxies = $env === '*' ? '*' : array_map('trim', explode(',', $env));
+        }
+    }
+
     /**
      * The headers that should be used to detect proxies.
      *
