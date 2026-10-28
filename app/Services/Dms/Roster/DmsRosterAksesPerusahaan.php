@@ -271,6 +271,12 @@ final class DmsRosterAksesPerusahaan
         return $out;
     }
 
+    /** Dua ejaan nama perusahaan yang sama persis menurut kunci(). */
+    public static function samaNama(string $a, string $b): bool
+    {
+        return self::kunci($a) === self::kunci($b);
+    }
+
     /**
      * Kunci pencocokan nama: tanpa awalan badan usaha, spasi, dan tanda baca,
      * supaya "PT Pama Persada Nusantara" = "PT Pamapersada Nusantara" dan

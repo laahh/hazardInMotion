@@ -567,6 +567,35 @@ final class DmsRosterMasterService
     }
 
     /**
+     * Roster yang di-upload per (perusahaan, site) — bahan perbandingan
+     * cakupan di Overview Roster (DmsRosterCakupanUpload). Yang ditolak tidak
+     * dihitung.
+     *
+     * @return list<array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}>
+     */
+    public function uploadPerSite(): array
+    {
+        $pt = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
+
+        return DB::table('dms_roster_master_jadwal as j')
+            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
+            ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
+            ->selectRaw("{$pt} AS perusahaan, TRIM(COALESCE(j.site, '')) AS site,
+                MAX(u.status = ?) AS disetujui, MAX(u.status = ?) AS menunggu,
+                COUNT(DISTINCT j.kode_sid) AS karyawan", [DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_PENDING])
+            ->groupByRaw($pt.", TRIM(COALESCE(j.site, ''))")
+            ->get()
+            ->map(static fn (object $r): array => [
+                'perusahaan' => (string) $r->perusahaan,
+                'site' => (string) $r->site,
+                'disetujui' => (bool) $r->disetujui,
+                'menunggu' => (bool) $r->menunggu,
+                'karyawan' => (int) $r->karyawan,
+            ])
+            ->all();
+    }
+
+    /**
      * Jadwal BERLAKU satu perusahaan pada rentang tanggal, gabungan semua
      * roster: hanya yang disetujui (opsional + yang menunggu approval). Untuk
      * (SID, tanggal) yang ada di beberapa roster, roster disetujui yang paling

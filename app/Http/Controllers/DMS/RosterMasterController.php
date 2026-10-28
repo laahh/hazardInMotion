@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DmsRosterMasterUpload;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
+use App\Services\Dms\Roster\DmsRosterCakupanUpload;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 /**
  * /dms/master-roster — Master Roster: upload jadwal kerja per karyawan
@@ -69,7 +71,28 @@ final class RosterMasterController extends Controller
             'perusahaan' => $this->statusPeriode($perusahaan),
             'ringkas' => $this->ringkasOverview($perusahaan),
             'buka' => (string) $request->query('pt', ''),
+            'cakupan' => $this->cakupanUpload(),
         ]);
+    }
+
+    /**
+     * Seluruh perusahaan & site karyawan aktif dibanding roster yang sudah
+     * di-upload. Null bila daftar karyawan aktif belum pernah tersalin
+     * (Tahap 8 dms:sync-roster-rfid) — bagian ini lalu disembunyikan.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function cakupanUpload(): ?array
+    {
+        try {
+            $aktif = $this->karyawanAktif->perusahaan();
+
+            return $aktif === null ? null : DmsRosterCakupanUpload::bandingkan($aktif, $this->service->uploadPerSite());
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     /** Batas "segera habis" di Overview Roster: periode roster tinggal sekian hari. */

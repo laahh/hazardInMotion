@@ -67,7 +67,56 @@
   .ro-filter label { font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px; }
   .ro-memuat { padding: 28px; text-align: center; color: #64748B; font-size: 13px; }
 
-  @media (max-width: 767.98px) { .rov-perhatian { grid-template-columns: 1fr; } }
+  /* ── Cakupan upload (perusahaan & site: sudah / menunggu / belum) ── */
+  .rov-cak-banding { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px 24px 8px; }
+  .rov-cak-blok { border: 1px solid #EEF2F7; border-radius: 12px; padding: 16px 18px; min-width: 0; }
+  .rov-cak-blok__judul { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #64748B; }
+  .rov-cak-blok__judul iconify-icon { font-size: 16px; color: #4F46E5; }
+  .rov-cak-blok__nilai { font-size: 26px; font-weight: 700; color: #0F172A; line-height: 1.15; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .rov-cak-blok__nilai span { font-size: 14px; font-weight: 500; color: #64748B; }
+  .rov-cak-blok__nilai em { font-style: normal; font-size: 13px; font-weight: 600; color: #047857; margin-left: 6px; }
+  .rov-cak-blok__catatan { font-size: 12px; color: #64748B; margin-top: 10px; }
+  .rov-cak-blok__catatan b { color: #0F172A; }
+  /* Batang bertumpuk: celah 2px antar segmen, ujung membulat. */
+  .rov-cak-bar { display: flex; gap: 2px; height: 10px; margin-top: 12px; }
+  .rov-cak-bar > span { flex-basis: 0; min-width: 4px; border-radius: 4px; }
+  .rov-cak-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: #475569; margin-top: 10px; }
+  .rov-cak-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .rov-cak-legenda b { color: #0F172A; font-variant-numeric: tabular-nums; }
+  .rov-cak-legenda i, .rov-cak-saring i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .rov-cak-bar .is-sudah, .rov-cak-legenda .is-sudah, .rov-cak-saring .is-sudah { background: #10B981; }
+  .rov-cak-bar .is-menunggu, .rov-cak-legenda .is-menunggu, .rov-cak-saring .is-menunggu { background: #F59E0B; }
+  .rov-cak-bar .is-belum, .rov-cak-legenda .is-belum, .rov-cak-saring .is-belum { background: #CBD5E1; }
+
+  .rov-cak-alat { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px 16px; }
+  .rov-cak-saring { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .rov-cak-saring button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #E2E8F0; background: #fff; color: #475569; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
+  .rov-cak-saring button b { color: #0F172A; font-variant-numeric: tabular-nums; }
+  .rov-cak-saring button.is-aktif { border-color: #6366F1; background: #EEF2FF; color: #4338CA; }
+  .rov-cak-saring button:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+  .rov-cak-cari { max-width: 260px; }
+  .rov-cak-gulir { max-height: 560px; overflow: auto; border-top: 1px solid #EEF2F7; }
+  .rov-cak-gulir thead th { position: sticky; top: 0; z-index: 1; }
+  /* Chip site tidak boleh menumpuk satu-satu ke bawah di layar sempit. */
+  .rov-cak-gulir td:nth-child(4) { min-width: 280px; }
+
+  .rov-cak-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .rov-cak-status iconify-icon { font-size: 14px; }
+  .rov-cak-status.is-sudah, .rov-cak-chip.is-sudah { background: #ECFDF5; color: #047857; }
+  .rov-cak-status.is-menunggu, .rov-cak-chip.is-menunggu { background: #FFF7ED; color: #C2410C; }
+  .rov-cak-status.is-belum, .rov-cak-chip.is-belum { background: #F1F5F9; color: #64748B; }
+  .rov-cak-jumlah { font-size: 12px; font-weight: 600; color: #0F172A; font-variant-numeric: tabular-nums; }
+  .rov-cak-situs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .rov-cak-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .rov-cak-chip iconify-icon { font-size: 12px; }
+  .rov-cak-tidakcocok { display: flex; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid #EEF2F7; font-size: 12px; color: #64748B; }
+  .rov-cak-tidakcocok > iconify-icon { font-size: 16px; flex: none; margin-top: 1px; }
+
+  @media (max-width: 767.98px) {
+    .rov-perhatian, .rov-cak-banding { grid-template-columns: 1fr; }
+    .rov-cak-banding, .rov-cak-alat { padding-left: 16px; padding-right: 16px; }
+    .rov-cak-cari { max-width: none; flex: 1 1 100%; }
+  }
   @media (max-width: 575.98px) {
     .ro-filter > div { flex: 1 1 100%; }
     .ro-sc-detail { padding: 12px; }
@@ -86,7 +135,7 @@
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
   <div>
     <h6 class="fw-semibold mb-0">Overview Roster</h6>
-    <p class="text-sm text-secondary-light mb-0 mt-4">Status roster kerja yang sudah di-upload per perusahaan, per {{ now()->locale('id')->translatedFormat('d F Y') }}.</p>
+    <p class="text-sm text-secondary-light mb-0 mt-4">Cakupan &amp; status roster kerja yang sudah di-upload per perusahaan, per {{ now()->locale('id')->translatedFormat('d F Y') }}.</p>
   </div>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
@@ -100,6 +149,10 @@
     <li class="fw-medium">Overview Roster</li>
   </ul>
 </div>
+
+@if ($cakupan !== null)
+  @include('dms.roster-master._cakupan', ['cakupan' => $cakupan])
+@endif
 
 @if ($perusahaan === [])
   <div class="rov-kartu p-24 text-center text-secondary-light">
@@ -265,6 +318,41 @@
 @endsection
 
 @section('page-scripts')
+<script>
+// Cakupan upload: saring status (Semua/Belum/Menunggu/Sudah) + cari nama/site.
+(function () {
+    'use strict';
+
+    var kartu = document.getElementById('roCakupan');
+    if (!kartu) { return; }
+
+    var tombol = kartu.querySelectorAll('[data-cak-status]');
+    var cari = kartu.querySelector('[data-cak-cari]');
+    var baris = kartu.querySelectorAll('[data-cak-baris]');
+    var kosong = kartu.querySelector('[data-cak-kosong]');
+    var status = '';
+
+    function terapkan() {
+        var q = cari.value.trim().toLowerCase();
+        var tampil = 0;
+        baris.forEach(function (tr) {
+            var cocok = (status === '' || tr.dataset.status === status) && (q === '' || tr.dataset.cari.indexOf(q) !== -1);
+            tr.classList.toggle('d-none', !cocok);
+            if (cocok) { tampil++; }
+        });
+        kosong.classList.toggle('d-none', tampil > 0);
+    }
+
+    tombol.forEach(function (b) {
+        b.addEventListener('click', function () {
+            status = b.dataset.cakStatus;
+            tombol.forEach(function (x) { x.classList.toggle('is-aktif', x === b); });
+            terapkan();
+        });
+    });
+    cari.addEventListener('input', terapkan);
+})();
+</script>
 <script>
 // Overview Roster: jadwal tiap perusahaan dimuat saat barisnya dibuka; navigasi
 // bulan, filter, cari, dan paginasi di dalam panel memuat ulang panel itu saja.
