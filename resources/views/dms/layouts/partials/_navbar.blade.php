@@ -332,7 +332,7 @@
                 <iconify-icon icon="icon-park-outline:setting-two" class="icon text-xl"></iconify-icon>  Setting</a>
               </li>
               <li>
-                <form method="POST" action="{{ route('logout') }}">
+                <form method="POST" action="{{ route('logout', absolute: false) }}">
                   @csrf
                   <button type="submit" class="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-danger d-flex align-items-center gap-3 w-100 border-0 bg-transparent">
                     <iconify-icon icon="lucide:power" class="icon text-xl"></iconify-icon> Log Out

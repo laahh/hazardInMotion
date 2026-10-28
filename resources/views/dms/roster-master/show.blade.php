@@ -60,7 +60,7 @@
         <h6 class="text-lg fw-semibold mb-4">Jadwal per karyawan</h6>
         @include('dms.roster-master._legenda')
       </div>
-      <form method="GET" action="{{ route('dms.master-roster.show', $upload->id) }}" class="rm-cari">
+      <form method="GET" action="{{ route('dms.master-roster.show', $upload->id, absolute: false) }}" class="rm-cari">
         <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
       </form>
     </div>
@@ -100,7 +100,7 @@
         </p>
       </div>
       @if ($upload->status !== 'APPROVED')
-        <form action="{{ route('dms.master-roster.destroy', $upload->id) }}" method="POST"
+        <form action="{{ route('dms.master-roster.destroy', $upload->id, absolute: false) }}" method="POST"
               onsubmit="return confirm('Hapus roster ini beserta seluruh jadwalnya?');">
           @csrf
           @method('DELETE')
@@ -128,7 +128,7 @@
       <div class="row g-4">
         {{-- Setujui: wajib tanda tangan (digambar atau upload). --}}
         <div class="col-xl-8">
-          <form action="{{ route('dms.master-roster.approve', $upload->id) }}" method="POST" enctype="multipart/form-data" id="rmFormSetuju" class="rm-panel h-100">
+          <form action="{{ route('dms.master-roster.approve', $upload->id, absolute: false) }}" method="POST" enctype="multipart/form-data" id="rmFormSetuju" class="rm-panel h-100">
             @csrf
             <input type="hidden" name="ttd_mode" value="gambar" data-ttd-mode>
             <input type="hidden" name="ttd_data" data-ttd-data>
@@ -191,7 +191,7 @@
 
         {{-- Tolak: cukup alasan. --}}
         <div class="col-xl-4">
-          <form action="{{ route('dms.master-roster.reject', $upload->id) }}" method="POST" class="rm-panel h-100">
+          <form action="{{ route('dms.master-roster.reject', $upload->id, absolute: false) }}" method="POST" class="rm-panel h-100">
             @csrf
             <div class="rm-panel__kepala">
               <span class="rm-panel__ikon bg-danger-focus text-danger-main"><iconify-icon icon="solar:close-circle-bold"></iconify-icon></span>

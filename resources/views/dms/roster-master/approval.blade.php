@@ -41,7 +41,7 @@
         <h6 class="text-lg fw-semibold mb-4">Daftar roster</h6>
         <p class="text-sm text-secondary-light mb-0">Buka roster untuk melihat jadwalnya, lalu setujui atau tolak.</p>
       </div>
-      <form method="GET" action="{{ route('dms.master-roster.approval') }}">
+      <form method="GET" action="{{ route('dms.master-roster.approval', absolute: false) }}">
         <select name="status" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
           @foreach (['PENDING' => 'Menunggu approval', 'APPROVED' => 'Disetujui', 'REJECTED' => 'Ditolak', 'SEMUA' => 'Semua status'] as $kode => $label)
             <option value="{{ $kode }}" @selected($status === $kode)>{{ $label }}</option>

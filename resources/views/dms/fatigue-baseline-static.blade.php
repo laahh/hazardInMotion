@@ -213,7 +213,7 @@
   const SITES = ['ALL', ...Array.from(new Set(OPERATORS.map(o=>o.site))).sort()];
   const state = { site:'ALL', predBucket:null, selected: OPERATORS[0].id };
 
-  const detailUrlBase = @json(url('/dms/fatigue-baseline-static/operator'));
+  const detailUrlBase = @json('/dms/fatigue-baseline-static/operator');
   const detailCache = {};
   let lastDetailSid = null;
 

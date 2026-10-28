@@ -371,7 +371,7 @@
 @section('page-scripts')
 <script
   data-base="{{ asset('dms-assets/roster-compliance') }}"
-  data-alert-counts-url="{{ route('dms.roster-compliance-static.alert-counts') }}"
-  data-alert-timeline-base="{{ url('dms/roster-compliance-static/alerts') }}"
+  data-alert-counts-url="{{ route('dms.roster-compliance-static.alert-counts', absolute: false) }}"
+  data-alert-timeline-base="/dms/roster-compliance-static/alerts"
   src="{{ asset('dms-assets/roster-compliance/roster-compliance.js') }}"></script>
 @endsection

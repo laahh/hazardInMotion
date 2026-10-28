@@ -73,7 +73,7 @@
       </div>
     </div>
     <div class="rup-isi">
-      <form action="{{ route('dms.master-roster.template') }}" method="GET" id="rmTemplate">
+      <form action="{{ route('dms.master-roster.template', absolute: false) }}" method="GET" id="rmTemplate">
         <div class="mb-16">
           @if ($perusahaan === null)
             <label for="rmPt" class="rup-label">Perusahaan</label>
@@ -147,7 +147,7 @@
       </div>
     </div>
     <div class="rup-isi">
-      <form action="{{ route('dms.master-roster.store') }}" method="POST" enctype="multipart/form-data" id="rmUpload">
+      <form action="{{ route('dms.master-roster.store', absolute: false) }}" method="POST" enctype="multipart/form-data" id="rmUpload">
         @csrf
         <div class="mb-16">
           <label for="rmJudul" class="rup-label">Judul roster <span class="text-danger-600">*</span></label>

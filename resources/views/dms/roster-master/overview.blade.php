@@ -249,7 +249,7 @@
             <tr class="ro-pt-detail">
               <td colspan="6">
                 <div class="collapse {{ $dibuka ? 'show' : '' }}" id="{{ $idPanel }}"
-                     data-ro-url="{{ route('dms.master-roster.overview.jadwal', ['pt' => $p['perusahaan']]) }}">
+                     data-ro-url="{{ route('dms.master-roster.overview.jadwal', ['pt' => $p['perusahaan']], absolute: false) }}">
                   <div class="ro-sc-detail" data-ro-isi>
                     <div class="ro-memuat">Memuat jadwal…</div>
                   </div>

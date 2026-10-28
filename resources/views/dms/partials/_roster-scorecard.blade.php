@@ -281,7 +281,9 @@
     $jenisPeriode = (string) ($periodeTabel['jenis'] ?? '');
     $nilaiPeriode = (string) ($periodeTabel['nilai'] ?? '');
     $namaBulan = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    $urlTabel = request()->url();
+    // Relatif (tanpa skema & host): form & tautan ikut protokol halaman,
+    // supaya Chrome tidak memperingatkan "form is not secure" di balik proxy https.
+    $urlTabel = '/'.ltrim(request()->path(), '/');
     $adaFilter = collect(['q', 'status', 'note', 'roster', 'kategori', 'pt', 'site', 'periode'])
         ->contains(static fn (string $k): bool => (string) ($f[$k] ?? '') !== '');
 
@@ -771,7 +773,7 @@
 
     var input = document.getElementById('roCariManualInput');
     var hasil = document.getElementById('roCariManualHasil');
-    var url = @json(route('dms.roster-compliance.cari-manual'));
+    var url = @json(route('dms.roster-compliance.cari-manual', absolute: false));
     var namaHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
     var namaKode = { P: 'Shift Pagi', M: 'Shift Malam', o: 'Off', c: 'Cuti' };
     var minta = 0;
@@ -1009,7 +1011,7 @@
     var panel = document.getElementById('roPlan');
     if (!panel) { return; }
 
-    var url = @json(route('dms.roster-compliance.plan-kesesuaian'));
+    var url = @json(route('dms.roster-compliance.plan-kesesuaian', absolute: false));
     var q = panel.querySelector('[data-pk-q]');
     var status = panel.querySelector('[data-pk-status]');
     var cek = panel.querySelector('[data-pk-cek]');
@@ -1315,7 +1317,7 @@
     var panel = document.getElementById('roLongShift');
     var judul = document.querySelector('[data-ro-judul]');
     var subjudul = document.querySelector('[data-ro-subjudul]');
-    var url = @json(route('dms.roster-compliance.long-shift'));
+    var url = @json(route('dms.roster-compliance.long-shift', absolute: false));
     var teks = {
         roster: ['Scorecard per Karyawan &amp; Timeline', 'Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode'],
         'long-shift': ['Long Shift Pengawas', 'Pengawas yang melanjutkan kerja ke shift berikutnya, dari rangkaian tap RFID IN–OUT'],

@@ -27,7 +27,7 @@
     </div>
   </div>
 
-  <form method="GET" action="{{ route('dms.master-roster.overview.jadwal') }}" class="d-flex flex-wrap align-items-end gap-3 ro-filter mb-16" data-ro-filter>
+  <form method="GET" action="{{ route('dms.master-roster.overview.jadwal', absolute: false) }}" class="d-flex flex-wrap align-items-end gap-3 ro-filter mb-16" data-ro-filter>
     <input type="hidden" name="pt" value="{{ $terpilih['perusahaan'] }}">
     <div>
       <label>Bulan</label>

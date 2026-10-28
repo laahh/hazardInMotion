@@ -127,7 +127,7 @@
       </div>
     </div>
 
-    <form method="GET" action="{{ route('dms.roster-compliance') }}">
+    <form method="GET" action="{{ route('dms.roster-compliance', absolute: false) }}">
       <input type="hidden" name="pt" value="{{ $filters['pt'] }}">
       <input type="hidden" name="sort" value="{{ $filters['sort'] }}">
       <input type="hidden" name="dir" value="{{ $filters['dir'] }}">
@@ -635,9 +635,9 @@
   var STATUS = @json($agregat['status']);
   var TOTAL = @json($agregat['total']);
   var TAHUN = @json($tahun);
-  var DETAIL_URL = @json(route('dms.roster-compliance.detail', ['sid' => '__SID__']));
-  var ALERT_COUNTS_URL = @json(route('dms.roster-compliance-static.alert-counts'));
-  var ALERT_TIMELINE_BASE = @json(url('dms/roster-compliance-static/alerts'));
+  var DETAIL_URL = @json(route('dms.roster-compliance.detail', ['sid' => '__SID__'], absolute: false));
+  var ALERT_COUNTS_URL = @json(route('dms.roster-compliance-static.alert-counts', absolute: false));
+  var ALERT_TIMELINE_BASE = @json('/dms/roster-compliance-static/alerts');
   var ALERT_UNTIL = @json($meta['hari_terakhir']);
 
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];

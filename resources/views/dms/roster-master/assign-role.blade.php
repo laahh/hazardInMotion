@@ -47,7 +47,7 @@
 <div class="row g-4">
   {{-- ══════════ FORM ASSIGN ══════════ --}}
   <div class="col-xl-5">
-    <form method="POST" action="{{ route('dms.master-roster.assign-role.store') }}" class="card radius-8 border-0 shadow-sm h-100" id="arForm">
+    <form method="POST" action="{{ route('dms.master-roster.assign-role.store', absolute: false) }}" class="card radius-8 border-0 shadow-sm h-100" id="arForm">
       @csrf
       <div class="card-header border-bottom bg-base py-16 px-24">
         <h6 class="text-lg fw-semibold mb-4">Assign perusahaan ke user</h6>
@@ -109,7 +109,7 @@
             <h6 class="text-lg fw-semibold mb-4">User yang sudah di-assign</h6>
             <p class="text-sm text-secondary-light mb-0">{{ count($daftar) }} user</p>
           </div>
-          <form method="GET" action="{{ route('dms.master-roster.assign-role') }}">
+          <form method="GET" action="{{ route('dms.master-roster.assign-role', absolute: false) }}">
             <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari user / perusahaan… (Enter)" aria-label="Cari user atau perusahaan">
           </form>
         </div>
@@ -143,7 +143,7 @@
                   <td class="pe-24 text-end text-nowrap">
                     <button type="button" class="btn btn-sm btn-outline-primary-600 radius-8"
                             data-ar-ubah="{{ $d['user_id'] }}" data-ar-pt-user="{{ json_encode($d['perusahaan']) }}">Ubah</button>
-                    <form action="{{ route('dms.master-roster.assign-role.destroy', $d['user_id']) }}" method="POST" class="d-inline"
+                    <form action="{{ route('dms.master-roster.assign-role.destroy', $d['user_id'], absolute: false) }}" method="POST" class="d-inline"
                           onsubmit="return confirm('Hapus seluruh assign perusahaan {{ addslashes($d['nama']) }}?');">
                       @csrf
                       @method('DELETE')

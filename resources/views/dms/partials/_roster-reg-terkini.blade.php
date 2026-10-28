@@ -16,7 +16,7 @@
 @foreach (\App\Services\Dms\Roster\DmsRosterAturanKartu::daftar() as $kartu)
   @if ($temuanKini)
     <div class="modal fade" id="roModalTemuan-{{ $kartu['id'] }}" tabindex="-1" aria-labelledby="roModalTemuanJudul-{{ $kartu['id'] }}" aria-hidden="true"
-         data-ro-timeline-url="{{ route('dms.roster-compliance.terkini.timeline', ['sid' => '__SID__']) }}">
+         data-ro-timeline-url="{{ route('dms.roster-compliance.terkini.timeline', ['sid' => '__SID__'], absolute: false) }}">
       <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content radius-8">
           <div class="modal-header">
@@ -92,8 +92,8 @@
                             data-ro-tab-btn="{{ $kode }}"
                             data-ro-definisi="{{ $definisi }}"
                             data-ro-kolom="{{ json_encode([$kolomNilai, $kolomMulai, $kolomSelesai]) }}"
-                            data-ro-url="{{ route('dms.roster-compliance.terkini.detail', ['kode' => $kode]) }}"
-                            data-ro-unduh="{{ route('dms.roster-compliance.terkini.unduh', ['kode' => $kode]) }}">
+                            data-ro-url="{{ route('dms.roster-compliance.terkini.detail', ['kode' => $kode], absolute: false) }}"
+                            data-ro-unduh="{{ route('dms.roster-compliance.terkini.unduh', ['kode' => $kode], absolute: false) }}">
                       {{ $label }}
                       <span class="badge bg-neutral-200 text-secondary-light ms-1">{{ number_format(count($temuanKini['daftar'][$kode]), 0, ',', '.') }}</span>
                     </button>
