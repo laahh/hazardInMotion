@@ -806,8 +806,8 @@ final class DmsRosterMasterService
         // Baris karyawan: dari filter perusahaan (jadwal kosong), atau 3 baris contoh.
         $contoh = $karyawan === [] ? [
             ['10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF']],
-            ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF'], '05:30', '17:30', 11],
-            ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['D1', 'D2', 'D3', 'D4', 'D5', 'OFF', 'OFF'], '07:30', '16:30', 8],
+            ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF'], '05:30', '17:30'],
+            ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['D1', 'D2', 'D3', 'D4', 'D5', 'OFF', 'OFF'], '07:30', '16:30'],
         ] : array_map(static fn (array $k): array => [$k['sid'], $k['nama'], $k['perusahaan'], $k['jabatan'], $k['site'], []], $karyawan);
         $barisAkhir = 6 + max($karyawan === [] ? 50 : 10, count($contoh) + ($karyawan === [] ? 0 : 10));
         foreach ($contoh as $i => $c0) {
@@ -819,8 +819,6 @@ final class DmsRosterMasterService
             if (isset($c0[6])) {
                 $sh->setCellValue('G'.$r, $this->pecahanHari($c0[6]));
                 $sh->setCellValue('H'.$r, $this->pecahanHari($c0[7]));
-                // Contoh Total Jam Kerja yang diketik (dipotong istirahat).
-                $sh->setCellValue('I'.$r, $c0[8]);
             }
             if ($pola !== []) {
                 for ($h = 0; $h < $jumlahHari; $h++) {
@@ -830,13 +828,17 @@ final class DmsRosterMasterService
         }
 
         // Kolom Jam Kerja Awal / Akhir (G, H): format jam. Total Jam Kerja (I):
-        // diketik manual (tanpa rumus) dalam jam, boleh lebih kecil dari
-        // Akhir − Awal (dipotong istirahat); kosong = sama dengan Akhir − Awal.
+        // rumus otomatis Akhir − Awal dalam jam (lewat tengah malam ikut
+        // dihitung lewat MOD); kosong bila Awal/Akhir kosong. Rumus boleh
+        // ditimpa angka yang lebih kecil (dipotong istirahat).
         $sh->getStyle('G7:H'.$barisAkhir)->getNumberFormat()->setFormatCode('hh:mm');
         $sh->getStyle('G7:I'.$barisAkhir)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sh->getStyle('I7:I'.$barisAkhir)->getNumberFormat()->setFormatCode('0.##');
-        $sh->getComment('I4')->getText()->createText('Ketik jam kerja efektif per hari (angka jam, mis. 11 atau 10,5). '
-            .'Boleh lebih kecil dari Jam Kerja Akhir − Awal (dipotong istirahat), tidak boleh lebih besar. Kosong = Akhir − Awal.');
+        for ($r = 7; $r <= $barisAkhir; $r++) {
+            $sh->setCellValue('I'.$r, '=IF(OR(G'.$r.'="",H'.$r.'=""),"",ROUND(MOD(H'.$r.'-G'.$r.',1)*24,2))');
+        }
+        $sh->getComment('I4')->getText()->createText('Otomatis = Jam Kerja Akhir − Awal (dalam jam). '
+            .'Boleh ditimpa angka yang lebih kecil (dipotong istirahat), tidak boleh lebih besar.');
 
         // Area isian identitas: kuning muda, garis tipis.
         $sh->getStyle('A7:I'.$barisAkhir)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFF2CC');
@@ -912,7 +914,7 @@ final class DmsRosterMasterService
                 .collect(self::legenda())->filter(fn (array $l): bool => $l[3] !== null)->map(fn (array $l): string => $l[0].' '.$l[3].'–'.$l[4])->implode(', ')
                 .'). Bila diisi, berlaku untuk semua hari kerja (D1–D13 / N1–N7) orang itu;'],
             ['   jam akhir lebih kecil dari jam awal berarti lewat tengah malam (mis. 18:00–06:00 = 12 jam).'],
-            ['   Total Jam Kerja diketik manual dalam jam (mis. 05:30–17:30 dengan istirahat 1 jam = 11). Tidak boleh lebih besar dari Akhir − Awal; kosong = sama dengan Akhir − Awal.'],
+            ['   Total Jam Kerja terhitung otomatis dari Jam Kerja Akhir − Awal (mis. 05:30–17:30 = 12). Boleh ditimpa angka lebih kecil bila dipotong istirahat (mis. 11), tidak boleh lebih besar.'],
             ['6. File dengan satu kesalahan saja ditolak utuh beserta daftar kesalahannya.'],
             [''],
             ['Kode', 'Keterangan'],
