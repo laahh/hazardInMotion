@@ -271,9 +271,16 @@ final class DmsRosterAksesPerusahaan
         return $out;
     }
 
+    /**
+     * Kunci pencocokan nama: tanpa awalan badan usaha, spasi, dan tanda baca,
+     * supaya "PT Pama Persada Nusantara" = "PT Pamapersada Nusantara" dan
+     * "PT. Terusan Raya" = "PT Terusan Raya".
+     */
     private static function kunci(string $pt): string
     {
-        return mb_strtoupper(preg_replace('/\s+/u', ' ', trim($pt)) ?? trim($pt));
+        $tanpaAwalan = preg_replace('/^\s*(PT|CV|UD|KOPERASI)\b\.?\s*/iu', '', $pt) ?? $pt;
+
+        return mb_strtoupper(preg_replace('/[^\p{L}\p{N}&]+/u', '', $tanpaAwalan) ?? $tanpaAwalan);
     }
 
     /**

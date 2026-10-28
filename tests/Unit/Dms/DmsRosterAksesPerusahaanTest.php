@@ -53,6 +53,13 @@ class DmsRosterAksesPerusahaanTest extends TestCase
         $this->assertTrue(Akses::mencakup(['PT Pamapersada Nusantara'], ['  PT PAMAPERSADA NUSANTARA ']));
     }
 
+    public function test_pencocokan_tidak_membedakan_spasi_di_tengah_dan_titik_awalan(): void
+    {
+        $this->assertTrue(Akses::mencakup(['PT Pamapersada Nusantara'], ['PT Pama Persada Nusantara']));
+        $this->assertTrue(Akses::mencakup(['PT Terusan Raya'], ['PT. Terusan Raya']));
+        $this->assertFalse(Akses::mencakup(['PT Pamapersada Nusantara'], ['PT Pama Persada']));
+    }
+
     public function test_singkatan_upload_cocok_dengan_nama_lengkap_yang_di_assign(): void
     {
         $cakupan = ['PT Puncak Makmur Jaya'];
