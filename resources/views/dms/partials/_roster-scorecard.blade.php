@@ -41,7 +41,7 @@
     // banned periode kerja > 70 hari → batasnya hari ke-71.
     $batasWajibCuti = (int) config('dms_roster.reg_live.aturan.onsite_maks', 70) + 1;
 
-    $gridDari = function (string $pola, array $merah) use ($tlAwal, $batasWajibCuti): array {
+    $gridDari = function (string $pola, array $merah, array $scan = []) use ($tlAwal, $batasWajibCuti): array {
         $grid = array_fill(0, 7, []);
         $kolom = 0;
         $n = strlen($pola);
@@ -62,6 +62,7 @@
                 'label' => $t->translatedFormat('D, d M Y'),
                 'ke' => $ke,
                 'batas' => $ke === $batasWajibCuti,
+                'scan' => $scan[$i] ?? null,
             ];
         }
 
@@ -115,7 +116,9 @@
             $judul = $sel['label'].' — '.$kodeLabel[$sel['kode']]
                 .($ke > 0 ? ' · hari kerja ke-'.$ke : '')
                 .(($sel['batas'] ?? false) ? ' · ⛔ seharusnya sudah cuti (periode kerja > '.($ke - 1).' hari)' : '')
-                .($sel['merah'] ? ' · ⚠ pelanggaran' : '');
+                .($sel['merah'] ? ' · ⚠ pelanggaran' : '')
+                ."\nCheck-in: ".($sel['scan']['masuk'] ?? 'tidak ada tap')
+                ."\nCheck-out: ".($sel['scan']['keluar'] ?? 'tidak ada tap');
             $out .= '<span class="ro-hm-cell sh-'.$sel['kode'].($sel['merah'] ? ' is-flag' : '')
                 .(($sel['batas'] ?? false) ? ' is-batas' : '')
                 .'" title="'.e($judul).'">'
@@ -243,6 +246,7 @@
             'pola' => $r['pola'],
             'merah' => $r['merah'],
             'riwayat' => $r['riwayat'] ?? [],
+            'scan' => $r['scan'] ?? [],
         ], $live['baris']);
     }
 
@@ -505,7 +509,7 @@
                 [$polaStr, $merahArr] = isset($r['pola'])
                     ? [$r['pola'], $r['merah']]
                     : $polaContoh($r['sid'], $r['pelanggaran']);
-                $pola = $gridDari($polaStr, $merahArr);
+                $pola = $gridDari($polaStr, $merahArr, $r['scan'] ?? []);
               @endphp
               <tr>
                 <td colspan="14" style="padding:0;border-bottom:0">

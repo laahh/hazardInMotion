@@ -76,6 +76,14 @@ final class DmsRosterOverviewKaryawanReader
             $checkinHalaman = null;
         }
 
+        // Jam check-in/out per hari untuk tooltip kalender; pelengkap juga.
+        try {
+            $scanHalaman = $this->scanHarian(array_column($payload['baris'], 'sid'), (int) $payload['tahun']);
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster scan harian scorecard gagal: '.$e->getMessage());
+            $scanHalaman = [];
+        }
+
         $ambang = $this->engine->ambang();
         $pg = $payload['paginasi'];
         $panjang = (int) $payload['meta']['panjang'];
@@ -130,6 +138,8 @@ final class DmsRosterOverviewKaryawanReader
                 // Dipakai panel collapse untuk menggambar pola harian.
                 'pola' => $eval?->pola ?? '',
                 'merah' => $eval === null ? [] : array_map(static fn (string $v): bool => $v !== '', $eval->red),
+                // Indeks hari ke-N sejak 1 Jan => teks check-in/out (tooltip sel).
+                'scan' => $scanHalaman[(string) $r['sid']] ?? [],
                 // Daftar kejadian pelanggaran (rentang tanggal) di bawah kalender.
                 'riwayat' => $eval === null ? [] : $this->riwayatPelanggaran($eval, (int) $payload['tahun']),
             ];
@@ -298,6 +308,85 @@ final class DmsRosterOverviewKaryawanReader
                 .$jam.' · '.$c['gate'],
             'hari_ini' => $samaHari,
         ];
+    }
+
+    /** Check-in mulai jam ini (menit) = shift malam, sama dengan aturan Pagi/Malam sinkronisasi. */
+    private const MENIT_SHIFT_MALAM = 720;
+
+    /**
+     * Check-in & check-out per hari sepanjang tahun untuk satu halaman SID,
+     * dari tabel lokal dms_roster_scan_harian (tidak menyentuh OLAP).
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array<int, array{masuk:?string,keluar:?string}>> SID => indeks hari sejak 1 Jan => teks
+     */
+    private function scanHarian(array $sids, int $tahun): array
+    {
+        if ($sids === []) {
+            return [];
+        }
+
+        $awal = CarbonImmutable::create($tahun, 1, 1);
+        $baris = DB::table('dms_roster_scan_harian as d')
+            ->join('dms_roster_karyawan as k', 'k.id', '=', 'd.karyawan_id')
+            ->leftJoin('dms_roster_gate as gi', 'gi.id', '=', 'd.gate_masuk_id')
+            ->leftJoin('dms_roster_gate as go', 'go.id', '=', 'd.gate_keluar_id')
+            ->whereIn('k.kode_sid', $sids)
+            ->whereBetween('d.tanggal', [$awal->toDateString(), $awal->endOfYear()->toDateString()])
+            ->get(['k.kode_sid', 'd.tanggal', 'd.menit_masuk', 'd.menit_keluar', 'gi.nama as gate_masuk', 'go.nama as gate_keluar']);
+
+        $mentah = [];
+        foreach ($baris as $r) {
+            $i = (int) $awal->diffInDays(CarbonImmutable::parse((string) $r->tanggal));
+            $mentah[(string) $r->kode_sid][$i] = [
+                'masuk' => $r->menit_masuk === null ? null : (int) $r->menit_masuk,
+                'keluar' => $r->menit_keluar === null ? null : (int) $r->menit_keluar,
+                'gate_masuk' => trim((string) ($r->gate_masuk ?? '')),
+                'gate_keluar' => trim((string) ($r->gate_keluar ?? '')),
+            ];
+        }
+
+        return array_map(self::teksScan(...), $mentah);
+    }
+
+    /**
+     * Pasangkan check-in tiap hari dengan check-out-nya. Tabel menyimpan
+     * check-out TERAKHIR per tanggal, jadi untuk shift malam check-out hari
+     * yang sama milik shift kemarin; check-out-nya diambil dari esok hari
+     * bila check-in-nya shift malam (>= 12:00) dan check-out esok lebih awal
+     * dari check-in esok (pilihan saya).
+     *
+     * @param  array<int, array{masuk:?int,keluar:?int,gate_masuk:string,gate_keluar:string}>  $hari
+     * @return array<int, array{masuk:?string,keluar:?string}>
+     */
+    public static function teksScan(array $hari): array
+    {
+        $jam = static fn (int $m, string $gate): string => sprintf('%02d:%02d', intdiv($m, 60), $m % 60)
+            .($gate !== '' ? ' ('.$gate.')' : '');
+        $out = [];
+
+        foreach ($hari as $i => $h) {
+            $besok = $hari[$i + 1] ?? null;
+            $keluar = null;
+
+            if ($h['masuk'] !== null && $h['keluar'] !== null && $h['keluar'] > $h['masuk']) {
+                $keluar = $jam($h['keluar'], $h['gate_keluar']);
+            } elseif ($h['masuk'] !== null && $h['masuk'] >= self::MENIT_SHIFT_MALAM && $besok !== null && $besok['keluar'] !== null
+                && ($besok['masuk'] === null || $besok['keluar'] < $besok['masuk'])) {
+                $keluar = $jam($besok['keluar'], $besok['gate_keluar']).' esok hari';
+            } elseif ($h['masuk'] === null && $h['keluar'] !== null) {
+                $kemarin = $hari[$i - 1]['masuk'] ?? null;
+                $keluar = $jam($h['keluar'], $h['gate_keluar'])
+                    .($kemarin !== null && $kemarin >= self::MENIT_SHIFT_MALAM ? ' — pulang shift malam kemarin' : '');
+            }
+
+            $out[$i] = [
+                'masuk' => $h['masuk'] === null ? null : $jam($h['masuk'], $h['gate_masuk']),
+                'keluar' => $keluar,
+            ];
+        }
+
+        return $out;
     }
 
     /**
