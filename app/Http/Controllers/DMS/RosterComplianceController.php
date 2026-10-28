@@ -157,6 +157,8 @@ final class RosterComplianceController extends Controller
             'per' => $data['per'],
             'diambil' => $data['diambil'],
             'baris' => $data['daftar'][$kode],
+            // Hanya > 13 hari beruntun: yang gugur karena hari ke-14 singkat, untuk audit.
+            'dikecualikan' => $kode === 'beruntun' ? ($data['beruntun_dikecualikan'] ?? []) : [],
         ]);
     }
 

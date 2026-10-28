@@ -294,6 +294,10 @@ return [
             'beruntun_banned_hari_ke' => 14,
             // Lama banned yang ditulis ke sid_roster_banned_master.lama_banned_hari.
             'beruntun_banned_lama' => 1,
+            // Hari ke-14 yang total check-in → check-out-nya <= N menit dianggap
+            // datang sebentar: tidak dihitung kerja, run tidak putus, hari
+            // kerja berikutnya jadi hari ke-14 (DmsRosterHariSingkat).
+            'beruntun_hari_singkat_menit' => 120,
 
             // Waktu kerja (check-in → check-out gate) maksimal 12 jam → highlight.
             // Dinilai pada shift lengkap terakhir yang check-in-nya dalam

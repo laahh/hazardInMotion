@@ -141,4 +141,4 @@
 @endforeach
 
 {{-- Modal: daftar per aturan (JSON) dan timeline tap RFID per karyawan. --}}
-<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=4"></script>
+<script src="{{ asset('dms-assets/roster-compliance/roster-temuan.js') }}?v=5"></script>

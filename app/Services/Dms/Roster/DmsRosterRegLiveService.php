@@ -141,14 +141,15 @@ final class DmsRosterRegLiveService
      *
      * @param  array<int, string>  $hariScan  offset hari => 'P'|'M'; 0 = hari pertama jendela.
      * @param  int  $panjang  Panjang jendela; offset $panjang - 1 = hari ini.
+     * @param  array<int, int>  $menitHari  offset => total menit check-in → check-out (pengecualian hari ke-14 singkat).
      * @return array<string, array<string, mixed>|null>
      */
-    public function nilai(array $hariScan, int $panjang, string $kategori, string $perusahaan = ''): array
+    public function nilai(array $hariScan, int $panjang, string $kategori, string $perusahaan = '', array $menitHari = []): array
     {
         $param = $this->engine->paramPerusahaan($perusahaan);
         $eval = $this->engine->evaluasi($this->rakitDeret($hariScan, $panjang), $kategori, $param['thr'], $param['map']);
 
-        return $this->nilaiEvaluasi($eval, $param);
+        return $this->nilaiEvaluasi($eval, $param, $menitHari);
     }
 
     /**
@@ -250,7 +251,8 @@ final class DmsRosterRegLiveService
 
         $param = $this->engine->paramPerusahaan((string) $k->perusahaan);
         $eval = $this->engine->evaluasi($this->rakitDeret($hariScan, $panjang), (string) $k->kategori, $param['thr'], $param['map']);
-        $merah = $this->tandaMerah($eval);
+        $menitHari = array_filter(array_column($hari, 'rentang_menit'), static fn ($m): bool => $m !== null);
+        $merah = $this->tandaMerah($eval, $menitHari);
         $n = strlen($eval->pola);
         $maksMenit = $this->aturan()['jam_kerja_maks'] * 60;
 
@@ -265,8 +267,8 @@ final class DmsRosterRegLiveService
         unset($h);
 
         $temuan = [];
-        foreach ($this->nilaiEvaluasi($eval, $param) as $kode => $run) {
-            if ($run !== null) {
+        foreach ($this->nilaiEvaluasi($eval, $param, $menitHari) as $kode => $run) {
+            if ($run !== null && in_array($kode, self::KODE, true)) {
                 $temuan[] = $kode;
             }
         }
@@ -288,8 +290,8 @@ final class DmsRosterRegLiveService
             'akhir' => $hariIni->toDateString(),
             'panjang' => $panjang,
             'temuan' => $temuan,
-            'terkini' => $this->statusTerkini($eval, $param, $hari, $hariIni),
-            'riwayat' => $this->riwayat($eval, $awal, $hari),
+            'terkini' => $this->statusTerkini($eval, $param, $hari, $hariIni, $menitHari),
+            'riwayat' => $this->riwayat($eval, $awal, $hari, $menitHari),
             'hari' => $hari,
         ];
     }
@@ -488,6 +490,12 @@ final class DmsRosterRegLiveService
             $masuk = $shift['masuk'] ?? null;
             $keluar = $shift['keluar'] ?? null;
             $menit = $masuk && $keluar ? (int) floor($masuk['t']->diffInMinutes($keluar['t'], true)) : null;
+            // Check-in pertama → check-out terakhir dari pasangan hari itu
+            // (sama dengan DmsRosterRfidReader::rentangHarian()).
+            $berpasangan = array_values(array_filter($daftar, static fn (array $c): bool => $c['keluar'] !== null));
+            $rentang = $berpasangan === [] ? null : (int) floor($berpasangan[0]['masuk']['t']->diffInMinutes(
+                max(array_map(static fn (array $c): CarbonImmutable => $c['keluar']['t'], $berpasangan)), true,
+            ));
             $hari[] = [
                 'iso' => $iso,
                 'label' => $tgl->translatedFormat('D, j M Y'),
@@ -501,6 +509,7 @@ final class DmsRosterRegLiveService
                 ] : null,
                 'durasi_menit' => $menit,
                 'durasi' => $menit === null ? null : $this->durasi($menit),
+                'rentang_menit' => $rentang,
                 'tap' => $perTanggal[$iso] ?? [],
             ];
         }
@@ -559,6 +568,8 @@ final class DmsRosterRegLiveService
 
         $daftar = array_fill_keys(self::KODE, []);
         $mendekati = [];
+        // Calon > 13 hari beruntun; dinilai ulang sesudah durasi hari ke-14 ditarik.
+        $calonBeruntun = [];
         $tanggal = static fn (int $i): string => $awal->addDays($i)->translatedFormat('j M Y');
         $iso = static fn (int $i): string => $awal->addDays($i)->toDateString();
 
@@ -589,7 +600,14 @@ final class DmsRosterRegLiveService
                     if ($unban !== null && $iso($run['mulai']) <= $unban) {
                         continue;
                     }
-                    $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal, $iso);
+                    if ($kode === 'beruntun') {
+                        $calonBeruntun[] = [$dasar, $run];
+
+                        continue;
+                    }
+                    if (in_array($kode, self::KODE, true)) {
+                        $daftar[$kode][] = $dasar + $this->barisPola($kode, $run, $tanggal, $iso);
+                    }
                 }
 
                 foreach ($this->mendekati($hariScan, $panjang, (string) $k->kategori, (string) $k->perusahaan) as $kode => $dekat) {
@@ -612,6 +630,8 @@ final class DmsRosterRegLiveService
             }
         }
 
+        [$daftar['beruntun'], $dikecualikan] = $this->saringHariSingkat($calonBeruntun, $awal, $hariIni, $tanggal, $iso);
+
         foreach ($daftar as &$baris) {
             usort($baris, static fn (array $a, array $b): int => $b['urut'] <=> $a['urut']);
         }
@@ -630,7 +650,58 @@ final class DmsRosterRegLiveService
             // kerja beruntun 10–13 hari — disimpan ke dms_roster_peringatan
             // oleh DmsRosterPeringatanStore untuk notifikasi.
             'mendekati' => $mendekati,
+            // > 13 hari beruntun yang gugur karena hari ke-14 <= 2 jam di site.
+            'beruntun_dikecualikan' => $dikecualikan,
         ];
+    }
+
+    /**
+     * Terapkan pengecualian hari ke-14 singkat pada calon > 13 hari beruntun.
+     * Durasi ditarik sekali untuk semua calon, mulai hari ke-14 paling awal.
+     * Gagal dibaca = tidak ada pengecualian (semua tetap potensial banned).
+     *
+     * @param  list<array{0: array<string, mixed>, 1: array<string, mixed>}>  $calon
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function saringHariSingkat(array $calon, CarbonImmutable $awal, CarbonImmutable $hariIni, callable $tanggal, callable $iso): array
+    {
+        $batas = $this->aturan()['beruntun_maks'];
+        $cek = array_filter($calon, static fn (array $c): bool => ! $c[1]['terpotong']);
+        $menit = [];
+
+        if ($cek !== []) {
+            $dari = min(array_map(static fn (array $c): int => $c[1]['mulai'] + $batas, $cek));
+            try {
+                $menit = $this->rfid->rentangHarian(
+                    $awal, $awal->addDays($dari), $hariIni,
+                    array_values(array_unique(array_map(static fn (array $c): string => $c[0]['sid'], $cek))),
+                );
+            } catch (Throwable $e) {
+                Log::warning('DmsRoster durasi hari ke-14 gagal, pengecualian dilewati: '.$e->getMessage());
+            }
+        }
+
+        $tetap = [];
+        $gugur = [];
+        foreach ($calon as [$dasar, $run]) {
+            $hasil = $this->terapkanHariSingkat($run, $menit[$dasar['sid']] ?? []);
+            if ($hasil['beruntun'] !== null) {
+                $tetap[] = $dasar + $this->barisPola('beruntun', $hasil['beruntun'], $tanggal, $iso);
+
+                continue;
+            }
+            $r = $hasil['beruntun_dikecualikan'];
+            $gugur[] = $dasar + [
+                'nilai' => $r['hari'].' hari',
+                'urut' => $r['hari'],
+                'mulai' => $tanggal($r['mulai']),
+                'selesai' => $tanggal($r['selesai']),
+                'keterangan' => 'Dikecualikan — '.$this->teksDilewati($r['dilewati'], $tanggal)
+                    .' di site (≤ '.DmsRosterHariSingkat::teksDurasi(DmsRosterHariSingkat::maksMenit()).')',
+            ];
+        }
+
+        return [$tetap, $gugur];
     }
 
     /**
@@ -677,7 +748,12 @@ final class DmsRosterRegLiveService
             'onsite' => $run['hari'] >= $aturan['onsite_banned_hari_ke']
                 ? 'Banned '.$aturan['onsite_banned_lama'].' hari sejak hari ke-'.$aturan['onsite_banned_hari_ke'].' ('.$hariKe($aturan['onsite_banned_hari_ke']).') — sudah jatuh tempo'
                 : 'Banned '.$aturan['onsite_banned_lama'].' hari mulai hari ke-'.$aturan['onsite_banned_hari_ke'].' ('.$hariKe($aturan['onsite_banned_hari_ke']).')',
-            'beruntun' => 'Banned 1 hari off di hari ke-'.$aturan['beruntun_banned_hari_ke'].' ('.$hariKe($aturan['beruntun_banned_hari_ke']).')',
+            'beruntun' => 'Banned 1 hari off di hari ke-'.$aturan['beruntun_banned_hari_ke'].' ('
+                .(($run['hari_langgar'] ?? null) !== null ? $tanggal($run['hari_langgar']) : $hariKe($aturan['beruntun_banned_hari_ke'])).')'
+                .(($run['dilewati'] ?? []) !== []
+                    ? ' · dilewati karena ≤ '.DmsRosterHariSingkat::teksDurasi(DmsRosterHariSingkat::maksMenit()).': '
+                        .$this->teksDilewati($run['dilewati'], $tanggal)
+                    : ''),
             'map1' => 'Blok roster PT maks '.$run['blok'].' hari; terlewati sejak '.$tanggal($run['pada']),
             'map2' => 'Ganti shift Pagi↔Malam tanpa off pada '.$tanggal($run['pada']),
             'map3' => 'Shift Pagi setelah Malam pada '.$tanggal($run['pada']),
@@ -708,7 +784,7 @@ final class DmsRosterRegLiveService
         if ($kode === 'beruntun') {
             // Hari pertama melewati 13 hari berturut-turut (hari ke-14).
             $baris['tgl_pelanggaran_iso'] = $iso(
-                $run['terpotong'] ? $run['mulai'] : $run['mulai'] + $aturan['beruntun_maks'],
+                $run['terpotong'] ? $run['mulai'] : ($run['hari_langgar'] ?? $run['mulai'] + $aturan['beruntun_maks']),
             );
         }
 
@@ -735,7 +811,7 @@ final class DmsRosterRegLiveService
      * @param  array{thr:int,map:string}  $param
      * @return array<string, array<string, mixed>|null>
      */
-    private function nilaiEvaluasi(DmsRosterEvaluation $eval, array $param): array
+    private function nilaiEvaluasi(DmsRosterEvaluation $eval, array $param, array $menitHari = []): array
     {
         $aturan = $this->aturan();
         $reg = $this->engine->pelanggaranTerkini($eval, [
@@ -749,6 +825,11 @@ final class DmsRosterRegLiveService
             // tetap pelanggaran (minimal sepanjang jendela), ditandai "≥".
             $hasil[$kode] = $run === null ? null : $run + ['terpotong' => $run['mulai'] === 0];
         }
+        // Hari ke-14 singkat: run tidak lagi melanggar → dipindah ke kunci
+        // 'beruntun_dikecualikan' (bukan anggota KODE, untuk audit saja).
+        if ($hasil['beruntun'] !== null) {
+            $hasil = $this->terapkanHariSingkat($hasil['beruntun'], $menitHari) + $hasil;
+        }
 
         foreach ($this->engine->mappingTerkini($eval, $param['thr'], $param['map']) as $kode => $run) {
             $hasil[$kode] = $run === null ? null : $run + ['terpotong' => false, 'blok' => $param['thr'] - 1];
@@ -758,13 +839,57 @@ final class DmsRosterRegLiveService
     }
 
     /**
+     * Pengecualian hari ke-14 singkat (DmsRosterHariSingkat) untuk run
+     * beruntun hari ini. Run terpotong tidak dicek. Mengembalikan
+     * ['beruntun' => run|null] plus 'beruntun_dikecualikan' bila run gugur.
+     *
+     * @param  array<string, mixed>  $run
+     * @param  array<int, int>  $menitHari
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function terapkanHariSingkat(array $run, array $menitHari): array
+    {
+        if ($run['terpotong']) {
+            return ['beruntun' => $run];
+        }
+
+        $s = DmsRosterHariSingkat::sesuaikan($run, $this->aturan()['beruntun_maks'], $menitHari);
+        if ($s['dilewati'] === []) {
+            return ['beruntun' => $run];
+        }
+        $run = [
+            'dilewati' => array_map(static fn (int $i): array => ['hari' => $i, 'menit' => $menitHari[$i]], $s['dilewati']),
+            'hari_langgar' => $s['hari_langgar'],
+        ] + $run;
+
+        return $s['melanggar']
+            ? ['beruntun' => $run]
+            : ['beruntun' => null, 'beruntun_dikecualikan' => $run];
+    }
+
+    /**
+     * Teks hari yang dilewati, mis. "hari ke-14 (27 Okt) 1j 20m".
+     *
+     * @param  list<array{hari:int,menit:int}>  $dilewati
+     */
+    private function teksDilewati(array $dilewati, callable $tanggal): string
+    {
+        $ke = $this->aturan()['beruntun_maks'] + 1;
+
+        return implode(', ', array_map(
+            static fn (array $d): string => 'hari ke-'.$ke.' ('.$tanggal($d['hari']).') '.DmsRosterHariSingkat::teksDurasi($d['menit']),
+            $dilewati,
+        ));
+    }
+
+    /**
      * Tanda merah per hari untuk timeline, memakai angka ATURAN (bukan ambang
      * replikasi referensi di rule engine): run on-site > onsite_maks dan run
      * kerja > beruntun_maks, di seluruh jendela.
      *
      * @return array<int, string>
      */
-    private function tandaMerah(DmsRosterEvaluation $eval): array
+    private function tandaMerah(DmsRosterEvaluation $eval, array $menitHari = []): array
     {
         $format = [
             'onsite' => 'Periode kerja %d hari (> %d) — banned 14 hari',
@@ -772,7 +897,7 @@ final class DmsRosterRegLiveService
         ];
         $merah = [];
 
-        foreach ($this->runPelanggaran($eval) as $run) {
+        foreach ($this->runPelanggaran($eval, $menitHari) as $run) {
             for ($k = $run['mulai']; $k <= $run['selesai']; $k++) {
                 $merah[$k] = sprintf($format[$run['kode']], $run['hari'], $run['batas']);
             }
@@ -793,7 +918,7 @@ final class DmsRosterRegLiveService
      * @param  list<array<string, mixed>>  $hari
      * @return list<array{jenis:string,teks:string,mulai:string,selesai:string,hari:int,warna:string}>
      */
-    public function riwayat(DmsRosterEvaluation $eval, CarbonImmutable $awal, array $hari = []): array
+    public function riwayat(DmsRosterEvaluation $eval, CarbonImmutable $awal, array $hari = [], array $menitHari = []): array
     {
         $jenis = [
             'onsite' => ['Periode kerja', '%s%d hari on-site tanpa cuti (maks %d)'],
@@ -802,7 +927,7 @@ final class DmsRosterRegLiveService
         $tgl = static fn (int $i): string => $awal->addDays($i)->translatedFormat('j M');
         $out = [];
 
-        foreach ($this->runPelanggaran($eval) as $run) {
+        foreach ($this->runPelanggaran($eval, $menitHari) as $run) {
             [$judul, $format] = $jenis[$run['kode']];
             $out[] = [
                 'jenis' => $judul,
@@ -860,9 +985,9 @@ final class DmsRosterRegLiveService
      * @param  list<array<string, mixed>>  $hari  Hasil susunHari().
      * @return list<array{kode:string,judul:string,ambang:string,perlakuan:string,warna:string,kena:bool,teks:string}>
      */
-    private function statusTerkini(DmsRosterEvaluation $eval, array $param, array $hari, CarbonImmutable $hariIni): array
+    private function statusTerkini(DmsRosterEvaluation $eval, array $param, array $hari, CarbonImmutable $hariIni, array $menitHari = []): array
     {
-        $nilai = $this->nilaiEvaluasi($eval, $param);
+        $nilai = $this->nilaiEvaluasi($eval, $param, $menitHari);
         $aturan = $this->aturan();
         $p = $eval->pola;
         $tgl = static fn (int $i): string => CarbonImmutable::parse($hari[$i]['iso'])->translatedFormat('j M');
@@ -883,6 +1008,12 @@ final class DmsRosterRegLiveService
                     ? $mundur(static fn (string $c): bool => $c !== 'c').' hari '.$ket.' — masih dalam batas'
                     : $mundur(static fn (string $c): bool => $c === 'P' || $c === 'M').' hari '.$ket.' — masih dalam batas')
                 : ($run['terpotong'] ? '≥ ' : '').$run['hari'].' hari '.$ket.' ('.$tgl($run['mulai']).' – '.$tgl($run['selesai']).')';
+        }
+        if (isset($nilai['beruntun_dikecualikan'])) {
+            $r = $nilai['beruntun_dikecualikan'];
+            $teks['beruntun'] = $r['hari'].' hari kerja tanpa off, tapi dikecualikan — '
+                .$this->teksDilewati($r['dilewati'], $tgl).' di site (≤ '
+                .DmsRosterHariSingkat::teksDurasi(DmsRosterHariSingkat::maksMenit()).')';
         }
 
         // Shift lengkap terakhir yang check-in-nya masih dalam N hari terakhir.
@@ -935,7 +1066,7 @@ final class DmsRosterRegLiveService
      *
      * @return list<array{kode:string,mulai:int,selesai:int,hari:int,batas:int}>
      */
-    private function runPelanggaran(DmsRosterEvaluation $eval): array
+    private function runPelanggaran(DmsRosterEvaluation $eval, array $menitHari = []): array
     {
         if ($eval->longgar) {
             return [];
@@ -961,7 +1092,10 @@ final class DmsRosterRegLiveService
                 while ($j < $n && $cocok($p[$j])) {
                     $j++;
                 }
-                if ($j - $i > $batas) {
+                // Hari ke-14 singkat: run beruntun itu tidak dihitung melanggar.
+                $gugur = $kode === 'beruntun' && $i > 0 && $j - $i > $batas
+                    && ! DmsRosterHariSingkat::sesuaikan(['mulai' => $i, 'selesai' => $j - 1, 'hari' => $j - $i], $batas, $menitHari)['melanggar'];
+                if ($j - $i > $batas && ! $gugur) {
                     $out[] = ['kode' => $kode, 'mulai' => $i, 'selesai' => $j - 1, 'hari' => $j - $i, 'batas' => $batas];
                 }
                 $i = $j;

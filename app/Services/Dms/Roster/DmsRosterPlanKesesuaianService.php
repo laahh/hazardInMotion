@@ -105,6 +105,14 @@ final class DmsRosterPlanKesesuaianService
                     $durasi[strtoupper(trim((string) $sidJam))][$o + $geser] = $menit;
                 }
             }
+            // Check-in pertama → check-out terakhir per hari: pengecualian
+            // hari ke-14 singkat (DmsRosterHariSingkat), rentang yang sama.
+            $rentang = [];
+            foreach ($this->rfid->rentangHarian($awalJam, $awalJam, $hariIni, $sids) as $sidJam => $hari) {
+                foreach ($hari as $o => $menit) {
+                    $rentang[strtoupper(trim((string) $sidJam))][$o + $geser] = $menit;
+                }
+            }
             $detik = microtime(true) - $mulai;
         } catch (Throwable $e) {
             $this->galat = mb_substr($e->getMessage(), 0, 200);
@@ -123,7 +131,7 @@ final class DmsRosterPlanKesesuaianService
                 'pt' => (string) ($m->kode_pt ?? ''),
                 'kategori' => $kategori,
                 'banned_aktif' => isset($banned[$sid]),
-            ] + $this->nilai($scan[$sid] ?? [], $awal, $hariIni, $p['jadwal'], $this->engine->isLonggar($kategori), $p['menit'], $durasi[$sid] ?? []);
+            ] + $this->nilai($scan[$sid] ?? [], $awal, $hariIni, $p['jadwal'], $this->engine->isLonggar($kategori), $p['menit'], $durasi[$sid] ?? [], $rentang[$sid] ?? []);
         }
         usort($baris, static fn (array $a, array $b): int => [array_search($a['status'], self::STATUS, true), $a['tgl_langgar'] ?? '9999', -$a['hari_onsite'], $a['nama']]
             <=> [array_search($b['status'], self::STATUS, true), $b['tgl_langgar'] ?? '9999', -$b['hari_onsite'], $b['nama']]);
@@ -157,6 +165,7 @@ final class DmsRosterPlanKesesuaianService
      * @param  array<string, string>  $jadwal  tanggal ISO => kode plan.
      * @param  array<string, int|null>  $menitPlan  tanggal ISO => menit kerja di plan.
      * @param  array<int, int>  $menitRfid  offset dari $awal => menit IN→OUT (DmsRosterRfidReader::durasiHarian).
+     * @param  array<int, int>  $rentangRfid  offset dari $awal => menit check-in pertama → check-out terakhir (rentangHarian).
      * @return array<string, mixed>
      */
     public function nilai(
@@ -167,6 +176,7 @@ final class DmsRosterPlanKesesuaianService
         bool $longgar = false,
         array $menitPlan = [],
         array $menitRfid = [],
+        array $rentangRfid = [],
     ): array {
         $aturan = $this->aturan();
         $idxHariIni = (int) $awal->diffInDays($hariIni);
@@ -205,9 +215,20 @@ final class DmsRosterPlanKesesuaianService
         $kerja = [];
         $tgl71 = null;
         $tgl14 = null;
+        $maksSingkat = DmsRosterHariSingkat::maksMenit();
+        $dilewati = [];
         for ($i = 0, $on = 0, $ke = 0; $i < $n; $i++) {
             $on = $pola[$i] !== 'c' ? $on + 1 : 0;
-            $ke = $pola[$i] === 'P' || $pola[$i] === 'M' ? $ke + 1 : 0;
+            $kerjaHari = $pola[$i] === 'P' || $pola[$i] === 'M';
+            // Hari ke-14 (dari RFID) yang hanya <= 2 jam di site dilewati: tidak
+            // menambah hitungan, tapi juga tidak memutus run. Run yang sudah
+            // berjalan sejak awal jendela tidak dicek (hari ke-14-nya di luar data).
+            $singkat = $kerjaHari && $i <= $kini && $ke === $aturan['beruntun_maks'] && $i > $ke
+                && isset($rentangRfid[$i]) && $rentangRfid[$i] <= $maksSingkat;
+            if ($singkat) {
+                $dilewati[] = $iso($i);
+            }
+            $ke = $kerjaHari ? ($singkat ? $ke : $ke + 1) : 0;
             $onsite[$i] = $on;
             $kerja[$i] = $ke;
             if ($i > $kini && $tgl71 === null && $on === $aturan['onsite_maks'] + 1) {
@@ -256,6 +277,8 @@ final class DmsRosterPlanKesesuaianService
             'tgl_langgar' => $tglLanggar,
             'hari_onsite' => $hariOnsite,
             'hari_beruntun' => $hariBeruntun,
+            // Tanggal hari ke-14 yang dilewati karena <= 2 jam di site.
+            'beruntun_dilewati' => $dilewati,
             // Run on-site sudah berjalan sejak awal jendela RFID → angka sebenarnya ≥ hari_onsite.
             'onsite_terpotong' => $kini >= 0 && $hariOnsite === $kini + 1,
             'cuti_plan' => $cutiPlan,

@@ -39,6 +39,44 @@ class DmsRosterRegLiveServiceTest extends TestCase
         $this->assertSame(['hari' => 20, 'mulai' => 80, 'selesai' => 99, 'terpotong' => false], $hasil['beruntun']);
     }
 
+    public function test_hari_ke_14_dua_jam_dikecualikan_dari_beruntun(): void
+    {
+        // 14 hari kerja (86–99); hari ke-14 (99) hanya 1 jam di site.
+        $hasil = $this->svc->nilai($this->pagi(range(86, 99)), self::JENDELA, 'Operator Hauler', '', [99 => 60]);
+
+        $this->assertNull($hasil['beruntun']);
+        $this->assertSame([['hari' => 99, 'menit' => 60]], $hasil['beruntun_dikecualikan']['dilewati']);
+    }
+
+    public function test_hari_ke_14_singkat_dilewati_hari_berikutnya_tetap_melanggar(): void
+    {
+        // 20 hari kerja (80–99); hari ke-14 (93) 1 jam → hari ke-14 efektif = 94.
+        $hasil = $this->svc->nilai($this->pagi(range(80, 99)), self::JENDELA, 'Operator Hauler', '', [93 => 60, 94 => 700]);
+
+        $this->assertSame(94, $hasil['beruntun']['hari_langgar']);
+        $this->assertArrayNotHasKey('beruntun_dikecualikan', $hasil);
+    }
+
+    public function test_hari_ke_14_tanpa_checkout_tetap_potensial_banned(): void
+    {
+        $hasil = $this->svc->nilai($this->pagi(range(86, 99)), self::JENDELA, 'Operator Hauler', '', []);
+
+        $this->assertSame(14, $hasil['beruntun']['hari']);
+    }
+
+    public function test_susun_hari_rentang_checkin_pertama_ke_checkout_terakhir(): void
+    {
+        // Tap ganda di gate: pasangan terpendek 25 mnt, tapi di site 06:00–17:30.
+        $hari = $this->svc->susunHari([
+            $this->tap('2026-10-10 06:00:00', 'CHECK IN', 'Pos Mess'),
+            $this->tap('2026-10-10 06:25:00', 'CHECK OUT', 'Pos Mess'),
+            $this->tap('2026-10-10 17:00:00', 'CHECK IN', 'Pos Site'),
+            $this->tap('2026-10-10 17:30:00', 'CHECK OUT', 'Pos Site'),
+        ], CarbonImmutable::parse('2026-10-10'), 1);
+
+        $this->assertSame(690, $hari[0]['rentang_menit']);
+    }
+
     public function test_belum_scan_hari_ini_tidak_memutus_run_kerja(): void
     {
         $hasil = $this->nilai($this->pagi(range(80, 98)));

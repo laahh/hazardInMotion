@@ -1140,6 +1140,11 @@
         var ket = b.sudah_beruntun ? 'sudah · <b>' + b.hari_beruntun + '</b> hari berturut'
             : b.tgl_14 ? 'akan · hari ke-' + (aturan.beruntun_maks + 1) + ' <b>' + tgl(b.tgl_14) + '</b>'
             : 'kini ' + b.hari_beruntun + ' hari berturut';
+        // Hari ke-14 yang hanya datang sebentar (<= 2 jam) tidak dihitung.
+        var lewat = b.beruntun_dilewati || [];
+        if (lewat.length) {
+            ket += ' · hari ke-' + (aturan.beruntun_maks + 1) + ' ' + lewat.map(tgl).join(', ') + ' dilewati (≤ 2 jam di site)';
+        }
         return selCek(b.lebih_13, ket);
     }
 

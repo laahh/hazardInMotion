@@ -56,6 +56,24 @@ class DmsRosterPlanKesesuaianServiceTest extends TestCase
         $this->assertSame($this->tgl(101), $hasil['tgl_14']);
     }
 
+    public function test_hari_ke_14_rfid_dua_jam_tidak_dihitung_beruntun(): void
+    {
+        // 14 hari tap berturut (86–99), hari ke-14 = hari ini hanya 1 jam di site.
+        $hasil = $this->svc->nilai($this->scan(86, 99, 0), $this->awal, $this->hariIni, [], false, [], [], [99 => 60]);
+
+        $this->assertSame(13, $hasil['hari_beruntun']);
+        $this->assertFalse($hasil['sudah_beruntun']);
+        $this->assertSame([$this->tgl(99)], $hasil['beruntun_dilewati']);
+    }
+
+    public function test_hari_ke_14_rfid_lebih_dari_dua_jam_tetap_beruntun(): void
+    {
+        $hasil = $this->svc->nilai($this->scan(86, 99, 0), $this->awal, $this->hariIni, [], false, [], [], [99 => 600]);
+
+        $this->assertTrue($hasil['sudah_beruntun']);
+        $this->assertSame([], $hasil['beruntun_dilewati']);
+    }
+
     public function test_off_pendek_memutus_beruntun_tapi_tidak_onsite(): void
     {
         $plan = $this->plan(100, 130, 0);

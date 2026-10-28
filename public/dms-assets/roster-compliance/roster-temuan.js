@@ -44,21 +44,30 @@
 
     function renderDaftar(modal, json) {
         var baris = json.baris;
+        var gugur = json.dikecualikan || [];
         modal.querySelector('[data-ro-tbody]').innerHTML = baris.map(function (r, i) {
-            return '<tr class="ro-temuan-row" data-ro-sid="' + esc(r.sid) + '" title="Lihat timeline RFID ' + esc(r.nama) + '">'
-                + '<td>' + (i + 1) + '</td>'
-                + '<td><div class="fw-medium text-nowrap">' + esc(r.nama) + '</div>'
-                + '<div class="text-xs text-secondary-light text-nowrap">' + esc(r.sid) + ' · ' + esc(r.jabatan) + '</div></td>'
-                + '<td>' + esc(r.pt) + '</td>'
-                + '<td class="text-nowrap">' + esc(r.site) + '</td>'
-                + '<td class="text-end fw-semibold text-nowrap">' + esc(r.nilai) + '</td>'
-                + '<td class="text-nowrap">' + esc(r.mulai) + '</td>'
-                + '<td class="text-nowrap">' + esc(r.selesai) + '</td>'
-                + '<td class="text-sm">' + esc(r.keterangan) + '</td>'
-                + '<td class="text-nowrap">' + esc(r.scan_terakhir) + '</td>'
-                + '</tr>';
-        }).join('');
+            return barisHtml(r, i + 1, false);
+        }).join('') + (gugur.length
+            ? '<tr class="ro-temuan-sekat"><td colspan="9" class="text-xs fw-semibold text-secondary-light bg-neutral-50">'
+                + 'Dikecualikan (' + gugur.length + ') — hari ke-14 hanya datang sebentar, tidak masuk potensial banned</td></tr>'
+                + gugur.map(function (r, i) { return barisHtml(r, i + 1, true); }).join('')
+            : '');
         saring(modal);
+    }
+
+    function barisHtml(r, no, gugur) {
+        return '<tr class="ro-temuan-row' + (gugur ? ' text-secondary-light' : '') + '" data-ro-sid="' + esc(r.sid) + '" title="Lihat timeline RFID ' + esc(r.nama) + '">'
+            + '<td>' + no + '</td>'
+            + '<td><div class="fw-medium text-nowrap">' + esc(r.nama) + '</div>'
+            + '<div class="text-xs text-secondary-light text-nowrap">' + esc(r.sid) + ' · ' + esc(r.jabatan) + '</div></td>'
+            + '<td>' + esc(r.pt) + '</td>'
+            + '<td class="text-nowrap">' + esc(r.site) + '</td>'
+            + '<td class="text-end fw-semibold text-nowrap">' + esc(r.nilai) + '</td>'
+            + '<td class="text-nowrap">' + esc(r.mulai) + '</td>'
+            + '<td class="text-nowrap">' + esc(r.selesai) + '</td>'
+            + '<td class="text-sm">' + esc(r.keterangan) + '</td>'
+            + '<td class="text-nowrap">' + esc(r.scan_terakhir) + '</td>'
+            + '</tr>';
     }
 
     function pesan(modal, teks) {
