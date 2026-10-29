@@ -210,6 +210,8 @@ final class RosterMasterController extends Controller
     {
         $pt = mb_substr(trim((string) $request->query('pt', '')), 0, 255);
         abort_if($pt === '', 404);
+        // Filter site di kartu cakupan ikut dibawa ke modal ('' = semua site).
+        $site = mb_substr(trim((string) $request->query('site', '')), 0, 60);
         $tampil = $request->query('tampil') === 'sudah' ? 'sudah' : 'belum';
         $halaman = max(1, (int) $request->query('hal', 1));
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
@@ -220,7 +222,7 @@ final class RosterMasterController extends Controller
             $tanggal[] = $t;
         }
 
-        $aktif = $this->karyawanAktif->untukPerusahaan($pt);
+        $aktif = $this->karyawanAktif->untukPerusahaan($pt, $site);
         $ejaan = $this->cakupan->ejaanUntuk($pt);
         $diRoster = $this->cakupan->sidRoster($ejaan);
         $mirip = static fn (array $k): bool => $cari === '' || stripos($k['sid'].' '.$k['nama'], $cari) !== false;
@@ -234,11 +236,12 @@ final class RosterMasterController extends Controller
                     array_slice($daftar, ($halaman - 1) * self::PER_HALAMAN_GRID, self::PER_HALAMAN_GRID)),
             ];
         } else {
-            $grid = $gabungan->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN_GRID);
+            $grid = $gabungan->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN_GRID, $site);
         }
 
         return view('dms.roster-master._kurang', [
             'pt' => $pt,
+            'site' => $site,
             'tampil' => $tampil,
             'bulan' => $bulan,
             'tanggal' => $tanggal,

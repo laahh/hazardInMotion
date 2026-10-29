@@ -6,12 +6,15 @@
 @php
   $namaBulan = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   $angka = static fn (int $n): string => number_format($n, 0, ',', '.');
-  $dasar = ['pt' => $pt, 'tampil' => $tampil, 'bulan' => $bulan->format('Y-m'), 'q' => $cari ?: null];
+  $dasar = ['pt' => $pt, 'site' => $site ?: null, 'tampil' => $tampil, 'bulan' => $bulan->format('Y-m'), 'q' => $cari ?: null];
   $url = static fn (array $ubah): string => route('dms.master-roster.overview.kurang', array_filter($ubah + $dasar, static fn ($v) => $v !== null && $v !== ''), false);
 @endphp
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-12">
   <div>
     <div class="text-sm text-secondary-light">
+      @if ($site !== '')
+        <span class="rov-cak-tab is-aktif me-4" style="padding:2px 10px">Site {{ $site === '-' ? 'tanpa site' : $site }}</span>
+      @endif
       @if ($jumlah['aktif'] !== null)
         {{ $angka($jumlah['aktif']) }} karyawan aktif &middot; {{ $angka($jumlah['aktif'] - $jumlah['belum']) }} sudah di roster &middot;
         <b class="text-danger-600">{{ $angka($jumlah['belum']) }} belum di roster</b>
@@ -36,6 +39,7 @@
   </div>
   <form method="GET" action="{{ route('dms.master-roster.overview.kurang', absolute: false) }}" data-ro-filter style="width:260px;max-width:100%">
     <input type="hidden" name="pt" value="{{ $pt }}">
+    <input type="hidden" name="site" value="{{ $site }}">
     <input type="hidden" name="tampil" value="{{ $tampil }}">
     <input type="hidden" name="bulan" value="{{ $bulan->format('Y-m') }}">
     <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">

@@ -267,7 +267,7 @@
         <tbody>
           @foreach ($perusahaan as $i => $p)
             @php $dibuka = $buka === $p['perusahaan']; $idPanel = 'roPt'.$i; @endphp
-            <tr class="{{ $dibuka ? 'is-buka' : '' }}" data-ro-baris="{{ $idPanel }}">
+            <tr class="{{ $dibuka ? 'is-buka' : '' }}" data-ro-baris="{{ $idPanel }}" data-ro-cari="{{ mb_strtolower($p['perusahaan'].' '.implode(' ', $p['ejaan'] ?? []).' '.implode(' ', $p['site'])) }}">
               <td class="ps-24">
                 <div class="ro-pt-nama">{{ $p['perusahaan'] }}</div>
                 <div class="ro-pt-site">{{ $p['site'] === [] ? '—' : implode(' · ', $p['site']) }}</div>
@@ -321,6 +321,52 @@
 
 @section('page-scripts')
 <script>
+// Kotak Search di navbar: di halaman ini menyaring tabel Cakupan upload roster
+// (lewat kotak cari kartu itu) dan tabel Roster per perusahaan. Enter tidak
+// memuat ulang halaman, hanya menggulir ke hasil.
+(function () {
+    'use strict';
+
+    var form = document.querySelector('.navbar-search');
+    var input = form ? form.querySelector('input[name="search"]') : null;
+    if (!input) { return; }
+
+    input.placeholder = 'Cari perusahaan / site…';
+    input.setAttribute('aria-label', 'Cari perusahaan atau site');
+    var cariKartu = document.querySelector('#roCakupan [data-cak-cari]');
+    var barisRoster = document.querySelectorAll('tr[data-ro-baris]');
+
+    function saring() {
+        var q = input.value.trim().toLowerCase();
+        if (cariKartu && cariKartu.value !== input.value) {
+            cariKartu.value = input.value;
+            cariKartu.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        barisRoster.forEach(function (tr) {
+            var cocok = q === '' || (tr.dataset.roCari || '').indexOf(q) !== -1;
+            tr.classList.toggle('d-none', !cocok);
+            // Baris panel jadwal di bawahnya ikut disembunyikan.
+            var detail = tr.nextElementSibling;
+            if (detail && detail.classList.contains('ro-pt-detail')) { detail.classList.toggle('d-none', !cocok); }
+        });
+    }
+
+    input.addEventListener('input', saring);
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        saring();
+        var tujuan = document.getElementById('roCakupan') || document.querySelector('.ro-pt-tabel');
+        if (tujuan) { tujuan.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+    // Kotak cari di kartu juga mengisi navbar, supaya keduanya selalu sama.
+    if (cariKartu) {
+        cariKartu.addEventListener('input', function () {
+            if (input.value !== cariKartu.value) { input.value = cariKartu.value; saring(); }
+        });
+    }
+})();
+</script>
+<script>
 // Cakupan upload: saring status (Semua/Belum/Menunggu/Sudah), perusahaan, site,
 // dan cari. Bila satu site dipilih, status tiap perusahaan = status site itu dan
 // angka perbandingan di atas dihitung ulang hanya untuk site tersebut.
@@ -361,10 +407,14 @@
 
     // Angka baris untuk satu site: karyawan aktif, kurang, dan di roster site itu.
     function isiAngkaSite(b, s) {
+        // Tab bawaan modal Detail ikut angka kurang yang sedang tampil.
+        var tombol = b.tr.querySelector('[data-cak-kurang]');
         if (!s) {
             ['karyawan', 'kurang', 'roster'].forEach(function (k) { b.sel[k].td.innerHTML = b.sel[k].asli; });
+            tombol.dataset.cakTab = (parseInt(b.tr.dataset.kurang, 10) || 0) === 0 ? 'sudah' : 'belum';
             return;
         }
+        tombol.dataset.cakTab = s[4] === 0 ? 'sudah' : 'belum';
         b.sel.karyawan.td.innerHTML = '<span class="rov-angka">' + angka(s[2]) + '</span>';
         b.sel.kurang.td.innerHTML = s[4] === 0
             ? '<span class="rov-cak-lengkap" title="Semua karyawan aktif site ini sudah ada di roster"><iconify-icon icon="solar:check-circle-bold"></iconify-icon>0</span>'
@@ -516,10 +566,14 @@
     document.querySelectorAll('[data-cak-kurang]').forEach(function (b) {
         b.addEventListener('click', function () {
             var pt = b.dataset.cakKurang;
-            judul.textContent = 'Karyawan aktif vs roster — ' + pt;
+            var pilihSite = document.querySelector('[data-cak-site]');
+            var site = pilihSite ? pilihSite.value : '';
+            judul.textContent = 'Karyawan aktif vs roster — ' + pt + (site ? ' · Site ' + site : '');
             isi.innerHTML = '<div class="ro-memuat">Memuat…</div>';
             modal.show();
-            muat(modalEl.dataset.url + '?' + new URLSearchParams({ pt: pt, tampil: b.dataset.cakTab || 'belum' }).toString());
+            var param = { pt: pt, tampil: b.dataset.cakTab || 'belum' };
+            if (site) { param.site = site; }
+            muat(modalEl.dataset.url + '?' + new URLSearchParams(param).toString());
         });
     });
 })();

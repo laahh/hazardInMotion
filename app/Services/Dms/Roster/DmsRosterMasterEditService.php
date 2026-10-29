@@ -76,11 +76,15 @@ final class DmsRosterMasterEditService
      * jadwal di rentang itu, urut SID.
      *
      * @param  list<string>|null  $ejaan  null = semua perusahaan
+     * @param  string  $site  '' = semua site; dicocokkan tanpa beda huruf & spasi ("BMO 1" = "bmo1")
      * @return array{karyawan: list<array<string, mixed>>, total: int}
      */
-    public function grid(?array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman): array
+    public function grid(?array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman, string $site = ''): array
     {
         $rentang = $this->dasar($ejaan)->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()]);
+        if ($site !== '') {
+            $rentang->whereRaw("UPPER(REPLACE(TRIM(j.site), ' ', '')) = ?", [mb_strtoupper(str_replace(' ', '', trim($site)))]);
+        }
         if ($cari !== '') {
             $mirip = '%'.addcslashes($cari, '%_\\').'%';
             $rentang->where(static fn ($q) => $q->where('j.kode_sid', 'like', $mirip)->orWhere('j.nama', 'like', $mirip));
