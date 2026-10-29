@@ -1,6 +1,6 @@
 @extends('dms.layouts.app')
 
-@section('title', 'Edit Roster — '.$upload->judul)
+@section('title', 'Edit Roster')
 
 @section('css')
 @include('dms.roster-master._grid-css')
@@ -30,51 +30,84 @@
   .re-jam.is-ubah { border-color: #4F46E5; box-shadow: 0 0 0 1px #4F46E5; }
   .re-pesan { margin: 0 24px 16px; }
   .re-riwayat td, .re-riwayat th { font-size: 12.5px; }
+  .re-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .re-filter .form-select { width: auto; min-width: 200px; }
+  .re-bulan { display: inline-flex; align-items: center; gap: 4px; }
+  .re-bulan__label { min-width: 120px; text-align: center; font-weight: 600; font-size: 13.5px; color: #0F172A; }
+  .rm-xl button.rm-sel.rm-menunggu { outline: 1.5px dashed #D97706; outline-offset: -2px; }
   @media (max-width: 575.98px) { .re-alat { padding: 12px; } .re-simpan, .re-simpan .btn { width: 100%; } }
 </style>
 @endsection
 
 @section('content')
 @php
-  $badge = ['PENDING' => ['Menunggu approval', 'warning'], 'APPROVED' => ['Disetujui', 'success']];
-  [$label, $warna] = $badge[$upload->status] ?? [$upload->status, 'secondary'];
   $hariSingkat = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   $bulanSingkat = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   $nomorAwal = ($halaman - 1) * $perHalaman;
   $jamTeks = static fn (?float $j): string => $j === null ? '' : rtrim(rtrim(number_format($j, 2, '.', ''), '0'), '.');
+  $urlBulan = static fn (\Carbon\CarbonImmutable $b): string => request()->fullUrlWithQuery(['bulan' => $b->format('Y-m'), 'hal' => 1]);
 @endphp
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
   <div>
-    <h6 class="fw-semibold mb-0">Edit: {{ $upload->judul }}</h6>
+    <h6 class="fw-semibold mb-0">Edit Roster</h6>
     <p class="text-sm text-secondary-light mb-0 mt-4">
-      <span class="badge bg-{{ $warna }}-focus text-{{ $warna }}-main">{{ $label }}</span>
-      {{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}
-      &middot; perusahaan: {{ implode(', ', $assignment) }}
+      Gabungan semua roster yang di-upload (menunggu approval &amp; disetujui). Bila satu tanggal ada di beberapa roster, yang dipakai roster terbaru.
     </p>
   </div>
   <ul class="d-flex align-items-center gap-2">
-    <li class="fw-medium"><a href="{{ route('dms.master-roster.edit.index') }}" class="hover-text-primary">Edit Roster</a></li>
+    <li class="fw-medium">
+      <a href="{{ route('dms.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
+        <iconify-icon icon="solar:home-smile-angle-outline" class="icon text-lg"></iconify-icon>DMS
+      </a>
+    </li>
     <li>-</li>
-    <li class="fw-medium">Editor</li>
+    <li class="fw-medium">Master Roster</li>
+    <li>-</li>
+    <li class="fw-medium">Edit Roster</li>
   </ul>
 </div>
 
 @include('dms.roster-master._alert')
 
+@if ($assignment === [])
+  <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8" role="alert">
+    Edit roster hanya untuk akun yang di-assign ke perusahaan. Minta admin menambahkan perusahaan Anda di menu <b>Assign Role</b>.
+  </div>
+@elseif ($bulan === null)
+  <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8" role="alert">
+    Belum ada roster yang di-upload untuk <b>{{ $pt !== '' ? $pt : implode(', ', $assignment) }}</b>.
+    <a href="{{ route('dms.master-roster.upload') }}" class="fw-semibold">Upload roster</a>
+  </div>
+@else
 <div class="card radius-8 border-0 shadow-sm" id="reEditor"
-     data-url="{{ route('dms.master-roster.edit.update', $upload->id, absolute: false) }}">
+     data-url="{{ route('dms.master-roster.edit.update', absolute: false) }}">
   <div class="card-header border-bottom bg-base py-16 px-24">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
       <div class="rm-kepala-teks">
         <h6 class="text-lg fw-semibold mb-4">Jadwal per karyawan</h6>
         <p class="text-sm text-secondary-light mb-0">
           Pilih kode di palet, lalu klik atau seret di sel tanggal. Jam Kerja Awal/Akhir/Total berlaku untuk semua hari kerja karyawan itu.
-          Sel berbingkai ungu = belum disimpan.
+          Sel berbingkai ungu = belum disimpan · garis putus oranye = dari roster yang masih menunggu approval.
         </p>
       </div>
-      <form method="GET" action="{{ route('dms.master-roster.edit', $upload->id, absolute: false) }}" class="rm-cari" data-re-cari>
-        <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
+      <form method="GET" action="{{ route('dms.master-roster.edit.index', absolute: false) }}" class="re-filter">
+        <div class="re-bulan" aria-label="Pilih bulan">
+          @php $sebelum = $bulan->subMonth(); $sesudah = $bulan->addMonth(); @endphp
+          <a class="btn btn-sm btn-outline-secondary radius-8 {{ $sebelum->lt($rentang['dari']->startOfMonth()) ? 'disabled' : '' }}" href="{{ $urlBulan($sebelum) }}" aria-label="Bulan sebelumnya">&lsaquo;</a>
+          <span class="re-bulan__label">{{ $bulan->locale('id')->translatedFormat('F Y') }}</span>
+          <a class="btn btn-sm btn-outline-secondary radius-8 {{ $sesudah->gt($rentang['sampai']->startOfMonth()) ? 'disabled' : '' }}" href="{{ $urlBulan($sesudah) }}" aria-label="Bulan berikutnya">&rsaquo;</a>
+        </div>
+        <input type="hidden" name="bulan" value="{{ $bulan->format('Y-m') }}">
+        @if (count($assignment) > 1)
+          <select name="pt" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filter perusahaan">
+            <option value="">Semua perusahaan saya</option>
+            @foreach ($assignment as $nama)
+              <option value="{{ $nama }}" @selected($pt === $nama)>{{ $nama }}</option>
+            @endforeach
+          </select>
+        @endif
+        <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm rm-cari" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
       </form>
     </div>
   </div>
@@ -143,12 +176,16 @@
               @php $total = $k['jam_awal'] ? $jamTeks($k['jam_total']) : ''; @endphp
               <td class="rm-c-id rm-c-jam"><input type="text" inputmode="decimal" class="re-jam re-total" data-re-jam="total" value="{{ $total }}" data-asli="{{ $total }}" placeholder="{{ $k['jam_awal'] ? '' : $jamTeks($k['jam_total']) }}" aria-label="Total jam kerja {{ $k['nama'] }}" title="Jam kerja efektif per hari; kosong = Akhir − Awal"></td>
               @foreach ($tanggal as $t)
-                @php $kode = $k['jadwal'][$t->toDateString()]['kode'] ?? ''; @endphp
-                <td class="rm-c-kode {{ $t->day === 1 && ! $loop->first ? 'rm-bulan' : '' }}"><button type="button" class="rm-sel {{ $kode === '' ? 'rm-kosong' : (isset(\App\Services\Dms\Roster\DmsRosterMasterService::KODE[$kode]) ? 'rm-'.$kode : 'rm-lain') }}" data-tgl="{{ $t->toDateString() }}" data-asli="{{ $kode }}" title="{{ $t->format('d/m/Y') }}">{{ $kode }}</button></td>
+                @php
+                  $h = $k['jadwal'][$t->toDateString()] ?? null;
+                  $kode = $h['kode'] ?? '';
+                  $tunggu = (bool) ($h['menunggu'] ?? false);
+                @endphp
+                <td class="rm-c-kode"><button type="button" class="rm-sel {{ $kode === '' ? 'rm-kosong' : (isset(\App\Services\Dms\Roster\DmsRosterMasterService::KODE[$kode]) ? 'rm-'.$kode : 'rm-lain') }}{{ $tunggu ? ' rm-menunggu' : '' }}" data-tgl="{{ $t->toDateString() }}" data-asli="{{ $kode }}" data-tunggu="{{ $tunggu ? '1' : '' }}" title="{{ $t->format('d/m/Y') }}{{ $tunggu ? ' · roster menunggu approval' : '' }}">{{ $kode }}</button></td>
               @endforeach
             </tr>
           @empty
-            <tr><td colspan="{{ count($tanggal) + 9 }}" class="text-secondary-light py-16">Tidak ada karyawan perusahaan Anda yang cocok di roster ini.</td></tr>
+            <tr><td colspan="{{ count($tanggal) + 9 }}" class="text-secondary-light py-16">Tidak ada karyawan perusahaan Anda yang punya jadwal di bulan ini{{ $cari !== '' ? ' dengan kata kunci "'.$cari.'"' : '' }}.</td></tr>
           @endforelse
         </tbody>
       </table>
@@ -169,7 +206,7 @@
 <div class="card radius-8 border-0 shadow-sm mt-24">
   <div class="card-header border-bottom bg-base py-16 px-24">
     <h6 class="text-lg fw-semibold mb-4">Riwayat edit</h6>
-    <p class="text-sm text-secondary-light mb-0">30 perubahan terakhir di roster ini.</p>
+    <p class="text-sm text-secondary-light mb-0">30 perubahan terakhir di roster perusahaan Anda.</p>
   </div>
   <div class="card-body p-24">
     @if (! $adaLog)
@@ -179,12 +216,13 @@
     @else
       <div class="table-responsive">
         <table class="table bordered-table mb-0 re-riwayat">
-          <thead><tr><th>Waktu</th><th>Oleh</th><th>SID</th><th>Tanggal</th><th>Perubahan</th></tr></thead>
+          <thead><tr><th>Waktu</th><th>Oleh</th><th>Roster</th><th>SID</th><th>Tanggal</th><th>Perubahan</th></tr></thead>
           <tbody>
             @foreach ($riwayat as $r)
               <tr>
                 <td class="text-nowrap">{{ \Carbon\CarbonImmutable::parse($r->created_at)->format('d/m/Y H:i') }}</td>
                 <td>{{ $r->diubah_oleh }}</td>
+                <td>{{ $r->judul ?? '#'.$r->upload_id }}</td>
                 <td>{{ $r->kode_sid }}</td>
                 <td class="text-nowrap">{{ $r->tanggal ? \Carbon\CarbonImmutable::parse($r->tanggal)->format('d/m/Y') : 'jam kerja' }}</td>
                 <td>{{ $r->nilai_lama ?? 'kosong' }} → <b>{{ $r->nilai_baru ?? 'kosong' }}</b></td>
@@ -196,6 +234,7 @@
     @endif
   </div>
 </div>
+@endif
 @endsection
 
 @section('page-scripts')
@@ -221,7 +260,8 @@
     function kelasKode(kode) { return kode === '' ? 'rm-kosong' : (KODE.indexOf(kode) !== -1 ? 'rm-' + kode : 'rm-lain'); }
 
     function isi(sel, kode) {
-        sel.className = 'rm-sel ' + kelasKode(kode) + (kode !== sel.dataset.asli ? ' is-ubah' : '');
+        var ubah = kode !== sel.dataset.asli;
+        sel.className = 'rm-sel ' + kelasKode(kode) + (ubah ? ' is-ubah' : (sel.dataset.tunggu ? ' rm-menunggu' : ''));
         sel.textContent = kode;
         perbarui();
     }

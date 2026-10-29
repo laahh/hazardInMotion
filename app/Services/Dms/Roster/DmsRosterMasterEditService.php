@@ -6,19 +6,29 @@ namespace App\Services\Dms\Roster;
 
 use App\Models\DmsRosterMasterUpload;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
- * Edit Roster: mengubah jadwal roster yang sudah di-upload langsung dari web
- * (menu Master Roster → Edit Roster), hanya untuk user yang di-assign ke
- * perusahaannya (lihat DmsRosterAksesPerusahaan::assignment()).
+ * Edit Roster: satu tabel gabungan SEMUA roster yang di-upload (menunggu
+ * approval & disetujui; yang ditolak tidak) untuk perusahaan user, diedit
+ * langsung dari web (menu Master Roster → Edit Roster). Hanya untuk user yang
+ * di-assign ke perusahaannya (DmsRosterAksesPerusahaan::assignment()).
  *
- * Yang bisa diubah:
- *   - kode satu tanggal (D1–D13, N1–N7, OFF, CT, S, I) atau dikosongkan;
- *   - Jam Kerja Awal / Akhir / Total satu karyawan — berlaku untuk semua hari
- *     kerjanya di roster itu, sama dengan arti kolom itu di template Excel.
+ * Gabungan: bila satu (SID, tanggal) ada di beberapa upload, yang dipakai
+ * baris dari upload TERBARU (created_at, lalu id). Identitas karyawan (nama,
+ * jabatan, site) juga dari upload terbarunya.
+ *
+ * Simpan:
+ *   - ubah kode   → baris pemenang (upload terbaru) diubah;
+ *   - isi kosong  → ditambahkan ke upload terbaru karyawan itu yang
+ *                   periodenya mencakup tanggal tsb (tidak ada = ditolak);
+ *   - kosongkan   → baris tanggal itu dihapus dari SEMUA upload perusahaan
+ *                   user, supaya jadwal lama di bawahnya tidak muncul lagi;
+ *   - jam kerja   → Jam Kerja Awal / Akhir / Total satu karyawan, berlaku
+ *                   untuk semua hari kerjanya di tabel gabungan.
  *
  * Jam per hari dihitung ulang dengan aturan yang sama dengan upload: hari
  * kerja memakai jam karyawan bila ada, kalau tidak jam bawaan kodenya; hari
@@ -34,89 +44,224 @@ final class DmsRosterMasterEditService
     public const MAKS_PERUBAHAN = 5000;
 
     /**
-     * Simpan perubahan. $ejaan = ejaan perusahaan yang boleh diedit user ini
-     * (DmsRosterAksesPerusahaan::ejaanCakupan()); SID perusahaan lain ditolak.
+     * Baris jadwal perusahaan user dari upload yang tidak ditolak, upload
+     * terbaru dulu — baris pertama per (SID, tanggal) adalah pemenangnya.
+     *
+     * @param  list<string>  $ejaan
+     */
+    private function dasar(array $ejaan): Builder
+    {
+        return DB::table('dms_roster_master_jadwal as j')
+            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
+            ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
+            ->whereIn(DB::raw('TRIM(j.perusahaan)'), $ejaan === [] ? [''] : $ejaan);
+    }
+
+    /**
+     * Rentang tanggal seluruh jadwal gabungan (untuk navigasi bulan).
+     *
+     * @param  list<string>  $ejaan
+     * @return array{dari:CarbonImmutable,sampai:CarbonImmutable}|null
+     */
+    public function rentang(array $ejaan): ?array
+    {
+        $r = $this->dasar($ejaan)->selectRaw('MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai')->first();
+
+        return $r === null || $r->dari === null ? null
+            : ['dari' => CarbonImmutable::parse((string) $r->dari), 'sampai' => CarbonImmutable::parse((string) $r->sampai)];
+    }
+
+    /**
+     * Satu halaman tabel gabungan untuk rentang tanggal: karyawan yang punya
+     * jadwal di rentang itu, urut SID.
+     *
+     * @param  list<string>  $ejaan
+     * @return array{karyawan: list<array<string, mixed>>, total: int}
+     */
+    public function grid(array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman): array
+    {
+        $rentang = $this->dasar($ejaan)->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()]);
+        if ($cari !== '') {
+            $mirip = '%'.addcslashes($cari, '%_\\').'%';
+            $rentang->where(static fn ($q) => $q->where('j.kode_sid', 'like', $mirip)->orWhere('j.nama', 'like', $mirip));
+        }
+        $total = (clone $rentang)->distinct()->count('j.kode_sid');
+        $sids = (clone $rentang)->select('j.kode_sid')->distinct()->orderBy('j.kode_sid')
+            ->offset(max(0, $halaman - 1) * $perHalaman)->limit($perHalaman)->pluck('kode_sid')->all();
+        if ($sids === []) {
+            return ['karyawan' => [], 'total' => $total];
+        }
+
+        $adaTotal = DmsRosterMasterService::adaKolomTotal();
+        $karyawan = [];
+        foreach ($this->dasar($ejaan)
+            ->whereIn('j.kode_sid', $sids)
+            ->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()])
+            ->orderBy('j.kode_sid')->orderByDesc('u.created_at')->orderByDesc('u.id')
+            ->get(['j.*', 'u.status']) as $r) {
+            $sid = (string) $r->kode_sid;
+            $tgl = CarbonImmutable::parse((string) $r->tanggal)->toDateString();
+            // Baris pertama per SID = upload terbaru → identitasnya yang dipakai.
+            $karyawan[$sid] ??= ['sid' => $sid, 'nama' => $r->nama, 'perusahaan' => $r->perusahaan, 'jabatan' => $r->jabatan, 'site' => $r->site, 'jadwal' => []];
+            if (! isset($karyawan[$sid]['jadwal'][$tgl])) {
+                $karyawan[$sid]['jadwal'][$tgl] = self::barisJadwal($r, $adaTotal)
+                    + ['menunggu' => $r->status === DmsRosterMasterUpload::STATUS_PENDING];
+            }
+        }
+
+        foreach ($karyawan as &$k) {
+            [$k['jam_awal'], $k['jam_akhir']] = DmsRosterMasterService::jamKaryawanDariJadwal($k['jadwal']);
+            $k['jam_total'] = DmsRosterMasterService::totalKaryawanDariJadwal($k['jadwal']);
+        }
+        unset($k);
+
+        return ['karyawan' => array_values($karyawan), 'total' => $total];
+    }
+
+    /**
+     * Simpan perubahan tabel gabungan. $ejaan = ejaan perusahaan yang boleh
+     * diedit user ini (DmsRosterAksesPerusahaan::ejaanCakupan()); SID
+     * perusahaan lain ditolak.
      *
      * @param  list<array{sid:string,tanggal:string,kode:string}>  $sel
      * @param  list<array{sid:string,masuk:string,keluar:string,total:string}>  $jam
      * @param  list<string>  $ejaan
      * @return array{galat: list<string>, ubah: int}
      */
-    public function simpan(DmsRosterMasterUpload $upload, array $sel, array $jam, array $ejaan, string $oleh): array
+    public function simpan(array $sel, array $jam, array $ejaan, string $oleh): array
     {
         $sids = array_values(array_unique(array_merge(array_column($sel, 'sid'), array_column($jam, 'sid'))));
         if ($sids === []) {
             return ['galat' => [], 'ubah' => 0];
         }
 
+        // Semua baris SID ini (semua tanggal) — upload terbaru dulu.
         $adaTotal = DmsRosterMasterService::adaKolomTotal();
         $baris = [];
+        $pemenang = [];
+        $semuaUpload = [];
         $identitas = [];
-        foreach (DB::table('dms_roster_master_jadwal')
-            ->where('upload_id', $upload->id)
-            ->whereIn('kode_sid', $sids)
-            ->whereIn(DB::raw('TRIM(perusahaan)'), $ejaan === [] ? [''] : $ejaan)
-            ->get() as $r) {
+        $uploadSid = [];
+        foreach ($this->dasar($ejaan)->whereIn('j.kode_sid', $sids)
+            ->orderByDesc('u.created_at')->orderByDesc('u.id')
+            ->get(['j.*', 'u.periode_mulai', 'u.periode_selesai']) as $r) {
             $sid = (string) $r->kode_sid;
+            $tgl = CarbonImmutable::parse((string) $r->tanggal)->toDateString();
+            $id = (int) $r->upload_id;
             $identitas[$sid] ??= ['nama' => $r->nama, 'perusahaan' => $r->perusahaan, 'jabatan' => $r->jabatan, 'site' => $r->site];
-            $baris[$sid][CarbonImmutable::parse((string) $r->tanggal)->toDateString()] = self::barisJadwal($r, $adaTotal);
+            $uploadSid[$sid][$id] ??= [
+                'id' => $id,
+                'dari' => CarbonImmutable::parse((string) $r->periode_mulai)->toDateString(),
+                'sampai' => CarbonImmutable::parse((string) $r->periode_selesai)->toDateString(),
+            ];
+            $semuaUpload[$sid][$tgl][] = $id;
+            if (! isset($baris[$sid][$tgl])) {
+                $baris[$sid][$tgl] = self::barisJadwal($r, $adaTotal);
+                $pemenang[$sid][$tgl] = $id;
+            }
         }
 
-        $rencana = self::rencana(
-            $baris,
-            $sel,
-            $jam,
-            CarbonImmutable::parse($upload->periode_mulai)->toDateString(),
-            CarbonImmutable::parse($upload->periode_selesai)->toDateString(),
-        );
+        $rencana = self::rencana($baris, $sel, $jam, '1900-01-01', '2999-12-31');
         if ($rencana['galat'] !== [] || $rencana['ops'] === []) {
             return ['galat' => $rencana['galat'], 'ubah' => 0];
         }
 
-        DB::transaction(function () use ($upload, $rencana, $identitas, $adaTotal, $oleh): void {
-            foreach ($rencana['ops'] as [$aksi, $sid, $tgl, $h]) {
-                $kunci = ['upload_id' => $upload->id, 'kode_sid' => $sid, 'tanggal' => $tgl];
-                if ($aksi === 'hapus') {
-                    DB::table('dms_roster_master_jadwal')->where($kunci)->delete();
+        // Terjemahkan ke baris upload yang mana; tolak sel kosong di luar periode semua roster karyawan itu.
+        $galat = [];
+        $langkah = [];
+        foreach ($rencana['ops'] as [$aksi, $sid, $tgl, $h]) {
+            if ($aksi === 'ubah') {
+                $langkah[] = [$aksi, $sid, $tgl, $h, [$pemenang[$sid][$tgl]]];
+            } elseif ($aksi === 'hapus') {
+                $langkah[] = [$aksi, $sid, $tgl, $h, array_values(array_unique($semuaUpload[$sid][$tgl] ?? []))];
+            } else {
+                $target = null;
+                foreach ($uploadSid[$sid] ?? [] as $u) {
+                    if ($u['dari'] <= $tgl && $tgl <= $u['sampai']) {
+                        $target = $u['id'];
+                        break;
+                    }
+                }
+                if ($target === null) {
+                    $galat[] = $sid.' '.$tgl.': di luar periode semua roster karyawan ini — upload roster untuk periode tersebut.';
 
                     continue;
                 }
-                $isi = [
-                    'kode' => $h['kode'],
-                    'jam_masuk' => $h['masuk'],
-                    'jam_keluar' => $h['keluar'],
-                    'menit_kerja' => $h['menit'],
-                ] + ($adaTotal ? ['menit_total_kerja' => $h['total']] : []);
-                if ($aksi === 'tambah') {
-                    DB::table('dms_roster_master_jadwal')->insert($kunci + $identitas[$sid] + $isi);
-                } else {
-                    DB::table('dms_roster_master_jadwal')->where($kunci)->update($isi);
+                $langkah[] = [$aksi, $sid, $tgl, $h, [$target]];
+            }
+        }
+        if ($galat !== []) {
+            return ['galat' => $galat, 'ubah' => 0];
+        }
+
+        $uploadLog = [];
+        foreach ($langkah as [, $sid, $tgl, , $ids]) {
+            $uploadLog[$sid.'|'.$tgl] = $ids[0];
+        }
+
+        DB::transaction(function () use ($langkah, $identitas, $adaTotal, $oleh, $rencana, $uploadLog, $uploadSid): void {
+            $tersentuh = [];
+            foreach ($langkah as [$aksi, $sid, $tgl, $h, $ids]) {
+                foreach ($ids as $id) {
+                    $tersentuh[$id] = true;
+                    $kunci = ['upload_id' => $id, 'kode_sid' => $sid, 'tanggal' => $tgl];
+                    if ($aksi === 'hapus') {
+                        DB::table('dms_roster_master_jadwal')->where($kunci)->delete();
+
+                        continue;
+                    }
+                    $isi = [
+                        'kode' => $h['kode'],
+                        'jam_masuk' => $h['masuk'],
+                        'jam_keluar' => $h['keluar'],
+                        'menit_kerja' => $h['menit'],
+                    ] + ($adaTotal ? ['menit_total_kerja' => $h['total']] : []);
+                    if ($aksi === 'tambah') {
+                        DB::table('dms_roster_master_jadwal')->insert($kunci + $identitas[$sid] + $isi);
+                    } else {
+                        DB::table('dms_roster_master_jadwal')->where($kunci)->update($isi);
+                    }
                 }
             }
 
-            $upload->update([
-                'jumlah_jadwal' => DB::table('dms_roster_master_jadwal')->where('upload_id', $upload->id)->count(),
-                'jumlah_karyawan' => DB::table('dms_roster_master_jadwal')->where('upload_id', $upload->id)->distinct()->count('kode_sid'),
-            ]);
-            $this->catat($upload->id, $rencana['log'], $oleh);
+            foreach (array_keys($tersentuh) as $id) {
+                DmsRosterMasterUpload::whereKey($id)->update([
+                    'jumlah_jadwal' => DB::table('dms_roster_master_jadwal')->where('upload_id', $id)->count(),
+                    'jumlah_karyawan' => DB::table('dms_roster_master_jadwal')->where('upload_id', $id)->distinct()->count('kode_sid'),
+                ]);
+            }
+
+            // Log jam (tanpa tanggal) dicatat ke upload terbaru karyawan itu.
+            $log = array_map(static fn (array $l): array => $l + [
+                'upload_id' => $uploadLog[$l['kode_sid'].'|'.$l['tanggal']] ?? (int) array_key_first($uploadSid[$l['kode_sid']] ?? [0 => 0]),
+            ], $rencana['log']);
+            $this->catat($log, $oleh);
         });
 
         return ['galat' => [], 'ubah' => count($rencana['ops'])];
     }
 
     /**
-     * Riwayat edit terbaru satu roster (kosong bila tabel log belum dimigrasi).
+     * Riwayat edit terbaru untuk roster perusahaan user (kosong bila tabel
+     * log belum dimigrasi).
      *
+     * @param  list<string>  $ejaan
      * @return list<object>
      */
-    public function riwayat(int $uploadId, int $batas = 30): array
+    public function riwayat(array $ejaan, int $batas = 30): array
     {
-        if (! self::adaLog()) {
+        if (! self::adaLog() || $ejaan === []) {
             return [];
         }
+        $upload = DB::table('dms_roster_master_jadwal')
+            ->whereIn(DB::raw('TRIM(perusahaan)'), $ejaan)
+            ->distinct()->pluck('upload_id')->all();
 
-        return DB::table(self::TABEL_LOG)->where('upload_id', $uploadId)
-            ->orderByDesc('id')->limit($batas)->get()->all();
+        return DB::table(self::TABEL_LOG.' as l')
+            ->leftJoin('dms_roster_master_upload as u', 'u.id', '=', 'l.upload_id')
+            ->whereIn('l.upload_id', $upload === [] ? [0] : $upload)
+            ->orderByDesc('l.id')->limit($batas)
+            ->get(['l.*', 'u.judul'])->all();
     }
 
     public static function adaLog(): bool
@@ -196,6 +341,8 @@ final class DmsRosterMasterEditService
         $ops = [];
         $log = [];
         foreach (array_unique(array_merge(array_keys($target), array_keys($jamBaru))) as $sid) {
+            // SID angka ("10016025") jadi kunci int di array PHP — kembalikan ke string.
+            $sid = (string) $sid;
             $tanggal = array_key_exists($sid, $jamBaru)
                 ? array_unique(array_merge(array_keys($baris[$sid]), array_keys($target[$sid] ?? [])))
                 : array_keys($target[$sid] ?? []);
@@ -227,7 +374,7 @@ final class DmsRosterMasterEditService
         foreach ($jamBaru as $sid => $j) {
             $lama = self::jamDariJadwal($baris[$sid]);
             if ($lama != $j) {
-                $log[] = self::log($sid, null, 'jam', self::teksJam($lama), self::teksJam($j));
+                $log[] = self::log((string) $sid, null, 'jam', self::teksJam($lama), self::teksJam($j));
             }
         }
 
@@ -350,9 +497,9 @@ final class DmsRosterMasterEditService
     }
 
     /**
-     * @param  list<array<string, ?string>>  $log
+     * @param  list<array<string, mixed>>  $log  tiap baris sudah membawa upload_id
      */
-    private function catat(int $uploadId, array $log, string $oleh): void
+    private function catat(array $log, string $oleh): void
     {
         if ($log === [] || ! self::adaLog()) {
             return;
@@ -360,7 +507,6 @@ final class DmsRosterMasterEditService
         $kini = now();
         foreach (array_chunk($log, 500) as $potong) {
             DB::table(self::TABEL_LOG)->insert(array_map(static fn (array $l): array => $l + [
-                'upload_id' => $uploadId,
                 'diubah_oleh' => mb_substr($oleh, 0, 150),
                 'created_at' => $kini,
             ], $potong));

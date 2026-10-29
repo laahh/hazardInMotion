@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\DMS;
 
 use App\Http\Controllers\Controller;
-use App\Models\DmsRosterMasterUpload;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
 use App\Services\Dms\Roster\DmsRosterMasterEditService;
-use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -18,18 +16,17 @@ use Illuminate\Support\Facades\Auth;
 use Throwable;
 
 /**
- * Master Roster → Edit Roster: ubah jadwal roster yang sudah di-upload
- * (menunggu approval atau disetujui) langsung dari web. Hanya untuk user yang
- * di-assign di menu Assign Role, dan hanya baris karyawan perusahaannya —
- * admin tanpa assignment pun tidak bisa mengedit. Roster yang ditolak tidak
- * bisa diedit (upload ulang).
+ * Master Roster → Edit Roster: satu tabel gabungan semua roster yang
+ * di-upload untuk perusahaan user (bila dobel, upload terbaru yang dipakai),
+ * per bulan, langsung bisa diedit. Hanya untuk user yang di-assign di menu
+ * Assign Role, dan hanya karyawan perusahaannya — admin tanpa assignment pun
+ * tidak bisa mengedit. Aturan gabungan & simpan: DmsRosterMasterEditService.
  */
 class RosterMasterEditController extends Controller
 {
     private const PER_HALAMAN = 25;
 
     public function __construct(
-        private readonly DmsRosterMasterService $master,
         private readonly DmsRosterMasterEditService $edit,
         private readonly DmsRosterAksesPerusahaan $akses,
     ) {}
@@ -37,45 +34,50 @@ class RosterMasterEditController extends Controller
     public function index(Request $request): View
     {
         $assignment = $this->assignment();
-        $status = (string) $request->query('status', '');
+        $pt = (string) $request->query('pt', '');
+        if (! in_array($pt, $assignment, true)) {
+            $pt = '';
+        }
+        $ejaan = $assignment === [] ? [] : DmsRosterAksesPerusahaan::ejaanCakupan($pt === '' ? $assignment : [$pt]);
+        $rentang = $ejaan === [] ? null : $this->edit->rentang($ejaan);
 
-        $q = DmsRosterMasterUpload::query()
-            ->where('status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
-            ->orderByDesc('created_at');
-        $this->akses->batasiUpload($q, $assignment);
-        if (in_array($status, [DmsRosterMasterUpload::STATUS_PENDING, DmsRosterMasterUpload::STATUS_APPROVED], true)) {
-            $q->where('status', $status);
+        // Bulan bawaan: bulan ini bila ada di rentang roster, kalau tidak bulan terakhirnya.
+        $bulan = null;
+        if ($rentang !== null) {
+            $awal = $rentang['dari']->startOfMonth();
+            $akhir = $rentang['sampai']->startOfMonth();
+            $minta = (string) $request->query('bulan', '');
+            $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : null;
+            if ($bulan === null || $bulan->lt($awal) || $bulan->gt($akhir)) {
+                $kini = CarbonImmutable::now()->startOfMonth();
+                $bulan = $kini->betweenIncluded($awal, $akhir) ? $kini : $akhir;
+            }
         }
 
-        return view('dms.roster-master.edit-index', [
-            'daftar' => $q->paginate(20)->withQueryString(),
-            'assignment' => $assignment,
-            'status' => $status,
-        ]);
-    }
-
-    public function edit(Request $request, int $id): View
-    {
-        [$upload, $ejaan] = $this->bolehEdit($id);
         $halaman = max(1, (int) $request->query('hal', 1));
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
-        $grid = $this->master->grid($upload, $halaman, self::PER_HALAMAN, $cari, $ejaan);
+        $grid = $bulan === null ? ['karyawan' => [], 'total' => 0]
+            : $this->edit->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN);
 
         $tanggal = [];
-        for ($t = CarbonImmutable::parse($upload->periode_mulai); $t->lte($upload->periode_selesai); $t = $t->addDay()) {
-            $tanggal[] = $t;
+        if ($bulan !== null) {
+            for ($t = $bulan->startOfMonth(); $t->lte($bulan->endOfMonth()); $t = $t->addDay()) {
+                $tanggal[] = $t;
+            }
         }
 
         return view('dms.roster-master.edit', [
-            'upload' => $upload,
+            'assignment' => $assignment,
+            'pt' => $pt,
+            'rentang' => $rentang,
+            'bulan' => $bulan,
             'grid' => $grid,
             'tanggal' => $tanggal,
             'halaman' => $halaman,
             'perHalaman' => self::PER_HALAMAN,
             'totalHalaman' => max(1, (int) ceil($grid['total'] / self::PER_HALAMAN)),
             'cari' => $cari,
-            'assignment' => $this->assignment(),
-            'riwayat' => $this->edit->riwayat($upload->id),
+            'riwayat' => $this->edit->riwayat($ejaan),
             'adaLog' => DmsRosterMasterEditService::adaLog(),
         ]);
     }
@@ -85,9 +87,11 @@ class RosterMasterEditController extends Controller
      *   sel: [{sid, tanggal, kode}]  kode '' = kosongkan
      *   jam: [{sid, masuk, keluar, total}]
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request): JsonResponse
     {
-        [$upload, $ejaan] = $this->bolehEdit($id);
+        $assignment = $this->assignment();
+        abort_if($assignment === [], 403, 'Edit roster hanya untuk user yang di-assign ke perusahaan di menu Assign Role.');
+
         $data = $request->validate([
             'sel' => ['array', 'max:'.DmsRosterMasterEditService::MAKS_PERUBAHAN],
             'sel.*.sid' => ['required', 'string', 'max:50'],
@@ -106,10 +110,9 @@ class RosterMasterEditController extends Controller
 
         try {
             $hasil = $this->edit->simpan(
-                $upload,
                 $normal($data['sel'] ?? [], ['sid', 'tanggal', 'kode']),
                 $normal($data['jam'] ?? [], ['sid', 'masuk', 'keluar', 'total']),
-                $ejaan,
+                DmsRosterAksesPerusahaan::ejaanCakupan($assignment),
                 mb_substr((string) (Auth::user()?->name ?? 'system'), 0, 150),
             );
         } catch (Throwable $e) {
@@ -127,26 +130,6 @@ class RosterMasterEditController extends Controller
             'ubah' => $hasil['ubah'],
             'pesan' => $hasil['ubah'] === 0 ? 'Tidak ada perubahan.' : number_format($hasil['ubah'], 0, ',', '.').' jadwal diperbarui.',
         ]);
-    }
-
-    /**
-     * Roster yang boleh diedit user ini + ejaan perusahaannya di roster.
-     *
-     * @return array{0: DmsRosterMasterUpload, 1: list<string>}
-     */
-    private function bolehEdit(int $id): array
-    {
-        $upload = DmsRosterMasterUpload::findOrFail($id);
-        $assignment = $this->assignment();
-        abort_if($assignment === [], 403, 'Edit roster hanya untuk user yang di-assign ke perusahaan di menu Assign Role.');
-        abort_if($upload->status === DmsRosterMasterUpload::STATUS_REJECTED, 403, 'Roster yang ditolak tidak bisa diedit — upload ulang roster yang sudah diperbaiki.');
-        abort_unless(
-            DmsRosterAksesPerusahaan::terlihat($assignment, $this->akses->perusahaanUpload($upload->id)),
-            403,
-            'Roster ini bukan perusahaan yang di-assign ke akun Anda.',
-        );
-
-        return [$upload, DmsRosterAksesPerusahaan::ejaanCakupan($assignment)];
     }
 
     /**

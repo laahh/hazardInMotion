@@ -1,7 +1,6 @@
 {{--
-  Tabel riwayat upload Master Roster — dipakai halaman Upload, Approval, dan Edit Roster.
+  Tabel riwayat upload Master Roster — dipakai halaman Upload dan Approval.
   $daftar: LengthAwarePaginator<DmsRosterMasterUpload>
-  $aksi:   'lihat' (bawaan, ke Detail/Review) atau 'edit' (ke editor Edit Roster)
 --}}
 @include('dms.roster-master._ui-css')
 @php
@@ -41,15 +40,9 @@
           </td>
           <td class="text-nowrap">{{ $u->diupload_oleh }}<span class="d-block text-xs text-secondary-light">{{ $u->created_at?->format('d/m/Y H:i') }}</span></td>
           <td class="text-nowrap">
-            @if (($aksi ?? 'lihat') === 'edit')
-              <a href="{{ route('dms.master-roster.edit', $u->id) }}" class="btn btn-sm btn-primary-600 radius-8 d-inline-flex align-items-center gap-1">
-                <iconify-icon icon="solar:pen-new-square-linear"></iconify-icon>Edit
-              </a>
-            @else
-              <a href="{{ route('dms.master-roster.show', $u->id) }}" class="btn btn-sm btn-outline-primary-600 radius-8">
-                {{ $u->isPending() ? 'Review' : 'Lihat' }}
-              </a>
-            @endif
+            <a href="{{ route('dms.master-roster.show', $u->id) }}" class="btn btn-sm btn-outline-primary-600 radius-8">
+              {{ $u->isPending() ? 'Review' : 'Lihat' }}
+            </a>
           </td>
         </tr>
       @empty

@@ -78,6 +78,15 @@ class DmsRosterMasterEditServiceTest extends TestCase
         $this->assertSame([], $r['ops']);
     }
 
+    public function test_sid_angka_tetap_string(): void
+    {
+        $baris = ['10016025' => ['2026-11-01' => ['kode' => 'D1', 'masuk' => '06:00', 'keluar' => '18:00', 'menit' => 720, 'total' => 720]]];
+        $r = Edit::rencana($baris, [['sid' => '10016025', 'tanggal' => '2026-11-01', 'kode' => 'OFF']], [['sid' => '10016025', 'masuk' => '07:00', 'keluar' => '17:00', 'total' => '']], self::DARI, self::SAMPAI);
+
+        $this->assertSame('10016025', $r['ops'][0][1]);
+        $this->assertSame('10016025', $r['log'][0]['kode_sid']);
+    }
+
     public function test_jam_dari_form(): void
     {
         $this->assertNull(Edit::jamDariForm(['masuk' => '', 'keluar' => '', 'total' => '']));
