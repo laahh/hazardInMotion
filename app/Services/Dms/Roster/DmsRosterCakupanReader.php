@@ -75,7 +75,8 @@ final class DmsRosterCakupanReader
      * 'kurang' = karyawan aktif perusahaan itu yang SID-nya tidak ada di
      * roster mana pun (menunggu/disetujui). Butuh salinan lengkap karyawan
      * aktif; tanpa itu dipakai perkiraan aktif − karyawan di roster
-     * ('kurang_pasti' => false).
+     * ('kurang_pasti' => false). Status 'sudah' yang masih kurang menjadi
+     * 'sebagian' (roster disetujui, belum semua karyawan aktif).
      *
      * @return array<string, mixed>|null
      */
@@ -106,9 +107,15 @@ final class DmsRosterCakupanReader
                 $p['kurang_pasti'] = false;
             }
             $total += $p['kurang'];
+            // Sudah ada roster disetujui tapi belum semua karyawan aktif terjadwal.
+            if ($p['status'] === 'sudah' && $p['kurang'] > 0) {
+                $p['status'] = 'sebagian';
+            }
         }
         unset($p);
         $hasil['ringkas']['kurang'] = $total;
+        $hasil['ringkas']['pt']['sebagian'] = count(array_filter($hasil['perusahaan'], static fn (array $p): bool => $p['status'] === 'sebagian'));
+        $hasil['ringkas']['pt']['sudah'] -= $hasil['ringkas']['pt']['sebagian'];
 
         return $hasil;
     }

@@ -79,6 +79,8 @@
   .rov-cak-saring .is-sudah { background: #10B981; }
   .rov-cak-saring .is-menunggu { background: #F59E0B; }
   .rov-cak-saring .is-belum { background: #CBD5E1; }
+  .rov-cak-saring .is-sebagian { background: #3B82F6; }
+  .rov-cak-status.is-sebagian { background: #EFF6FF; color: #1D4ED8; }
 
   .rov-cak-alat { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px 16px; }
   .rov-cak-saring { display: inline-flex; flex-wrap: wrap; gap: 6px; }
@@ -328,7 +330,7 @@
     var kartu = document.getElementById('roCakupan');
     if (!kartu) { return; }
 
-    var STATUS = ['sudah', 'menunggu', 'belum'];
+    var STATUS = ['sudah', 'sebagian', 'menunggu', 'belum'];
     var tombol = kartu.querySelectorAll('[data-cak-status]');
     var cari = kartu.querySelector('[data-cak-cari]');
     var pilihPt = kartu.querySelector('[data-cak-pt]');
@@ -349,8 +351,8 @@
             badge: tr.querySelector('.rov-cak-status'),
         };
     });
-    var LABEL = { sudah: 'Sudah', menunggu: 'Menunggu approval', belum: 'Belum upload' };
-    var IKON = { sudah: 'solar:check-circle-bold', menunggu: 'solar:hourglass-bold', belum: 'solar:minus-circle-linear' };
+    var LABEL = { sudah: 'Sudah', sebagian: 'Sudah, belum semua karyawan', menunggu: 'Menunggu approval', belum: 'Belum upload' };
+    var IKON = { sudah: 'solar:check-circle-bold', sebagian: 'solar:pie-chart-2-bold', menunggu: 'solar:hourglass-bold', belum: 'solar:minus-circle-linear' };
 
     // Badge status baris = status efektif (status site itu bila satu site dipilih).
     function isiBadge(b, efektif, site) {
@@ -362,24 +364,24 @@
 
     function angka(n) { return n.toLocaleString('id-ID'); }
     function persen(n, t) { return t > 0 ? (n / t * 100).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'; }
-    function nol() { return { sudah: 0, menunggu: 0, belum: 0 }; }
+    function nol() { return { sudah: 0, sebagian: 0, menunggu: 0, belum: 0 }; }
 
     var nKurang = 0;
     function isiKpi(nPt, nSite, nKar) {
         var kpi = kartu.querySelector('[data-cak-kpi]');
-        var total = nPt.sudah + nPt.menunggu + nPt.belum;
+        var disetujui = nPt.sudah + nPt.sebagian;
+        var total = disetujui + nPt.menunggu + nPt.belum;
         var set = function (k, v) { kpi.querySelector('[data-cak-n="' + k + '"]').textContent = v; };
         set('total', angka(total));
         set('kar_total', angka(nKar.sudah + nKar.menunggu + nKar.belum));
-        set('upload', angka(nPt.sudah + nPt.menunggu));
-        set('sudah', angka(nPt.sudah));
+        set('upload', angka(disetujui + nPt.menunggu));
+        set('disetujui', angka(disetujui));
         set('menunggu', angka(nPt.menunggu));
         set('belum', angka(nPt.belum));
         set('kurang', angka(nKurang));
-        set('rate', persen(nPt.sudah, total));
-        ['sudah', 'menunggu'].forEach(function (s) {
-            kpi.querySelector('[data-cak-seg="' + s + '"]').style.width = (total > 0 ? nPt[s] / total * 100 : 0) + '%';
-        });
+        set('rate', persen(disetujui, total));
+        kpi.querySelector('[data-cak-seg="sudah"]').style.width = (total > 0 ? disetujui / total * 100 : 0) + '%';
+        kpi.querySelector('[data-cak-seg="menunggu"]').style.width = (total > 0 ? nPt.menunggu / total * 100 : 0) + '%';
     }
 
     function terapkan() {
@@ -415,7 +417,7 @@
 
         isiKpi(nPt, nSite, nKar);
         STATUS.forEach(function (s) { kartu.querySelector('[data-cak-hitung="' + s + '"]').textContent = angka(nPt[s]); });
-        kartu.querySelector('[data-cak-hitung=""]').textContent = angka(nPt.sudah + nPt.menunggu + nPt.belum);
+        kartu.querySelector('[data-cak-hitung=""]').textContent = angka(nPt.sudah + nPt.sebagian + nPt.menunggu + nPt.belum);
         kosong.classList.toggle('d-none', tampil > 0);
 
         var label = [];

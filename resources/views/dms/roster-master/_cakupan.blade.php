@@ -11,11 +11,11 @@
 @php
   $angka = static fn (int $n) => number_format($n, 0, ',', '.');
   $persen = static fn (int $n, int $t) => $t > 0 ? number_format($n / $t * 100, 1, ',', '.') : '0';
-  $label = ['sudah' => 'Sudah', 'menunggu' => 'Menunggu approval', 'belum' => 'Belum upload'];
-  $ikon = ['sudah' => 'solar:check-circle-bold', 'menunggu' => 'solar:hourglass-bold', 'belum' => 'solar:minus-circle-linear'];
+  $label = ['sudah' => 'Sudah', 'sebagian' => 'Sudah, belum semua karyawan', 'menunggu' => 'Menunggu approval', 'belum' => 'Belum upload'];
+  $ikon = ['sudah' => 'solar:check-circle-bold', 'sebagian' => 'solar:pie-chart-2-bold', 'menunggu' => 'solar:hourglass-bold', 'belum' => 'solar:minus-circle-linear'];
   $r = $cakupan['ringkas'];
   // Belum dulu (yang perlu dikejar), lalu karyawan terbanyak.
-  $urutan = ['belum' => 0, 'menunggu' => 1, 'sudah' => 2];
+  $urutan = ['belum' => 0, 'menunggu' => 1, 'sebagian' => 2, 'sudah' => 3];
   $daftar = $cakupan['perusahaan'];
   usort($daftar, static fn (array $a, array $b): int => [$urutan[$a['status']], -$a['karyawan'], $a['nama']] <=> [$urutan[$b['status']], -$b['karyawan'], $b['nama']]);
   // Pilihan dropdown: perusahaan urut nama, site urut nama dengan jumlah perusahaannya.
@@ -45,7 +45,9 @@
   {{-- KPI cakupan; angka diisi ulang oleh skrip saat filter perusahaan/site dipakai. --}}
   @php
     $pt = $r['pt'];
-    $diupload = $pt['sudah'] + $pt['menunggu'];
+    $pt += ['sebagian' => 0];
+    $disetujui = $pt['sudah'] + $pt['sebagian'];
+    $diupload = $disetujui + $pt['menunggu'];
   @endphp
   <div class="rov-kpi rov-cak-kpi" data-cak-kpi>
     <div class="rov-kpi__kartu">
@@ -61,7 +63,7 @@
       <div>
         <div class="rov-kpi__label">Sudah upload</div>
         <div class="rov-kpi__nilai" data-cak-n="upload">{{ $angka($diupload) }}</div>
-        <div class="rov-kpi__sub"><span data-cak-n="sudah">{{ $angka($pt['sudah']) }}</span> disetujui · <span data-cak-n="menunggu">{{ $angka($pt['menunggu']) }}</span> menunggu approval</div>
+        <div class="rov-kpi__sub"><span data-cak-n="disetujui">{{ $angka($disetujui) }}</span> disetujui · <span data-cak-n="menunggu">{{ $angka($pt['menunggu']) }}</span> menunggu approval</div>
       </div>
     </div>
     <div class="rov-kpi__kartu">
@@ -76,9 +78,9 @@
       <span class="rov-kpi__ikon rov-ikon-sky"><iconify-icon icon="solar:chart-2-bold"></iconify-icon></span>
       <div class="flex-grow-1">
         <div class="rov-kpi__label">Comply rate</div>
-        <div class="rov-kpi__nilai"><span data-cak-n="rate">{{ $persen($pt['sudah'], $pt['total']) }}</span>%</div>
+        <div class="rov-kpi__nilai"><span data-cak-n="rate">{{ $persen($disetujui, $pt['total']) }}</span>%</div>
         <div class="rov-cak-rate" role="img" aria-label="Comply rate" data-cak-rate>
-          <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $pt['total'] > 0 ? round($pt['sudah'] / $pt['total'] * 100, 2) : 0 }}%"></span>
+          <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $pt['total'] > 0 ? round($disetujui / $pt['total'] * 100, 2) : 0 }}%"></span>
           <span class="is-menunggu" data-cak-seg="menunggu" style="width: {{ $pt['total'] > 0 ? round($pt['menunggu'] / $pt['total'] * 100, 2) : 0 }}%"></span>
         </div>
         <div class="rov-kpi__sub">Disetujui ÷ total perusahaan</div>
@@ -89,7 +91,7 @@
   <div class="rov-cak-alat">
     <div class="rov-cak-saring" role="group" aria-label="Saring status">
       <button type="button" class="is-aktif" data-cak-status="">Semua <b data-cak-hitung="">{{ $angka($r['pt']['total']) }}</b></button>
-      @foreach (['belum', 'menunggu', 'sudah'] as $s)
+      @foreach (['belum', 'menunggu', 'sebagian', 'sudah'] as $s)
         <button type="button" data-cak-status="{{ $s }}"><i class="is-{{ $s }}"></i>{{ $label[$s] }} <b data-cak-hitung="{{ $s }}">{{ $angka($r['pt'][$s]) }}</b></button>
       @endforeach
     </div>
