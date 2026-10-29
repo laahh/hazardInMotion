@@ -72,6 +72,15 @@ return [
     | jabatan/status dikerjakan di PHP, dan 'regex_jabatan' di bawah adalah
     | badan regex PHP (dipakai preg_match), bukan operator ~ Postgres.
     */
+    /*
+    | Master Roster (Overview cakupan & template roster): jabatan yang tidak
+    | dihitung sebagai karyawan aktif. Dicocokkan tanpa membedakan huruf besar
+    | kecil ("VISITOR" = "Visitor"). Lihat DmsRosterKaryawanAktif.
+    */
+    'master' => [
+        'jabatan_dikecualikan' => ['VISITOR'],
+    ],
+
     'populasi' => [
         'view_karyawan' => 'bcsid.bep_vw_safety_karyawan_aktif',
         'regex_jabatan' => '(OPERATOR|DRIVER|MECHANIC|MEKANIK|WELDER|TYREMAN|FITTER)',

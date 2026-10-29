@@ -25,15 +25,20 @@ use Throwable;
  *
  * Bila OLAP tidak terjangkau, dipakai salinan lengkap terakhir yang diisi
  * dms:sync-roster-rfid (Tahap 8, segarkan()); alasan gagalnya di galatTerakhir().
+ *
+ * Jabatan di dms_roster.master.jabatan_dikecualikan (VISITOR) tidak dianggap
+ * karyawan aktif di mana pun kelas ini dibaca (jumlah per perusahaan/site,
+ * daftar per perusahaan, salinan lengkap).
  */
 final class DmsRosterKaryawanAktif
 {
     /** Salinan lengkap dari command terjadwal — cadangan. */
     private const KUNCI_LENGKAP = 'dms_roster:karyawan_aktif:v1';
 
-    private const KUNCI_PT = 'dms_roster:karyawan_aktif:pt:v2';
+    // v3 / v2: sejak VISITOR dikecualikan — cache lama masih memuatnya.
+    private const KUNCI_PT = 'dms_roster:karyawan_aktif:pt:v3';
 
-    private const KUNCI_PER_PT = 'dms_roster:karyawan_aktif:per_pt:v1:';
+    private const KUNCI_PER_PT = 'dms_roster:karyawan_aktif:per_pt:v2:';
 
     private const TTL_DETIK = 3600;
 
@@ -74,13 +79,15 @@ final class DmsRosterKaryawanAktif
         try {
             $rows = $this->olap->select(
                 "WITH k AS MATERIALIZED (
-                     SELECT trim(kode_sid) AS sid, trim(nama_perusahaan) AS perusahaan, coalesce(trim(site_dedicated), '') AS site
+                     SELECT trim(kode_sid) AS sid, trim(nama_perusahaan) AS perusahaan, coalesce(trim(site_dedicated), '') AS site,
+                            upper(trim(coalesce(jabatan_struktural, ''))) AS jabatan
                      FROM {$this->view()}
                  )
                  SELECT perusahaan, site, count(DISTINCT sid) AS jumlah
                  FROM k WHERE coalesce(perusahaan, '') <> '' AND coalesce(sid, '') <> ''
+                   AND jabatan <> ALL(?::text[])
                  GROUP BY perusahaan, site",
-                [],
+                [DmsRosterRfidReader::arrayPg(self::jabatanDikecualikan())],
                 $this->timeout(),
             );
             $hasil = self::kelompokkan(array_map(
@@ -134,8 +141,8 @@ final class DmsRosterKaryawanAktif
                             jabatan_struktural AS jabatan, site_dedicated AS site
                      FROM {$this->view()}
                  )
-                 SELECT * FROM k WHERE perusahaan = ?",
-                [trim($perusahaan)],
+                 SELECT * FROM k WHERE perusahaan = ? AND upper(trim(coalesce(jabatan, ''))) <> ALL(?::text[])",
+                [trim($perusahaan), DmsRosterRfidReader::arrayPg(self::jabatanDikecualikan())],
                 $this->timeout(),
             );
             $hasil = self::urutkan(self::rapikan($rows));
@@ -151,7 +158,10 @@ final class DmsRosterKaryawanAktif
             return null;
         }
 
-        return self::urutkan(array_values(array_filter($lengkap['karyawan'], static fn (array $k): bool => $k['perusahaan'] === trim($perusahaan))));
+        return self::urutkan(array_values(array_filter(
+            $lengkap['karyawan'],
+            static fn (array $k): bool => $k['perusahaan'] === trim($perusahaan) && ! self::dikecualikan($k['jabatan']),
+        )));
     }
 
     /**
@@ -170,7 +180,7 @@ final class DmsRosterKaryawanAktif
 
         $out = [];
         foreach ($lengkap['karyawan'] as $k) {
-            if ($k['perusahaan'] !== '') {
+            if ($k['perusahaan'] !== '' && ! self::dikecualikan($k['jabatan'])) {
                 $out[$k['perusahaan']][$k['site'] === '' ? '-' : $k['site']][] = $k['sid'];
             }
         }
@@ -269,7 +279,26 @@ final class DmsRosterKaryawanAktif
     }
 
     /**
-     * Baris view → daftar unik per SID (baris pertama menang). Murni.
+     * Jabatan yang tidak dihitung sebagai karyawan aktif (huruf besar).
+     *
+     * @return list<string>
+     */
+    public static function jabatanDikecualikan(): array
+    {
+        return array_values(array_unique(array_map(
+            static fn ($j): string => mb_strtoupper(trim((string) $j)),
+            (array) config('dms_roster.master.jabatan_dikecualikan', ['VISITOR']),
+        )));
+    }
+
+    public static function dikecualikan(string $jabatan): bool
+    {
+        return in_array(mb_strtoupper(trim($jabatan)), self::jabatanDikecualikan(), true);
+    }
+
+    /**
+     * Baris view → daftar unik per SID (baris pertama menang), tanpa jabatan
+     * yang dikecualikan (VISITOR). Murni.
      *
      * @param  list<object>  $rows
      * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>
@@ -279,7 +308,7 @@ final class DmsRosterKaryawanAktif
         $out = [];
         foreach ($rows as $r) {
             $sid = mb_strtoupper(trim((string) ($r->sid ?? '')));
-            if ($sid === '' || isset($out[$sid])) {
+            if ($sid === '' || isset($out[$sid]) || self::dikecualikan((string) ($r->jabatan ?? ''))) {
                 continue;
             }
             $out[$sid] = [
@@ -302,7 +331,7 @@ final class DmsRosterKaryawanAktif
     {
         $baris = [];
         foreach ($karyawan as $k) {
-            if ($k['perusahaan'] === '') {
+            if ($k['perusahaan'] === '' || self::dikecualikan($k['jabatan'])) {
                 continue;
             }
             $kunci = $k['perusahaan']."\0".$k['site'];
