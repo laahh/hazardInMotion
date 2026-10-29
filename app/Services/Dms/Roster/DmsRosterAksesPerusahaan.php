@@ -76,6 +76,47 @@ final class DmsRosterAksesPerusahaan
     }
 
     /**
+     * Perusahaan yang BENAR-BENAR di-assign ke user (tanpa aturan "admin
+     * tanpa assign = semua"). Dipakai Edit Roster: hanya user ber-assign yang
+     * boleh mengubah jadwal, dan hanya untuk perusahaannya.
+     *
+     * @return list<string>
+     */
+    public function assignment(?User $user): array
+    {
+        if ($user === null || ! $this->siap()) {
+            return [];
+        }
+
+        return DB::table(self::TABEL)->where('user_id', $user->getKey())->orderBy('perusahaan')->pluck('perusahaan')
+            ->map(static fn ($p): string => (string) $p)->all();
+    }
+
+    /**
+     * Ejaan perusahaan yang benar-benar ada di jadwal roster (termasuk
+     * singkatan) dan cocok dengan cakupan; daftar distinct-nya kecil.
+     *
+     * @param  list<string>  $cakupan
+     * @return list<string>
+     */
+    public static function ejaanCakupan(array $cakupan): array
+    {
+        if ($cakupan === []) {
+            return [];
+        }
+        $indeks = self::indeks($cakupan);
+
+        return DB::table('dms_roster_master_jadwal')
+            ->selectRaw('DISTINCT TRIM(perusahaan) AS pt')
+            ->whereNotNull('perusahaan')
+            ->pluck('pt')
+            ->map(static fn ($p): string => (string) $p)
+            ->filter(static fn (string $p): bool => $p !== '' && self::masuk($p, $indeks))
+            ->values()
+            ->all();
+    }
+
+    /**
      * Semua perusahaan upload masuk cakupan → boleh approve/tolak.
      *
      * @param  list<string>|null  $cakupan
@@ -151,17 +192,7 @@ final class DmsRosterAksesPerusahaan
         }
 
         $tanpa = in_array(DmsRosterMasterService::TANPA_PERUSAHAAN, $cakupan, true);
-        // Ejaan perusahaan yang benar-benar ada di jadwal (termasuk singkatan)
-        // yang cocok dengan cakupan; daftar distinct-nya kecil.
-        $indeks = self::indeks($cakupan);
-        $ejaan = DB::table('dms_roster_master_jadwal')
-            ->selectRaw('DISTINCT TRIM(perusahaan) AS pt')
-            ->whereNotNull('perusahaan')
-            ->pluck('pt')
-            ->map(static fn ($p): string => (string) $p)
-            ->filter(static fn (string $p): bool => $p !== '' && self::masuk($p, $indeks))
-            ->values()
-            ->all();
+        $ejaan = self::ejaanCakupan($cakupan);
 
         return $q->whereExists(static function ($sub) use ($ejaan, $tanpa): void {
             $sub->selectRaw('1')

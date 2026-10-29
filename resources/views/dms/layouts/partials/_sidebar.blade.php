@@ -10,6 +10,12 @@
   mengecualikan halaman treatment.
 --}}
 @php
+    try {
+        $bolehEditRoster = app(\App\Services\Dms\Roster\DmsRosterAksesPerusahaan::class)
+            ->assignment(auth()->user() instanceof \App\Models\User ? auth()->user() : null) !== [];
+    } catch (\Throwable) {
+        $bolehEditRoster = false;
+    }
     $groups = [
         [
             'key' => 'master-roster',
@@ -34,6 +40,13 @@
                     'url' => route('dms.master-roster.approval'),
                     'active' => request()->routeIs('dms.master-roster.approval') || request()->routeIs('dms.master-roster.show'),
                 ],
+                // Edit Roster hanya untuk user yang di-assign perusahaan (Assign Role).
+                ...($bolehEditRoster ? [[
+                    'label' => 'Edit Roster',
+                    'icon' => 'solar:pen-new-square-outline',
+                    'url' => route('dms.master-roster.edit.index'),
+                    'active' => request()->routeIs('dms.master-roster.edit*'),
+                ]] : []),
                 // Assign Role hanya untuk admin (halamannya juga 403 untuk non-admin).
                 ...(auth()->user()?->isAdmin() ? [[
                     'label' => 'Assign Role',

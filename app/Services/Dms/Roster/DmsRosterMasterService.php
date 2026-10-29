@@ -481,9 +481,13 @@ final class DmsRosterMasterService
      *
      * @return array{karyawan: list<array{sid:string,nama:?string,perusahaan:?string,jabatan:?string,site:?string,jadwal:array<string,array{kode:string,masuk:?string,keluar:?string,menit:?int}>}>, total:int}
      */
-    public function grid(DmsRosterMasterUpload $upload, int $halaman, int $perHalaman, string $cari = ''): array
+    public function grid(DmsRosterMasterUpload $upload, int $halaman, int $perHalaman, string $cari = '', ?array $ejaan = null): array
     {
         $dasar = DB::table('dms_roster_master_jadwal')->where('upload_id', $upload->id);
+        // Edit Roster: hanya baris perusahaan milik user (null = semua).
+        if ($ejaan !== null) {
+            $dasar->whereIn(DB::raw('TRIM(perusahaan)'), $ejaan === [] ? [''] : $ejaan);
+        }
         if ($cari !== '') {
             $mirip = '%'.addcslashes($cari, '%_\\').'%';
             $dasar->where(static fn ($q) => $q->where('kode_sid', 'like', $mirip)->orWhere('nama', 'like', $mirip));
@@ -495,6 +499,7 @@ final class DmsRosterMasterService
 
         $karyawan = [];
         foreach (DB::table('dms_roster_master_jadwal')->where('upload_id', $upload->id)->whereIn('kode_sid', $sids)
+            ->when($ejaan !== null, static fn ($q) => $q->whereIn(DB::raw('TRIM(perusahaan)'), $ejaan === [] ? [''] : $ejaan))
             ->orderBy('kode_sid')->orderBy('tanggal')->get() as $r) {
             $sid = (string) $r->kode_sid;
             $karyawan[$sid] ??= ['sid' => $sid, 'nama' => $r->nama, 'perusahaan' => $r->perusahaan, 'jabatan' => $r->jabatan, 'site' => $r->site, 'jadwal' => []];
