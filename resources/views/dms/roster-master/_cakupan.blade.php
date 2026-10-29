@@ -128,8 +128,8 @@
       </thead>
       <tbody>
         @foreach ($daftar as $p)
-          <tr data-cak-baris data-status="{{ $p['status'] }}" data-nama="{{ $p['nama'] }}" data-karyawan="{{ $p['karyawan'] }}" data-kurang="{{ $p['kurang'] ?? 0 }}"
-              data-site="{{ json_encode(array_map(static fn (array $s): array => [$s['nama'], $s['status'], $s['karyawan']], $p['site'])) }}"
+          <tr data-cak-baris data-status="{{ $p['status'] }}" data-nama="{{ $p['nama'] }}" data-karyawan="{{ $p['karyawan'] }}" data-kurang="{{ $p['kurang'] ?? 0 }}" data-kurang-pasti="{{ ($p['kurang_pasti'] ?? false) ? '1' : '' }}"
+              data-site="{{ json_encode(array_map(static fn (array $s): array => [$s['nama'], $s['status'], $s['karyawan'], $s['roster'] ?? 0, $s['kurang'] ?? 0], $p['site'])) }}"
               data-cari="{{ mb_strtolower($p['nama'].' '.implode(' ', $p['alias']).' '.implode(' ', array_column($p['site'], 'nama'))) }}">
             <td class="ps-24">
               <div class="ro-pt-nama">{{ $p['nama'] }}</div>
@@ -137,9 +137,9 @@
                 <div class="ro-pt-site" title="Ejaan di file roster yang dicocokkan ke perusahaan ini">di roster: {{ implode(', ', $p['alias']) }}</div>
               @endif
             </td>
-            <td class="text-end"><span class="rov-angka">{{ $angka($p['karyawan']) }}</span></td>
+            <td class="text-end" data-cak-sel="karyawan"><span class="rov-angka">{{ $angka($p['karyawan']) }}</span></td>
             @php $kurang = (int) ($p['kurang'] ?? 0); @endphp
-            <td class="text-end">
+            <td class="text-end" data-cak-sel="kurang">
               @if ($kurang === 0)
                 <span class="rov-cak-lengkap" title="Semua karyawan aktif sudah ada di roster"><iconify-icon icon="solar:check-circle-bold"></iconify-icon>0</span>
               @else
@@ -166,7 +166,7 @@
                 <div class="ro-pt-site mt-4" title="Site di roster yang tidak ada di data karyawan aktif perusahaan ini">+ di roster saja: {{ implode(', ', $p['site_lain']) }}</div>
               @endif
             </td>
-            <td class="text-end">
+            <td class="text-end" data-cak-sel="roster">
               @if ($p['karyawan_roster'] > 0)
                 <span class="rov-angka">{{ $angka($p['karyawan_roster']) }}</span>
               @else

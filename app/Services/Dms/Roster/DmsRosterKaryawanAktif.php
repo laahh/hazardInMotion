@@ -155,10 +155,11 @@ final class DmsRosterKaryawanAktif
     }
 
     /**
-     * SID karyawan aktif per perusahaan, dari salinan lengkap (Tahap 8) saja —
-     * tanpa query ke view. Null bila salinan belum ada.
+     * SID karyawan aktif per perusahaan per site, dari salinan lengkap
+     * (Tahap 8) saja — tanpa query ke view. Site kosong ditulis "-", sama
+     * dengan perusahaan(). Null bila salinan belum ada.
      *
-     * @return array<string, list<string>>|null nama perusahaan => SID (huruf besar)
+     * @return array<string, array<string, list<string>>>|null perusahaan => site => SID (huruf besar)
      */
     public function sidPerPerusahaan(): ?array
     {
@@ -170,7 +171,7 @@ final class DmsRosterKaryawanAktif
         $out = [];
         foreach ($lengkap['karyawan'] as $k) {
             if ($k['perusahaan'] !== '') {
-                $out[$k['perusahaan']][] = $k['sid'];
+                $out[$k['perusahaan']][$k['site'] === '' ? '-' : $k['site']][] = $k['sid'];
             }
         }
 

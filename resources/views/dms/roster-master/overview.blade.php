@@ -349,8 +349,28 @@
             chip: tr.querySelectorAll('[data-cak-chip]'),
             jumlah: tr.querySelector('[data-cak-jumlah]'),
             badge: tr.querySelector('.rov-cak-status'),
+            pasti: tr.dataset.kurangPasti === '1',
+            // Isi asli sel angka (semua site) — dikembalikan saat filter site dilepas.
+            sel: ['karyawan', 'kurang', 'roster'].reduce(function (o, k) {
+                var td = tr.querySelector('[data-cak-sel="' + k + '"]');
+                o[k] = { td: td, asli: td.innerHTML };
+                return o;
+            }, {}),
         };
     });
+
+    // Angka baris untuk satu site: karyawan aktif, kurang, dan di roster site itu.
+    function isiAngkaSite(b, s) {
+        if (!s) {
+            ['karyawan', 'kurang', 'roster'].forEach(function (k) { b.sel[k].td.innerHTML = b.sel[k].asli; });
+            return;
+        }
+        b.sel.karyawan.td.innerHTML = '<span class="rov-angka">' + angka(s[2]) + '</span>';
+        b.sel.kurang.td.innerHTML = s[4] === 0
+            ? '<span class="rov-cak-lengkap" title="Semua karyawan aktif site ini sudah ada di roster"><iconify-icon icon="solar:check-circle-bold"></iconify-icon>0</span>'
+            : '<span class="rov-cak-kurang-angka">' + (b.pasti ? '' : '≈ ') + angka(s[4]) + '</span>';
+        b.sel.roster.td.innerHTML = s[3] > 0 ? '<span class="rov-angka">' + angka(s[3]) + '</span>' : '<span class="ro-pt-site">—</span>';
+    }
     var LABEL = { sudah: 'Sudah', sebagian: 'Sudah, belum semua karyawan', menunggu: 'Menunggu approval', belum: 'Belum upload' };
     var IKON = { sudah: 'solar:check-circle-bold', sebagian: 'solar:pie-chart-2-bold', menunggu: 'solar:hourglass-bold', belum: 'solar:minus-circle-linear' };
 
@@ -393,15 +413,19 @@
 
         baris.forEach(function (b) {
             // Status & karyawan efektif: per site terpilih, atau per perusahaan.
-            var efektif = b.status, karyawan = b.karyawan, situs = b.site;
+            var efektif = b.status, karyawan = b.karyawan, situs = b.site, kurang = parseInt(b.tr.dataset.kurang, 10) || 0, siteIni = null;
             var dasar = (pt === '' || b.nama === pt) && (q === '' || b.cari.indexOf(q) !== -1);
             if (dasar && site !== '') {
                 var s = b.site.filter(function (x) { return x[0] === site; })[0];
                 dasar = !!s;
-                if (s) { efektif = s[1]; karyawan = s[2]; situs = [s]; }
+                if (s) {
+                    // Roster site ini disetujui tapi masih ada karyawan aktif site ini yang belum terjadwal.
+                    efektif = s[1] === 'sudah' && s[4] > 0 ? 'sebagian' : s[1];
+                    karyawan = s[2]; situs = [s]; kurang = s[4]; siteIni = s;
+                }
             }
             if (dasar) {
-                nKurang += parseInt(b.tr.dataset.kurang, 10) || 0;
+                nKurang += kurang;
                 nPt[efektif]++;
                 nKar[efektif] += karyawan;
                 situs.forEach(function (x) { nSite[x[1]]++; });
@@ -410,7 +434,7 @@
             b.tr.classList.toggle('d-none', !lihat);
             if (lihat) { tampil++; }
 
-            if (lihat) { isiBadge(b, efektif, site); }
+            if (lihat) { isiBadge(b, efektif, site); isiAngkaSite(b, siteIni); }
             b.chip.forEach(function (c) { c.classList.toggle('d-none', site !== '' && c.dataset.cakChip !== site); });
             if (b.jumlah) { b.jumlah.classList.toggle('d-none', site !== ''); }
         });

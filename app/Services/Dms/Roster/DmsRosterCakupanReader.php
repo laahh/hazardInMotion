@@ -99,13 +99,22 @@ final class DmsRosterCakupanReader
         $total = 0;
         foreach ($hasil['perusahaan'] as &$p) {
             $ada = $roster[$p['nama']] ?? [];
-            if ($sidAktif !== null && isset($sidAktif[$p['nama']])) {
-                $p['kurang'] = count(array_filter($sidAktif[$p['nama']], static fn (string $s): bool => ! isset($ada[$s])));
-                $p['kurang_pasti'] = true;
+            $belum = static fn (array $sids): int => count(array_filter($sids, static fn (string $s): bool => ! isset($ada[$s])));
+            $perSite = $sidAktif[$p['nama']] ?? null;
+            $p['kurang_pasti'] = $sidAktif !== null && $perSite !== null;
+            if ($p['kurang_pasti']) {
+                $p['kurang'] = $belum(array_merge(...array_values($perSite)));
             } else {
                 $p['kurang'] = max(0, $p['karyawan'] - $p['karyawan_roster']);
-                $p['kurang_pasti'] = false;
             }
+            // Per site: karyawan aktif site itu yang belum ada di roster mana pun
+            // (terjadwal di site lain tetap dianggap sudah di roster).
+            foreach ($p['site'] as &$s) {
+                $s['kurang'] = $p['kurang_pasti']
+                    ? $belum($perSite[$s['nama']] ?? [])
+                    : max(0, $s['karyawan'] - $s['roster']);
+            }
+            unset($s);
             $total += $p['kurang'];
             // Sudah ada roster disetujui tapi belum semua karyawan aktif terjadwal.
             if ($p['status'] === 'sudah' && $p['kurang'] > 0) {

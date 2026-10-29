@@ -36,7 +36,7 @@ class DmsRosterCakupanUploadTest extends TestCase
         $this->assertSame('sudah', $pt['PT Pamapersada Nusantara']['status']);
         $this->assertSame(['PT Pama Persada Nusantara'], $pt['PT Pamapersada Nusantara']['alias']);
         $this->assertSame(
-            [['nama' => 'BMO 2', 'karyawan' => 60, 'status' => 'sudah'], ['nama' => 'GMO', 'karyawan' => 35, 'status' => 'menunggu']],
+            [['nama' => 'BMO 2', 'karyawan' => 60, 'status' => 'sudah', 'roster' => 58], ['nama' => 'GMO', 'karyawan' => 35, 'status' => 'menunggu', 'roster' => 30]],
             $pt['PT Pamapersada Nusantara']['site'],
         );
         $this->assertSame(1, $pt['PT Pamapersada Nusantara']['site_sudah']);

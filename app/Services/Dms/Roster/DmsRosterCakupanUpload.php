@@ -64,6 +64,7 @@ final class DmsRosterCakupanUpload
                     'disetujui' => ($perSite[$k]['disetujui'] ?? false) || $r['disetujui'],
                     'menunggu' => ($perSite[$k]['menunggu'] ?? false) || $r['menunggu'],
                     'nama' => $perSite[$k]['nama'] ?? $r['site'],
+                    'roster' => ($perSite[$k]['roster'] ?? 0) + $r['karyawan'],
                 ];
             }
 
@@ -75,7 +76,13 @@ final class DmsRosterCakupanUpload
                 }
                 $k = self::kunciSite($s['nama']);
                 $dikenal[$k] = true;
-                $site[] = ['nama' => $s['nama'], 'karyawan' => $s['jumlah'], 'status' => self::status($perSite[$k] ?? null)];
+                $site[] = [
+                    'nama' => $s['nama'],
+                    'karyawan' => $s['jumlah'],
+                    'status' => self::status($perSite[$k] ?? null),
+                    // Karyawan di roster yang site-nya ini (untuk filter site).
+                    'roster' => $perSite[$k]['roster'] ?? 0,
+                ];
             }
             $siteLain = [];
             foreach ($perSite as $k => $s) {
