@@ -7,7 +7,9 @@ namespace App\Http\Controllers\DMS;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
+use App\Services\Dms\Roster\DmsRosterCakupanReader;
 use App\Services\Dms\Roster\DmsRosterMasterEditService;
+use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -17,10 +19,16 @@ use Throwable;
 
 /**
  * Master Roster → Edit Roster: satu tabel gabungan semua roster yang
- * di-upload untuk perusahaan user (bila dobel, upload terbaru yang dipakai),
- * per bulan, langsung bisa diedit. Hanya untuk user yang di-assign di menu
- * Assign Role, dan hanya karyawan perusahaannya — admin tanpa assignment pun
- * tidak bisa mengedit. Aturan gabungan & simpan: DmsRosterMasterEditService.
+ * di-upload (bila dobel, upload terbaru yang dipakai), per bulan.
+ *
+ * Semua user boleh MELIHAT seluruh perusahaan. MENGEDIT hanya baris karyawan
+ * perusahaan yang di-assign ke user itu di menu Assign Role — admin tanpa
+ * assignment pun hanya melihat. Simpan ditolak untuk SID di luar perusahaan
+ * user (DmsRosterMasterEditService::simpan). Filter perusahaan:
+ *   ''        bawaan: perusahaan saya (bila di-assign), kalau tidak semua
+ *   '__saya'  semua perusahaan yang di-assign ke user
+ *   '__semua' semua perusahaan
+ *   <nama>    satu perusahaan (nama resmi, ejaan di roster digabung)
  */
 class RosterMasterEditController extends Controller
 {
@@ -29,16 +37,30 @@ class RosterMasterEditController extends Controller
     public function __construct(
         private readonly DmsRosterMasterEditService $edit,
         private readonly DmsRosterAksesPerusahaan $akses,
+        private readonly DmsRosterMasterService $master,
+        private readonly DmsRosterCakupanReader $cakupan,
     ) {}
 
     public function index(Request $request): View
     {
         $assignment = $this->assignment();
+        $ejaanSaya = DmsRosterAksesPerusahaan::ejaanCakupan($assignment);
+        // Pilihan perusahaan: nama resmi + semua ejaannya di roster.
+        $daftarPt = array_map(
+            static fn (array $p): array => ['nama' => $p['perusahaan'], 'ejaan' => $p['ejaan']],
+            $this->master->perusahaanTerupload($this->cakupan->peta()),
+        );
+
         $pt = (string) $request->query('pt', '');
-        if (! in_array($pt, $assignment, true)) {
-            $pt = '';
+        $terpilih = collect($daftarPt)->firstWhere('nama', $pt);
+        if (($terpilih === null && ! in_array($pt, ['__semua', '__saya'], true)) || ($pt === '__saya' && $assignment === [])) {
+            $pt = $assignment === [] ? '__semua' : '__saya';
         }
-        $ejaan = $assignment === [] ? [] : DmsRosterAksesPerusahaan::ejaanCakupan($pt === '' ? $assignment : [$pt]);
+        $ejaan = match ($pt) {
+            '__semua' => null,
+            '__saya' => $ejaanSaya,
+            default => $terpilih['ejaan'],
+        };
         $rentang = $ejaan === [] ? null : $this->edit->rentang($ejaan);
 
         // Bulan bawaan: bulan ini bila ada di rentang roster, kalau tidak bulan terakhirnya.
@@ -58,6 +80,12 @@ class RosterMasterEditController extends Controller
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
         $grid = $bulan === null ? ['karyawan' => [], 'total' => 0]
             : $this->edit->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN);
+        // Baris yang boleh diedit: karyawan perusahaan yang di-assign ke user ini.
+        $milikSaya = array_fill_keys(array_map(static fn (string $e): string => mb_strtoupper(trim($e)), $ejaanSaya), true);
+        foreach ($grid['karyawan'] as &$k) {
+            $k['boleh'] = isset($milikSaya[mb_strtoupper(trim((string) $k['perusahaan']))]);
+        }
+        unset($k);
 
         $tanggal = [];
         if ($bulan !== null) {
@@ -69,6 +97,8 @@ class RosterMasterEditController extends Controller
         return view('dms.roster-master.edit', [
             'assignment' => $assignment,
             'pt' => $pt,
+            'daftarPt' => array_column($daftarPt, 'nama'),
+            'bolehEdit' => in_array(true, array_column($grid['karyawan'], 'boleh'), true),
             'rentang' => $rentang,
             'bulan' => $bulan,
             'grid' => $grid,

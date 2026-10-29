@@ -41,6 +41,8 @@
   .re-jam.re-total { width: 54px; }
   .re-jam.is-ubah { border-color: #4F46E5; box-shadow: 0 0 0 1px #4F46E5; }
   .re-pesan { margin: 0 24px 16px; }
+  .rm-xl tr.re-baca > .rm-c-id { background: #F8FAFC; color: #64748B; }
+  .rm-xl tr.re-baca .re-jam:disabled { background: #F1F5F9; color: #94A3B8; cursor: not-allowed; }
   .re-riwayat td, .re-riwayat th { font-size: 12.5px; }
   .re-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .re-filter .form-select { width: auto; min-width: 200px; }
@@ -83,12 +85,21 @@
 @include('dms.roster-master._alert')
 
 @if ($assignment === [])
-  <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8" role="alert">
-    Edit roster hanya untuk akun yang di-assign ke perusahaan. Minta admin menambahkan perusahaan Anda di menu <b>Assign Role</b>.
+  <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+    <b>Mode lihat saja.</b> Mengedit roster hanya untuk akun yang di-assign ke perusahaan di menu <b>Assign Role</b>.
   </div>
-@elseif ($bulan === null)
+@elseif (! $bolehEdit && $bulan !== null)
+  <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+    Anda hanya bisa mengedit karyawan perusahaan: <b>{{ implode(', ', $assignment) }}</b>. Perusahaan yang sedang ditampilkan hanya bisa dilihat.
+  </div>
+@endif
+
+@if ($bulan === null)
   <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8" role="alert">
-    Belum ada roster yang di-upload untuk <b>{{ $pt !== '' ? $pt : implode(', ', $assignment) }}</b>.
+    Belum ada roster yang di-upload untuk {{ $pt === '__saya' ? 'perusahaan Anda ('.implode(', ', $assignment).')' : ($pt === '__semua' ? 'perusahaan mana pun' : $pt) }}.
+    @if ($pt !== '__semua')
+      <a href="{{ route('dms.master-roster.edit.index', ['pt' => '__semua']) }}" class="fw-semibold">Lihat semua perusahaan</a> ·
+    @endif
     <a href="{{ route('dms.master-roster.upload') }}" class="fw-semibold">Upload roster</a>
   </div>
 @else
@@ -99,9 +110,12 @@
       <div class="rm-kepala-teks">
         <h6 class="text-lg fw-semibold mb-4">Jadwal per karyawan</h6>
         <p class="text-sm text-secondary-light mb-0">
-          Klik sel tanggal untuk memilih kode dari daftar. Untuk mengisi banyak sel sekaligus, pilih kode di palet lalu klik atau seret di sel (klik kode palet lagi untuk berhenti).
-          Jam Kerja Awal/Akhir/Total berlaku untuk semua hari kerja karyawan itu.
-          Sel berbingkai ungu = belum disimpan · garis putus oranye = dari roster yang masih menunggu approval.
+          @if ($bolehEdit)
+            Klik sel tanggal untuk memilih kode dari daftar. Untuk mengisi banyak sel sekaligus, pilih kode di palet lalu klik atau seret di sel (klik kode palet lagi untuk berhenti).
+            Jam Kerja Awal/Akhir/Total berlaku untuk semua hari kerja karyawan itu. Baris abu-abu = perusahaan lain, hanya bisa dilihat.
+            Sel berbingkai ungu = belum disimpan ·
+          @endif
+          Garis putus oranye = dari roster yang masih menunggu approval.
         </p>
       </div>
       <form method="GET" action="{{ route('dms.master-roster.edit.index', absolute: false) }}" class="re-filter">
@@ -112,19 +126,21 @@
           <a class="btn btn-sm btn-outline-secondary radius-8 {{ $sesudah->gt($rentang['sampai']->startOfMonth()) ? 'disabled' : '' }}" href="{{ $urlBulan($sesudah) }}" aria-label="Bulan berikutnya">&rsaquo;</a>
         </div>
         <input type="hidden" name="bulan" value="{{ $bulan->format('Y-m') }}">
-        @if (count($assignment) > 1)
-          <select name="pt" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filter perusahaan">
-            <option value="">Semua perusahaan saya</option>
-            @foreach ($assignment as $nama)
-              <option value="{{ $nama }}" @selected($pt === $nama)>{{ $nama }}</option>
-            @endforeach
-          </select>
-        @endif
+        <select name="pt" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filter perusahaan">
+          @if ($assignment !== [])
+            <option value="__saya" @selected($pt === '__saya')>Perusahaan saya ({{ count($assignment) }})</option>
+          @endif
+          <option value="__semua" @selected($pt === '__semua')>Semua perusahaan</option>
+          @foreach ($daftarPt as $nama)
+            <option value="{{ $nama }}" @selected($pt === $nama)>{{ $nama }}</option>
+          @endforeach
+        </select>
         <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm rm-cari" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
       </form>
     </div>
   </div>
 
+  @if ($bolehEdit)
   <div class="re-alat">
     <div class="re-palet" role="toolbar" aria-label="Pilih kode">
       <span class="re-palet__label">Kode:</span>
@@ -142,6 +158,7 @@
     </div>
   </div>
   <div class="re-pesan d-none mt-16" data-re-pesan role="status" aria-live="polite"></div>
+  @endif
 
   <div class="card-body rm-isi">
     <div class="table-responsive rm-gulir">
@@ -174,7 +191,8 @@
         </thead>
         <tbody>
           @forelse ($grid['karyawan'] as $k)
-            <tr data-re-sid="{{ $k['sid'] }}">
+            @php $boleh = (bool) ($k['boleh'] ?? false); @endphp
+            <tr data-re-sid="{{ $k['sid'] }}" class="{{ $boleh ? '' : 're-baca' }}">
               <td class="rm-c-id rm-c-no rm-s1 rm-hp-sembunyi">{{ $nomorAwal + $loop->iteration }}</td>
               <td class="rm-c-id rm-c-sid rm-s2 rm-hp-sembunyi">{{ $k['sid'] }}</td>
               <td class="rm-c-id rm-c-nama rm-s3">
@@ -184,17 +202,24 @@
               <td class="rm-c-id rm-opsional"><span class="rm-potong rm-w-pt" title="{{ $k['perusahaan'] }}">{{ $k['perusahaan'] ?? '—' }}</span></td>
               <td class="rm-c-id rm-opsional"><span class="rm-potong rm-w-jab" title="{{ $k['jabatan'] }}">{{ $k['jabatan'] ?? '—' }}</span></td>
               <td class="rm-c-id rm-opsional">{{ $k['site'] ?? '—' }}</td>
-              <td class="rm-c-id rm-c-jam"><input type="time" class="re-jam" data-re-jam="masuk" value="{{ $k['jam_awal'] ?? '' }}" data-asli="{{ $k['jam_awal'] ?? '' }}" aria-label="Jam kerja awal {{ $k['nama'] }}"></td>
-              <td class="rm-c-id rm-c-jam"><input type="time" class="re-jam" data-re-jam="keluar" value="{{ $k['jam_akhir'] ?? '' }}" data-asli="{{ $k['jam_akhir'] ?? '' }}" aria-label="Jam kerja akhir {{ $k['nama'] }}"></td>
+              <td class="rm-c-id rm-c-jam"><input type="time" class="re-jam" data-re-jam="masuk" @disabled(! $boleh) value="{{ $k['jam_awal'] ?? '' }}" data-asli="{{ $k['jam_awal'] ?? '' }}" aria-label="Jam kerja awal {{ $k['nama'] }}"></td>
+              <td class="rm-c-id rm-c-jam"><input type="time" class="re-jam" data-re-jam="keluar" @disabled(! $boleh) value="{{ $k['jam_akhir'] ?? '' }}" data-asli="{{ $k['jam_akhir'] ?? '' }}" aria-label="Jam kerja akhir {{ $k['nama'] }}"></td>
               @php $total = $k['jam_awal'] ? $jamTeks($k['jam_total']) : ''; @endphp
-              <td class="rm-c-id rm-c-jam"><input type="text" inputmode="decimal" class="re-jam re-total" data-re-jam="total" value="{{ $total }}" data-asli="{{ $total }}" placeholder="{{ $k['jam_awal'] ? '' : $jamTeks($k['jam_total']) }}" aria-label="Total jam kerja {{ $k['nama'] }}" title="Jam kerja efektif per hari; kosong = Akhir − Awal"></td>
+              <td class="rm-c-id rm-c-jam"><input type="text" inputmode="decimal" class="re-jam re-total" data-re-jam="total" @disabled(! $boleh) value="{{ $total }}" data-asli="{{ $total }}" placeholder="{{ $k['jam_awal'] ? '' : $jamTeks($k['jam_total']) }}" aria-label="Total jam kerja {{ $k['nama'] }}" title="Jam kerja efektif per hari; kosong = Akhir − Awal"></td>
               @foreach ($tanggal as $t)
                 @php
                   $h = $k['jadwal'][$t->toDateString()] ?? null;
                   $kode = $h['kode'] ?? '';
                   $tunggu = (bool) ($h['menunggu'] ?? false);
                 @endphp
-                <td class="rm-c-kode"><button type="button" class="rm-sel {{ $kode === '' ? 'rm-kosong' : (isset(\App\Services\Dms\Roster\DmsRosterMasterService::KODE[$kode]) ? 'rm-'.$kode : 'rm-lain') }}{{ $tunggu ? ' rm-menunggu' : '' }}" data-tgl="{{ $t->toDateString() }}" data-asli="{{ $kode }}" data-tunggu="{{ $tunggu ? '1' : '' }}" title="{{ $t->format('d/m/Y') }}{{ $tunggu ? ' · roster menunggu approval' : '' }}">{{ $kode }}</button></td>
+                @php $kelasSel = 'rm-sel '.($kode === '' ? 'rm-kosong' : (isset(\App\Services\Dms\Roster\DmsRosterMasterService::KODE[$kode]) ? 'rm-'.$kode : 'rm-lain')).($tunggu ? ' rm-menunggu' : ''); @endphp
+                <td class="rm-c-kode">
+                  @if ($boleh)
+                    <button type="button" class="{{ $kelasSel }}" data-tgl="{{ $t->toDateString() }}" data-asli="{{ $kode }}" data-tunggu="{{ $tunggu ? '1' : '' }}" title="{{ $t->format('d/m/Y') }}{{ $tunggu ? ' · roster menunggu approval' : '' }}">{{ $kode }}</button>
+                  @else
+                    <div class="{{ $kelasSel }}" title="{{ $t->format('d/m/Y') }}{{ $tunggu ? ' · roster menunggu approval' : '' }} · hanya bisa dilihat">{{ $kode }}</div>
+                  @endif
+                </td>
               @endforeach
             </tr>
           @empty
@@ -258,7 +283,8 @@
     'use strict';
 
     var editor = document.getElementById('reEditor');
-    if (!editor) { return; }
+    // Mode lihat saja: tanpa palet & tombol simpan, tidak ada yang perlu dipasang.
+    if (!editor || !editor.querySelector('[data-re-simpan]')) { return; }
 
     var KODE = @json(array_keys(\App\Services\Dms\Roster\DmsRosterMasterService::KODE));
     var tabel = editor.querySelector('[data-re-tabel]');

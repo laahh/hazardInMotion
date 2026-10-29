@@ -47,23 +47,23 @@ final class DmsRosterMasterEditService
      * Baris jadwal perusahaan user dari upload yang tidak ditolak, upload
      * terbaru dulu — baris pertama per (SID, tanggal) adalah pemenangnya.
      *
-     * @param  list<string>  $ejaan
+     * @param  list<string>|null  $ejaan  null = semua perusahaan (hanya untuk dilihat)
      */
-    private function dasar(array $ejaan): Builder
+    private function dasar(?array $ejaan): Builder
     {
         return DB::table('dms_roster_master_jadwal as j')
             ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
             ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
-            ->whereIn(DB::raw('TRIM(j.perusahaan)'), $ejaan === [] ? [''] : $ejaan);
+            ->when($ejaan !== null, static fn ($q) => $q->whereIn(DB::raw('TRIM(j.perusahaan)'), $ejaan === [] ? [''] : $ejaan));
     }
 
     /**
      * Rentang tanggal seluruh jadwal gabungan (untuk navigasi bulan).
      *
-     * @param  list<string>  $ejaan
+     * @param  list<string>|null  $ejaan  null = semua perusahaan
      * @return array{dari:CarbonImmutable,sampai:CarbonImmutable}|null
      */
-    public function rentang(array $ejaan): ?array
+    public function rentang(?array $ejaan): ?array
     {
         $r = $this->dasar($ejaan)->selectRaw('MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai')->first();
 
@@ -75,10 +75,10 @@ final class DmsRosterMasterEditService
      * Satu halaman tabel gabungan untuk rentang tanggal: karyawan yang punya
      * jadwal di rentang itu, urut SID.
      *
-     * @param  list<string>  $ejaan
+     * @param  list<string>|null  $ejaan  null = semua perusahaan
      * @return array{karyawan: list<array<string, mixed>>, total: int}
      */
-    public function grid(array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman): array
+    public function grid(?array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman): array
     {
         $rentang = $this->dasar($ejaan)->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()]);
         if ($cari !== '') {
@@ -242,24 +242,24 @@ final class DmsRosterMasterEditService
     }
 
     /**
-     * Riwayat edit terbaru untuk roster perusahaan user (kosong bila tabel
+     * Riwayat edit terbaru untuk roster perusahaan yang dilihat (kosong bila tabel
      * log belum dimigrasi).
      *
-     * @param  list<string>  $ejaan
+     * @param  list<string>|null  $ejaan  null = semua perusahaan
      * @return list<object>
      */
-    public function riwayat(array $ejaan, int $batas = 30): array
+    public function riwayat(?array $ejaan, int $batas = 30): array
     {
         if (! self::adaLog() || $ejaan === []) {
             return [];
         }
-        $upload = DB::table('dms_roster_master_jadwal')
+        $upload = $ejaan === null ? null : DB::table('dms_roster_master_jadwal')
             ->whereIn(DB::raw('TRIM(perusahaan)'), $ejaan)
             ->distinct()->pluck('upload_id')->all();
 
         return DB::table(self::TABEL_LOG.' as l')
             ->leftJoin('dms_roster_master_upload as u', 'u.id', '=', 'l.upload_id')
-            ->whereIn('l.upload_id', $upload === [] ? [0] : $upload)
+            ->when($upload !== null, static fn ($q) => $q->whereIn('l.upload_id', $upload === [] ? [0] : $upload))
             ->orderByDesc('l.id')->limit($batas)
             ->get(['l.*', 'u.judul'])->all();
     }
