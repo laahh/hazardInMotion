@@ -39,12 +39,33 @@ class OhsDivisiPobServiceTest extends TestCase
         $this->assertSame(['a1', 'C3'], array_column($hasil['checkins'], 'sid'));
         $this->assertSame('SDCER', $hasil['checkins'][1]['department']);
         $this->assertSame(2, $hasil['summary']['checkin_total']);
-        $this->assertSame([2, 0], array_column($hasil['summary']['checkin_by_site'], 'count'));
+        $this->assertSame(['BMO' => 2, 'LMO' => 0, 'HO' => 0], array_column($hasil['summary']['checkin_by_site'], 'count', 'code'));
         $this->assertSame(2, $hasil['reconcile']['rfid_count']);
         $this->assertSame(2, $hasil['reconcile']['gap_rfid_minus_besigma_count']);
         // GPS/Besigma tetap utuh.
         $this->assertSame(7, $hasil['summary']['in']);
         $this->assertSame([['sid' => 'Z9']], $hasil['people']);
+    }
+
+    public function test_checkin_gate_ho_masuk_site_ho(): void
+    {
+        $data = [
+            'checkins' => [
+                ['sid' => 'A1', 'gate' => 'HO - POS DEPAN HO', 'site_code' => null],
+                ['sid' => 'B2', 'gate' => 'Pos Office PMO', 'site_code' => null],
+                ['sid' => 'C3', 'gate' => 'Pos Gabungan LMO', 'site_code' => 'LMO'],
+            ],
+            'summary' => ['checkin_by_site' => [['code' => 'LMO', 'label' => 'Lati', 'count' => 9]]],
+            'reconcile' => [],
+        ];
+
+        $hasil = OhsDivisiPobService::saring($data, ['A1' => 'SDCER', 'B2' => 'SDCER', 'C3' => 'SDCER']);
+        $site = array_column($hasil['summary']['checkin_by_site'], 'count', 'code');
+
+        $this->assertSame(['HO', null, 'LMO'], array_column($hasil['checkins'], 'site_code'));
+        $this->assertSame(['LMO' => 1, 'HO' => 1], $site);
+        $this->assertTrue(OhsDivisiPobService::gateHo('HO - POS DEPAN HO'));
+        $this->assertFalse(OhsDivisiPobService::gateHo('Pos Office PHOTO'));
     }
 
     public function test_daftar_departemen_tidak_terbaca_berarti_nol_bukan_semua(): void

@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Isc\IscBasemapProxyService;
 use App\Services\Isc\IscBoundaryMapService;
 use App\Services\MonitoringOhsDivisi\OhsDivisiPobService;
+use App\Services\MonitoringOhsDivisi\OhsDivisiStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -24,6 +25,7 @@ final class MonitoringOhsDivisiController extends Controller
     public function __construct(
         private readonly IscBoundaryMapService $boundaries,
         private readonly OhsDivisiPobService $pob,
+        private readonly OhsDivisiStatusService $status,
     ) {}
 
     public function index(): View
@@ -58,7 +60,17 @@ final class MonitoringOhsDivisiController extends Controller
             'wmsUrl' => '',
             'wmsLayer' => IscBasemapProxyService::WMS_LAYER,
             'wmtsProxyUrl' => $this->wmtsProxyUrl(),
+            'statusUrl' => route('monitoring-ohs-divisi.status'),
         ]);
+    }
+
+    /**
+     * Status RFID terkini karyawan departemen OHS Divisi (onsite / sudah
+     * check-out / belum check-in) beserta lama di site.
+     */
+    public function status(): JsonResponse
+    {
+        return response()->json(['success' => true] + $this->status->status());
     }
 
     /**

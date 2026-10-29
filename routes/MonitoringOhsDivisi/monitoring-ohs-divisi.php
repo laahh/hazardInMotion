@@ -12,4 +12,6 @@ Route::prefix('monitoring-ohs-divisi')
         Route::get('/', [MonitoringOhsDivisiController::class, 'index'])->name('index');
         // POB seperti /isc/maps/pob, Check-in RFID hanya departemen OHS Divisi.
         Route::get('/pob', [MonitoringOhsDivisiController::class, 'pob'])->name('pob');
+        // Status RFID per karyawan OHS: onsite / sudah check-out / belum check-in.
+        Route::get('/status', [MonitoringOhsDivisiController::class, 'status'])->name('status');
     });

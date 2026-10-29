@@ -3,6 +3,48 @@
 
 @section('title', 'Monitoring OHS Divisi')
 
+@section('css')
+<style>
+  /* Kartu & modal Status karyawan OHS (Monitoring OHS Divisi). */
+  .ohs-st-ico { background: rgba(22, 163, 74, .12); color: #15803d; }
+  .ohs-st-ico svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .gm-hud-metric.is-onsite { background: rgba(22, 163, 74, .12); color: #15803d; }
+  .ohs-st-tombol { width: 100%; margin-top: 10px; border: 0; border-radius: 12px; padding: 10px 12px; background: var(--gm-blue); color: #fff; font: 600 13px var(--gm-font); cursor: pointer; }
+  .ohs-st-tombol:hover { background: var(--gm-blue-h); }
+  .ohs-st-tombol:focus-visible, .ohs-st-tab button:focus-visible, .ohs-st-x:focus-visible { outline: 2px solid var(--gm-blue); outline-offset: 2px; }
+  .ohs-st-modal { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; padding: 16px; }
+  .ohs-st-modal[hidden] { display: none; }
+  .ohs-st-backdrop { position: absolute; inset: 0; background: rgba(32, 33, 36, .45); }
+  .ohs-st-dialog { position: relative; width: min(1100px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: #fff; border-radius: 16px; box-shadow: var(--gm-shadow-lg); font-family: var(--gm-font); color: var(--gm-ink); }
+  .ohs-st-kepala { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 22px 10px; }
+  .ohs-st-kepala h2 { margin: 0; font-size: 17px; }
+  .ohs-st-kepala p { margin: 4px 0 0; font-size: 12px; color: var(--gm-muted); }
+  .ohs-st-x { border: 0; background: #f1f3f4; width: 34px; height: 34px; border-radius: 50%; font-size: 20px; line-height: 1; cursor: pointer; color: var(--gm-ink); }
+  .ohs-st-alat { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 22px 12px; border-bottom: 1px solid var(--gm-line); }
+  .ohs-st-tab { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ohs-st-tab button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--gm-line); background: #fff; border-radius: 999px; padding: 5px 12px; font: 600 12px var(--gm-font); color: var(--gm-muted); cursor: pointer; }
+  .ohs-st-tab button b { color: var(--gm-ink); font-variant-numeric: tabular-nums; }
+  .ohs-st-tab button.is-on { border-color: var(--gm-blue); background: rgba(26, 115, 232, .08); color: var(--gm-blue); }
+  .ohs-st-tab i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .ohs-st-tab i.is-onsite { background: #16a34a; } .ohs-st-tab i.is-keluar { background: #2563eb; } .ohs-st-tab i.is-belum { background: #94a3b8; }
+  #ohs-st-cari { width: 260px; max-width: 100%; border: 1px solid var(--gm-line); border-radius: 10px; padding: 7px 12px; font: 13px var(--gm-font); }
+  .ohs-st-gulir { overflow: auto; }
+  .ohs-st-tabel { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ohs-st-tabel th { position: sticky; top: 0; background: #f8f9fa; text-align: left; font-size: 11px; font-weight: 600; color: var(--gm-muted); padding: 9px 12px; border-bottom: 1px solid var(--gm-line); white-space: nowrap; }
+  .ohs-st-tabel td { padding: 9px 12px; border-bottom: 1px solid #f1f3f4; vertical-align: top; }
+  .ohs-st-tabel th:first-child, .ohs-st-tabel td:first-child { padding-left: 22px; }
+  .ohs-st-nama { font-weight: 600; }
+  .ohs-st-kecil { display: block; font-size: 11px; color: var(--gm-muted); margin-top: 2px; }
+  .ohs-st-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .ohs-st-pill.is-onsite { background: rgba(22, 163, 74, .12); color: #15803d; }
+  .ohs-st-pill.is-keluar { background: rgba(37, 99, 235, .1); color: #1d4ed8; }
+  .ohs-st-pill.is-belum { background: #f1f5f9; color: #475569; }
+  .ohs-st-durasi { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ohs-st-kosong { text-align: center; color: var(--gm-muted); padding: 28px 12px !important; }
+  @media (max-width: 640px) { .ohs-st-tabel th:nth-child(2), .ohs-st-tabel td:nth-child(2) { display: none; } }
+</style>
+@endsection
+
 @section('content')
 <section class="gm-shell is-panel-closed">
   <div
@@ -89,6 +131,7 @@
           <button type="button" class="gm-hud-site" data-hud-site="GMO">GMO <b id="hud-site-GMO">0</b></button>
           <button type="button" class="gm-hud-site" data-hud-site="SMO">SMO <b id="hud-site-SMO">0</b></button>
           <button type="button" class="gm-hud-site" data-hud-site="PUNAN">PUNAN <b id="hud-site-PUNAN">0</b></button>
+          <button type="button" class="gm-hud-site" data-hud-site="HO" title="Head Office">HO <b id="hud-site-HO">0</b></button>
         </div>
         <p class="gm-hud-foot">Per site hari ini <button type="button" class="gm-hud-link" data-roster="checkin">Lihat daftar</button></p>
       </article>
@@ -148,49 +191,36 @@
         <p class="gm-hud-foot">Tidak diketahui <b id="hud-pob-unknown">–</b> <button type="button" class="gm-hud-link" data-roster="unknown">Lihat daftar</button> · <button type="button" class="gm-hud-link" data-roster="in">Lihat di boundary</button></p>
       </article>
 
-      <article class="gm-hud-card is-rfid" id="gm-rfid-card" role="button" tabindex="0" aria-label="Buka daftar Besigma dan RFID">
+      {{-- Status RFID karyawan departemen OHS Divisi (menggantikan kartu Besigma × RFID). --}}
+      <article class="gm-hud-card ohs-st-card" id="ohs-status-card" data-status-url="{{ $statusUrl }}">
         <div class="gm-hud-card-top">
-          <span class="gm-hud-ico rfid" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 7-7"/><path d="M8 12a4 4 0 0 1 4-4"/><circle cx="12" cy="12" r="1.4"/><path d="M19 12a7 7 0 0 1-7 7"/><path d="M16 12a4 4 0 0 1-4 4"/></svg>
+          <span class="gm-hud-ico ohs-st-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 11l2 2 3.5-3.5"/></svg>
           </span>
           <div class="gm-hud-head">
-            <p class="gm-hud-kicker">Besigma × RFID</p>
-            <p class="gm-hud-value"><b id="hud-both">–</b> <small>keduanya cocok</small></p>
+            <p class="gm-hud-kicker">Status karyawan OHS</p>
+            <p class="gm-hud-value"><b id="ohs-st-onsite-besar">–</b> <small>masih onsite</small></p>
           </div>
-          <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
-            <path d="M2 18 C12 18 16 8 26 11 C36 14 38 22 48 16 C58 10 62 6 72 12 C80 16 82 20 86 14" />
-          </svg>
         </div>
         <div class="gm-hud-split is-3">
-          <button type="button" class="gm-hud-metric is-ever" data-roster="current">
-            <span>GPS aktif</span>
-            <strong id="hud-current">–</strong>
-            <small>GPS aktif hari ini</small>
+          <button type="button" class="gm-hud-metric ohs-st-metric is-onsite" data-ohs-buka="onsite">
+            <span>Onsite</span>
+            <strong id="ohs-st-onsite">–</strong>
+            <small>Check-in, belum keluar</small>
           </button>
-          <button type="button" class="gm-hud-metric is-tag" data-roster="checkin">
-            <span>Check-in RFID</span>
-            <strong id="hud-rfid">–</strong>
-            <small>Sudah tap onsite</small>
+          <button type="button" class="gm-hud-metric is-tag" data-ohs-buka="keluar">
+            <span>Sudah keluar</span>
+            <strong id="ohs-st-keluar">–</strong>
+            <small>Sudah check-out</small>
           </button>
-          <button type="button" class="gm-hud-metric is-live" data-roster="both">
-            <span>Keduanya cocok</span>
-            <strong id="hud-both-metric">–</strong>
-            <small>RFID + Besigma</small>
-          </button>
-        </div>
-        <div class="gm-hud-split">
-          <button type="button" class="gm-hud-metric is-gap" data-roster="both">
-            <span>Aktif dari Install</span>
-            <strong id="hud-install-ratio">–</strong>
-            <small>Pakai Besigma &amp; check-in, dari total install</small>
-          </button>
-          <button type="button" class="gm-hud-metric is-miss" data-roster="gap_rb">
-            <span>RFID tanpa GPS</span>
-            <strong id="hud-gap-rb">–</strong>
-            <small>Sudah tap, tidak di Besigma</small>
+          <button type="button" class="gm-hud-metric is-ever" data-ohs-buka="belum">
+            <span>Belum masuk</span>
+            <strong id="ohs-st-belum">–</strong>
+            <small>Tidak ada check-in</small>
           </button>
         </div>
-        <p class="gm-hud-foot">Klik angka untuk daftar · Excel di panel daftar</p>
+        <button type="button" class="ohs-st-tombol" data-ohs-buka="">Lihat status karyawan</button>
+        <p class="gm-hud-foot" id="ohs-st-foot">Memuat status RFID…</p>
       </article>
       </div>
 
@@ -694,6 +724,36 @@
     </div>
   </div>
 </section>
+{{-- Modal daftar status karyawan OHS Divisi. --}}
+<div class="ohs-st-modal" id="ohs-status-modal" hidden>
+  <div class="ohs-st-backdrop" data-ohs-tutup></div>
+  <div class="ohs-st-dialog" role="dialog" aria-modal="true" aria-labelledby="ohs-st-judul">
+    <div class="ohs-st-kepala">
+      <div>
+        <h2 id="ohs-st-judul">Status karyawan OHS Divisi</h2>
+        <p id="ohs-st-sub">Check-in tanpa check-out sesudahnya dianggap masih onsite.</p>
+      </div>
+      <button type="button" class="ohs-st-x" data-ohs-tutup aria-label="Tutup">&times;</button>
+    </div>
+    <div class="ohs-st-alat">
+      <div class="ohs-st-tab" role="tablist">
+        <button type="button" data-ohs-tab="" class="is-on">Semua <b id="ohs-st-n-semua">0</b></button>
+        <button type="button" data-ohs-tab="onsite"><i class="is-onsite"></i>Onsite <b id="ohs-st-n-onsite">0</b></button>
+        <button type="button" data-ohs-tab="keluar"><i class="is-keluar"></i>Sudah keluar <b id="ohs-st-n-keluar">0</b></button>
+        <button type="button" data-ohs-tab="belum"><i class="is-belum"></i>Belum masuk <b id="ohs-st-n-belum">0</b></button>
+      </div>
+      <input type="search" id="ohs-st-cari" placeholder="Cari nama / SID / departemen" aria-label="Cari karyawan">
+    </div>
+    <div class="ohs-st-gulir">
+      <table class="ohs-st-tabel">
+        <thead>
+          <tr><th>Karyawan</th><th>Departemen</th><th>Status</th><th>Check-in</th><th>Check-out</th><th>Lama di site</th></tr>
+        </thead>
+        <tbody id="ohs-st-baris"><tr><td colspan="6" class="ohs-st-kosong">Memuat…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 @endsection
 
 @section('scripts')
@@ -701,4 +761,104 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="{{ $iupkAsset }}"></script>
 <script src="{{ asset('isc-assets/isc-hotspot-map.js') }}?v={{ filemtime(public_path('isc-assets/isc-hotspot-map.js')) }}"></script>
+<script>
+// Status RFID karyawan OHS Divisi: angka di kartu (diperbarui tiap menit) dan
+// modal daftar nama — onsite / sudah keluar / belum masuk, dengan lama di site.
+(function () {
+  'use strict';
+
+  var kartu = document.getElementById('ohs-status-card');
+  var modal = document.getElementById('ohs-status-modal');
+  if (!kartu || !modal) { return; }
+
+  var LABEL = { onsite: 'Onsite', keluar: 'Sudah keluar', belum: 'Belum masuk' };
+  var data = null, tab = '', kembali = null;
+  var tbody = document.getElementById('ohs-st-baris');
+  var cari = document.getElementById('ohs-st-cari');
+
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function set(id, v) { var el = document.getElementById(id); if (el) { el.textContent = v; } }
+  function durasi(m) {
+    if (m == null) { return '–'; }
+    var h = Math.floor(m / 1440), j = Math.floor((m % 1440) / 60), n = m % 60;
+    return (h ? h + 'h ' : '') + (h || j ? j + 'j ' : '') + n + 'm';
+  }
+  function waktu(t) {
+    if (!t) { return '–'; }
+    var hari = t.slice(0, 10), jam = t.slice(11, 16);
+    var kini = data && data.diambil ? data.diambil.slice(0, 10) : '';
+    return hari === kini ? jam : hari.slice(8, 10) + '/' + hari.slice(5, 7) + ' ' + jam;
+  }
+
+  function isiKartu() {
+    var r = data.ringkas;
+    set('ohs-st-onsite-besar', r.onsite); set('ohs-st-onsite', r.onsite); set('ohs-st-keluar', r.keluar); set('ohs-st-belum', r.belum);
+    set('ohs-st-n-semua', r.onsite + r.keluar + r.belum); set('ohs-st-n-onsite', r.onsite); set('ohs-st-n-keluar', r.keluar); set('ohs-st-n-belum', r.belum);
+    var foot = !data.tersedia ? 'Data RFID tidak terjangkau saat ini.'
+      : !data.karyawan_terbaca ? 'Daftar karyawan departemen tidak terbaca.'
+      : (r.onsite + r.keluar + r.belum) + ' karyawan OHS · diperbarui ' + data.diambil.slice(11, 16);
+    set('ohs-st-foot', foot);
+  }
+
+  function render() {
+    if (!data) { return; }
+    var q = cari.value.trim().toLowerCase();
+    var baris = data.baris.filter(function (b) {
+      return (tab === '' || b.status === tab)
+        && (q === '' || (b.nama + ' ' + b.sid + ' ' + b.departemen + ' ' + b.jabatan).toLowerCase().indexOf(q) !== -1);
+    });
+    if (!baris.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="ohs-st-kosong">Tidak ada karyawan yang cocok.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = baris.map(function (b) {
+      return '<tr>'
+        + '<td><span class="ohs-st-nama">' + esc(b.nama || b.sid) + '</span><span class="ohs-st-kecil">' + esc(b.sid) + (b.jabatan ? ' · ' + esc(b.jabatan) : '') + '</span></td>'
+        + '<td>' + esc(b.departemen) + '<span class="ohs-st-kecil">' + esc(b.perusahaan) + '</span></td>'
+        + '<td><span class="ohs-st-pill is-' + b.status + '">' + LABEL[b.status] + '</span></td>'
+        + '<td>' + waktu(b.masuk) + (b.gate_masuk ? '<span class="ohs-st-kecil">' + esc(b.gate_masuk) + '</span>' : '') + '</td>'
+        + '<td>' + waktu(b.keluar) + (b.gate_keluar ? '<span class="ohs-st-kecil">' + esc(b.gate_keluar) + '</span>' : '') + '</td>'
+        + '<td><span class="ohs-st-durasi">' + durasi(b.durasi_menit) + '</span>'
+        + (b.status === 'onsite' ? '<span class="ohs-st-kecil">sejak check-in</span>' : '') + '</td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  function muat() {
+    fetch(kartu.dataset.statusUrl, { headers: { Accept: 'application/json' } })
+      .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+      .then(function (d) { data = d; isiKartu(); render(); })
+      .catch(function () { set('ohs-st-foot', 'Gagal memuat status RFID — dicoba lagi otomatis.'); });
+  }
+
+  function pilihTab(t) {
+    tab = t;
+    modal.querySelectorAll('[data-ohs-tab]').forEach(function (b) { b.classList.toggle('is-on', b.dataset.ohsTab === t); });
+    render();
+  }
+  function buka(t) {
+    kembali = document.activeElement;
+    modal.hidden = false;
+    pilihTab(t);
+    cari.focus();
+  }
+  function tutup() {
+    modal.hidden = true;
+    if (kembali) { kembali.focus(); }
+  }
+
+  kartu.querySelectorAll('[data-ohs-buka]').forEach(function (b) {
+    b.addEventListener('click', function () { buka(b.dataset.ohsBuka); });
+  });
+  modal.querySelectorAll('[data-ohs-tab]').forEach(function (b) {
+    b.addEventListener('click', function () { pilihTab(b.dataset.ohsTab); });
+  });
+  modal.querySelectorAll('[data-ohs-tutup]').forEach(function (b) { b.addEventListener('click', tutup); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) { tutup(); } });
+  cari.addEventListener('input', render);
+
+  muat();
+  setInterval(muat, 60000);
+})();
+</script>
 @endsection

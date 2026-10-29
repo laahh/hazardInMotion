@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * SID karyawan aktif dari departemen OHS Divisi (config monitoring_ohs_divisi.
+ * Karyawan aktif dari departemen OHS Divisi (config monitoring_ohs_divisi.
  * departemen), dibaca dari view karyawan aktif kolom `departement`.
  *
  * View itu tidak boleh diberi WHERE langsung (lihat DmsRosterKaryawanAktif),
@@ -21,11 +21,11 @@ use Throwable;
  */
 final class OhsDivisiKaryawanReader
 {
-    private const KUNCI = 'monitoring_ohs_divisi:sid_departemen:v1:';
+    private const KUNCI = 'monitoring_ohs_divisi:karyawan:v2:';
 
-    private const KUNCI_TERAKHIR = 'monitoring_ohs_divisi:sid_departemen:terakhir:v1:';
+    private const KUNCI_TERAKHIR = 'monitoring_ohs_divisi:karyawan:terakhir:v2:';
 
-    private const KUNCI_GAGAL = 'monitoring_ohs_divisi:sid_departemen:gagal:v1';
+    private const KUNCI_GAGAL = 'monitoring_ohs_divisi:karyawan:gagal:v2';
 
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
@@ -35,6 +35,17 @@ final class OhsDivisiKaryawanReader
      * @return array<string, string>|null SID (huruf besar) => departemen; null bila belum pernah terbaca
      */
     public function sidDepartemen(): ?array
+    {
+        $karyawan = $this->karyawan();
+
+        return $karyawan === null ? null : array_map(static fn (array $k): string => $k['departemen'], $karyawan);
+    }
+
+    /**
+     * @return array<string, array{sid:string,nama:string,departemen:string,perusahaan:string,jabatan:string}>|null
+     *         kunci = SID huruf besar; null bila belum pernah terbaca
+     */
+    public function karyawan(): ?array
     {
         $departemen = self::departemen();
         $sufiks = md5(implode('|', $departemen));
@@ -48,16 +59,17 @@ final class OhsDivisiKaryawanReader
         try {
             $rows = $this->olap->select(
                 "WITH k AS MATERIALIZED (
-                     SELECT upper(trim(kode_sid)) AS sid, trim(departement) AS dep
+                     SELECT upper(trim(kode_sid)) AS sid, trim(departement) AS dep, trim(nama) AS nama,
+                            trim(nama_perusahaan) AS pt, trim(jabatan_struktural) AS jabatan
                      FROM {$this->view()}
                  )
-                 SELECT DISTINCT ON (sid) sid, dep FROM k
+                 SELECT DISTINCT ON (sid) sid, dep, nama, pt, jabatan FROM k
                  WHERE coalesce(sid, '') <> '' AND upper(coalesce(dep, '')) = ANY(?::text[])",
                 [DmsRosterRfidReader::arrayPg($departemen)],
                 (int) config('monitoring_ohs_divisi.timeout_ms', 20000),
             );
         } catch (Throwable $e) {
-            Log::warning('Monitoring OHS Divisi: SID departemen gagal dibaca: '.$e->getMessage());
+            Log::warning('Monitoring OHS Divisi: karyawan departemen gagal dibaca: '.$e->getMessage());
             Cache::put(self::KUNCI_GAGAL, true, 60);
 
             return Cache::get(self::KUNCI_TERAKHIR.$sufiks);
@@ -65,7 +77,13 @@ final class OhsDivisiKaryawanReader
 
         $hasil = [];
         foreach ($rows as $r) {
-            $hasil[(string) $r->sid] = (string) $r->dep;
+            $hasil[(string) $r->sid] = [
+                'sid' => (string) $r->sid,
+                'nama' => (string) ($r->nama ?? ''),
+                'departemen' => (string) $r->dep,
+                'perusahaan' => (string) ($r->pt ?? ''),
+                'jabatan' => (string) ($r->jabatan ?? ''),
+            ];
         }
         Cache::put(self::KUNCI.$sufiks, $hasil, (int) config('monitoring_ohs_divisi.cache_detik', 21600));
         Cache::put(self::KUNCI_TERAKHIR.$sufiks, $hasil, now()->addDays(7));

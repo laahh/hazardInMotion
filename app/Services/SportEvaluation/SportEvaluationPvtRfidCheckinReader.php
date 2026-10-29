@@ -371,6 +371,38 @@ final class SportEvaluationPvtRfidCheckinReader
     }
 
     /**
+     * Tap lolos TERAKHIR per SID dalam rentang waktu [$start, $end) — check-in
+     * atau check-out. Rentang boleh lintas hari (mis. sejak kemarin pagi,
+     * supaya shift malam yang check-in kemarin sore tetap terbaca).
+     *
+     * @param  list<string>  $sids
+     * @return array<string, array{
+     *     kode_sid: string, checked_in_at: string, nama_karyawan: string,
+     *     perusahaan: string, gate: string, jenis_checkinout: string, status_lolos: string
+     * }>  kunci = SID huruf besar
+     */
+    public function lastPassedForSidsBetween(string $start, string $end, array $sids, bool $checkout = false): array
+    {
+        if (! $this->isUp() || $sids === []) {
+            return [];
+        }
+
+        $upper = array_values(array_unique(array_filter(array_map(
+            static fn ($s): string => mb_strtoupper(trim((string) $s)),
+            $sids,
+        ))));
+
+        $merged = [];
+        foreach (array_chunk($upper, self::SID_CHUNK) as $chunk) {
+            foreach ($this->queryChunk($start, $end, $chunk, true, $checkout ? self::CHECKOUT_TYPES : self::CHECKIN_TYPES, 'DESC') as $row) {
+                $merged[mb_strtoupper($row['kode_sid'])] ??= $row;
+            }
+        }
+
+        return $merged;
+    }
+
+    /**
      * @param  list<string>  $upperSids
      * @param  list<string>  $types  daftar sinonim jenis_checkinout (IN atau OUT)
      * @return list<array{
