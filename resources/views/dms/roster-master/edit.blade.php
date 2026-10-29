@@ -25,6 +25,18 @@
   .rm-xl button.rm-sel:focus-visible { outline: 2px solid #4F46E5; outline-offset: 1px; }
   .rm-xl .is-ubah { box-shadow: inset 0 0 0 2px #4F46E5 !important; }
   .re-melukis, .re-melukis * { user-select: none; }
+  /* Dropdown kode saat sel diklik (tanpa kuas aktif). */
+  .re-menu { position: fixed; z-index: 1080; width: 300px; background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, .18); padding: 10px; }
+  .re-menu__judul { font-size: 12px; font-weight: 600; color: #0F172A; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+  .re-menu__judul span { color: #64748B; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .re-menu__grup { font-size: 10.5px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 4px; }
+  .re-menu__isi { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .re-menu__opsi { border: 1.5px solid transparent; border-radius: 6px; height: 26px; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0; }
+  .re-menu__opsi:hover { filter: brightness(.95); }
+  .re-menu__opsi:focus-visible { outline: 2px solid #4F46E5; outline-offset: 1px; }
+  .re-menu__opsi.is-kini { border-color: #0F172A; }
+  .re-menu__kosong { grid-column: span 3; background: #fff; border: 1.5px dashed #CBD5E1; color: #64748B; }
+  .rm-xl button.rm-sel.is-buka { box-shadow: inset 0 0 0 2px #0F172A !important; }
   .re-jam { width: 74px; height: 26px; padding: 0 4px; font-size: 12px; border: 1px solid #E2E8F0; border-radius: 6px; text-align: center; background: #fff; }
   .re-jam.re-total { width: 54px; }
   .re-jam.is-ubah { border-color: #4F46E5; box-shadow: 0 0 0 1px #4F46E5; }
@@ -87,7 +99,8 @@
       <div class="rm-kepala-teks">
         <h6 class="text-lg fw-semibold mb-4">Jadwal per karyawan</h6>
         <p class="text-sm text-secondary-light mb-0">
-          Pilih kode di palet, lalu klik atau seret di sel tanggal. Jam Kerja Awal/Akhir/Total berlaku untuk semua hari kerja karyawan itu.
+          Klik sel tanggal untuk memilih kode dari daftar. Untuk mengisi banyak sel sekaligus, pilih kode di palet lalu klik atau seret di sel (klik kode palet lagi untuk berhenti).
+          Jam Kerja Awal/Akhir/Total berlaku untuk semua hari kerja karyawan itu.
           Sel berbingkai ungu = belum disimpan · garis putus oranye = dari roster yang masih menunggu approval.
         </p>
       </div>
@@ -297,6 +310,7 @@
         b.addEventListener('click', function () {
             var sama = kuas === b.dataset.kuas;
             kuas = sama ? null : b.dataset.kuas;
+            tutupMenu(false);
             editor.querySelectorAll('[data-kuas]').forEach(function (x) { x.classList.toggle('is-aktif', !sama && x === b); });
         });
     });
@@ -316,16 +330,93 @@
         if (melukis && sel) { isi(sel, kuas); }
     });
     document.addEventListener('mouseup', function () { melukis = false; document.body.classList.remove('re-melukis'); });
-    // Keyboard & sentuh: klik biasa.
+    // Klik sel: tanpa kuas → dropdown daftar kode; dengan kuas → keyboard (klik mouse sudah di mousedown).
     tabel.addEventListener('click', function (e) {
         var sel = selDari(e.target);
         if (!sel) { return; }
         if (kuas === null) {
-            tampilPesan('Pilih kode di palet dulu, lalu klik sel yang ingin diubah.', 'galat');
+            e.stopPropagation();
+            bukaMenu(sel);
             return;
         }
         if (e.detail === 0) { isi(sel, kuas); }
     });
+
+    // ── Dropdown kode per sel ──
+    var GRUP = [
+        ['Day', KODE.filter(function (k) { return k.charAt(0) === 'D'; })],
+        ['Night', KODE.filter(function (k) { return k.charAt(0) === 'N'; })],
+        ['Lainnya', KODE.filter(function (k) { return !/^[DN]\d/.test(k); })],
+    ];
+    var NAMA_KODE = @json(array_map(static fn (array $k): string => $k[0], \App\Services\Dms\Roster\DmsRosterMasterService::KODE));
+    var menu = document.createElement('div');
+    menu.className = 're-menu d-none';
+    menu.setAttribute('role', 'dialog');
+    menu.setAttribute('aria-label', 'Pilih kode roster');
+    document.body.appendChild(menu);
+    var selMenu = null;
+
+    function bukaMenu(sel) {
+        tutupMenu(false);
+        selMenu = sel;
+        sel.classList.add('is-buka');
+        var kini = sel.textContent.trim();
+        var tr = sel.closest('tr');
+        var nama = tr.querySelector('.rm-nama') ? tr.querySelector('.rm-nama').textContent.trim() : tr.dataset.reSid;
+        var tgl = new Date(sel.dataset.tgl + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short' });
+        var html = '<div class="re-menu__judul">' + esc(tgl) + '<span>' + esc(nama) + '</span></div>';
+        GRUP.forEach(function (g) {
+            html += '<div class="re-menu__grup">' + g[0] + '</div><div class="re-menu__isi">';
+            g[1].forEach(function (k) {
+                html += '<button type="button" class="re-menu__opsi ' + kelasKode(k) + (k === kini ? ' is-kini' : '') + '" data-opsi="' + k + '" title="' + esc(NAMA_KODE[k] || k) + '">' + k + '</button>';
+            });
+            if (g[0] === 'Lainnya') {
+                html += '<button type="button" class="re-menu__opsi re-menu__kosong' + (kini === '' ? ' is-kini' : '') + '" data-opsi="" title="Tidak dijadwalkan">Kosongkan</button>';
+            }
+            html += '</div>';
+        });
+        menu.innerHTML = html;
+        menu.classList.remove('d-none');
+
+        // Di bawah sel; balik ke atas bila tidak muat, dan tetap di dalam layar.
+        var r = sel.getBoundingClientRect();
+        var t = menu.offsetHeight, l = menu.offsetWidth;
+        var atas = r.bottom + 6 + t > window.innerHeight && r.top - 6 - t > 0 ? r.top - 6 - t : r.bottom + 6;
+        menu.style.top = Math.max(8, Math.min(atas, window.innerHeight - t - 8)) + 'px';
+        menu.style.left = Math.max(8, Math.min(r.left + r.width / 2 - l / 2, window.innerWidth - l - 8)) + 'px';
+        (menu.querySelector('.is-kini') || menu.querySelector('[data-opsi]')).focus();
+    }
+
+    function tutupMenu(kembalikanFokus) {
+        if (!selMenu) { return; }
+        menu.classList.add('d-none');
+        selMenu.classList.remove('is-buka');
+        if (kembalikanFokus) { selMenu.focus(); }
+        selMenu = null;
+    }
+
+    menu.addEventListener('click', function (e) {
+        var opsi = e.target.closest('[data-opsi]');
+        if (!opsi || !selMenu) { return; }
+        var sel = selMenu;
+        isi(sel, opsi.dataset.opsi);
+        tutupMenu(true);
+    });
+    // Panah: pindah antar opsi (7 per baris); Esc: tutup.
+    menu.addEventListener('keydown', function (e) {
+        var opsi = Array.prototype.slice.call(menu.querySelectorAll('[data-opsi]'));
+        var i = opsi.indexOf(document.activeElement);
+        var geser = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 7, ArrowUp: -7 }[e.key];
+        if (e.key === 'Escape') { e.preventDefault(); tutupMenu(true); return; }
+        if (geser && i !== -1) {
+            e.preventDefault();
+            opsi[Math.max(0, Math.min(opsi.length - 1, i + geser))].focus();
+        }
+    });
+    document.addEventListener('click', function (e) { if (selMenu && !menu.contains(e.target)) { tutupMenu(false); } });
+    window.addEventListener('resize', function () { tutupMenu(false); });
+    editor.querySelector('.rm-gulir').addEventListener('scroll', function () { tutupMenu(false); });
+    window.addEventListener('scroll', function () { tutupMenu(false); }, true);
     tabel.addEventListener('touchstart', function (e) {
         var sel = selDari(e.target);
         if (sel && kuas !== null) { isi(sel, kuas); }

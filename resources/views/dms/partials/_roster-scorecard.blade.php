@@ -1,5 +1,5 @@
 {{--
-  Scorecard per Karyawan & Timeline — kolom dan tata letaknya mengikuti tabel
+  Detail per Karyawan & Timeline — kolom dan tata letaknya mengikuti tabel
   scorecard aplikasi referensi, temanya disesuaikan dengan halaman ini (terang).
 
   Barisnya LIVE: $karyawanLive berisi satu halaman hasil evaluasi rule engine
@@ -305,7 +305,7 @@
 
       <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-16">
         <div>
-          <h6 class="mb-1 fw-bold text-lg ro-card__title" data-ro-judul>Scorecard per Karyawan &amp; Timeline</h6>
+          <h6 class="mb-1 fw-bold text-lg ro-card__title" data-ro-judul>Detail per Karyawan &amp; Timeline</h6>
           <span class="ro-card__subtitle" data-ro-subjudul>Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode</span>
         </div>
 
@@ -1319,7 +1319,7 @@
     var subjudul = document.querySelector('[data-ro-subjudul]');
     var url = @json(route('dms.roster-compliance.long-shift', absolute: false));
     var teks = {
-        roster: ['Scorecard per Karyawan &amp; Timeline', 'Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode'],
+        roster: ['Detail per Karyawan &amp; Timeline', 'Ringkasan roster tiap karyawan beserta pola kerja hariannya sepanjang periode'],
         'long-shift': ['Long Shift Pengawas', 'Pengawas yang melanjutkan kerja ke shift berikutnya, dari rangkaian tap RFID IN–OUT'],
         plan: ['Plan Kesesuaian Roster', 'Plan roster yang disetujui disambung tap RFID, dinilai dengan aturan > 70 hari on-site dan > 13 hari kerja berturut-turut']
     };
