@@ -364,13 +364,11 @@
         var total = nPt.sudah + nPt.menunggu + nPt.belum;
         var set = function (k, v) { kpi.querySelector('[data-cak-n="' + k + '"]').textContent = v; };
         set('total', angka(total));
-        set('site_total', angka(nSite.sudah + nSite.menunggu + nSite.belum));
         set('kar_total', angka(nKar.sudah + nKar.menunggu + nKar.belum));
         set('upload', angka(nPt.sudah + nPt.menunggu));
         set('sudah', angka(nPt.sudah));
         set('menunggu', angka(nPt.menunggu));
         set('belum', angka(nPt.belum));
-        set('site_belum', angka(nSite.belum));
         set('rate', persen(nPt.sudah, total));
         ['sudah', 'menunggu'].forEach(function (s) {
             kpi.querySelector('[data-cak-seg="' + s + '"]').style.width = (total > 0 ? nPt[s] / total * 100 : 0) + '%';

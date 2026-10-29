@@ -88,6 +88,45 @@ class DmsRosterCakupanUploadTest extends TestCase
         $this->assertSame('belum', $pt['PT Sumber Mitra Binungan']['status']);
     }
 
+    public function test_singkatan_ambigu_diputuskan_lewat_sid_atau_tidak_dicocokkan(): void
+    {
+        $aktif = [
+            ['nama' => 'PT Sambakungan Makmur Bersama', 'jumlah' => 60, 'site' => []],
+            ['nama' => 'PT Sumber Mitra Binungan', 'jumlah' => 9, 'site' => []],
+        ];
+        $upload = [$this->up('PT SMB', '', true, false, 56)];
+
+        // Tanpa data SID: tidak dihitung ganda ke dua perusahaan.
+        $tanpa = Cakupan::bandingkan($aktif, $upload);
+        $this->assertSame(['PT SMB'], $tanpa['tidak_cocok']);
+        $this->assertSame(0, $tanpa['ringkas']['pt']['sudah']);
+
+        // 54 dari 56 SID milik Sambakungan Makmur Bersama.
+        $suara = ['PT SMB' => ['PT Sambakungan Makmur Bersama' => 54, 'PT Sambakungan Samburakat Maluang Lati' => 1]];
+        $pt = array_column(Cakupan::bandingkan($aktif, $upload, $suara)['perusahaan'], null, 'nama');
+        $this->assertSame('sudah', $pt['PT Sambakungan Makmur Bersama']['status']);
+        $this->assertSame('belum', $pt['PT Sumber Mitra Binungan']['status']);
+        $this->assertSame(['PT SMB' => 'PT Sambakungan Makmur Bersama'], Cakupan::peta(array_column($aktif, 'nama'), ['PT SMB'], $suara));
+    }
+
+    public function test_salah_ketik_kecil_dicocokkan_bila_kandidatnya_jelas(): void
+    {
+        $aktif = ['PT Eurotruk Trasindo', 'PT Eka Dharma Jaya Sakti', 'PT Sambakungan Samburakat Maluang Lati', 'PT AKR Corporindo'];
+
+        $this->assertSame([
+            'PT Eurotruk Transindo' => 'PT Eurotruk Trasindo',
+            'PT EKA DHARMA JAYA SAKIT' => 'PT Eka Dharma Jaya Sakti',
+            'PT Sembakungan Samburakat Maluang Lati' => 'PT Sambakungan Samburakat Maluang Lati',
+            'PT Lain Sama Sekali' => 'PT Lain Sama Sekali',
+        ], Cakupan::peta($aktif, ['PT Eurotruk Transindo', 'PT EKA DHARMA JAYA SAKIT', 'PT Sembakungan Samburakat Maluang Lati', 'PT Lain Sama Sekali']));
+    }
+
+    public function test_salah_ketik_ambigu_tidak_dicocokkan(): void
+    {
+        // "PT Karya Abadi" berselisih 1 huruf dari dua nama sekaligus.
+        $this->assertSame(['PT Karya Abadi' => 'PT Karya Abadi'], Cakupan::peta(['PT Karya Abadu', 'PT Karya Abado'], ['PT Karya Abadi']));
+    }
+
     /**
      * @return array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}
      */

@@ -533,27 +533,47 @@ final class DmsRosterMasterService
      * Overview Roster: perusahaan yang sudah meng-upload roster (yang ditolak
      * tidak dihitung) beserta ringkasannya.
      *
-     * @return list<array{perusahaan:string,karyawan:int,upload:int,disetujui:int,menunggu:int,dari:string,sampai:string,terakhir:?string,site:list<string>}>
+     * $peta (ejaan di roster => nama resmi, DmsRosterCakupanUpload::peta())
+     * menggabungkan ejaan berbeda untuk perusahaan yang sama menjadi satu
+     * baris; karyawan tetap dihitung unik per SID. 'ejaan' = ejaan asli yang
+     * tergabung (dipakai jadwalBerlaku()).
+     *
+     * @param  array<string, string>  $peta
+     * @return list<array{perusahaan:string,ejaan:list<string>,karyawan:int,upload:int,disetujui:int,menunggu:int,dari:string,sampai:string,terakhir:?string,site:list<string>}>
      */
-    public function perusahaanTerupload(): array
+    public function perusahaanTerupload(array $peta = []): array
     {
-        $pt = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
+        $asli = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
+        $pt = $asli;
+        $ikat = [];
+        // Ejaan yang sama dengan nama resmi ikut dipetakan: MySQL mengelompokkan
+        // tanpa membedakan huruf ("PT SUCOFINDO" = "PT Sucofindo"), dan yang
+        // tampil harus nama resmi, bukan ejaan pertama yang ditemui.
+        if ($peta !== []) {
+            $pt = 'CASE '.$asli.str_repeat(' WHEN ? THEN ?', count($peta)).' ELSE '.$asli.' END';
+            foreach ($peta as $ejaan => $resmi) {
+                array_push($ikat, (string) $ejaan, $resmi);
+            }
+        }
 
         return DB::table('dms_roster_master_jadwal as j')
             ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
             ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
             ->selectRaw("{$pt} AS perusahaan,
+                GROUP_CONCAT(DISTINCT {$asli} SEPARATOR '|') AS ejaan,
                 COUNT(DISTINCT j.kode_sid) AS karyawan,
                 COUNT(DISTINCT j.upload_id) AS upload,
                 COUNT(DISTINCT CASE WHEN u.status = 'APPROVED' THEN j.upload_id END) AS disetujui,
                 COUNT(DISTINCT CASE WHEN u.status = 'PENDING' THEN j.upload_id END) AS menunggu,
                 MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai, MAX(u.created_at) AS terakhir,
-                GROUP_CONCAT(DISTINCT NULLIF(TRIM(j.site), '') ORDER BY j.site SEPARATOR '|') AS site")
-            ->groupByRaw($pt)
-            ->orderByRaw($pt)
+                GROUP_CONCAT(DISTINCT NULLIF(TRIM(j.site), '') ORDER BY j.site SEPARATOR '|') AS site", $ikat)
+            // Posisi kolom: ekspresi CASE berplaceholder tidak dianggap sama oleh ONLY_FULL_GROUP_BY.
+            ->groupByRaw('1')
+            ->orderByRaw('1')
             ->get()
             ->map(static fn (object $r): array => [
                 'perusahaan' => (string) $r->perusahaan,
+                'ejaan' => explode('|', (string) $r->ejaan),
                 'karyawan' => (int) $r->karyawan,
                 'upload' => (int) $r->upload,
                 'disetujui' => (int) $r->disetujui,
@@ -603,6 +623,7 @@ final class DmsRosterMasterService
      * dari roster yang masih menunggu ditandai 'menunggu' => true dan hanya
      * mengisi tanggal yang belum punya jadwal disetujui.
      *
+     * @param  list<string>  $ejaan  semua ejaan nama perusahaan di roster; kosong = $perusahaan saja.
      * @return array{karyawan: list<array<string, mixed>>, total: int}
      */
     public function jadwalBerlaku(
@@ -614,6 +635,7 @@ final class DmsRosterMasterService
         bool $termasukMenunggu = false,
         int $halaman = 1,
         int $perHalaman = 25,
+        array $ejaan = [],
     ): array {
         $status = $termasukMenunggu
             ? [DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_PENDING]
@@ -625,6 +647,9 @@ final class DmsRosterMasterService
             ->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()]);
         if ($perusahaan === self::TANPA_PERUSAHAAN) {
             $dasar->where(static fn ($q) => $q->whereNull('j.perusahaan')->orWhereRaw("TRIM(j.perusahaan) = ''"));
+        } elseif ($ejaan !== []) {
+            // Satu perusahaan dengan beberapa ejaan di roster (perusahaanTerupload($peta)).
+            $dasar->whereIn(DB::raw('TRIM(j.perusahaan)'), array_map('trim', $ejaan));
         } else {
             $dasar->whereRaw('TRIM(j.perusahaan) = ?', [trim($perusahaan)]);
         }

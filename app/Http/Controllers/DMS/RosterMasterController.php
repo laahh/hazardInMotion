@@ -16,6 +16,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
@@ -65,7 +66,7 @@ final class RosterMasterController extends Controller
      */
     public function overview(Request $request): View
     {
-        $perusahaan = $this->service->perusahaanTerupload();
+        $perusahaan = $this->service->perusahaanTerupload($this->petaNama());
 
         return view('dms.roster-master.overview', [
             'perusahaan' => $this->statusPeriode($perusahaan),
@@ -73,6 +74,76 @@ final class RosterMasterController extends Controller
             'buka' => (string) $request->query('pt', ''),
             'cakupan' => $this->cakupanUpload(),
         ]);
+    }
+
+    /**
+     * Ejaan nama perusahaan di roster => nama di data karyawan aktif, supaya
+     * daftar Overview menggabungkan "PT PMJ" & "PT Puncak Makmur Jaya" (dan
+     * salah ketik kecil) seperti kartu cakupan. Kosong bila data karyawan
+     * aktif belum tersalin — daftar lalu memakai ejaan apa adanya.
+     *
+     * @return array<string, string>
+     */
+    private function petaNama(): array
+    {
+        try {
+            $aktif = $this->karyawanAktif->perusahaan();
+            if ($aktif === null) {
+                return [];
+            }
+            $ejaan = DB::table('dms_roster_master_jadwal')
+                ->selectRaw("DISTINCT TRIM(perusahaan) AS pt")
+                ->whereRaw("TRIM(COALESCE(perusahaan, '')) <> ''")
+                ->pluck('pt')
+                ->map(static fn ($p): string => (string) $p)
+                ->all();
+
+            return DmsRosterCakupanUpload::peta(array_column($aktif, 'nama'), $ejaan, $this->suaraSid());
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+    }
+
+    /** @var array<string, array<string, int>>|null */
+    private ?array $suaraSid = null;
+
+    /**
+     * Untuk ejaan singkatan di roster ("PT SMB"): perusahaan aktif pemilik
+     * SID-nya beserta jumlahnya — memutuskan singkatan yang cocok ke beberapa
+     * perusahaan (DmsRosterCakupanUpload). Dihitung sekali per request.
+     *
+     * @return array<string, array<string, int>>
+     */
+    private function suaraSid(): array
+    {
+        if ($this->suaraSid !== null) {
+            return $this->suaraSid;
+        }
+        $this->suaraSid = [];
+
+        $baris = DB::table('dms_roster_master_jadwal')
+            ->selectRaw('DISTINCT TRIM(perusahaan) AS pt, UPPER(TRIM(kode_sid)) AS sid')
+            ->whereRaw("TRIM(COALESCE(perusahaan, '')) <> ''")
+            ->get()
+            ->filter(static fn (object $r): bool => preg_match(
+                '/^[A-Z0-9&]{2,12}$/',
+                trim((string) preg_replace('/^(PT|CV|UD|KOPERASI)\.?\s+/i', '', trim((string) $r->pt))),
+            ) === 1);
+        if ($baris->isEmpty()) {
+            return $this->suaraSid;
+        }
+
+        $milik = $this->karyawanAktif->perusahaanSid($baris->pluck('sid')->all());
+        foreach ($baris as $r) {
+            $pt = $milik[(string) $r->sid] ?? null;
+            if ($pt !== null) {
+                $this->suaraSid[(string) $r->pt][$pt] = ($this->suaraSid[(string) $r->pt][$pt] ?? 0) + 1;
+            }
+        }
+
+        return $this->suaraSid;
     }
 
     /**
@@ -87,7 +158,7 @@ final class RosterMasterController extends Controller
         try {
             $aktif = $this->karyawanAktif->perusahaan();
 
-            return $aktif === null ? null : DmsRosterCakupanUpload::bandingkan($aktif, $this->service->uploadPerSite());
+            return $aktif === null ? null : DmsRosterCakupanUpload::bandingkan($aktif, $this->service->uploadPerSite(), $this->suaraSid());
         } catch (Throwable $e) {
             report($e);
 
@@ -175,7 +246,7 @@ final class RosterMasterController extends Controller
      */
     public function overviewJadwal(Request $request): View
     {
-        $terpilih = collect($this->service->perusahaanTerupload())->firstWhere('perusahaan', (string) $request->query('pt', ''));
+        $terpilih = collect($this->service->perusahaanTerupload($this->petaNama()))->firstWhere('perusahaan', (string) $request->query('pt', ''));
         abort_if($terpilih === null, 404);
 
         $halaman = max(1, (int) $request->query('hal', 1));
@@ -201,7 +272,7 @@ final class RosterMasterController extends Controller
             $tanggal[] = $t;
         }
         $grid = $this->service->jadwalBerlaku($terpilih['perusahaan'], $bulan->startOfMonth(), $bulan->endOfMonth(),
-            $site, $cari, $menunggu, $halaman, self::PER_HALAMAN_GRID);
+            $site, $cari, $menunggu, $halaman, self::PER_HALAMAN_GRID, $terpilih['ejaan']);
 
         return view('dms.roster-master._overview-jadwal', [
             'terpilih' => $terpilih,

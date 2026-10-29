@@ -155,6 +155,62 @@ final class DmsRosterKaryawanAktif
     }
 
     /**
+     * Perusahaan aktif tiap SID — dari salinan lengkap (Tahap 8); bila belum
+     * ada, langsung dari view untuk SID itu saja (hasil di-cache 1 jam).
+     * Gagal = array kosong, pemanggil memperlakukannya sebagai "tidak tahu".
+     *
+     * @param  list<string>  $sids
+     * @return array<string, string> SID (huruf besar) => nama perusahaan
+     */
+    public function perusahaanSid(array $sids): array
+    {
+        $sids = array_values(array_unique(array_filter(array_map(static fn ($s): string => mb_strtoupper(trim((string) $s)), $sids))));
+        if ($sids === []) {
+            return [];
+        }
+
+        $lengkap = Cache::get(self::KUNCI_LENGKAP);
+        if (is_array($lengkap)) {
+            $cari = array_flip($sids);
+            $out = [];
+            foreach ($lengkap['karyawan'] as $k) {
+                if (isset($cari[$k['sid']]) && $k['perusahaan'] !== '') {
+                    $out[$k['sid']] = $k['perusahaan'];
+                }
+            }
+
+            return $out;
+        }
+
+        sort($sids);
+
+        return Cache::remember(self::KUNCI_PER_PT.'sid:'.md5(implode(',', $sids)), self::TTL_DETIK, function () use ($sids): array {
+            try {
+                $rows = $this->olap->select(
+                    "SELECT DISTINCT ON (upper(trim(kode_sid))) upper(trim(kode_sid)) AS sid, trim(nama_perusahaan) AS perusahaan
+                     FROM {$this->view()}
+                     WHERE upper(trim(kode_sid)) = ANY(?::text[])",
+                    [DmsRosterRfidReader::arrayPg($sids)],
+                    $this->timeout(),
+                );
+            } catch (Throwable $e) {
+                $this->catatGagal($e);
+
+                return [];
+            }
+
+            $out = [];
+            foreach ($rows as $r) {
+                if (trim((string) $r->perusahaan) !== '') {
+                    $out[(string) $r->sid] = trim((string) $r->perusahaan);
+                }
+            }
+
+            return $out;
+        });
+    }
+
+    /**
      * Salinan lengkap untuk cadangan — dipanggil dms:sync-roster-rfid (Tahap 8),
      * yang terhubung ke OLAP dari CLI. Ikut menyegarkan daftar perusahaan.
      *

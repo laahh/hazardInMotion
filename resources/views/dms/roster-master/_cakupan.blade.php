@@ -53,7 +53,7 @@
       <div>
         <div class="rov-kpi__label">Total perusahaan</div>
         <div class="rov-kpi__nilai" data-cak-n="total">{{ $angka($pt['total']) }}</div>
-        <div class="rov-kpi__sub"><span data-cak-n="site_total">{{ $angka($r['site']['total']) }}</span> site · <span data-cak-n="kar_total">{{ $angka($r['karyawan']['total']) }}</span> karyawan aktif</div>
+        <div class="rov-kpi__sub"><span data-cak-n="kar_total">{{ $angka($r['karyawan']['total']) }}</span> karyawan aktif</div>
       </div>
     </div>
     <div class="rov-kpi__kartu">
@@ -69,7 +69,6 @@
       <div>
         <div class="rov-kpi__label">Belum upload</div>
         <div class="rov-kpi__nilai" data-cak-n="belum">{{ $angka($pt['belum']) }}</div>
-        <div class="rov-kpi__sub"><span data-cak-n="site_belum">{{ $angka($r['site']['belum']) }}</span> site belum ada roster</div>
       </div>
     </div>
     <div class="rov-kpi__kartu">

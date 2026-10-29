@@ -271,6 +271,12 @@ final class DmsRosterAksesPerusahaan
         return $out;
     }
 
+    /** Kunci pencocokan nama (lihat kunci()) untuk pemakai di luar kelas ini. */
+    public static function kunciNama(string $pt): string
+    {
+        return self::kunci($pt);
+    }
+
     /** Dua ejaan nama perusahaan yang sama persis menurut kunci(). */
     public static function samaNama(string $a, string $b): bool
     {
