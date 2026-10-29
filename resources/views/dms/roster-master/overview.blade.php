@@ -104,6 +104,13 @@
   .rov-cak-situs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .rov-cak-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .rov-cak-chip iconify-icon { font-size: 12px; }
+  .rov-cak-kurang { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #FECACA; background: #FEF2F2; color: #B91C1C; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; }
+  .rov-cak-kurang:hover { background: #FEE2E2; }
+  .rov-cak-kurang:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+  .rov-cak-kurang.is-lengkap { border-color: #A7F3D0; background: #ECFDF5; color: #047857; }
+  .rov-cak-tab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #E2E8F0; background: #fff; color: #475569; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
+  .rov-cak-tab b { color: #0F172A; }
+  .rov-cak-tab.is-aktif { border-color: #6366F1; background: #EEF2FF; color: #4338CA; }
   .rov-cak-tidakcocok { display: flex; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid #EEF2F7; font-size: 12px; color: #64748B; }
   .rov-cak-tidakcocok > iconify-icon { font-size: 16px; flex: none; margin-top: 1px; }
 
@@ -359,6 +366,7 @@
     function persen(n, t) { return t > 0 ? (n / t * 100).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'; }
     function nol() { return { sudah: 0, menunggu: 0, belum: 0 }; }
 
+    var nKurang = 0;
     function isiKpi(nPt, nSite, nKar) {
         var kpi = kartu.querySelector('[data-cak-kpi]');
         var total = nPt.sudah + nPt.menunggu + nPt.belum;
@@ -369,6 +377,7 @@
         set('sudah', angka(nPt.sudah));
         set('menunggu', angka(nPt.menunggu));
         set('belum', angka(nPt.belum));
+        set('kurang', angka(nKurang));
         set('rate', persen(nPt.sudah, total));
         ['sudah', 'menunggu'].forEach(function (s) {
             kpi.querySelector('[data-cak-seg="' + s + '"]').style.width = (total > 0 ? nPt[s] / total * 100 : 0) + '%';
@@ -380,6 +389,7 @@
         var pt = pilihPt.value;
         var site = pilihSite.value;
         var nPt = nol(), nSite = nol(), nKar = nol(), tampil = 0;
+        nKurang = 0;
 
         baris.forEach(function (b) {
             // Status & karyawan efektif: per site terpilih, atau per perusahaan.
@@ -391,6 +401,7 @@
                 if (s) { efektif = s[1]; karyawan = s[2]; situs = [s]; }
             }
             if (dasar) {
+                nKurang += parseInt(b.tr.dataset.kurang, 10) || 0;
                 nPt[efektif]++;
                 nKar[efektif] += karyawan;
                 situs.forEach(function (x) { nSite[x[1]]++; });
@@ -434,6 +445,58 @@
         pilihSite.value = '';
         tombol.forEach(function (x) { x.classList.toggle('is-aktif', x.dataset.cakStatus === ''); });
         terapkan();
+    });
+})();
+</script>
+<script>
+// Modal "Kurang": karyawan aktif yang belum / sudah di roster untuk satu
+// perusahaan. Tab, bulan, cari, dan halaman dimuat ulang di modal yang sama.
+(function () {
+    'use strict';
+
+    var modalEl = document.getElementById('roCakModal');
+    if (!modalEl || typeof bootstrap === 'undefined') { return; }
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    var isi = modalEl.querySelector('[data-cak-modal-isi]');
+    var judul = modalEl.querySelector('#roCakModalJudul');
+    var minta = 0;
+
+    function muat(url) {
+        var no = ++minta;
+        isi.style.opacity = isi.querySelector('.rm-xl') ? '.55' : '';
+        if (!isi.querySelector('.rm-xl')) { isi.innerHTML = '<div class="ro-memuat">Memuat…</div>'; }
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.text(); })
+            .then(function (html) { if (no === minta) { isi.innerHTML = html; } })
+            .catch(function () {
+                if (no !== minta) { return; }
+                isi.innerHTML = '<div class="ro-memuat text-danger-600">Gagal memuat. <a href="#" class="text-primary-600 fw-semibold" data-ulang>Coba lagi</a></div>';
+                isi.querySelector('[data-ulang]').addEventListener('click', function (e) { e.preventDefault(); muat(url); });
+            })
+            .finally(function () { isi.style.opacity = ''; });
+    }
+
+    isi.addEventListener('click', function (e) {
+        var a = e.target.closest('a[data-ro-muat]');
+        if (!a) { return; }
+        e.preventDefault();
+        if (!a.classList.contains('disabled')) { muat(a.href); }
+    });
+    isi.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-ro-filter]');
+        if (!form) { return; }
+        e.preventDefault();
+        muat(form.action + '?' + new URLSearchParams(new FormData(form)).toString());
+    });
+
+    document.querySelectorAll('[data-cak-kurang]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var pt = b.dataset.cakKurang;
+            judul.textContent = 'Karyawan aktif vs roster — ' + pt;
+            isi.innerHTML = '<div class="ro-memuat">Memuat…</div>';
+            modal.show();
+            muat(modalEl.dataset.url + '?' + new URLSearchParams({ pt: pt, tampil: b.classList.contains('is-lengkap') ? 'sudah' : 'belum' }).toString());
+        });
     });
 })();
 </script>

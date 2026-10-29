@@ -69,6 +69,7 @@
       <div>
         <div class="rov-kpi__label">Belum upload</div>
         <div class="rov-kpi__nilai" data-cak-n="belum">{{ $angka($pt['belum']) }}</div>
+        <div class="rov-kpi__sub"><span data-cak-n="kurang">{{ $angka($r['kurang'] ?? 0) }}</span> karyawan aktif belum di roster</div>
       </div>
     </div>
     <div class="rov-kpi__kartu">
@@ -118,12 +119,13 @@
           <th class="text-end">Karyawan aktif</th>
           <th>Status</th>
           <th>Site <span class="fw-normal text-lowercase">(sudah / total)</span></th>
-          <th class="pe-24 text-end">Di roster</th>
+          <th class="text-end">Di roster</th>
+          <th class="pe-24 text-end" title="Karyawan aktif yang belum ada di roster mana pun — klik untuk detail">Kurang</th>
         </tr>
       </thead>
       <tbody>
         @foreach ($daftar as $p)
-          <tr data-cak-baris data-status="{{ $p['status'] }}" data-nama="{{ $p['nama'] }}" data-karyawan="{{ $p['karyawan'] }}"
+          <tr data-cak-baris data-status="{{ $p['status'] }}" data-nama="{{ $p['nama'] }}" data-karyawan="{{ $p['karyawan'] }}" data-kurang="{{ $p['kurang'] ?? 0 }}"
               data-site="{{ json_encode(array_map(static fn (array $s): array => [$s['nama'], $s['status'], $s['karyawan']], $p['site'])) }}"
               data-cari="{{ mb_strtolower($p['nama'].' '.implode(' ', $p['alias']).' '.implode(' ', array_column($p['site'], 'nama'))) }}">
             <td class="ps-24">
@@ -153,16 +155,28 @@
                 <div class="ro-pt-site mt-4" title="Site di roster yang tidak ada di data karyawan aktif perusahaan ini">+ di roster saja: {{ implode(', ', $p['site_lain']) }}</div>
               @endif
             </td>
-            <td class="pe-24 text-end">
+            <td class="text-end">
               @if ($p['karyawan_roster'] > 0)
                 <span class="rov-angka">{{ $angka($p['karyawan_roster']) }}</span>
               @else
                 <span class="ro-pt-site">—</span>
               @endif
             </td>
+            <td class="pe-24 text-end">
+              @php $kurang = (int) ($p['kurang'] ?? 0); @endphp
+              <button type="button" class="rov-cak-kurang {{ $kurang === 0 ? 'is-lengkap' : '' }}" data-cak-kurang="{{ $p['nama'] }}"
+                      title="{{ ($p['kurang_pasti'] ?? false) ? '' : 'Perkiraan (karyawan aktif − karyawan di roster). ' }}Lihat detail karyawan {{ $p['nama'] }}">
+                @if ($kurang === 0)
+                  <iconify-icon icon="solar:check-circle-bold"></iconify-icon>Lengkap
+                @else
+                  {{ ($p['kurang_pasti'] ?? false) ? '' : '≈ ' }}{{ $angka($kurang) }}
+                  <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon>
+                @endif
+              </button>
+            </td>
           </tr>
         @endforeach
-        <tr data-cak-kosong class="d-none"><td colspan="5" class="text-center text-secondary-light py-24">Tidak ada perusahaan yang cocok.</td></tr>
+        <tr data-cak-kosong class="d-none"><td colspan="6" class="text-center text-secondary-light py-24">Tidak ada perusahaan yang cocok.</td></tr>
       </tbody>
     </table>
   </div>
@@ -176,4 +190,20 @@
       </div>
     </div>
   @endif
+</div>
+
+{{-- Modal detail "Kurang": isinya dimuat dari RosterMasterController::overviewKurang. --}}
+<div class="modal fade" id="roCakModal" tabindex="-1" aria-labelledby="roCakModalJudul" aria-hidden="true"
+     data-url="{{ route('dms.master-roster.overview.kurang', absolute: false) }}">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: min(1400px, 96vw)">
+    <div class="modal-content radius-12">
+      <div class="modal-header py-16 px-24">
+        <h6 class="modal-title fw-semibold mb-0" id="roCakModalJudul">Karyawan aktif vs roster</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body px-24 py-16" data-cak-modal-isi>
+        <div class="ro-memuat">Memuat…</div>
+      </div>
+    </div>
+  </div>
 </div>

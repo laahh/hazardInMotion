@@ -8,20 +8,19 @@ use App\Http\Controllers\Controller;
 use App\Models\DmsRosterMasterUpload;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
-use App\Services\Dms\Roster\DmsRosterCakupanUpload;
+use App\Services\Dms\Roster\DmsRosterCakupanReader;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
+use App\Services\Dms\Roster\DmsRosterMasterEditService;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use Throwable;
 
 /**
  * /dms/master-roster — Master Roster: upload jadwal kerja per karyawan
@@ -36,6 +35,7 @@ final class RosterMasterController extends Controller
         private readonly DmsRosterMasterService $service,
         private readonly DmsRosterKaryawanAktif $karyawanAktif,
         private readonly DmsRosterAksesPerusahaan $akses,
+        private readonly DmsRosterCakupanReader $cakupan,
     ) {}
 
     /**
@@ -66,104 +66,14 @@ final class RosterMasterController extends Controller
      */
     public function overview(Request $request): View
     {
-        $perusahaan = $this->service->perusahaanTerupload($this->petaNama());
+        $perusahaan = $this->service->perusahaanTerupload($this->cakupan->peta());
 
         return view('dms.roster-master.overview', [
             'perusahaan' => $this->statusPeriode($perusahaan),
             'ringkas' => $this->ringkasOverview($perusahaan),
             'buka' => (string) $request->query('pt', ''),
-            'cakupan' => $this->cakupanUpload(),
+            'cakupan' => $this->cakupan->cakupan(),
         ]);
-    }
-
-    /**
-     * Ejaan nama perusahaan di roster => nama di data karyawan aktif, supaya
-     * daftar Overview menggabungkan "PT PMJ" & "PT Puncak Makmur Jaya" (dan
-     * salah ketik kecil) seperti kartu cakupan. Kosong bila data karyawan
-     * aktif belum tersalin — daftar lalu memakai ejaan apa adanya.
-     *
-     * @return array<string, string>
-     */
-    private function petaNama(): array
-    {
-        try {
-            $aktif = $this->karyawanAktif->perusahaan();
-            if ($aktif === null) {
-                return [];
-            }
-            $ejaan = DB::table('dms_roster_master_jadwal')
-                ->selectRaw("DISTINCT TRIM(perusahaan) AS pt")
-                ->whereRaw("TRIM(COALESCE(perusahaan, '')) <> ''")
-                ->pluck('pt')
-                ->map(static fn ($p): string => (string) $p)
-                ->all();
-
-            return DmsRosterCakupanUpload::peta(array_column($aktif, 'nama'), $ejaan, $this->suaraSid());
-        } catch (Throwable $e) {
-            report($e);
-
-            return [];
-        }
-    }
-
-    /** @var array<string, array<string, int>>|null */
-    private ?array $suaraSid = null;
-
-    /**
-     * Untuk ejaan singkatan di roster ("PT SMB"): perusahaan aktif pemilik
-     * SID-nya beserta jumlahnya — memutuskan singkatan yang cocok ke beberapa
-     * perusahaan (DmsRosterCakupanUpload). Dihitung sekali per request.
-     *
-     * @return array<string, array<string, int>>
-     */
-    private function suaraSid(): array
-    {
-        if ($this->suaraSid !== null) {
-            return $this->suaraSid;
-        }
-        $this->suaraSid = [];
-
-        $baris = DB::table('dms_roster_master_jadwal')
-            ->selectRaw('DISTINCT TRIM(perusahaan) AS pt, UPPER(TRIM(kode_sid)) AS sid')
-            ->whereRaw("TRIM(COALESCE(perusahaan, '')) <> ''")
-            ->get()
-            ->filter(static fn (object $r): bool => preg_match(
-                '/^[A-Z0-9&]{2,12}$/',
-                trim((string) preg_replace('/^(PT|CV|UD|KOPERASI)\.?\s+/i', '', trim((string) $r->pt))),
-            ) === 1);
-        if ($baris->isEmpty()) {
-            return $this->suaraSid;
-        }
-
-        $milik = $this->karyawanAktif->perusahaanSid($baris->pluck('sid')->all());
-        foreach ($baris as $r) {
-            $pt = $milik[(string) $r->sid] ?? null;
-            if ($pt !== null) {
-                $this->suaraSid[(string) $r->pt][$pt] = ($this->suaraSid[(string) $r->pt][$pt] ?? 0) + 1;
-            }
-        }
-
-        return $this->suaraSid;
-    }
-
-    /**
-     * Seluruh perusahaan & site karyawan aktif dibanding roster yang sudah
-     * di-upload. Null bila daftar karyawan aktif belum pernah tersalin
-     * (Tahap 8 dms:sync-roster-rfid) — bagian ini lalu disembunyikan.
-     *
-     * @return array<string, mixed>|null
-     */
-    private function cakupanUpload(): ?array
-    {
-        try {
-            $aktif = $this->karyawanAktif->perusahaan();
-
-            return $aktif === null ? null : DmsRosterCakupanUpload::bandingkan($aktif, $this->service->uploadPerSite(), $this->suaraSid());
-        } catch (Throwable $e) {
-            report($e);
-
-            return null;
-        }
     }
 
     /** Batas "segera habis" di Overview Roster: periode roster tinggal sekian hari. */
@@ -246,7 +156,7 @@ final class RosterMasterController extends Controller
      */
     public function overviewJadwal(Request $request): View
     {
-        $terpilih = collect($this->service->perusahaanTerupload($this->petaNama()))->firstWhere('perusahaan', (string) $request->query('pt', ''));
+        $terpilih = collect($this->service->perusahaanTerupload($this->cakupan->peta()))->firstWhere('perusahaan', (string) $request->query('pt', ''));
         abort_if($terpilih === null, 404);
 
         $halaman = max(1, (int) $request->query('hal', 1));
@@ -289,6 +199,58 @@ final class RosterMasterController extends Controller
     }
 
     private const PER_HALAMAN_GRID = 25;
+
+    /**
+     * Isi modal "Kurang" di kartu Cakupan upload roster (fragmen HTML): untuk
+     * satu perusahaan aktif, karyawan aktif yang BELUM ada di roster mana pun
+     * (sel jadwal kosong), atau yang SUDAH — dengan jadwal gabungan per bulan
+     * (dobel = upload terbaru, aturan sama dengan Edit Roster).
+     */
+    public function overviewKurang(Request $request, DmsRosterMasterEditService $gabungan): View
+    {
+        $pt = mb_substr(trim((string) $request->query('pt', '')), 0, 255);
+        abort_if($pt === '', 404);
+        $tampil = $request->query('tampil') === 'sudah' ? 'sudah' : 'belum';
+        $halaman = max(1, (int) $request->query('hal', 1));
+        $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
+        $minta = (string) $request->query('bulan', '');
+        $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : CarbonImmutable::now()->startOfMonth();
+        $tanggal = [];
+        for ($t = $bulan->startOfMonth(); $t->lte($bulan->endOfMonth()); $t = $t->addDay()) {
+            $tanggal[] = $t;
+        }
+
+        $aktif = $this->karyawanAktif->untukPerusahaan($pt);
+        $ejaan = $this->cakupan->ejaanUntuk($pt);
+        $diRoster = $this->cakupan->sidRoster($ejaan);
+        $mirip = static fn (array $k): bool => $cari === '' || stripos($k['sid'].' '.$k['nama'], $cari) !== false;
+
+        $belum = $aktif === null ? [] : array_values(array_filter($aktif, static fn (array $k): bool => ! isset($diRoster[mb_strtoupper($k['sid'])])));
+        if ($tampil === 'belum') {
+            $daftar = array_values(array_filter($belum, $mirip));
+            $grid = [
+                'total' => count($daftar),
+                'karyawan' => array_map(static fn (array $k): array => $k + ['jam_awal' => null, 'jam_akhir' => null, 'jam_total' => null, 'jadwal' => []],
+                    array_slice($daftar, ($halaman - 1) * self::PER_HALAMAN_GRID, self::PER_HALAMAN_GRID)),
+            ];
+        } else {
+            $grid = $gabungan->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN_GRID);
+        }
+
+        return view('dms.roster-master._kurang', [
+            'pt' => $pt,
+            'tampil' => $tampil,
+            'bulan' => $bulan,
+            'tanggal' => $tanggal,
+            'cari' => $cari,
+            'grid' => $grid,
+            'halaman' => $halaman,
+            'perHalaman' => self::PER_HALAMAN_GRID,
+            'totalHalaman' => max(1, (int) ceil($grid['total'] / self::PER_HALAMAN_GRID)),
+            'aktifTerbaca' => $aktif !== null,
+            'jumlah' => ['aktif' => $aktif === null ? null : count($aktif), 'belum' => count($belum), 'roster' => count($diRoster)],
+        ]);
+    }
 
     public function approval(Request $request): View
     {

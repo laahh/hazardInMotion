@@ -155,6 +155,29 @@ final class DmsRosterKaryawanAktif
     }
 
     /**
+     * SID karyawan aktif per perusahaan, dari salinan lengkap (Tahap 8) saja —
+     * tanpa query ke view. Null bila salinan belum ada.
+     *
+     * @return array<string, list<string>>|null nama perusahaan => SID (huruf besar)
+     */
+    public function sidPerPerusahaan(): ?array
+    {
+        $lengkap = Cache::get(self::KUNCI_LENGKAP);
+        if (! is_array($lengkap)) {
+            return null;
+        }
+
+        $out = [];
+        foreach ($lengkap['karyawan'] as $k) {
+            if ($k['perusahaan'] !== '') {
+                $out[$k['perusahaan']][] = $k['sid'];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Perusahaan aktif tiap SID — dari salinan lengkap (Tahap 8); bila belum
      * ada, langsung dari view untuk SID itu saja (hasil di-cache 1 jam).
      * Gagal = array kosong, pemanggil memperlakukannya sebagai "tidak tahu".

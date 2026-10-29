@@ -818,6 +818,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             Route::get('/approval', 'approval')->name('approval');
             Route::get('/overview', 'overview')->name('overview');
             Route::get('/overview/jadwal', 'overviewJadwal')->name('overview.jadwal');
+            Route::get('/overview/kurang', 'overviewKurang')->name('overview.kurang');
             // Edit Roster: hanya user yang di-assign, hanya perusahaannya.
             Route::get('/edit', [\App\Http\Controllers\DMS\RosterMasterEditController::class, 'index'])->name('edit.index');
             Route::post('/edit', [\App\Http\Controllers\DMS\RosterMasterEditController::class, 'update'])->name('edit.update');
