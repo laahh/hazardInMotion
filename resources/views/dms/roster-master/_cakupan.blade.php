@@ -81,7 +81,7 @@
           <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $pt['total'] > 0 ? round($pt['sudah'] / $pt['total'] * 100, 2) : 0 }}%"></span>
           <span class="is-menunggu" data-cak-seg="menunggu" style="width: {{ $pt['total'] > 0 ? round($pt['menunggu'] / $pt['total'] * 100, 2) : 0 }}%"></span>
         </div>
-        <div class="rov-kpi__sub">Disetujui ÷ total perusahaan · termasuk yang menunggu: <span data-cak-n="rate_upload">{{ $persen($diupload, $pt['total']) }}</span>%</div>
+        <div class="rov-kpi__sub">Disetujui ÷ total perusahaan</div>
       </div>
     </div>
   </div>

@@ -372,7 +372,6 @@
         set('belum', angka(nPt.belum));
         set('site_belum', angka(nSite.belum));
         set('rate', persen(nPt.sudah, total));
-        set('rate_upload', persen(nPt.sudah + nPt.menunggu, total));
         ['sudah', 'menunggu'].forEach(function (s) {
             kpi.querySelector('[data-cak-seg="' + s + '"]').style.width = (total > 0 ? nPt[s] / total * 100 : 0) + '%';
         });
