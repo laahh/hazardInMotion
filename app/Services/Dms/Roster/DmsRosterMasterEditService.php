@@ -113,9 +113,20 @@ final class DmsRosterMasterEditService
             }
         }
 
-        foreach ($karyawan as &$k) {
-            [$k['jam_awal'], $k['jam_akhir']] = DmsRosterMasterService::jamKaryawanDariJadwal($k['jadwal']);
-            $k['jam_total'] = DmsRosterMasterService::totalKaryawanDariJadwal($k['jadwal']);
+        // Jam Kerja Awal/Akhir/Total dibaca dari SELURUH jadwal gabungan karyawan,
+        // bukan bulan ini saja — bulan yang hanya berisi OFF/CT tidak punya hari
+        // kerja, sehingga kolom jamnya kosong padahal jam khususnya ada.
+        $semua = [];
+        foreach ($this->dasar($ejaan)->whereIn('j.kode_sid', $sids)
+            ->orderByDesc('u.created_at')->orderByDesc('u.id')
+            ->get(['j.kode_sid', 'j.tanggal', 'j.kode', 'j.jam_masuk', 'j.jam_keluar', 'j.menit_kerja'] + ($adaTotal ? [6 => 'j.menit_total_kerja'] : [])) as $r) {
+            $tgl = CarbonImmutable::parse((string) $r->tanggal)->toDateString();
+            $semua[(string) $r->kode_sid][$tgl] ??= self::barisJadwal($r, $adaTotal);
+        }
+        foreach ($karyawan as $sid => &$k) {
+            $jadwal = $semua[$sid] ?? $k['jadwal'];
+            [$k['jam_awal'], $k['jam_akhir']] = DmsRosterMasterService::jamKaryawanDariJadwal($jadwal);
+            $k['jam_total'] = DmsRosterMasterService::totalKaryawanDariJadwal($jadwal);
         }
         unset($k);
 

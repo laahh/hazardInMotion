@@ -1123,6 +1123,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     require __DIR__ . '/OhsScoreCard/ohs-score-card.php';
     require __DIR__ . '/Besigma/besigma.php';
     require __DIR__ . '/Isc/isc.php';
+    require __DIR__ . '/MonitoringOhsDivisi/monitoring-ohs-divisi.php';
     require __DIR__ . '/DwhRedshift/dwh-redshift.php';
 
 
