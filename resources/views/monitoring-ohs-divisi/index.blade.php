@@ -44,28 +44,6 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M9 20v-6h6v6"/></svg>
       <span>Beranda</span>
     </button>
-    <button type="button" class="gm-rail-btn" id="gm-postevent-btn" data-rail="postevent">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V7"/><path d="M4 19h16"/><path d="M8 15l3-4 3 3 4-6"/></svg>
-      <span>Post-event</span>
-    </button>
-    <button type="button" class="gm-rail-btn" id="gm-cctv-btn" data-rail="cctv">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h10v10H4z"/><path d="m14 11 6-3v8l-6-3z"/></svg>
-      <span>CCTV</span>
-    </button>
-    <button type="button" class="gm-rail-btn" id="gm-interventions-btn" data-rail="interventions">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M7 21h10"/></svg>
-      <span>Intervensi</span>
-    </button>
-    <button type="button" class="gm-rail-btn" id="gm-historical-btn" data-rail="historical">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l4 2"/></svg>
-      <span>Historical</span>
-    </button>
-    <span class="gm-rail-gap"></span>
-    <button type="button" class="gm-rail-thumb bmo" data-jump="BMO" title="Binungan">BMO</button>
-    <button type="button" class="gm-rail-thumb lmo" data-jump="LMO" title="Lati">LMO</button>
-    <button type="button" class="gm-rail-thumb gmo" data-jump="GMO" title="Gurimbang">GMO</button>
-    <button type="button" class="gm-rail-thumb smo" data-jump="SMO" title="Sambarata">SMO</button>
-    <button type="button" class="gm-rail-thumb punan" data-jump="PUNAN" title="Punan">PUN</button>
   </aside>
 
   <div class="gm-left">
