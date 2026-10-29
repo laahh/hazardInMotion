@@ -10,4 +10,6 @@ Route::prefix('monitoring-ohs-divisi')
     ->name('monitoring-ohs-divisi.')
     ->group(function (): void {
         Route::get('/', [MonitoringOhsDivisiController::class, 'index'])->name('index');
+        // POB seperti /isc/maps/pob, Check-in RFID hanya departemen OHS Divisi.
+        Route::get('/pob', [MonitoringOhsDivisiController::class, 'pob'])->name('pob');
     });

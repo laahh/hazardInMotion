@@ -7,18 +7,23 @@ namespace App\Http\Controllers\MonitoringOhsDivisi;
 use App\Http\Controllers\Controller;
 use App\Services\Isc\IscBasemapProxyService;
 use App\Services\Isc\IscBoundaryMapService;
+use App\Services\MonitoringOhsDivisi\OhsDivisiPobService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
  * Monitoring OHS Divisi — salinan awal halaman peta /isc/maps
- * (IscMapsController::index). Data peta (boundary, overlay, POB, CCTV,
- * hazard, intervensi) masih memakai endpoint ISC yang sudah ada; ganti di
- * sini bila halaman ini perlu sumber data sendiri.
+ * (IscMapsController::index). Data POB lewat pob() di bawah: sama dengan ISC,
+ * tetapi Check-in RFID hanya karyawan departemen OHS Divisi
+ * (config/monitoring_ohs_divisi.php). Data peta lain (boundary, overlay,
+ * CCTV, hazard, intervensi) masih memakai endpoint ISC yang sudah ada.
  */
 final class MonitoringOhsDivisiController extends Controller
 {
     public function __construct(
         private readonly IscBoundaryMapService $boundaries,
+        private readonly OhsDivisiPobService $pob,
     ) {}
 
     public function index(): View
@@ -34,7 +39,7 @@ final class MonitoringOhsDivisiController extends Controller
             'iupkAsset' => asset('isc-assets/BounderyBC.js'),
             'boundariesUrl' => route('isc.maps.boundaries'),
             'overlayUrl' => route('isc.maps.overlay'),
-            'pobUrl' => route('isc.maps.pob', ['source' => $sumber]),
+            'pobUrl' => route('monitoring-ohs-divisi.pob', ['source' => $sumber]),
             'pobExportUrl' => route('isc.maps.pob.export', ['source' => $sumber]),
             'postEventUrl' => route('isc.maps.post-event', ['source' => $sumber]),
             'postEventTrailUrl' => route('isc.maps.post-event.trail', ['source' => $sumber]),
@@ -53,6 +58,34 @@ final class MonitoringOhsDivisiController extends Controller
             'wmsUrl' => '',
             'wmsLayer' => IscBasemapProxyService::WMS_LAYER,
             'wmtsProxyUrl' => $this->wmtsProxyUrl(),
+        ]);
+    }
+
+    /**
+     * Snapshot POB (format sama dengan IscPobController::index), Check-in RFID
+     * hanya departemen OHS Divisi.
+     */
+    public function pob(Request $request): JsonResponse
+    {
+        $demo = $request->query('source', 'demo') !== 'live';
+        $data = $this->pob->snapshot($request->boolean('fresh'), $demo);
+
+        return response()->json([
+            'success' => true,
+            'source' => $data['source'] ?? ($demo ? 'demo' : 'live'),
+            'generated_at' => $data['generated_at'],
+            'stale_gps_seconds' => $data['stale_gps_seconds'],
+            'besigma_connected' => $data['besigma_connected'],
+            'besigma_error' => $data['besigma_error'],
+            'rfid_available' => $data['rfid_available'],
+            'summary' => $data['summary'],
+            'sites' => $data['sites'] ?? [],
+            'checkins' => $data['checkins'] ?? [],
+            'reconcile' => $data['reconcile'],
+            'people' => $data['people'],
+            'hazard_features' => $data['hazard_features'] ?? [],
+            'departemen' => $data['departemen'],
+            'departemen_terbaca' => $data['departemen_terbaca'],
         ]);
     }
 
