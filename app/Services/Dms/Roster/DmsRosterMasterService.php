@@ -978,13 +978,16 @@ final class DmsRosterMasterService
             [''],
             ['Kode', 'Keterangan'],
         ];
+        // Baris judul "Kode | Keterangan" dihitung dari isi petunjuk di atasnya,
+        // supaya warna kode tidak bergeser saat teks petunjuk bertambah.
+        $barisJudul = count($isi);
         foreach (self::KODE as $kode => [$ket2]) {
             $isi[] = [$kode, $ket2];
         }
         $ket->fromArray($isi);
         $ket->getStyle('A1')->getFont()->setBold(true)->setSize(12);
-        $ket->getStyle('A9:B9')->getFont()->setBold(true);
-        $r = 10;
+        $ket->getStyle('A'.$barisJudul.':B'.$barisJudul)->getFont()->setBold(true);
+        $r = $barisJudul + 1;
         foreach (self::KODE as [, $warna]) {
             $ket->getStyle('A'.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB($warna);
             $r++;
