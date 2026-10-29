@@ -117,10 +117,11 @@
         <tr>
           <th class="ps-24">Perusahaan</th>
           <th class="text-end">Karyawan aktif</th>
+          <th class="text-end" title="Karyawan aktif yang belum ada di roster mana pun">Kurang</th>
           <th>Status</th>
           <th>Site <span class="fw-normal text-lowercase">(sudah / total)</span></th>
           <th class="text-end">Di roster</th>
-          <th class="pe-24 text-end" title="Karyawan aktif yang belum ada di roster mana pun — klik untuk detail">Kurang</th>
+          <th class="pe-24 text-end"><span class="visually-hidden">Detail</span></th>
         </tr>
       </thead>
       <tbody>
@@ -135,6 +136,14 @@
               @endif
             </td>
             <td class="text-end"><span class="rov-angka">{{ $angka($p['karyawan']) }}</span></td>
+            @php $kurang = (int) ($p['kurang'] ?? 0); @endphp
+            <td class="text-end">
+              @if ($kurang === 0)
+                <span class="rov-cak-lengkap" title="Semua karyawan aktif sudah ada di roster"><iconify-icon icon="solar:check-circle-bold"></iconify-icon>0</span>
+              @else
+                <span class="rov-cak-kurang-angka" title="{{ ($p['kurang_pasti'] ?? false) ? 'Karyawan aktif yang belum ada di roster mana pun' : 'Perkiraan: karyawan aktif − karyawan di roster' }}">{{ ($p['kurang_pasti'] ?? false) ? '' : '≈ ' }}{{ $angka($kurang) }}</span>
+              @endif
+            </td>
             <td>
               <span class="rov-cak-status is-{{ $p['status'] }}"><iconify-icon icon="{{ $ikon[$p['status']] }}"></iconify-icon>{{ $label[$p['status']] }}</span>
             </td>
@@ -163,20 +172,15 @@
               @endif
             </td>
             <td class="pe-24 text-end">
-              @php $kurang = (int) ($p['kurang'] ?? 0); @endphp
-              <button type="button" class="rov-cak-kurang {{ $kurang === 0 ? 'is-lengkap' : '' }}" data-cak-kurang="{{ $p['nama'] }}"
-                      title="{{ ($p['kurang_pasti'] ?? false) ? '' : 'Perkiraan (karyawan aktif − karyawan di roster). ' }}Lihat detail karyawan {{ $p['nama'] }}">
-                @if ($kurang === 0)
-                  <iconify-icon icon="solar:check-circle-bold"></iconify-icon>Lengkap
-                @else
-                  {{ ($p['kurang_pasti'] ?? false) ? '' : '≈ ' }}{{ $angka($kurang) }}
-                  <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon>
-                @endif
+              <button type="button" class="ro-sc-toggle" data-cak-kurang="{{ $p['nama'] }}" data-cak-tab="{{ $kurang === 0 ? 'sudah' : 'belum' }}"
+                      aria-label="Detail karyawan {{ $p['nama'] }}">
+                <iconify-icon icon="solar:users-group-rounded-linear"></iconify-icon>
+                Detail
               </button>
             </td>
           </tr>
         @endforeach
-        <tr data-cak-kosong class="d-none"><td colspan="6" class="text-center text-secondary-light py-24">Tidak ada perusahaan yang cocok.</td></tr>
+        <tr data-cak-kosong class="d-none"><td colspan="7" class="text-center text-secondary-light py-24">Tidak ada perusahaan yang cocok.</td></tr>
       </tbody>
     </table>
   </div>

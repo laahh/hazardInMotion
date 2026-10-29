@@ -93,7 +93,7 @@
   .rov-cak-gulir { max-height: 560px; overflow: auto; border-top: 1px solid #EEF2F7; }
   .rov-cak-gulir thead th { position: sticky; top: 0; z-index: 1; }
   /* Chip site tidak boleh menumpuk satu-satu ke bawah di layar sempit. */
-  .rov-cak-gulir td:nth-child(4) { min-width: 280px; }
+  .rov-cak-gulir td:nth-child(5) { min-width: 280px; }
 
   .rov-cak-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .rov-cak-status iconify-icon { font-size: 14px; }
@@ -104,10 +104,8 @@
   .rov-cak-situs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .rov-cak-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .rov-cak-chip iconify-icon { font-size: 12px; }
-  .rov-cak-kurang { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #FECACA; background: #FEF2F2; color: #B91C1C; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; }
-  .rov-cak-kurang:hover { background: #FEE2E2; }
-  .rov-cak-kurang:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
-  .rov-cak-kurang.is-lengkap { border-color: #A7F3D0; background: #ECFDF5; color: #047857; }
+  .rov-cak-kurang-angka { font-weight: 700; color: #DC2626; font-variant-numeric: tabular-nums; }
+  .rov-cak-lengkap { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: #047857; }
   .rov-cak-tab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #E2E8F0; background: #fff; color: #475569; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
   .rov-cak-tab b { color: #0F172A; }
   .rov-cak-tab.is-aktif { border-color: #6366F1; background: #EEF2FF; color: #4338CA; }
@@ -495,7 +493,7 @@
             judul.textContent = 'Karyawan aktif vs roster — ' + pt;
             isi.innerHTML = '<div class="ro-memuat">Memuat…</div>';
             modal.show();
-            muat(modalEl.dataset.url + '?' + new URLSearchParams({ pt: pt, tampil: b.classList.contains('is-lengkap') ? 'sudah' : 'belum' }).toString());
+            muat(modalEl.dataset.url + '?' + new URLSearchParams({ pt: pt, tampil: b.dataset.cakTab || 'belum' }).toString());
         });
     });
 })();
