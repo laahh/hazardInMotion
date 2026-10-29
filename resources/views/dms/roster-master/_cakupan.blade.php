@@ -3,6 +3,10 @@
   disalin Tahap 8 dms:sync-roster-rfid) dibanding roster yang sudah di-upload.
   Data dari DmsRosterCakupanUpload::bandingkan() — lihat docblock-nya untuk
   aturan status & pencocokan nama.
+
+  Filter (status, perusahaan, site, cari) bekerja di browser. Bila satu site
+  dipilih, status tiap perusahaan = status site itu, dan angka perbandingan di
+  atas dihitung ulang hanya untuk site tersebut (skrip di overview.blade.php).
 --}}
 @php
   $angka = static fn (int $n) => number_format($n, 0, ',', '.');
@@ -14,6 +18,16 @@
   $urutan = ['belum' => 0, 'menunggu' => 1, 'sudah' => 2];
   $daftar = $cakupan['perusahaan'];
   usort($daftar, static fn (array $a, array $b): int => [$urutan[$a['status']], -$a['karyawan'], $a['nama']] <=> [$urutan[$b['status']], -$b['karyawan'], $b['nama']]);
+  // Pilihan dropdown: perusahaan urut nama, site urut nama dengan jumlah perusahaannya.
+  $opsiPt = array_column($cakupan['perusahaan'], 'nama');
+  natcasesort($opsiPt);
+  $opsiSite = [];
+  foreach ($cakupan['perusahaan'] as $p) {
+      foreach ($p['site'] as $s) {
+          $opsiSite[$s['nama']] = ($opsiSite[$s['nama']] ?? 0) + 1;
+      }
+  }
+  uksort($opsiSite, 'strnatcasecmp');
 @endphp
 
 <div class="rov-kartu mb-16" id="roCakupan">
@@ -25,50 +39,76 @@
         <b>Sudah</b> = ada roster disetujui · <b>Menunggu</b> = baru di-upload, belum disetujui.
       </p>
     </div>
+    <div class="rov-cak-konteks d-none" data-cak-konteks></div>
   </div>
 
-  <div class="rov-cak-banding">
-    @foreach (['pt' => ['Perusahaan', 'solar:buildings-2-bold'], 'site' => ['Site perusahaan', 'solar:map-point-bold']] as $kunci => [$judul, $ikonJudul])
-      @php $n = $r[$kunci]; @endphp
-      <div class="rov-cak-blok">
-        <div class="rov-cak-blok__judul"><iconify-icon icon="{{ $ikonJudul }}"></iconify-icon>{{ $judul }}</div>
-        <div class="rov-cak-blok__nilai">
-          {{ $angka($n['sudah']) }}<span> / {{ $angka($n['total']) }} sudah</span>
-          <em>{{ $persen($n['sudah'], $n['total']) }}%</em>
-        </div>
-        <div class="rov-cak-bar" role="img"
-             aria-label="{{ $judul }}: {{ $n['sudah'] }} sudah, {{ $n['menunggu'] }} menunggu, {{ $n['belum'] }} belum dari {{ $n['total'] }}">
-          @foreach (['sudah', 'menunggu', 'belum'] as $s)
-            @if ($n[$s] > 0)
-              <span class="is-{{ $s }}" style="flex-grow: {{ $n[$s] }}" title="{{ $label[$s] }}: {{ $angka($n[$s]) }}"></span>
-            @endif
-          @endforeach
-        </div>
-        <div class="rov-cak-legenda">
-          @foreach (['sudah', 'menunggu', 'belum'] as $s)
-            <span><i class="is-{{ $s }}"></i>{{ $label[$s] }} <b>{{ $angka($n[$s]) }}</b></span>
-          @endforeach
-        </div>
-        @if ($kunci === 'pt')
-          <div class="rov-cak-blok__catatan">
-            Karyawan aktif di perusahaan yang sudah: <b>{{ $angka($r['karyawan']['sudah']) }}</b> dari {{ $angka($r['karyawan']['total']) }}
-            ({{ $persen($r['karyawan']['sudah'], $r['karyawan']['total']) }}%)
-          </div>
-        @else
-          <div class="rov-cak-blok__catatan">Karyawan aktif tanpa site tidak dihitung sebagai site.</div>
-        @endif
+  {{-- KPI cakupan; angka diisi ulang oleh skrip saat filter perusahaan/site dipakai. --}}
+  @php
+    $pt = $r['pt'];
+    $diupload = $pt['sudah'] + $pt['menunggu'];
+  @endphp
+  <div class="rov-kpi rov-cak-kpi" data-cak-kpi>
+    <div class="rov-kpi__kartu">
+      <span class="rov-kpi__ikon rov-ikon-indigo"><iconify-icon icon="solar:buildings-2-bold"></iconify-icon></span>
+      <div>
+        <div class="rov-kpi__label">Total perusahaan</div>
+        <div class="rov-kpi__nilai" data-cak-n="total">{{ $angka($pt['total']) }}</div>
+        <div class="rov-kpi__sub"><span data-cak-n="site_total">{{ $angka($r['site']['total']) }}</span> site · <span data-cak-n="kar_total">{{ $angka($r['karyawan']['total']) }}</span> karyawan aktif</div>
       </div>
-    @endforeach
+    </div>
+    <div class="rov-kpi__kartu">
+      <span class="rov-kpi__ikon rov-ikon-hijau"><iconify-icon icon="solar:upload-minimalistic-bold"></iconify-icon></span>
+      <div>
+        <div class="rov-kpi__label">Sudah upload</div>
+        <div class="rov-kpi__nilai" data-cak-n="upload">{{ $angka($diupload) }}</div>
+        <div class="rov-kpi__sub"><span data-cak-n="sudah">{{ $angka($pt['sudah']) }}</span> disetujui · <span data-cak-n="menunggu">{{ $angka($pt['menunggu']) }}</span> menunggu approval</div>
+      </div>
+    </div>
+    <div class="rov-kpi__kartu">
+      <span class="rov-kpi__ikon rov-ikon-merah"><iconify-icon icon="solar:danger-circle-bold"></iconify-icon></span>
+      <div>
+        <div class="rov-kpi__label">Belum upload</div>
+        <div class="rov-kpi__nilai" data-cak-n="belum">{{ $angka($pt['belum']) }}</div>
+        <div class="rov-kpi__sub"><span data-cak-n="site_belum">{{ $angka($r['site']['belum']) }}</span> site belum ada roster</div>
+      </div>
+    </div>
+    <div class="rov-kpi__kartu">
+      <span class="rov-kpi__ikon rov-ikon-sky"><iconify-icon icon="solar:chart-2-bold"></iconify-icon></span>
+      <div class="flex-grow-1">
+        <div class="rov-kpi__label">Comply rate</div>
+        <div class="rov-kpi__nilai"><span data-cak-n="rate">{{ $persen($pt['sudah'], $pt['total']) }}</span>%</div>
+        <div class="rov-cak-rate" role="img" aria-label="Comply rate" data-cak-rate>
+          <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $pt['total'] > 0 ? round($pt['sudah'] / $pt['total'] * 100, 2) : 0 }}%"></span>
+          <span class="is-menunggu" data-cak-seg="menunggu" style="width: {{ $pt['total'] > 0 ? round($pt['menunggu'] / $pt['total'] * 100, 2) : 0 }}%"></span>
+        </div>
+        <div class="rov-kpi__sub">Disetujui ÷ total perusahaan · termasuk yang menunggu: <span data-cak-n="rate_upload">{{ $persen($diupload, $pt['total']) }}</span>%</div>
+      </div>
+    </div>
   </div>
 
   <div class="rov-cak-alat">
     <div class="rov-cak-saring" role="group" aria-label="Saring status">
-      <button type="button" class="is-aktif" data-cak-status="">Semua <b>{{ $angka($r['pt']['total']) }}</b></button>
+      <button type="button" class="is-aktif" data-cak-status="">Semua <b data-cak-hitung="">{{ $angka($r['pt']['total']) }}</b></button>
       @foreach (['belum', 'menunggu', 'sudah'] as $s)
-        <button type="button" data-cak-status="{{ $s }}"><i class="is-{{ $s }}"></i>{{ $label[$s] }} <b>{{ $angka($r['pt'][$s]) }}</b></button>
+        <button type="button" data-cak-status="{{ $s }}"><i class="is-{{ $s }}"></i>{{ $label[$s] }} <b data-cak-hitung="{{ $s }}">{{ $angka($r['pt'][$s]) }}</b></button>
       @endforeach
     </div>
-    <input type="search" class="form-control form-control-sm rov-cak-cari" placeholder="Cari perusahaan / site…" data-cak-cari aria-label="Cari perusahaan atau site">
+    <div class="rov-cak-filter">
+      <select class="form-select form-select-sm" data-cak-pt aria-label="Filter perusahaan">
+        <option value="">Semua perusahaan</option>
+        @foreach ($opsiPt as $nama)
+          <option value="{{ $nama }}">{{ $nama }}</option>
+        @endforeach
+      </select>
+      <select class="form-select form-select-sm" data-cak-site aria-label="Filter site">
+        <option value="">Semua site</option>
+        @foreach ($opsiSite as $nama => $jml)
+          <option value="{{ $nama }}">{{ $nama }} ({{ $jml }} PT)</option>
+        @endforeach
+      </select>
+      <input type="search" class="form-control form-control-sm rov-cak-cari" placeholder="Cari perusahaan / site…" data-cak-cari aria-label="Cari perusahaan atau site">
+      <button type="button" class="btn btn-sm btn-outline-secondary d-none" data-cak-reset>Reset</button>
+    </div>
   </div>
 
   <div class="rov-cak-gulir">
@@ -84,7 +124,8 @@
       </thead>
       <tbody>
         @foreach ($daftar as $p)
-          <tr data-cak-baris data-status="{{ $p['status'] }}"
+          <tr data-cak-baris data-status="{{ $p['status'] }}" data-nama="{{ $p['nama'] }}" data-karyawan="{{ $p['karyawan'] }}"
+              data-site="{{ json_encode(array_map(static fn (array $s): array => [$s['nama'], $s['status'], $s['karyawan']], $p['site'])) }}"
               data-cari="{{ mb_strtolower($p['nama'].' '.implode(' ', $p['alias']).' '.implode(' ', array_column($p['site'], 'nama'))) }}">
             <td class="ps-24">
               <div class="ro-pt-nama">{{ $p['nama'] }}</div>
@@ -100,10 +141,10 @@
               @if ($p['site'] === [])
                 <span class="ro-pt-site">Tanpa site</span>
               @else
-                <div class="rov-cak-jumlah">{{ $p['site_sudah'] }} / {{ count($p['site']) }}</div>
+                <div class="rov-cak-jumlah" data-cak-jumlah>{{ $p['site_sudah'] }} / {{ count($p['site']) }}</div>
                 <div class="rov-cak-situs">
                   @foreach ($p['site'] as $s)
-                    <span class="rov-cak-chip is-{{ $s['status'] }}" title="{{ $s['nama'] }} · {{ $label[$s['status']] }} · {{ $angka($s['karyawan']) }} karyawan aktif">
+                    <span class="rov-cak-chip is-{{ $s['status'] }}" data-cak-chip="{{ $s['nama'] }}" title="{{ $s['nama'] }} · {{ $label[$s['status']] }} · {{ $angka($s['karyawan']) }} karyawan aktif">
                       <iconify-icon icon="{{ $ikon[$s['status']] }}"></iconify-icon>{{ $s['nama'] }}
                     </span>
                   @endforeach

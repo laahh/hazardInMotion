@@ -68,25 +68,17 @@
   .ro-memuat { padding: 28px; text-align: center; color: #64748B; font-size: 13px; }
 
   /* ── Cakupan upload (perusahaan & site: sudah / menunggu / belum) ── */
-  .rov-cak-banding { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px 24px 8px; }
-  .rov-cak-blok { border: 1px solid #EEF2F7; border-radius: 12px; padding: 16px 18px; min-width: 0; }
-  .rov-cak-blok__judul { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #64748B; }
-  .rov-cak-blok__judul iconify-icon { font-size: 16px; color: #4F46E5; }
-  .rov-cak-blok__nilai { font-size: 26px; font-weight: 700; color: #0F172A; line-height: 1.15; margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .rov-cak-blok__nilai span { font-size: 14px; font-weight: 500; color: #64748B; }
-  .rov-cak-blok__nilai em { font-style: normal; font-size: 13px; font-weight: 600; color: #047857; margin-left: 6px; }
-  .rov-cak-blok__catatan { font-size: 12px; color: #64748B; margin-top: 10px; }
-  .rov-cak-blok__catatan b { color: #0F172A; }
-  /* Batang bertumpuk: celah 2px antar segmen, ujung membulat. */
-  .rov-cak-bar { display: flex; gap: 2px; height: 10px; margin-top: 12px; }
-  .rov-cak-bar > span { flex-basis: 0; min-width: 4px; border-radius: 4px; }
-  .rov-cak-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: #475569; margin-top: 10px; }
-  .rov-cak-legenda span { display: inline-flex; align-items: center; gap: 6px; }
-  .rov-cak-legenda b { color: #0F172A; font-variant-numeric: tabular-nums; }
-  .rov-cak-legenda i, .rov-cak-saring i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
-  .rov-cak-bar .is-sudah, .rov-cak-legenda .is-sudah, .rov-cak-saring .is-sudah { background: #10B981; }
-  .rov-cak-bar .is-menunggu, .rov-cak-legenda .is-menunggu, .rov-cak-saring .is-menunggu { background: #F59E0B; }
-  .rov-cak-bar .is-belum, .rov-cak-legenda .is-belum, .rov-cak-saring .is-belum { background: #CBD5E1; }
+  .rov-cak-kpi { padding: 20px 24px 4px; margin-bottom: 0; }
+  .rov-cak-kpi .rov-kpi__kartu { box-shadow: none; }
+  /* Batang comply rate: hijau disetujui, oranye menunggu, celah 2px. */
+  .rov-cak-rate { display: flex; gap: 2px; height: 6px; border-radius: 3px; background: #F1F5F9; margin-top: 8px; overflow: hidden; }
+  .rov-cak-rate > span { display: block; height: 100%; border-radius: 3px; }
+  .rov-cak-rate .is-sudah { background: #10B981; }
+  .rov-cak-rate .is-menunggu { background: #F59E0B; }
+  .rov-cak-saring i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .rov-cak-saring .is-sudah { background: #10B981; }
+  .rov-cak-saring .is-menunggu { background: #F59E0B; }
+  .rov-cak-saring .is-belum { background: #CBD5E1; }
 
   .rov-cak-alat { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px 16px; }
   .rov-cak-saring { display: inline-flex; flex-wrap: wrap; gap: 6px; }
@@ -94,7 +86,10 @@
   .rov-cak-saring button b { color: #0F172A; font-variant-numeric: tabular-nums; }
   .rov-cak-saring button.is-aktif { border-color: #6366F1; background: #EEF2FF; color: #4338CA; }
   .rov-cak-saring button:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
-  .rov-cak-cari { max-width: 260px; }
+  .rov-cak-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .rov-cak-filter .form-select { width: 220px; }
+  .rov-cak-cari { width: 220px; }
+  .rov-cak-konteks { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: #EEF2FF; color: #4338CA; font-size: 12px; font-weight: 600; }
   .rov-cak-gulir { max-height: 560px; overflow: auto; border-top: 1px solid #EEF2F7; }
   .rov-cak-gulir thead th { position: sticky; top: 0; z-index: 1; }
   /* Chip site tidak boleh menumpuk satu-satu ke bawah di layar sempit. */
@@ -113,9 +108,9 @@
   .rov-cak-tidakcocok > iconify-icon { font-size: 16px; flex: none; margin-top: 1px; }
 
   @media (max-width: 767.98px) {
-    .rov-perhatian, .rov-cak-banding { grid-template-columns: 1fr; }
-    .rov-cak-banding, .rov-cak-alat { padding-left: 16px; padding-right: 16px; }
-    .rov-cak-cari { max-width: none; flex: 1 1 100%; }
+    .rov-perhatian { grid-template-columns: 1fr; }
+    .rov-cak-kpi, .rov-cak-alat { padding-left: 16px; padding-right: 16px; }
+    .rov-cak-filter, .rov-cak-filter .form-select, .rov-cak-cari { width: 100%; }
   }
   @media (max-width: 575.98px) {
     .ro-filter > div { flex: 1 1 100%; }
@@ -319,28 +314,110 @@
 
 @section('page-scripts')
 <script>
-// Cakupan upload: saring status (Semua/Belum/Menunggu/Sudah) + cari nama/site.
+// Cakupan upload: saring status (Semua/Belum/Menunggu/Sudah), perusahaan, site,
+// dan cari. Bila satu site dipilih, status tiap perusahaan = status site itu dan
+// angka perbandingan di atas dihitung ulang hanya untuk site tersebut.
 (function () {
     'use strict';
 
     var kartu = document.getElementById('roCakupan');
     if (!kartu) { return; }
 
+    var STATUS = ['sudah', 'menunggu', 'belum'];
     var tombol = kartu.querySelectorAll('[data-cak-status]');
     var cari = kartu.querySelector('[data-cak-cari]');
-    var baris = kartu.querySelectorAll('[data-cak-baris]');
+    var pilihPt = kartu.querySelector('[data-cak-pt]');
+    var pilihSite = kartu.querySelector('[data-cak-site]');
+    var reset = kartu.querySelector('[data-cak-reset]');
+    var konteks = kartu.querySelector('[data-cak-konteks]');
     var kosong = kartu.querySelector('[data-cak-kosong]');
+    var baris = Array.prototype.map.call(kartu.querySelectorAll('[data-cak-baris]'), function (tr) {
+        return {
+            tr: tr,
+            nama: tr.dataset.nama,
+            status: tr.dataset.status,
+            karyawan: parseInt(tr.dataset.karyawan, 10) || 0,
+            site: JSON.parse(tr.dataset.site || '[]'),
+            cari: tr.dataset.cari,
+            chip: tr.querySelectorAll('[data-cak-chip]'),
+            jumlah: tr.querySelector('[data-cak-jumlah]'),
+            badge: tr.querySelector('.rov-cak-status'),
+        };
+    });
+    var LABEL = { sudah: 'Sudah', menunggu: 'Menunggu approval', belum: 'Belum upload' };
+    var IKON = { sudah: 'solar:check-circle-bold', menunggu: 'solar:hourglass-bold', belum: 'solar:minus-circle-linear' };
+
+    // Badge status baris = status efektif (status site itu bila satu site dipilih).
+    function isiBadge(b, efektif, site) {
+        b.badge.className = 'rov-cak-status is-' + efektif;
+        b.badge.innerHTML = '<iconify-icon icon="' + IKON[efektif] + '"></iconify-icon>' + LABEL[efektif];
+        b.badge.title = site === '' ? '' : 'Status roster untuk site ' + site;
+    }
     var status = '';
+
+    function angka(n) { return n.toLocaleString('id-ID'); }
+    function persen(n, t) { return t > 0 ? (n / t * 100).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '0'; }
+    function nol() { return { sudah: 0, menunggu: 0, belum: 0 }; }
+
+    function isiKpi(nPt, nSite, nKar) {
+        var kpi = kartu.querySelector('[data-cak-kpi]');
+        var total = nPt.sudah + nPt.menunggu + nPt.belum;
+        var set = function (k, v) { kpi.querySelector('[data-cak-n="' + k + '"]').textContent = v; };
+        set('total', angka(total));
+        set('site_total', angka(nSite.sudah + nSite.menunggu + nSite.belum));
+        set('kar_total', angka(nKar.sudah + nKar.menunggu + nKar.belum));
+        set('upload', angka(nPt.sudah + nPt.menunggu));
+        set('sudah', angka(nPt.sudah));
+        set('menunggu', angka(nPt.menunggu));
+        set('belum', angka(nPt.belum));
+        set('site_belum', angka(nSite.belum));
+        set('rate', persen(nPt.sudah, total));
+        set('rate_upload', persen(nPt.sudah + nPt.menunggu, total));
+        ['sudah', 'menunggu'].forEach(function (s) {
+            kpi.querySelector('[data-cak-seg="' + s + '"]').style.width = (total > 0 ? nPt[s] / total * 100 : 0) + '%';
+        });
+    }
 
     function terapkan() {
         var q = cari.value.trim().toLowerCase();
-        var tampil = 0;
-        baris.forEach(function (tr) {
-            var cocok = (status === '' || tr.dataset.status === status) && (q === '' || tr.dataset.cari.indexOf(q) !== -1);
-            tr.classList.toggle('d-none', !cocok);
-            if (cocok) { tampil++; }
+        var pt = pilihPt.value;
+        var site = pilihSite.value;
+        var nPt = nol(), nSite = nol(), nKar = nol(), tampil = 0;
+
+        baris.forEach(function (b) {
+            // Status & karyawan efektif: per site terpilih, atau per perusahaan.
+            var efektif = b.status, karyawan = b.karyawan, situs = b.site;
+            var dasar = (pt === '' || b.nama === pt) && (q === '' || b.cari.indexOf(q) !== -1);
+            if (dasar && site !== '') {
+                var s = b.site.filter(function (x) { return x[0] === site; })[0];
+                dasar = !!s;
+                if (s) { efektif = s[1]; karyawan = s[2]; situs = [s]; }
+            }
+            if (dasar) {
+                nPt[efektif]++;
+                nKar[efektif] += karyawan;
+                situs.forEach(function (x) { nSite[x[1]]++; });
+            }
+            var lihat = dasar && (status === '' || efektif === status);
+            b.tr.classList.toggle('d-none', !lihat);
+            if (lihat) { tampil++; }
+
+            if (lihat) { isiBadge(b, efektif, site); }
+            b.chip.forEach(function (c) { c.classList.toggle('d-none', site !== '' && c.dataset.cakChip !== site); });
+            if (b.jumlah) { b.jumlah.classList.toggle('d-none', site !== ''); }
         });
+
+        isiKpi(nPt, nSite, nKar);
+        STATUS.forEach(function (s) { kartu.querySelector('[data-cak-hitung="' + s + '"]').textContent = angka(nPt[s]); });
+        kartu.querySelector('[data-cak-hitung=""]').textContent = angka(nPt.sudah + nPt.menunggu + nPt.belum);
         kosong.classList.toggle('d-none', tampil > 0);
+
+        var label = [];
+        if (pt !== '') { label.push(pt); }
+        if (site !== '') { label.push('Site ' + site); }
+        konteks.textContent = label.length ? 'Menampilkan: ' + label.join(' · ') : '';
+        konteks.classList.toggle('d-none', label.length === 0);
+        reset.classList.toggle('d-none', label.length === 0 && q === '' && status === '');
     }
 
     tombol.forEach(function (b) {
@@ -351,6 +428,16 @@
         });
     });
     cari.addEventListener('input', terapkan);
+    pilihPt.addEventListener('change', terapkan);
+    pilihSite.addEventListener('change', terapkan);
+    reset.addEventListener('click', function () {
+        status = '';
+        cari.value = '';
+        pilihPt.value = '';
+        pilihSite.value = '';
+        tombol.forEach(function (x) { x.classList.toggle('is-aktif', x.dataset.cakStatus === ''); });
+        terapkan();
+    });
 })();
 </script>
 <script>
