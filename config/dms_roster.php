@@ -230,6 +230,9 @@ return [
         // (tiap 1 jam) tetap dipakai sampai putaran berikutnya selesai.
         'cache_ttl' => 4500,
         'timeout_ms' => 20000,
+        // Salinan lengkap karyawan aktif (Tahap 8, CLI): view-nya bisa > 30 dtk,
+        // jadi batasnya lebih longgar dari query halaman (timeout_cari_ms).
+        'timeout_lengkap_ms' => 180000,
         // Jendela dipecah per N hari: satu query 180 hari bisa melewati
         // statement_timeout saat server sibuk; potongan 30 hari ±0,5 dtk.
         'potongan_hari' => 30,
@@ -263,7 +266,7 @@ return [
             'simpan' => (bool) env('DMS_PERINGATAN_SIMPAN', true),
         ],
 
-        // Penyisipan otomatis "Pelanggaran periode kerja > 70 hari" ke
+        // Penyisipan otomatis "Pelanggaran periode kerja > 70 hari" (baru di hari ke-74, aturan.onsite_banned_hari_ke) ke
         // sid_roster_banned_master (menu Master Roster Banned), dijalankan
         // command dms:sync-roster-rfid tiap 30 menit.
         //

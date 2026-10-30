@@ -49,7 +49,7 @@ final class DmsRosterKaryawanAktif
      */
     private const KUNCI_GAGAL = 'dms_roster:karyawan_aktif:gagal:v2';
 
-    private const TTL_GAGAL_DETIK = 60;
+    private const TTL_GAGAL_DETIK = 300;
 
     private ?string $galat = null;
 
@@ -68,6 +68,16 @@ final class DmsRosterKaryawanAktif
     {
         if (! $segarkan && is_array($ada = Cache::get(self::KUNCI_PT))) {
             return $ada;
+        }
+        // View karyawan aktif bisa > 30 dtk; beberapa query live berturut-turut
+        // di satu request = 504. Halaman memakai salinan lengkap (Tahap 8 sync)
+        // bila ada; query view hanya bila salinan belum ada atau minta segarkan.
+        $lengkap = $segarkan ? null : Cache::get(self::KUNCI_LENGKAP);
+        if (is_array($lengkap)) {
+            $hasil = self::hitungPerusahaan($lengkap['karyawan']);
+            Cache::put(self::KUNCI_PT, $hasil, self::TTL_DETIK);
+
+            return $hasil;
         }
         if (! $segarkan && is_string($gagal = Cache::get(self::KUNCI_GAGAL))) {
             $this->galat = $gagal;
@@ -133,6 +143,14 @@ final class DmsRosterKaryawanAktif
         if (is_array($ada = Cache::get($kunci))) {
             return $ada;
         }
+        if (is_array($lengkap = Cache::get(self::KUNCI_LENGKAP))) {
+            return self::dariLengkap($lengkap, $perusahaan);
+        }
+        if (is_string($gagal = Cache::get(self::KUNCI_GAGAL))) {
+            $this->galat = $gagal;
+
+            return null;
+        }
 
         try {
             $rows = $this->olap->select(
@@ -154,10 +172,16 @@ final class DmsRosterKaryawanAktif
         }
 
         $lengkap = Cache::get(self::KUNCI_LENGKAP);
-        if (! is_array($lengkap)) {
-            return null;
-        }
 
+        return is_array($lengkap) ? self::dariLengkap($lengkap, $perusahaan) : null;
+    }
+
+    /**
+     * @param  array{karyawan: list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>}  $lengkap
+     * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>
+     */
+    private static function dariLengkap(array $lengkap, string $perusahaan): array
+    {
         return self::urutkan(array_values(array_filter(
             $lengkap['karyawan'],
             static fn (array $k): bool => $k['perusahaan'] === trim($perusahaan) && ! self::dikecualikan($k['jabatan']),
@@ -258,7 +282,7 @@ final class DmsRosterKaryawanAktif
                         jabatan_struktural AS jabatan, site_dedicated AS site
                  FROM {$this->view()}",
                 [],
-                $this->timeout(),
+                (int) config('dms_roster.reg_live.timeout_lengkap_ms', 180000),
             );
         } catch (Throwable $e) {
             $this->catatGagal($e);

@@ -187,7 +187,7 @@ final class SyncRosterRfidCommand extends Command
             $this->warn('  > 13 hari beruntun dilewati: migrasi 2026_10_28_110000 (aturan_pelanggaran) belum dijalankan.');
             $beruntun = false;
         }
-        $this->info('Tahap 6 — masukkan periode kerja > 70 hari'.($beruntun ? ' & kerja > 13 hari berturut-turut' : '')
+        $this->info('Tahap 6 — masukkan periode kerja > 70 hari (mulai hari ke-74)'.($beruntun ? ' & kerja > 13 hari berturut-turut' : '')
             .' ke Master Roster Banned ...');
 
         try {

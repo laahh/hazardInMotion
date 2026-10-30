@@ -57,7 +57,30 @@ final class PraOperasiOperatorRosterReader
             return [];
         }
 
-        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SECONDS, fn (): array => $this->fetchRoster('STRUKTURAL'));
+        return $this->rememberNonEmpty(self::CACHE_KEY, fn (): array => $this->fetchRoster('STRUKTURAL'));
+    }
+
+    /**
+     * Seperti Cache::remember, tapi hasil kosong TIDAK disimpan: query roster
+     * yang gagal/timeout sekali (fetch* menelan error dan mengembalikan [])
+     * tidak boleh membuat dashboard kosong selama 6 jam penuh.
+     *
+     * @param  callable(): list<array{kode_sid: string, nama: string, jabatan: string, perusahaan: string}>  $fetch
+     * @return list<array{kode_sid: string, nama: string, jabatan: string, perusahaan: string}>
+     */
+    private function rememberNonEmpty(string $key, callable $fetch): array
+    {
+        $cached = Cache::get($key);
+        if (is_array($cached) && $cached !== []) {
+            return $cached;
+        }
+
+        $roster = $fetch();
+        if ($roster !== []) {
+            Cache::put($key, $roster, self::CACHE_TTL_SECONDS);
+        }
+
+        return $roster;
     }
 
     /**
@@ -71,7 +94,7 @@ final class PraOperasiOperatorRosterReader
             return [];
         }
 
-        return Cache::remember(self::CACHE_KEY_FUNGSIONAL, self::CACHE_TTL_SECONDS, fn (): array => $this->fetchFungsionalFromActiveSnapshot());
+        return $this->rememberNonEmpty(self::CACHE_KEY_FUNGSIONAL, fn (): array => $this->fetchFungsionalFromActiveSnapshot());
     }
 
     /**

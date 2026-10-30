@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
  * Memasukkan pelanggaran dari DmsRosterRegLiveService ke
  * sid_roster_banned_master — menu Master Roster Banned di
  * /pra-operasi/roster-banned:
- *   onsite    periode kerja > 70 hari       (tanggal_pelanggaran = hari ke-71)
+ *   onsite    periode kerja > 70 hari, masuk di hari ke-74 (tanggal_pelanggaran = hari ke-71)
  *   beruntun  bekerja > 13 hari berturut-turut (tanggal_pelanggaran = hari ke-14)
  *
  * Isi baris mengikuti baris yang sudah ada di master: nik, sid, nama,
@@ -52,6 +52,19 @@ final class DmsRosterAutoBannedService
             'onsite' => (int) config('dms_roster.reg_live.aturan.onsite_banned_lama', 14),
             'beruntun' => (int) config('dms_roster.reg_live.aturan.beruntun_banned_lama', 1),
         ];
+        // > 70 hari baru masuk master di hari ke-74 (jatuh tempo banned, lihat
+        // aturan.onsite_banned_hari_ke); hari ke-71–73 tetap tampil di kartu live.
+        $bannedKe = (int) config('dms_roster.reg_live.aturan.onsite_banned_hari_ke', 74);
+        $belumTempo = [];
+        $onsite = array_values(array_filter($onsite, static function (array $r) use ($bannedKe, &$belumTempo): bool {
+            $hari = (int) ($r['urut'] ?? 0);
+            if ($hari >= $bannedKe) {
+                return true;
+            }
+            $belumTempo[] = ['sid' => (string) $r['sid'], 'nama' => (string) $r['nama'], 'alasan' => 'periode kerja hari ke-'.$hari.', masuk master di hari ke-'.$bannedKe];
+
+            return false;
+        }));
         $baris = array_merge(
             array_map(static fn (array $r): array => $r + ['_aturan' => 'onsite'], $onsite),
             array_map(static fn (array $r): array => $r + ['_aturan' => 'beruntun'], $beruntun),
@@ -59,14 +72,14 @@ final class DmsRosterAutoBannedService
 
         $sids = array_values(array_unique(array_map(static fn (array $r): string => (string) $r['sid'], $baris)));
         if ($sids === []) {
-            return ['calon' => [], 'dilewati' => []];
+            return ['calon' => [], 'dilewati' => $belumTempo];
         }
 
         $nik = DB::table('dms_roster_karyawan')->whereIn('kode_sid', $sids)->pluck('nik', 'kode_sid')->all();
         [$sidAda, $nikAda] = $this->sudahTercatat($sids, array_values(array_filter(array_map('strval', $nik))));
 
         $calon = [];
-        $dilewati = [];
+        $dilewati = $belumTempo;
         $dipilih = [];
         foreach ($baris as $r) {
             $sid = (string) $r['sid'];
