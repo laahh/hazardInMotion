@@ -363,7 +363,48 @@ final class DmsRosterAksesPerusahaan
 
         // Singkatan cocok dengan nama lengkap mana pun; nama lengkap hanya
         // cocok dengan singkatan (bukan dengan nama lengkap lain berinisial sama).
-        return $isSingkatan ? isset($kodeNama[$kode]) || isset($singkatan[$kode]) : isset($singkatan[$kode]);
+        if ($isSingkatan ? isset($kodeNama[$kode]) || isset($singkatan[$kode]) : isset($singkatan[$kode])) {
+            return true;
+        }
+
+        // Salah ketik di file roster ("PT Duta Borne Mining"): dipetakan dulu ke
+        // nama resmi di data karyawan aktif (DmsRosterCakupanUpload::peta —
+        // selisih <= 2 huruf, kandidat tunggal & jelas), baru dicocokkan ke
+        // assignment. Akses tidak diberikan hanya karena mirip nama yang di-assign.
+        $resmi = self::petaResmi()[$pt] ?? null;
+
+        return $resmi !== null && $resmi !== $pt && isset($nama[self::kunci($resmi)]);
+    }
+
+    /** @var array<string, string>|null */
+    private static ?array $petaResmi = null;
+
+    /**
+     * Ejaan perusahaan di roster → nama resmi karyawan aktif (sekali per request).
+     * Gagal dibaca = kosong (pencocokan kembali ke ejaan/singkatan saja).
+     *
+     * @return array<string, string>
+     */
+    private static function petaResmi(): array
+    {
+        if (self::$petaResmi === null) {
+            // Peta sendiri dibangun lewat terlihat()/masuk() — selama dibangun
+            // dianggap kosong supaya tidak berputar tanpa ujung.
+            self::$petaResmi = [];
+            try {
+                self::$petaResmi = app(DmsRosterCakupanReader::class)->peta();
+            } catch (Throwable) {
+                self::$petaResmi = [];
+            }
+        }
+
+        return self::$petaResmi;
+    }
+
+    /** Untuk test: buang peta yang diingat. */
+    public static function lupakanPeta(?array $peta = null): void
+    {
+        self::$petaResmi = $peta;
     }
 
     /**

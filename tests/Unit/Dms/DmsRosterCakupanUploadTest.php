@@ -13,6 +13,18 @@ use Tests\TestCase;
  */
 class DmsRosterCakupanUploadTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        \App\Services\Dms\Roster\DmsRosterAksesPerusahaan::lupakanPeta([]);
+    }
+
+    protected function tearDown(): void
+    {
+        \App\Services\Dms\Roster\DmsRosterAksesPerusahaan::lupakanPeta();
+        parent::tearDown();
+    }
+
     private const AKTIF = [
         ['nama' => 'PT Pamapersada Nusantara', 'jumlah' => 100, 'site' => [
             ['nama' => '-', 'jumlah' => 5], ['nama' => 'BMO 2', 'jumlah' => 60], ['nama' => 'GMO', 'jumlah' => 35],

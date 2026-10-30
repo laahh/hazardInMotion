@@ -13,6 +13,34 @@ use PHPUnit\Framework\TestCase;
  */
 class DmsRosterAksesPerusahaanTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Tanpa peta salah ketik (tidak membaca data karyawan aktif).
+        Akses::lupakanPeta([]);
+    }
+
+    protected function tearDown(): void
+    {
+        Akses::lupakanPeta();
+        parent::tearDown();
+    }
+
+    public function test_salah_ketik_di_roster_cocok_lewat_nama_resmi_karyawan_aktif(): void
+    {
+        Akses::lupakanPeta(['PT Duta Borne Mining' => 'PT Duta Borneo Mining']);
+
+        $this->assertTrue(Akses::terlihat(['PT Duta Borneo Mining'], ['PT Duta Borne Mining']));
+        $this->assertTrue(Akses::mencakup(['PT Duta Borneo Mining'], ['PT Duta Borne Mining']));
+        // Assignment perusahaan lain tetap tidak dapat akses.
+        $this->assertFalse(Akses::mencakup(['PT Lintech Duta Pratama'], ['PT Duta Borne Mining']));
+    }
+
+    public function test_salah_ketik_tanpa_peta_tidak_diberi_akses(): void
+    {
+        $this->assertFalse(Akses::mencakup(['PT Duta Borneo Mining'], ['PT Duta Borne Mining']));
+    }
+
     public function test_tanpa_batasan_melihat_dan_mereview_semua(): void
     {
         $this->assertTrue(Akses::terlihat(null, ['PT Pamapersada Nusantara']));
