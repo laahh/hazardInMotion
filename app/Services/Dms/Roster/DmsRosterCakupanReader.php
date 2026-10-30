@@ -53,12 +53,7 @@ final class DmsRosterCakupanReader
             if ($aktif === null) {
                 return $this->peta = [];
             }
-            $ejaan = DB::table('dms_roster_master_jadwal')
-                ->selectRaw('DISTINCT TRIM(perusahaan) AS pt')
-                ->whereRaw("TRIM(COALESCE(perusahaan, '')) <> ''")
-                ->pluck('pt')
-                ->map(static fn ($p): string => (string) $p)
-                ->all();
+            $ejaan = DmsRosterMasterCache::ejaan();
 
             return $this->peta = DmsRosterCakupanUpload::peta(array_column($aktif, 'nama'), $ejaan, $this->suaraSid());
         } catch (Throwable $e) {
@@ -156,7 +151,9 @@ final class DmsRosterCakupanReader
      */
     public function sidRoster(array $ejaan): array
     {
-        return array_fill_keys(
+        sort($ejaan);
+
+        return DmsRosterMasterCache::ingat('sid_roster:'.md5(implode('|', $ejaan)), static fn (): array => array_fill_keys(
             DB::table('dms_roster_master_jadwal as j')
                 ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
                 ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
@@ -166,7 +163,7 @@ final class DmsRosterCakupanReader
                 ->map(static fn ($s): string => (string) $s)
                 ->all(),
             true,
-        );
+        ));
     }
 
     /**
@@ -201,13 +198,13 @@ final class DmsRosterCakupanReader
      */
     private function pasangan(): array
     {
-        return $this->pasangan ??= DB::table('dms_roster_master_jadwal as j')
+        return $this->pasangan ??= DmsRosterMasterCache::ingat('pasangan', static fn (): array => DB::table('dms_roster_master_jadwal as j')
             ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
             ->whereRaw("TRIM(COALESCE(j.perusahaan, '')) <> ''")
             ->selectRaw('TRIM(j.perusahaan) AS pt, UPPER(TRIM(j.kode_sid)) AS sid, MAX(u.status <> ?) AS aktif', [DmsRosterMasterUpload::STATUS_REJECTED])
             ->groupByRaw('1, 2')
             ->get()
-            ->all();
+            ->all());
     }
 
     /**

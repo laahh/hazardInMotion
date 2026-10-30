@@ -548,6 +548,17 @@ final class DmsRosterMasterService
      */
     public function perusahaanTerupload(array $peta = []): array
     {
+        ksort($peta);
+
+        return DmsRosterMasterCache::ingat('terupload:'.md5((string) json_encode($peta)), fn (): array => $this->hitungPerusahaanTerupload($peta));
+    }
+
+    /**
+     * @param  array<string, string>  $peta
+     * @return list<array<string, mixed>>
+     */
+    private function hitungPerusahaanTerupload(array $peta): array
+    {
         $asli = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
         $pt = $asli;
         $ikat = [];
@@ -599,6 +610,14 @@ final class DmsRosterMasterService
      * @return list<array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}>
      */
     public function uploadPerSite(): array
+    {
+        return DmsRosterMasterCache::ingat('per_site', fn (): array => $this->hitungUploadPerSite());
+    }
+
+    /**
+     * @return list<array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}>
+     */
+    private function hitungUploadPerSite(): array
     {
         $pt = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
 

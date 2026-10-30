@@ -106,14 +106,11 @@ final class DmsRosterAksesPerusahaan
         }
         $indeks = self::indeks($cakupan);
 
-        return DB::table('dms_roster_master_jadwal')
-            ->selectRaw('DISTINCT TRIM(perusahaan) AS pt')
-            ->whereNotNull('perusahaan')
-            ->pluck('pt')
-            ->map(static fn ($p): string => (string) $p)
-            ->filter(static fn (string $p): bool => $p !== '' && self::masuk($p, $indeks))
-            ->values()
-            ->all();
+        // Daftar ejaan dari cache berversi (bukan DISTINCT penuh tiap request).
+        return array_values(array_filter(
+            DmsRosterMasterCache::ejaan(),
+            static fn (string $p): bool => self::masuk($p, $indeks),
+        ));
     }
 
     /**
@@ -168,13 +165,13 @@ final class DmsRosterAksesPerusahaan
      */
     public function perusahaanUpload(int $uploadId): array
     {
-        return DB::table('dms_roster_master_jadwal')
-            ->where('upload_id', $uploadId)
-            ->selectRaw("DISTINCT COALESCE(NULLIF(TRIM(perusahaan), ''), ?) AS pt", [DmsRosterMasterService::TANPA_PERUSAHAAN])
-            ->orderBy('pt')
-            ->pluck('pt')
-            ->map(static fn ($p): string => (string) $p)
-            ->all();
+        $pt = array_values(array_unique(array_map(
+            static fn (string $p): string => $p === '' ? DmsRosterMasterService::TANPA_PERUSAHAAN : $p,
+            DmsRosterMasterCache::ptPerUpload()[$uploadId] ?? [],
+        )));
+        sort($pt);
+
+        return $pt;
     }
 
     /**
@@ -192,19 +189,21 @@ final class DmsRosterAksesPerusahaan
         }
 
         $tanpa = in_array(DmsRosterMasterService::TANPA_PERUSAHAAN, $cakupan, true);
-        $ejaan = self::ejaanCakupan($cakupan);
+        $ejaan = array_flip(self::ejaanCakupan($cakupan));
 
-        return $q->whereExists(static function ($sub) use ($ejaan, $tanpa): void {
-            $sub->selectRaw('1')
-                ->from('dms_roster_master_jadwal as j')
-                ->whereColumn('j.upload_id', 'dms_roster_master_upload.id')
-                ->where(static function ($w) use ($ejaan, $tanpa): void {
-                    $w->whereIn(DB::raw('TRIM(j.perusahaan)'), $ejaan === [] ? [''] : $ejaan);
-                    if ($tanpa) {
-                        $w->orWhereNull('j.perusahaan')->orWhereRaw("TRIM(j.perusahaan) = ''");
-                    }
-                });
-        });
+        // Upload yang punya minimal satu ejaan dalam cakupan — dari cache
+        // ptPerUpload, bukan subquery EXISTS + TRIM() per baris jadwal.
+        $id = [];
+        foreach (DmsRosterMasterCache::ptPerUpload() as $uploadId => $pts) {
+            foreach ($pts as $pt) {
+                if (isset($ejaan[$pt]) || ($tanpa && $pt === '')) {
+                    $id[] = $uploadId;
+                    break;
+                }
+            }
+        }
+
+        return $id === [] ? $q->whereRaw('1 = 0') : $q->whereIn('dms_roster_master_upload.id', $id);
     }
 
     /**
