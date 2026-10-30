@@ -99,6 +99,14 @@ class Kernel extends ConsoleKernel
         // hari terakhir lalu rakit ulang pola. Mode inkremental memakai indeks
         // tanggal pada bcsid.mv_checkinout_rfid, jadi ringan — backfill satu
         // tahun penuh dijalankan manual sekali dengan --full.
+        // Ringkasan jadwal Master Roster untuk halaman (Overview/Approval/Edit):
+        // dihitung di latar, hanya bila data berubah — query-nya 20–40 dtk di
+        // MySQL dev, terlalu lama untuk request web.
+        $schedule->command('dms:master-roster-ringkas')
+            ->everyMinute()
+            ->withoutOverlapping(15)
+            ->runInBackground();
+
         $schedule->command('dms:sync-roster-rfid')
             ->timezone('Asia/Makassar')
             ->hourly()

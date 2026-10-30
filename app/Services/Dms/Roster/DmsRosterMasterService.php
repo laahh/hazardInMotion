@@ -548,58 +548,9 @@ final class DmsRosterMasterService
      */
     public function perusahaanTerupload(array $peta = []): array
     {
-        ksort($peta);
-
-        return DmsRosterMasterCache::ingat('terupload:'.md5((string) json_encode($peta)), fn (): array => $this->hitungPerusahaanTerupload($peta));
-    }
-
-    /**
-     * @param  array<string, string>  $peta
-     * @return list<array<string, mixed>>
-     */
-    private function hitungPerusahaanTerupload(array $peta): array
-    {
-        $asli = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
-        $pt = $asli;
-        $ikat = [];
-        // Ejaan yang sama dengan nama resmi ikut dipetakan: MySQL mengelompokkan
-        // tanpa membedakan huruf ("PT SUCOFINDO" = "PT Sucofindo"), dan yang
-        // tampil harus nama resmi, bukan ejaan pertama yang ditemui.
-        if ($peta !== []) {
-            $pt = 'CASE '.$asli.str_repeat(' WHEN ? THEN ?', count($peta)).' ELSE '.$asli.' END';
-            foreach ($peta as $ejaan => $resmi) {
-                array_push($ikat, (string) $ejaan, $resmi);
-            }
-        }
-
-        return DB::table('dms_roster_master_jadwal as j')
-            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
-            ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
-            ->selectRaw("{$pt} AS perusahaan,
-                GROUP_CONCAT(DISTINCT {$asli} SEPARATOR '|') AS ejaan,
-                COUNT(DISTINCT j.kode_sid) AS karyawan,
-                COUNT(DISTINCT j.upload_id) AS upload,
-                COUNT(DISTINCT CASE WHEN u.status = 'APPROVED' THEN j.upload_id END) AS disetujui,
-                COUNT(DISTINCT CASE WHEN u.status = 'PENDING' THEN j.upload_id END) AS menunggu,
-                MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai, MAX(u.created_at) AS terakhir,
-                GROUP_CONCAT(DISTINCT NULLIF(TRIM(j.site), '') ORDER BY j.site SEPARATOR '|') AS site", $ikat)
-            // Posisi kolom: ekspresi CASE berplaceholder tidak dianggap sama oleh ONLY_FULL_GROUP_BY.
-            ->groupByRaw('1')
-            ->orderByRaw('1')
-            ->get()
-            ->map(static fn (object $r): array => [
-                'perusahaan' => (string) $r->perusahaan,
-                'ejaan' => explode('|', (string) $r->ejaan),
-                'karyawan' => (int) $r->karyawan,
-                'upload' => (int) $r->upload,
-                'disetujui' => (int) $r->disetujui,
-                'menunggu' => (int) $r->menunggu,
-                'dari' => (string) $r->dari,
-                'sampai' => (string) $r->sampai,
-                'terakhir' => $r->terakhir === null ? null : (string) $r->terakhir,
-                'site' => $r->site === null || $r->site === '' ? [] : explode('|', (string) $r->site),
-            ])
-            ->all();
+        // Dari ringkasan latar (dms:master-roster-ringkas), bukan GROUP BY
+        // penuh per request — di MySQL dev itu > 50 dtk → 504.
+        return DmsRosterMasterCache::perusahaanTerupload($peta);
     }
 
     /**
@@ -611,32 +562,7 @@ final class DmsRosterMasterService
      */
     public function uploadPerSite(): array
     {
-        return DmsRosterMasterCache::ingat('per_site', fn (): array => $this->hitungUploadPerSite());
-    }
-
-    /**
-     * @return list<array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}>
-     */
-    private function hitungUploadPerSite(): array
-    {
-        $pt = "COALESCE(NULLIF(TRIM(j.perusahaan), ''), '".self::TANPA_PERUSAHAAN."')";
-
-        return DB::table('dms_roster_master_jadwal as j')
-            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
-            ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
-            ->selectRaw("{$pt} AS perusahaan, TRIM(COALESCE(j.site, '')) AS site,
-                MAX(u.status = ?) AS disetujui, MAX(u.status = ?) AS menunggu,
-                COUNT(DISTINCT j.kode_sid) AS karyawan", [DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_PENDING])
-            ->groupByRaw($pt.", TRIM(COALESCE(j.site, ''))")
-            ->get()
-            ->map(static fn (object $r): array => [
-                'perusahaan' => (string) $r->perusahaan,
-                'site' => (string) $r->site,
-                'disetujui' => (bool) $r->disetujui,
-                'menunggu' => (bool) $r->menunggu,
-                'karyawan' => (int) $r->karyawan,
-            ])
-            ->all();
+        return DmsRosterMasterCache::uploadPerSite();
     }
 
     /**

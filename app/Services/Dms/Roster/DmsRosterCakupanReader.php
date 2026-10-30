@@ -151,19 +151,7 @@ final class DmsRosterCakupanReader
      */
     public function sidRoster(array $ejaan): array
     {
-        sort($ejaan);
-
-        return DmsRosterMasterCache::ingat('sid_roster:'.md5(implode('|', $ejaan)), static fn (): array => array_fill_keys(
-            DB::table('dms_roster_master_jadwal as j')
-                ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
-                ->where('u.status', '<>', DmsRosterMasterUpload::STATUS_REJECTED)
-                ->whereIn(DB::raw('TRIM(j.perusahaan)'), $ejaan === [] ? [''] : $ejaan)
-                ->selectRaw('DISTINCT UPPER(TRIM(j.kode_sid)) AS sid')
-                ->pluck('sid')
-                ->map(static fn ($s): string => (string) $s)
-                ->all(),
-            true,
-        ));
+        return DmsRosterMasterCache::sidRoster($ejaan);
     }
 
     /**
@@ -198,13 +186,7 @@ final class DmsRosterCakupanReader
      */
     private function pasangan(): array
     {
-        return $this->pasangan ??= DmsRosterMasterCache::ingat('pasangan', static fn (): array => DB::table('dms_roster_master_jadwal as j')
-            ->join('dms_roster_master_upload as u', 'u.id', '=', 'j.upload_id')
-            ->whereRaw("TRIM(COALESCE(j.perusahaan, '')) <> ''")
-            ->selectRaw('TRIM(j.perusahaan) AS pt, UPPER(TRIM(j.kode_sid)) AS sid, MAX(u.status <> ?) AS aktif', [DmsRosterMasterUpload::STATUS_REJECTED])
-            ->groupByRaw('1, 2')
-            ->get()
-            ->all());
+        return $this->pasangan ??= DmsRosterMasterCache::pasangan();
     }
 
     /**
