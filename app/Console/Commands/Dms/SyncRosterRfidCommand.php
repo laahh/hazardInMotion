@@ -13,6 +13,7 @@ use App\Services\Dms\Roster\DmsRosterRegLiveService;
 use App\Services\Dms\Roster\DmsRosterSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 /**
@@ -36,11 +37,40 @@ final class SyncRosterRfidCommand extends Command
         {--full : Backfill dari 1 Januari tahun tersebut}
         {--master : Segarkan master karyawan + SIMPER + flag wajib_cek}
         {--only-master : Hanya master, lewati penarikan scan & kompilasi}
-        {--no-compile : Jangan rakit ulang pola setelah menarik scan}';
+        {--no-compile : Jangan rakit ulang pola setelah menarik scan}
+        {--lepas-kunci : Lepas kunci "sedang berjalan" milik proses yang sudah mati, lalu keluar}';
 
     protected $description = 'Tarik scan RFID ke dms_roster_scan_harian dan rakit pola roster';
 
+    /** Batas umur kunci: proses yang mati tidak mengunci sinkronisasi selamanya. */
+    private const KUNCI_DETIK = 3 * 3600;
+
     public function handle(DmsRosterSyncService $sync, DmsRosterRegLiveService $live): int
+    {
+        // Jalan manual + terjadwal bersamaan saling menunggu kunci baris MySQL
+        // di tabel yang sama sampai tak satu pun selesai (withoutOverlapping di
+        // Kernel hanya menjaga sesama jadwal, dan kedaluwarsa setelah 55 menit).
+        $kunci = Cache::lock('dms:sync-roster-rfid:berjalan', self::KUNCI_DETIK);
+        if ($this->option('lepas-kunci')) {
+            $kunci->forceRelease();
+            $this->info('Kunci dms:sync-roster-rfid dilepas.');
+
+            return self::SUCCESS;
+        }
+        if (! $kunci->get()) {
+            $this->warn('dms:sync-roster-rfid lain masih berjalan — dilewati. Bila prosesnya sudah mati: php artisan dms:sync-roster-rfid --lepas-kunci');
+
+            return self::SUCCESS;
+        }
+
+        try {
+            return $this->jalankan($sync, $live);
+        } finally {
+            $kunci->release();
+        }
+    }
+
+    private function jalankan(DmsRosterSyncService $sync, DmsRosterRegLiveService $live): int
     {
         if (! $sync->isUp()) {
             $this->error('Postgres OLAP tidak terjangkau (pgsql_direct / pgsql_ssh). Sinkronisasi dibatalkan.');

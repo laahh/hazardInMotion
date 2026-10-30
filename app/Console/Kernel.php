@@ -102,7 +102,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('dms:sync-roster-rfid')
             ->timezone('Asia/Makassar')
             ->hourly()
-            ->withoutOverlapping(55)
+            ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/dms-sync-roster-rfid.log'));
 
         // Generate planning roster dari DOP & IKK setiap 10 menit (hari ini). Skip jika job periode yang sama masih pending/processing.
