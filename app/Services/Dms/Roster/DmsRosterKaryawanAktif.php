@@ -40,6 +40,9 @@ final class DmsRosterKaryawanAktif
 
     private const KUNCI_PER_PT = 'dms_roster:karyawan_aktif:per_pt:v2:';
 
+    /** Daftar PT terakhir yang berhasil dihitung, tanpa batas umur (cadangan halaman). */
+    private const KUNCI_PT_CADANGAN = 'dms_roster:karyawan_aktif:pt_cadangan:v1';
+
     private const TTL_DETIK = 3600;
 
     /**
@@ -76,14 +79,18 @@ final class DmsRosterKaryawanAktif
         if (is_array($lengkap)) {
             $hasil = self::hitungPerusahaan($lengkap['karyawan']);
             Cache::put(self::KUNCI_PT, $hasil, self::TTL_DETIK);
+            Cache::forever(self::KUNCI_PT_CADANGAN, $hasil);
 
             return $hasil;
         }
-        if (! $segarkan && is_string($gagal = Cache::get(self::KUNCI_GAGAL))) {
-            $this->galat = $gagal;
-            $lengkap = Cache::get(self::KUNCI_LENGKAP);
+        if (! $segarkan) {
+            // Tanpa salinan: pakai hasil terakhir yang pernah dihitung (tanpa
+            // batas umur), selebihnya null. Query view hanya lewat segarkan
+            // (tombol/parameter segarkan_pt) atau Tahap 8 dms:sync-roster-rfid.
+            $this->galat = Cache::get(self::KUNCI_GAGAL) ?: 'Salinan karyawan aktif belum ada — jalankan php artisan dms:sync-roster-rfid.';
+            $cadangan = Cache::get(self::KUNCI_PT_CADANGAN);
 
-            return is_array($lengkap) ? self::hitungPerusahaan($lengkap['karyawan']) : null;
+            return is_array($cadangan) ? $cadangan : null;
         }
 
         try {
@@ -105,6 +112,7 @@ final class DmsRosterKaryawanAktif
                 $rows,
             ));
             Cache::put(self::KUNCI_PT, $hasil, self::TTL_DETIK);
+            Cache::forever(self::KUNCI_PT_CADANGAN, $hasil);
             Cache::forget(self::KUNCI_GAGAL);
 
             return $hasil;
@@ -213,9 +221,9 @@ final class DmsRosterKaryawanAktif
     }
 
     /**
-     * Perusahaan aktif tiap SID — dari salinan lengkap (Tahap 8); bila belum
-     * ada, langsung dari view untuk SID itu saja (hasil di-cache 1 jam).
-     * Gagal = array kosong, pemanggil memperlakukannya sebagai "tidak tahu".
+     * Perusahaan aktif tiap SID — dari salinan lengkap (Tahap 8) saja. Tanpa
+     * salinan = array kosong (tidak query view: > 30 dtk → 504); pemanggil
+     * memperlakukannya sebagai "tidak tahu".
      *
      * @param  list<string>  $sids
      * @return array<string, string> SID (huruf besar) => nama perusahaan
@@ -240,32 +248,9 @@ final class DmsRosterKaryawanAktif
             return $out;
         }
 
-        sort($sids);
-
-        return Cache::remember(self::KUNCI_PER_PT.'sid:'.md5(implode(',', $sids)), self::TTL_DETIK, function () use ($sids): array {
-            try {
-                $rows = $this->olap->select(
-                    "SELECT DISTINCT ON (upper(trim(kode_sid))) upper(trim(kode_sid)) AS sid, trim(nama_perusahaan) AS perusahaan
-                     FROM {$this->view()}
-                     WHERE upper(trim(kode_sid)) = ANY(?::text[])",
-                    [DmsRosterRfidReader::arrayPg($sids)],
-                    $this->timeout(),
-                );
-            } catch (Throwable $e) {
-                $this->catatGagal($e);
-
-                return [];
-            }
-
-            $out = [];
-            foreach ($rows as $r) {
-                if (trim((string) $r->perusahaan) !== '') {
-                    $out[(string) $r->sid] = trim((string) $r->perusahaan);
-                }
-            }
-
-            return $out;
-        });
+        // Tanpa salinan: tidak query view (WHERE langsung di view = scan penuh,
+        // > 30 dtk). Pemanggil (suara SID) cukup tanpa data ini.
+        return [];
     }
 
     /**
@@ -292,7 +277,8 @@ final class DmsRosterKaryawanAktif
 
         $data = ['diambil' => now()->toDateTimeString(), 'karyawan' => self::rapikan($rows)];
         Cache::put(self::KUNCI_LENGKAP, $data, now()->addDays(2));
-        Cache::put(self::KUNCI_PT, self::hitungPerusahaan($data['karyawan']), self::TTL_DETIK);
+        Cache::put(self::KUNCI_PT, $pt = self::hitungPerusahaan($data['karyawan']), self::TTL_DETIK);
+        Cache::forever(self::KUNCI_PT_CADANGAN, $pt);
 
         return $data;
     }
