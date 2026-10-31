@@ -49,4 +49,19 @@ class DmsRosterMasterUpload extends Model
     {
         return $this->status === self::STATUS_PENDING;
     }
+
+    /**
+     * Batch salah upload boleh dihapus (beserta seluruh jadwalnya) oleh
+     * pengupload-nya atau admin, selama belum disetujui. diupload_oleh berisi
+     * nama user saat upload, jadi dicocokkan lewat nama.
+     */
+    public function bolehDihapusOleh(?User $user): bool
+    {
+        if ($user === null || $this->status === self::STATUS_APPROVED) {
+            return false;
+        }
+
+        return mb_strtolower(trim((string) $this->diupload_oleh)) === mb_strtolower(trim((string) $user->name))
+            || $user->isAdmin();
+    }
 }

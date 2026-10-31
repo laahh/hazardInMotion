@@ -336,14 +336,19 @@ final class RosterMasterController extends Controller
     public function destroy(int $id): RedirectResponse
     {
         $upload = DmsRosterMasterUpload::findOrFail($id);
+        $user = Auth::user();
+        abort_unless($upload->bolehDihapusOleh($user instanceof \App\Models\User ? $user : null), 403,
+            'Hanya pengupload roster ini atau admin yang boleh menghapusnya, dan hanya selama belum disetujui.');
 
+        $jadwal = (int) $upload->jumlah_jadwal;
         try {
             $this->service->hapus($upload);
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('dms.master-roster.upload')->with('success', 'Roster "'.$upload->judul.'" dihapus.');
+        return redirect()->route('dms.master-roster.upload')->with('success', 'Roster "'.$upload->judul.'" dihapus beserta '
+            .number_format($jadwal, 0, ',', '.').' jadwalnya.');
     }
 
     /**

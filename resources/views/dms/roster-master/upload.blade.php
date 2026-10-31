@@ -187,7 +187,7 @@
     </div>
   </div>
   <div class="p-16">
-    @include('dms.roster-master._daftar', ['daftar' => $daftar])
+    @include('dms.roster-master._daftar', ['daftar' => $daftar, 'hapus' => true])
   </div>
 </div>
 @endsection

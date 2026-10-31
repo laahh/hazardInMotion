@@ -1244,21 +1244,29 @@ final class SportEvaluationWellnessMetricsService
         string $site = '',
         string $company = '',
     ): Builder {
-        $workoutUsers = $this->workoutBaseQuery($from, $to, $scope, $site, $company)
+        $db = DB::connection(BewellConnectionService::CONNECTION);
+
+        // Subquery cukup per user_id dalam rentang tanggal: filter karyawan
+        // (scope, site, perusahaan, pengecualian) dipasang SEKALI di query
+        // employee_profiles luar yang di-join lewat user_id. Dulu filter site
+        // ikut dipasang di kedua subquery juga — daftar SID-nya ±24 ribu
+        // placeholder × 3 melewati batas MySQL 65.535, query gagal diam-diam
+        // dan tabel kosong untuk site mana pun.
+        $workoutUsers = $db->table('workout_analyses as w')
+            ->whereBetween('w.created_at', [$from, $to])
             ->select('w.user_id')
             ->selectRaw('COUNT(w.id) as frekuensi')
             ->selectRaw('COALESCE(SUM(w.calories_kcal), 0) as kalori_out')
             ->groupBy('w.user_id');
 
-        $foodUsers = $this->foodBaseQuery($from, $to, $scope, $site, $company)
+        $foodUsers = $db->table('food_analyses as f')
+            ->whereBetween('f.created_at', [$from, $to])
             ->select('f.user_id')
             ->selectRaw('COALESCE(SUM(f.total_calories), 0) as kalori_in')
             ->selectRaw('COALESCE(SUM(f.protein_g), 0) as protein_g')
             ->selectRaw('COALESCE(SUM(f.carbs_g), 0) as carbs_g')
             ->selectRaw('COALESCE(SUM(f.fats_g), 0) as fats_g')
             ->groupBy('f.user_id');
-
-        $db = DB::connection(BewellConnectionService::CONNECTION);
 
         return $this->applyEmployeeFilters(
             $this->applyScopeToEmployees(

@@ -24,6 +24,8 @@ final class SportEvaluationPvtDashboardService
      */
     private const CHART_CACHE_TTL = 600;
 
+    private const OPERATOR_CACHE_TTL = 600;
+
     private const PVT_STATUSES = ['belum', 'lulus', 'tidak_lulus'];
 
     /** @var array<string, list<array{id:int,nama:string,kode_sid:string,site:string,company:string,jabatan:string}>> */
@@ -414,6 +416,21 @@ final class SportEvaluationPvtDashboardService
             return $this->operatorsMemo[$memoKey];
         }
 
+        // Daftar operator jarang berubah; ±15 ribu baris + resolve site/PT per
+        // baris tidak perlu diulang tiap request (cohort, chart, data, export).
+        return $this->operatorsMemo[$memoKey] = Cache::remember(
+            'evaluasi_well:pvt_operators:v1:'.$memoKey,
+            self::OPERATOR_CACHE_TTL,
+            fn (): array => $this->fetchOperators($filters),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return list<array{id:int,nama:string,kode_sid:string,site:string,company:string,jabatan:string}>
+     */
+    private function fetchOperators(array $filters): array
+    {
         $query = DB::connection(BewellConnectionService::CONNECTION)
             ->table('employee_profiles as e')
             ->select([
@@ -483,7 +500,7 @@ final class SportEvaluationPvtDashboardService
             ];
         }
 
-        return $this->operatorsMemo[$memoKey] = array_values($operators);
+        return array_values($operators);
     }
 
     /**
@@ -506,7 +523,6 @@ final class SportEvaluationPvtDashboardService
             }
             $upperSids[mb_strtoupper($trimmed)] = true;
         }
-        $upperSids = array_keys($upperSids);
         if ($upperSids === []) {
             return [];
         }
@@ -521,31 +537,28 @@ final class SportEvaluationPvtDashboardService
         $start = $fromDay->copy()->subHours(12)->format('Y-m-d H:i:s');
         $end = $toDay->copy()->addDay()->addHours(12)->format('Y-m-d H:i:s');
 
-        $rows = collect();
+        // Satu query per jendela waktu (index tested_at; ±1.500 tes per hari),
+        // SID disaring di PHP. Dulu UPPER(TRIM(e.kode_sid)) IN per 800 SID
+        // = ±19 query untuk 15 ribu operator (±4,5 dtk vs ±0,2 dtk).
         try {
-            foreach (array_chunk($upperSids, 800) as $chunk) {
-                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
-                $chunkRows = DB::connection(BewellConnectionService::CONNECTION)
-                    ->table('cognitive_pvt_results as p')
-                    ->join('employee_profiles as e', 'e.id', '=', 'p.user_id')
-                    ->select([
-                        'e.kode_sid',
-                        'p.user_id',
-                        'p.tested_at',
-                        'p.passed',
-                        'p.evaluation_label',
-                        'p.mean_rt_ms',
-                        'p.median_rt_ms',
-                        'p.lapses',
-                        'p.false_starts',
-                    ])
-                    ->where('p.tested_at', '>=', $start)
-                    ->where('p.tested_at', '<', $end)
-                    ->whereRaw('UPPER(TRIM(e.kode_sid)) IN ('.$placeholders.')', $chunk)
-                    ->orderBy('p.tested_at')
-                    ->get();
-                $rows = $rows->concat($chunkRows);
-            }
+            $rows = DB::connection(BewellConnectionService::CONNECTION)
+                ->table('cognitive_pvt_results as p')
+                ->join('employee_profiles as e', 'e.id', '=', 'p.user_id')
+                ->select([
+                    'e.kode_sid',
+                    'p.user_id',
+                    'p.tested_at',
+                    'p.passed',
+                    'p.evaluation_label',
+                    'p.mean_rt_ms',
+                    'p.median_rt_ms',
+                    'p.lapses',
+                    'p.false_starts',
+                ])
+                ->where('p.tested_at', '>=', $start)
+                ->where('p.tested_at', '<', $end)
+                ->orderBy('p.tested_at')
+                ->get();
         } catch (Throwable $e) {
             report($e);
 
@@ -555,7 +568,7 @@ final class SportEvaluationPvtDashboardService
         $grouped = [];
         foreach ($rows as $row) {
             $sid = mb_strtoupper(trim((string) ($row->kode_sid ?? '')));
-            if ($sid === '') {
+            if (! isset($upperSids[$sid])) {
                 continue;
             }
 

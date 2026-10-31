@@ -1,6 +1,7 @@
 {{--
   Tabel riwayat upload Master Roster — dipakai halaman Upload dan Approval.
   $daftar: LengthAwarePaginator<DmsRosterMasterUpload>
+  $hapus:  true = tampilkan tombol Hapus batch (halaman Upload) bagi pengupload/admin.
 --}}
 @include('dms.roster-master._ui-css')
 @php
@@ -9,6 +10,8 @@
       'APPROVED' => ['Disetujui', 'success'],
       'REJECTED' => ['Ditolak', 'danger'],
   ];
+  $hapus = (bool) ($hapus ?? false);
+  $pengguna = auth()->user();
 @endphp
 <div class="table-responsive">
   <table class="table bordered-table mb-0 w-100 rm-daftar">
@@ -43,6 +46,14 @@
             <a href="{{ route('dms.master-roster.show', $u->id) }}" class="btn btn-sm btn-outline-primary-600 radius-8">
               {{ $u->isPending() ? 'Review' : 'Lihat' }}
             </a>
+            @if ($hapus && $u->bolehDihapusOleh($pengguna))
+              <form action="{{ route('dms.master-roster.destroy', $u->id, absolute: false) }}" method="POST" class="d-inline"
+                    onsubmit="return confirm({{ json_encode('Hapus batch roster “'.$u->judul.'”?'."\n\n".'Seluruh '.number_format($u->jumlah_jadwal, 0, ',', '.').' jadwal ('.number_format($u->jumlah_karyawan, 0, ',', '.').' karyawan) dari file ini ikut terhapus dan tidak bisa dikembalikan.', JSON_UNESCAPED_UNICODE) }});">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="btn btn-sm btn-outline-danger-600 radius-8 ms-4" title="Hapus batch ini beserta seluruh jadwalnya">Hapus</button>
+              </form>
+            @endif
           </td>
         </tr>
       @empty

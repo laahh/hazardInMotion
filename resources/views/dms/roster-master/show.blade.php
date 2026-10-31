@@ -99,7 +99,7 @@
           &middot; <a href="{{ route('dms.master-roster.file', $upload->id) }}" class="text-primary-600">file asli</a>
         </p>
       </div>
-      @if ($upload->status !== 'APPROVED')
+      @if ($upload->bolehDihapusOleh(auth()->user()))
         <form action="{{ route('dms.master-roster.destroy', $upload->id, absolute: false) }}" method="POST"
               onsubmit="return confirm('Hapus roster ini beserta seluruh jadwalnya?');">
           @csrf

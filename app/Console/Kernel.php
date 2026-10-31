@@ -102,6 +102,13 @@ class Kernel extends ConsoleKernel
         // Ringkasan jadwal Master Roster untuk halaman (Overview/Approval/Edit):
         // dihitung di latar, hanya bila data berubah — query-nya 20–40 dtk di
         // MySQL dev, terlalu lama untuk request web.
+        // Snapshot RFID harian untuk /evaluasi-well/pvt & Pra Operasi: query
+        // view RFID dikerjakan di latar, request web hanya membaca cache.
+        $schedule->command('evaluasi-well:rfid-hangatkan')
+            ->everyTwoMinutes()
+            ->withoutOverlapping(10)
+            ->runInBackground();
+
         $schedule->command('dms:master-roster-ringkas')
             ->everyMinute()
             ->withoutOverlapping(15)
