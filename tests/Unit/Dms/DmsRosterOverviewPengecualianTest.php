@@ -23,7 +23,7 @@ class DmsRosterOverviewPengecualianTest extends TestCase
     {
         parent::setUp();
         config(['dms_roster.master.overview_dikecualikan' => [
-            'perusahaan' => ['PT Berau Coal', 'PT Berau Coal Energy', 'PT Unggul Jaya Berkah'],
+            'perusahaan' => ['PT Berau Coal', 'PT Berau Coal Energy', 'PT Unggul Jaya Berkah', 'Yayasan Dharma Bakti Berau Coal', 'KAMPUS MERDEKA'],
             'site' => ['MARINE'],
         ]]);
         $this->simpan = Cache::get(self::KUNCI);
@@ -41,7 +41,10 @@ class DmsRosterOverviewPengecualianTest extends TestCase
         $this->assertTrue(Kecuali::perusahaan('PT. Berau Coal'));
         $this->assertTrue(Kecuali::perusahaan('pt berau coal energy'));
         $this->assertTrue(Kecuali::perusahaan('PT Unggul Jaya Berkah'));
+        // Dicocokkan utuh, bukan "mengandung": nama yang tidak didaftar tetap dihitung.
         $this->assertFalse(Kecuali::perusahaan('Politeknik Sinar Mas Berau Coal'));
+        $this->assertTrue(Kecuali::perusahaan('Yayasan Dharma Bakti Berau Coal'));
+        $this->assertTrue(Kecuali::perusahaan('Kampus Merdeka'));
         $this->assertFalse(Kecuali::perusahaan('PT Prima Unggul Persada'));
         $this->assertTrue(Kecuali::site('Marine'));
         $this->assertFalse(Kecuali::site('-'));

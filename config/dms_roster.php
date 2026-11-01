@@ -83,7 +83,10 @@ return [
         // cakupan). Nama perusahaan dicocokkan tanpa awalan PT/tanda baca
         // (DmsRosterAksesPerusahaan::samaNama), site tanpa membedakan huruf.
         'overview_dikecualikan' => [
-            'perusahaan' => ['PT Berau Coal', 'PT Berau Coal Energy', 'PT Unggul Jaya Berkah'],
+            'perusahaan' => [
+                'PT Berau Coal', 'PT Berau Coal Energy', 'PT Unggul Jaya Berkah',
+                'Politeknik Sinar Mas Berau Coal', 'Yayasan Dharma Bakti Berau Coal', 'KAMPUS MERDEKA',
+            ],
             'site' => ['MARINE'],
         ],
     ],
