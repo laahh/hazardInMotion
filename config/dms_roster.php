@@ -79,6 +79,13 @@ return [
     */
     'master' => [
         'jabatan_dikecualikan' => ['VISITOR'],
+        // Tidak dihitung di Overview Roster (daftar perusahaan, KPI, kartu
+        // cakupan). Nama perusahaan dicocokkan tanpa awalan PT/tanda baca
+        // (DmsRosterAksesPerusahaan::samaNama), site tanpa membedakan huruf.
+        'overview_dikecualikan' => [
+            'perusahaan' => ['PT Berau Coal', 'PT Berau Coal Energy', 'PT Unggul Jaya Berkah'],
+            'site' => ['MARINE'],
+        ],
     ],
 
     'populasi' => [

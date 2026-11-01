@@ -82,14 +82,18 @@ final class DmsRosterCakupanReader
             if ($aktif === null) {
                 return null;
             }
-            $hasil = DmsRosterCakupanUpload::bandingkan($aktif, $this->master->uploadPerSite(), $this->suaraSid());
+            $hasil = DmsRosterCakupanUpload::bandingkan(
+                DmsRosterOverviewPengecualian::saringAktif($aktif),
+                DmsRosterOverviewPengecualian::saringUpload($this->master->uploadPerSite()),
+                $this->suaraSid(),
+            );
         } catch (Throwable $e) {
             report($e);
 
             return null;
         }
 
-        $sidAktif = $this->karyawanAktif->sidPerPerusahaan();
+        $sidAktif = DmsRosterOverviewPengecualian::saringSid($this->karyawanAktif->sidPerPerusahaan());
         $roster = $this->sidRosterPerPerusahaan();
         $total = 0;
         foreach ($hasil['perusahaan'] as &$p) {

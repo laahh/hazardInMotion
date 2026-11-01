@@ -66,7 +66,8 @@ final class RosterMasterController extends Controller
      */
     public function overview(Request $request): View
     {
-        $perusahaan = $this->service->perusahaanTerupload($this->cakupan->peta());
+        // Perusahaan/site di config dms_roster.master.overview_dikecualikan tidak dihitung.
+        $perusahaan = $this->service->perusahaanTerupload($this->cakupan->peta(), true);
 
         return view('dms.roster-master.overview', [
             'perusahaan' => $this->statusPeriode($perusahaan),
@@ -156,7 +157,7 @@ final class RosterMasterController extends Controller
      */
     public function overviewJadwal(Request $request): View
     {
-        $terpilih = collect($this->service->perusahaanTerupload($this->cakupan->peta()))->firstWhere('perusahaan', (string) $request->query('pt', ''));
+        $terpilih = collect($this->service->perusahaanTerupload($this->cakupan->peta(), true))->firstWhere('perusahaan', (string) $request->query('pt', ''));
         abort_if($terpilih === null, 404);
 
         $halaman = max(1, (int) $request->query('hal', 1));

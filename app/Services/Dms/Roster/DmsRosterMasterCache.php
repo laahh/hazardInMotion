@@ -171,10 +171,12 @@ final class DmsRosterMasterCache
      * Ringkasan per perusahaan (nama resmi lewat $peta) — lihat
      * DmsRosterMasterService::perusahaanTerupload().
      *
+     * $kecualikan: tanpa perusahaan/site DmsRosterOverviewPengecualian.
+     *
      * @param  array<string, string>  $peta  ejaan => nama resmi
      * @return list<array<string, mixed>>
      */
-    public static function perusahaanTerupload(array $peta): array
+    public static function perusahaanTerupload(array $peta, bool $kecualikan = false): array
     {
         $r = self::ringkas();
         $resmi = static function (string $pt) use ($peta): string {
@@ -190,6 +192,9 @@ final class DmsRosterMasterCache
                 continue;
             }
             $nama = $resmi($pt);
+            if ($kecualikan && (DmsRosterOverviewPengecualian::perusahaan($nama) || DmsRosterOverviewPengecualian::site($site))) {
+                continue;
+            }
             $k = mb_strtolower($nama);
             $g = $grup[$k] ?? ['perusahaan' => $nama, 'ejaan' => [], 'sid' => [], 'upload' => [], 'dari' => $dari, 'sampai' => $sampai, 'terakhir' => null, 'site' => []];
             $g['ejaan'][$pt === '' ? DmsRosterMasterService::TANPA_PERUSAHAAN : $pt] = true;
@@ -204,7 +209,10 @@ final class DmsRosterMasterCache
             }
             $grup[$k] = $g;
         }
-        foreach ($r['b'] as [$pt, , $sid]) {
+        foreach ($r['b'] as [$pt, $site, $sid]) {
+            if ($kecualikan && DmsRosterOverviewPengecualian::site($site)) {
+                continue;
+            }
             $k = mb_strtolower($resmi($pt));
             if (isset($grup[$k])) {
                 $grup[$k]['sid'][$sid] = true;

@@ -546,11 +546,11 @@ final class DmsRosterMasterService
      * @param  array<string, string>  $peta
      * @return list<array{perusahaan:string,ejaan:list<string>,karyawan:int,upload:int,disetujui:int,menunggu:int,dari:string,sampai:string,terakhir:?string,site:list<string>}>
      */
-    public function perusahaanTerupload(array $peta = []): array
+    public function perusahaanTerupload(array $peta = [], bool $kecualikan = false): array
     {
         // Dari ringkasan latar (dms:master-roster-ringkas), bukan GROUP BY
         // penuh per request — di MySQL dev itu > 50 dtk → 504.
-        return DmsRosterMasterCache::perusahaanTerupload($peta);
+        return DmsRosterMasterCache::perusahaanTerupload($peta, $kecualikan);
     }
 
     /**
