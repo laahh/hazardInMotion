@@ -48,6 +48,10 @@
     $pt += ['sebagian' => 0];
     $disetujui = $pt['sudah'] + $pt['sebagian'];
     $diupload = $disetujui + $pt['menunggu'];
+    // Comply rate per karyawan: aktif yang sudah ada di roster (disetujui
+    // maupun menunggu approval) ÷ seluruh karyawan aktif.
+    $karTotal = (int) $r['karyawan']['total'];
+    $karRoster = max(0, $karTotal - (int) ($r['kurang'] ?? 0));
   @endphp
   <div class="rov-kpi rov-cak-kpi" data-cak-kpi>
     <div class="rov-kpi__kartu">
@@ -78,12 +82,11 @@
       <span class="rov-kpi__ikon rov-ikon-sky"><iconify-icon icon="solar:chart-2-bold"></iconify-icon></span>
       <div class="flex-grow-1">
         <div class="rov-kpi__label">Comply rate</div>
-        <div class="rov-kpi__nilai"><span data-cak-n="rate">{{ $persen($disetujui, $pt['total']) }}</span>%</div>
+        <div class="rov-kpi__nilai"><span data-cak-n="rate">{{ $persen($karRoster, $karTotal) }}</span>%</div>
         <div class="rov-cak-rate" role="img" aria-label="Comply rate" data-cak-rate>
-          <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $pt['total'] > 0 ? round($disetujui / $pt['total'] * 100, 2) : 0 }}%"></span>
-          <span class="is-menunggu" data-cak-seg="menunggu" style="width: {{ $pt['total'] > 0 ? round($pt['menunggu'] / $pt['total'] * 100, 2) : 0 }}%"></span>
+          <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $karTotal > 0 ? round($karRoster / $karTotal * 100, 2) : 0 }}%"></span>
         </div>
-        <div class="rov-kpi__sub">Disetujui ÷ total perusahaan</div>
+        <div class="rov-kpi__sub"><span data-cak-n="kar_roster">{{ $angka($karRoster) }}</span> karyawan aktif sudah di roster ÷ total karyawan aktif</div>
       </div>
     </div>
   </div>

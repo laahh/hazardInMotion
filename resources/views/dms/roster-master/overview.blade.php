@@ -70,7 +70,7 @@
   /* ── Cakupan upload (perusahaan & site: sudah / menunggu / belum) ── */
   .rov-cak-kpi { padding: 20px 24px 4px; margin-bottom: 0; }
   .rov-cak-kpi .rov-kpi__kartu { box-shadow: none; }
-  /* Batang comply rate: hijau disetujui, oranye menunggu, celah 2px. */
+  /* Batang comply rate: hijau = karyawan aktif yang sudah ada di roster. */
   .rov-cak-rate { display: flex; gap: 2px; height: 6px; border-radius: 3px; background: #F1F5F9; margin-top: 8px; overflow: hidden; }
   .rov-cak-rate > span { display: block; height: 100%; border-radius: 3px; }
   .rov-cak-rate .is-sudah { background: #10B981; }
@@ -443,15 +443,18 @@
         var total = disetujui + nPt.menunggu + nPt.belum;
         var set = function (k, v) { kpi.querySelector('[data-cak-n="' + k + '"]').textContent = v; };
         set('total', angka(total));
-        set('kar_total', angka(nKar.sudah + nKar.menunggu + nKar.belum));
+        var karTotal = nKar.sudah + nKar.sebagian + nKar.menunggu + nKar.belum;
+        var karRoster = Math.max(0, karTotal - nKurang);
+        set('kar_total', angka(karTotal));
+        set('kar_roster', angka(karRoster));
         set('upload', angka(disetujui + nPt.menunggu));
         set('disetujui', angka(disetujui));
         set('menunggu', angka(nPt.menunggu));
         set('belum', angka(nPt.belum));
         set('kurang', angka(nKurang));
-        set('rate', persen(disetujui, total));
-        kpi.querySelector('[data-cak-seg="sudah"]').style.width = (total > 0 ? disetujui / total * 100 : 0) + '%';
-        kpi.querySelector('[data-cak-seg="menunggu"]').style.width = (total > 0 ? nPt.menunggu / total * 100 : 0) + '%';
+        // Comply rate per karyawan, bukan per perusahaan.
+        set('rate', persen(karRoster, karTotal));
+        kpi.querySelector('[data-cak-seg="sudah"]').style.width = (karTotal > 0 ? karRoster / karTotal * 100 : 0) + '%';
     }
 
     function terapkan() {
