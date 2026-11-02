@@ -57,9 +57,60 @@ class SidRosterBannedMasterController extends Controller
         self::LOG_NONE => ['Belum Ada Log', 'secondary'],
     ];
 
+    /** Site kosong di master banned. */
+    private const SITE_KOSONG = '-';
+
     public function index(): View
     {
-        return view('pra-operasi.roster-banned.index');
+        return view('pra-operasi.roster-banned.index', [
+            'ringkasan' => $this->ringkasan(),
+        ]);
+    }
+
+    /**
+     * Total keseluruhan + per site: sudah banned / sudah unbanned / belum
+     * banned — status sama dengan kolom "Status Banned" (statusBanned()).
+     * Null bila query gagal (halaman tetap tampil tanpa ringkasan).
+     *
+     * @return array{total: array<string, int>, site: list<array<string, int|string>>}|null
+     */
+    private function ringkasan(): ?array
+    {
+        try {
+            $rows = DB::query()
+                ->fromSub($this->listQuery(new Request(), '')->toBase(), 'x')
+                ->selectRaw("COALESCE(NULLIF(UPPER(TRIM(x.site_dedicated)), ''), ?) AS site", [self::SITE_KOSONG])
+                ->selectRaw('COUNT(*) AS total')
+                ->selectRaw('SUM(x.is_unbanned = 1) AS unbanned')
+                ->selectRaw('SUM(x.is_unbanned = 0 AND x.ban_status = ?) AS banned', [SidRosterBannedLog::STATUS_SUCCESS])
+                ->groupBy('site')
+                ->get();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        $site = [];
+        $total = ['total' => 0, 'banned' => 0, 'unbanned' => 0, 'belum' => 0];
+        foreach ($rows as $r) {
+            $baris = [
+                'site' => (string) $r->site,
+                'total' => (int) $r->total,
+                'banned' => (int) $r->banned,
+                'unbanned' => (int) $r->unbanned,
+            ];
+            $baris['belum'] = $baris['total'] - $baris['banned'] - $baris['unbanned'];
+            foreach (['total', 'banned', 'unbanned', 'belum'] as $k) {
+                $total[$k] += $baris[$k];
+            }
+            $site[] = $baris;
+        }
+        // Site terbanyak dulu; tanpa site paling bawah.
+        usort($site, static fn (array $a, array $b): int => [$a['site'] === self::SITE_KOSONG, -$a['total'], $a['site']]
+            <=> [$b['site'] === self::SITE_KOSONG, -$b['total'], $b['site']]);
+
+        return ['total' => $total, 'site' => $site];
     }
 
     /**
@@ -263,6 +314,14 @@ class SidRosterBannedMasterController extends Controller
                 $q->whereNull('bl.automation_status')
                     ->orWhere('bl.automation_status', '<>', SidRosterBannedLog::STATUS_SUCCESS);
             });
+        }
+
+        // Filter site dari tabel ringkasan per site ('-' = tanpa site).
+        $site = mb_substr(trim((string) $request->input('site', '')), 0, 60);
+        if ($site === self::SITE_KOSONG) {
+            $query->where(static fn ($q) => $q->whereNull('m.site_dedicated')->orWhereRaw("TRIM(m.site_dedicated) = ''"));
+        } elseif ($site !== '') {
+            $query->whereRaw('UPPER(TRIM(m.site_dedicated)) = ?', [mb_strtoupper($site)]);
         }
 
         // Pembeda aturan: ONSITE_70 / BERUNTUN_13 / MANUAL (kosong).

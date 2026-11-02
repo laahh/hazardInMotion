@@ -564,13 +564,12 @@
 
     // ── Modal "Cakupan per site" (kartu Belum upload / Comply rate) ──────────
     // Dirakit dari data-site tiap baris: [nama, status, aktif, di roster, kurang].
-    // Karyawan aktif tanpa site (tidak masuk data-site) dikumpulkan ke "Tanpa
-    // site" supaya jumlah semua site = angka KPI.
+    // Karyawan aktif tanpa site tidak ditampilkan, jadi total modal bisa lebih
+    // kecil dari angka KPI.
     var siteModalEl = document.getElementById('roSiteModal');
     if (!siteModalEl || typeof bootstrap === 'undefined') { return; }
     var siteModal = bootstrap.Modal.getOrCreateInstance(siteModalEl);
     var siteIsi = siteModalEl.querySelector('[data-site-isi]');
-    var TANPA_SITE = 'Tanpa site';
     var siteData = [], sitePilih = '', siteTab = 'kurang';
 
     function esc(t) {
@@ -589,13 +588,7 @@
             s.pt.push({ nama: pt, status: status === 'sudah' && kurang > 0 ? 'sebagian' : status, aktif: aktif, kurang: kurang });
         }
         baris.forEach(function (b) {
-            var kurangPt = parseInt(b.tr.dataset.kurang, 10) || 0, nA = 0, nK = 0;
-            b.site.forEach(function (s) {
-                tambah(s[0], b.nama, s[1], s[2], s[4]);
-                nA += s[2];
-                nK += s[4];
-            });
-            tambah(TANPA_SITE, b.nama, b.status === 'sebagian' ? 'sudah' : b.status, b.karyawan - nA, kurangPt - nK);
+            b.site.forEach(function (s) { tambah(s[0], b.nama, s[1], s[2], s[4]); });
         });
 
         return Object.keys(peta).map(function (k) { return peta[k]; })
@@ -659,7 +652,7 @@
     function gambarSite() {
         var aktif = 0, kurang = 0, ptBelum = 0;
         siteData.forEach(function (s) { aktif += s.aktif; kurang += s.kurang; });
-        baris.forEach(function (b) { if (b.status === 'belum') { ptBelum++; } });
+        baris.forEach(function (b) { if (b.status === 'belum' && b.site.length > 0) { ptBelum++; } });
         siteIsi.innerHTML = '<div class="rov-st-ringkas">'
             + '<div><span>Site</span><b>' + angka(siteData.length) + '</b></div>'
             + '<div><span>Karyawan aktif</span><b>' + angka(aktif) + '</b></div>'
