@@ -111,9 +111,10 @@
   $t = $ringkasan['total'];
   $kpi = [
       ['', 'Total keseluruhan', $t['total'], 'rb-i-indigo', 'solar:users-group-rounded-bold', $angka(count($ringkasan['site'])).' site'],
-      ['BANNED', 'Sudah banned', $t['banned'], 'rb-i-merah', 'solar:forbidden-circle-bold', $persen($t['banned'], $t['total']).'% dari total · masih aktif'],
-      ['UNBANNED', 'Sudah unbanned', $t['unbanned'], 'rb-i-hijau', 'solar:check-circle-bold', $persen($t['unbanned'], $t['total']).'% dari total'],
-      ['BELUM', 'Belum banned', $t['belum'], 'rb-i-kuning', 'solar:hourglass-bold', 'antre / gagal / dilewati'],
+      // Total banned = pernah di-banned (masih banned + sudah unbanned); tidak ada filter tunggalnya.
+      ['', 'Total banned', $t['banned'] + $t['unbanned'], 'rb-i-kuning', 'solar:shield-warning-bold', $angka($t['belum']).' belum diproses banned'],
+      ['UNBANNED', 'Sudah unbanned', $t['unbanned'], 'rb-i-hijau', 'solar:check-circle-bold', $persen($t['unbanned'], $t['banned'] + $t['unbanned']).'% dari total banned'],
+      ['BANNED', 'Masih banned', $t['banned'], 'rb-i-merah', 'solar:forbidden-circle-bold', $persen($t['banned'], $t['banned'] + $t['unbanned']).'% dari total banned · saat ini'],
   ];
 @endphp
 {{-- Kartu & baris site memfilter tabel di bawah (skrip di page-scripts). --}}
@@ -138,7 +139,7 @@
         <p class="text-sm text-secondary-light mb-0">Klik baris site untuk menyaring daftar karyawan di bawah.</p>
       </div>
       <div class="rb-legenda">
-        <span><i class="rb-w-banned"></i>Sudah banned</span>
+        <span><i class="rb-w-banned"></i>Masih banned</span>
         <span><i class="rb-w-unbanned"></i>Sudah unbanned</span>
         <span><i class="rb-w-belum"></i>Belum banned</span>
       </div>
@@ -151,8 +152,9 @@
           <tr>
             <th class="ps-24">Site</th>
             <th class="text-end">Total</th>
-            <th class="text-end">Sudah banned</th>
+            <th class="text-end">Total banned</th>
             <th class="text-end">Sudah unbanned</th>
+            <th class="text-end">Masih banned</th>
             <th class="text-end">Belum banned</th>
             <th class="pe-24">Komposisi</th>
           </tr>
@@ -162,8 +164,9 @@
             <tr data-rb-site="{{ $s['site'] }}" tabindex="0" aria-label="Saring site {{ $s['site'] === '-' ? 'tanpa site' : $s['site'] }}">
               <td class="ps-24 fw-semibold">{{ $s['site'] === '-' ? 'Tanpa site' : $s['site'] }}</td>
               <td class="text-end rb-angka fw-semibold">{{ $angka($s['total']) }}</td>
-              <td class="text-end rb-angka">{{ $angka($s['banned']) }} <span class="text-secondary-light">({{ $persen($s['banned'], $s['total']) }}%)</span></td>
-              <td class="text-end rb-angka">{{ $angka($s['unbanned']) }} <span class="text-secondary-light">({{ $persen($s['unbanned'], $s['total']) }}%)</span></td>
+              <td class="text-end rb-angka">{{ $angka($s['banned'] + $s['unbanned']) }}</td>
+              <td class="text-end rb-angka">{{ $angka($s['unbanned']) }} <span class="text-secondary-light">({{ $persen($s['unbanned'], $s['banned'] + $s['unbanned']) }}%)</span></td>
+              <td class="text-end rb-angka">{{ $angka($s['banned']) }} <span class="text-secondary-light">({{ $persen($s['banned'], $s['banned'] + $s['unbanned']) }}%)</span></td>
               <td class="text-end rb-angka">{{ $angka($s['belum']) }}</td>
               <td class="pe-24">
                 <div class="rb-bar" title="{{ $s['site'] }}: {{ $s['banned'] }} banned, {{ $s['unbanned'] }} unbanned, {{ $s['belum'] }} belum">
@@ -174,7 +177,7 @@
               </td>
             </tr>
           @empty
-            <tr><td colspan="6" class="text-center text-secondary-light py-16">Belum ada data banned.</td></tr>
+            <tr><td colspan="7" class="text-center text-secondary-light py-16">Belum ada data banned.</td></tr>
           @endforelse
         </tbody>
         @if ($ringkasan['site'] !== [])
@@ -182,8 +185,9 @@
             <tr class="fw-semibold">
               <td class="ps-24">Total</td>
               <td class="text-end rb-angka">{{ $angka($t['total']) }}</td>
-              <td class="text-end rb-angka">{{ $angka($t['banned']) }}</td>
+              <td class="text-end rb-angka">{{ $angka($t['banned'] + $t['unbanned']) }}</td>
               <td class="text-end rb-angka">{{ $angka($t['unbanned']) }}</td>
+              <td class="text-end rb-angka">{{ $angka($t['banned']) }}</td>
               <td class="text-end rb-angka">{{ $angka($t['belum']) }}</td>
               <td class="pe-24"></td>
             </tr>
