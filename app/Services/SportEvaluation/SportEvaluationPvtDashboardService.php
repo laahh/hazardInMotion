@@ -28,6 +28,9 @@ final class SportEvaluationPvtDashboardService
 
     private const PVT_STATUSES = ['belum', 'lulus', 'tidak_lulus'];
 
+    /** Rentang filter Dari–Sampai maksimal (hari, inklusif). */
+    public const RANGE_MAX_DAYS = 31;
+
     /** @var array<string, list<array{id:int,nama:string,kode_sid:string,site:string,company:string,jabatan:string}>> */
     private array $operatorsMemo = [];
 
@@ -72,7 +75,7 @@ final class SportEvaluationPvtDashboardService
                 'bewellUp' => true,
                 'rfidUp' => $rfidUp,
                 'filters' => $filters,
-                'dateLabel' => $this->dateLabel($filters['date']),
+                'dateLabel' => $this->rangeLabel($filters),
                 'kpi' => $this->buildKpi($cohort),
                 'siteRows' => $this->aggregateBy($cohort, 'site'),
                 'companyRows' => $this->aggregateBy($cohort, 'company'),
@@ -244,8 +247,12 @@ final class SportEvaluationPvtDashboardService
 
     /**
     /**
+     * 'date' = tanggal Sampai (nama lama dipertahankan untuk tautan & klik
+     * grafik), 'date_from' = tanggal Dari; maks RANGE_MAX_DAYS hari.
+     *
      * @return array{
      *     date: string,
+     *     date_from: string,
      *     site: string,
      *     company: string,
      *     pvt_status: string,
@@ -263,6 +270,17 @@ final class SportEvaluationPvtDashboardService
         if ($date === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
             $date = Carbon::now(config('app.timezone'))->toDateString();
         }
+        $dateFrom = $read($request->input('date_from', $request->query('date_from', '')));
+        if ($dateFrom === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) !== 1) {
+            $dateFrom = $date;
+        }
+        if ($dateFrom > $date) {
+            [$dateFrom, $date] = [$date, $dateFrom];
+        }
+        $earliest = Carbon::parse($date, config('app.timezone'))->subDays(self::RANGE_MAX_DAYS - 1)->toDateString();
+        if ($dateFrom < $earliest) {
+            $dateFrom = $earliest;
+        }
 
         $status = strtolower($read($request->input('pvt_status', $request->query('pvt_status', ''))));
         if (! in_array($status, self::PVT_STATUSES, true)) {
@@ -277,6 +295,7 @@ final class SportEvaluationPvtDashboardService
 
                 return [
                     'date' => $date,
+                    'date_from' => $dateFrom,
                     'site' => '',
                     'company' => '',
                     'pvt_status' => $status,
@@ -288,6 +307,7 @@ final class SportEvaluationPvtDashboardService
 
         return [
             'date' => $date,
+            'date_from' => $dateFrom,
             'site' => $read($request->input('site', $request->query('site', ''))),
             'company' => $read($request->input('company', $request->query('company', $request->query('perusahaan', '')))),
             'pvt_status' => $status,
@@ -302,7 +322,8 @@ final class SportEvaluationPvtDashboardService
      */
     private function cohortRows(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:pvt_cohort:v4:'.sha1((string) json_encode([
+        $cacheKey = 'evaluasi_well:pvt_cohort:v5:'.sha1((string) json_encode([
+            $filters['date_from'],
             $filters['date'],
             $filters['site'],
             $filters['company'],
@@ -327,37 +348,42 @@ final class SportEvaluationPvtDashboardService
         }
 
         $sids = array_map(static fn (array $op): string => $op['kode_sid'], $operators);
-        $checkins = $this->rfidReader->firstPassedCheckinsForSids($filters['date'], $sids);
-        if ($checkins === []) {
-            return [];
-        }
+        $from = $filters['date_from'];
+        $to = $filters['date'];
+        // Satu hari: jalur lama. Rentang: check-IN lolos pertama per (hari, SID).
+        $byDay = $from === $to
+            ? [$to => $this->rfidReader->firstPassedCheckinsForSids($to, $sids)]
+            : $this->rfidReader->firstPassedCheckinsByDayForSids($from, $to, $sids);
 
         $onsite = [];
-        foreach ($operators as $operator) {
-            $upper = mb_strtoupper($operator['kode_sid']);
-            if (! isset($checkins[$upper])) {
-                continue;
-            }
-            $checkin = $checkins[$upper];
-            $company = $operator['company'] !== ''
-                ? $operator['company']
-                : $this->companyAliasResolver->resolve($checkin['perusahaan']);
-            if ($company === '') {
-                $company = 'Tidak diketahui';
-            }
+        foreach ($byDay as $day => $checkins) {
+            foreach ($operators as $operator) {
+                $upper = mb_strtoupper($operator['kode_sid']);
+                if (! isset($checkins[$upper])) {
+                    continue;
+                }
+                $checkin = $checkins[$upper];
+                $company = $operator['company'] !== ''
+                    ? $operator['company']
+                    : $this->companyAliasResolver->resolve($checkin['perusahaan']);
+                if ($company === '') {
+                    $company = 'Tidak diketahui';
+                }
 
-            $onsite[] = [
-                'id' => $operator['id'],
-                'nama' => $operator['nama'] !== '' ? $operator['nama'] : $checkin['nama_karyawan'],
-                'kode_sid' => $operator['kode_sid'],
-                'site' => $operator['site'] !== '' ? $operator['site'] : 'Tidak diketahui',
-                'company' => $company,
-                'jabatan' => $operator['jabatan'],
-                'gate' => $checkin['gate'] !== '' ? $checkin['gate'] : '-',
-                'checked_in_at' => $checkin['checked_in_at'],
-                'status_lolos' => $checkin['status_lolos'] !== '' ? $checkin['status_lolos'] : '-',
-                'jenis_checkinout' => $checkin['jenis_checkinout'],
-            ];
+                $onsite[] = [
+                    'id' => $operator['id'],
+                    'nama' => $operator['nama'] !== '' ? $operator['nama'] : $checkin['nama_karyawan'],
+                    'kode_sid' => $operator['kode_sid'],
+                    'site' => $operator['site'] !== '' ? $operator['site'] : 'Tidak diketahui',
+                    'company' => $company,
+                    'jabatan' => $operator['jabatan'],
+                    'gate' => $checkin['gate'] !== '' ? $checkin['gate'] : '-',
+                    'checked_in_at' => $checkin['checked_in_at'],
+                    'status_lolos' => $checkin['status_lolos'] !== '' ? $checkin['status_lolos'] : '-',
+                    'jenis_checkinout' => $checkin['jenis_checkinout'],
+                    'tanggal' => (string) $day,
+                ];
+            }
         }
 
         if ($onsite === []) {
@@ -366,15 +392,18 @@ final class SportEvaluationPvtDashboardService
 
         $pvtBySid = $this->loadPvtBySid(
             array_map(static fn (array $row): string => $row['kode_sid'], $onsite),
-            $filters['date'],
+            $from,
+            $to,
         );
 
         $cohort = [];
         foreach ($onsite as $row) {
-            $matched = $this->matchPvtForCheckin(
+            // PVT hanya dari hari yang sama dengan check-in baris ini.
+            $candidates = array_values(array_filter(
                 $pvtBySid[mb_strtoupper($row['kode_sid'])] ?? [],
-                $row['checked_in_at'],
-            );
+                static fn (array $pvt): bool => str_starts_with((string) ($pvt['tested_at'] ?? ''), $row['tanggal']),
+            ));
+            $matched = $this->matchPvtForCheckin($candidates, $row['checked_in_at']);
             $status = $this->resolvePvtStatus($matched);
             if ($filters['pvt_status'] !== '' && $status !== $filters['pvt_status']) {
                 continue;
@@ -955,6 +984,17 @@ final class SportEvaluationPvtDashboardService
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function rangeLabel(array $filters): string
+    {
+        $to = (string) $filters['date'];
+        $from = (string) ($filters['date_from'] ?? $to);
+
+        return $from === $to ? $this->dateLabel($to) : $this->dateLabel($from).' – '.$this->dateLabel($to);
+    }
+
     private function dateLabel(string $date): string
     {
         try {
@@ -974,7 +1014,7 @@ final class SportEvaluationPvtDashboardService
             'bewellUp' => false,
             'rfidUp' => false,
             'filters' => $filters,
-            'dateLabel' => $this->dateLabel($filters['date']),
+            'dateLabel' => $this->rangeLabel($filters),
             'kpi' => [
                 'checkin' => 0,
                 'sudah_pvt' => 0,
@@ -1008,7 +1048,8 @@ final class SportEvaluationPvtDashboardService
      */
     private function checkinChart(array $filters): array
     {
-        $cacheKey = 'evaluasi_well:pvt_checkin_chart:v2:'.sha1((string) json_encode([
+        $cacheKey = 'evaluasi_well:pvt_checkin_chart:v3:'.sha1((string) json_encode([
+            $filters['date_from'],
             $filters['date'],
             $filters['site'],
             $filters['company'],
@@ -1035,8 +1076,13 @@ final class SportEvaluationPvtDashboardService
     private function buildCheckinChart(array $filters): array
     {
         $tz = (string) config('app.timezone');
+        // Minimal 7 hari berakhir di tanggal Sampai; rentang lebih panjang tampil utuh.
         $end = Carbon::parse($filters['date'], $tz)->startOfDay();
         $start = $end->copy()->subDays(6);
+        $from = Carbon::parse($filters['date_from'] ?? $filters['date'], $tz)->startOfDay();
+        if ($from->lt($start)) {
+            $start = $from;
+        }
         $dates = [];
         for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addDay()) {
             $dates[] = $cursor->toDateString();

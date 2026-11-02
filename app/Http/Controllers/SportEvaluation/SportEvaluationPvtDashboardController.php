@@ -81,7 +81,9 @@ final class SportEvaluationPvtDashboardController extends Controller
 
             SpreadsheetExporter::download(
                 $spreadsheet,
-                'evaluasi_well_pvt_'.$filters['date'].'_'.date('Y-m-d_His').'.xlsx'
+                'evaluasi_well_pvt_'
+                    .($filters['date_from'] !== $filters['date'] ? $filters['date_from'].'_sd_' : '')
+                    .$filters['date'].'_'.date('Y-m-d_His').'.xlsx'
             );
         } catch (Throwable $e) {
             report($e);

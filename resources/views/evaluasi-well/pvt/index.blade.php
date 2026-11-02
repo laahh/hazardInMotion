@@ -121,6 +121,28 @@
     var indexUrl = @json(route('evaluasi-well.pvt.index'));
 
     var dateEl = document.querySelector('#pvt-date');
+    var dateFromEl = document.querySelector('#pvt-date-from');
+    var rangeMaxDays = @json(\App\Services\SportEvaluation\SportEvaluationPvtDashboardService::RANGE_MAX_DAYS);
+
+    // Dari ≤ Sampai, rentang maks rangeMaxDays hari (server juga membatasi).
+    function syncRange(changed) {
+        if (!dateEl || !dateFromEl || !dateEl.value || !dateFromEl.value) return;
+        var dayMs = 86400000;
+        var from = new Date(dateFromEl.value + 'T00:00:00');
+        var to = new Date(dateEl.value + 'T00:00:00');
+        if (from > to) {
+            if (changed === dateFromEl) dateEl.value = dateFromEl.value; else dateFromEl.value = dateEl.value;
+        } else if ((to - from) / dayMs > rangeMaxDays - 1) {
+            var geser = new Date((changed === dateFromEl ? from.getTime() + (rangeMaxDays - 1) * dayMs : to.getTime() - (rangeMaxDays - 1) * dayMs));
+            var iso = geser.getFullYear() + '-' + String(geser.getMonth() + 1).padStart(2, '0') + '-' + String(geser.getDate()).padStart(2, '0');
+            if (changed === dateFromEl) dateEl.value = iso; else dateFromEl.value = iso;
+        }
+        dateEl.min = dateFromEl.value;
+        dateFromEl.max = dateEl.value;
+    }
+    [dateEl, dateFromEl].forEach(function (el) {
+        if (el) el.addEventListener('change', function () { syncRange(el); });
+    });
     var siteEl = document.querySelector('#pvt-site');
     var companyEl = document.querySelector('#pvt-company');
     var statusEl = document.querySelector('#pvt-status');
@@ -156,6 +178,7 @@
 
     function currentFilters() {
         return {
+            date_from: dateFromEl ? dateFromEl.value : '',
             date: dateEl ? dateEl.value : '',
             site: siteEl ? siteEl.value : '',
             company: companyEl ? companyEl.value : '',
@@ -241,7 +264,7 @@
                         dataPointSelection: function (event, ctx, config) {
                             var picked = dates[config.dataPointIndex] || '';
                             if (picked) {
-                                reloadWithFilters({ date: picked });
+                                reloadWithFilters({ date_from: picked, date: picked });
                             }
                         }
                     }
@@ -323,6 +346,7 @@
             url: dataUrl,
             data: function (d) {
                 var filters = currentFilters();
+                d.date_from = filters.date_from;
                 d.date = filters.date;
                 d.site = filters.site;
                 d.company = filters.company;
@@ -447,6 +471,8 @@
       ->isMitraOnlyUser(auth()->user());
   $homeUrl = $isMitraOnlyUser ? route('evaluasi-well.mitra.index') : route('evaluasi-well.index');
   $homeLabel = $isMitraOnlyUser ? 'Mitra Kerja' : 'Dashboard';
+  $isRange = ($f['date_from'] ?? ($f['date'] ?? '')) !== ($f['date'] ?? '');
+  $chartDays = count($chart['dates'] ?? []) ?: 7;
 @endphp
 
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
@@ -488,10 +514,14 @@
   <div class="card-body p-20">
     <div class="row g-3 align-items-end">
       <div class="col-xl-2 col-md-4 col-sm-6">
-        <label for="pvt-date" class="form-label text-sm fw-medium mb-6">Tanggal</label>
-        <input id="pvt-date" type="date" class="form-control form-control-sm" value="{{ $f['date'] ?? '' }}">
+        <label for="pvt-date-from" class="form-label text-sm fw-medium mb-6">Dari tanggal</label>
+        <input id="pvt-date-from" type="date" class="form-control form-control-sm" value="{{ $f['date_from'] ?? ($f['date'] ?? '') }}" max="{{ $f['date'] ?? '' }}">
       </div>
-      <div class="col-xl-3 col-md-4 col-sm-6">
+      <div class="col-xl-2 col-md-4 col-sm-6">
+        <label for="pvt-date" class="form-label text-sm fw-medium mb-6">Sampai tanggal</label>
+        <input id="pvt-date" type="date" class="form-control form-control-sm" value="{{ $f['date'] ?? '' }}" min="{{ $f['date_from'] ?? '' }}">
+      </div>
+      <div class="col-xl-2 col-md-4 col-sm-6">
         <label for="pvt-site" class="form-label text-sm fw-medium mb-6">Site</label>
         <select id="pvt-site" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Site" @disabled(! empty($lockMitraFilters))>
           <option value="">{{ ! empty($lockMitraFilters) ? 'Sesuai assignment' : 'Semua Site' }}</option>
@@ -500,7 +530,7 @@
           @endforeach
         </select>
       </div>
-      <div class="col-xl-3 col-md-4 col-sm-6">
+      <div class="col-xl-2 col-md-4 col-sm-6">
         <label for="pvt-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
         <select id="pvt-company" class="form-select form-select-sm js-pvt-searchable" data-placeholder="Semua Perusahaan" @disabled(! empty($lockMitraFilters))>
           <option value="">{{ ! empty($lockMitraFilters) ? 'Sesuai assignment' : 'Semua Perusahaan' }}</option>
@@ -575,7 +605,7 @@
   <div class="card-header border-bottom bg-base py-16 px-24">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
       <div>
-        <h6 class="text-lg fw-semibold mb-0">Check-in operator 7 hari</h6>
+        <h6 class="text-lg fw-semibold mb-0">Check-in operator {{ $chartDays }} hari</h6>
         <p class="text-sm text-secondary-light mb-0">
           Jumlah karyawan yang masuk (RFID IN lolos) · batang = Lulus / Tidak lulus / Belum tes · angka atas = total masuk · % di batang hijau = % sudah PVT
           @if (($f['site'] ?? '') !== '' || ($f['company'] ?? '') !== '')
@@ -594,7 +624,7 @@
   </div>
   <div class="card-body p-24">
     <div id="pvtCheckinChartEmpty" class="text-center text-secondary-light py-40 {{ collect($chart['checkin'] ?? [])->sum() > 0 ? 'd-none' : '' }}">
-      Belum ada data check-in operator pada 7 hari ini.
+      Belum ada data check-in operator pada {{ $chartDays }} hari ini.
     </div>
     <div id="pvtCheckinChart" class="{{ collect($chart['checkin'] ?? [])->sum() > 0 ? '' : 'd-none' }}"></div>
   </div>
@@ -659,7 +689,7 @@
           <h6 class="text-lg fw-semibold mb-0">Operator Check-in</h6>
           <span id="pvt-total-badge" class="bg-primary-50 text-primary-600 text-sm fw-medium px-12 py-2 rounded-pill">{{ number_format($kpi['checkin'] ?? 0) }}</span>
         </div>
-        <p class="text-sm text-secondary-light mb-0">Satu baris per SID · check-IN lolos pertama · PVT terakhir di hari yang sama</p>
+        <p class="text-sm text-secondary-light mb-0">{{ $isRange ? 'Satu baris per SID per hari' : 'Satu baris per SID' }} · check-IN lolos pertama · PVT terakhir di hari yang sama · {{ $dateLabel ?? '' }}</p>
       </div>
       <a id="pvt-export-btn" href="{{ route('evaluasi-well.pvt.export', request()->query()) }}" class="btn btn-sm btn-success-600 d-inline-flex align-items-center gap-1">
         <iconify-icon icon="solar:file-download-bold" class="icon"></iconify-icon>
