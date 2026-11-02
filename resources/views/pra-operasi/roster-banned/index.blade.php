@@ -35,7 +35,7 @@
   #rbTable .rb-log-error { max-width: 260px; word-break: break-word; }
 
   /* Ringkasan: total + per site. Merah = sudah banned, hijau = sudah unbanned, kuning = belum banned. */
-  .rb-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .rb-kpi { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
   .rb-kpi__kartu { display: flex; gap: 14px; align-items: flex-start; width: 100%; text-align: left; background: #fff; border: 1px solid #EEF2F7; border-radius: 12px; padding: 18px 20px; color: inherit; transition: border-color .15s ease, box-shadow .15s ease; }
   .rb-kpi__kartu:hover, .rb-kpi__kartu.is-aktif { border-color: #C7D2FE; box-shadow: 0 4px 14px rgba(79, 70, 229, .08); }
   .rb-kpi__kartu:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
@@ -61,8 +61,7 @@
   .rb-w-belum { background: #F59E0B; }
   .rb-legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #475569; }
   .rb-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
-  @media (max-width: 991.98px) { .rb-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 575.98px) { .rb-kpi { grid-template-columns: 1fr; } }
+  @media (max-width: 767.98px) { .rb-kpi { grid-template-columns: 1fr; } }
 </style>
 @endsection
 
@@ -110,7 +109,6 @@
   $persen = static fn (int $n, int $t): string => $t > 0 ? number_format($n / $t * 100, 1, ',', '.') : '0';
   $t = $ringkasan['total'];
   $kpi = [
-      ['', 'Total keseluruhan', $t['total'], 'rb-i-indigo', 'solar:users-group-rounded-bold', $angka(count($ringkasan['site'])).' site'],
       // Total banned = pernah di-banned (masih banned + sudah unbanned); tidak ada filter tunggalnya.
       ['', 'Total banned', $t['banned'] + $t['unbanned'], 'rb-i-kuning', 'solar:shield-warning-bold', $angka($t['belum']).' belum diproses banned'],
       ['UNBANNED', 'Sudah unbanned', $t['unbanned'], 'rb-i-hijau', 'solar:check-circle-bold', $persen($t['unbanned'], $t['banned'] + $t['unbanned']).'% dari total banned'],
