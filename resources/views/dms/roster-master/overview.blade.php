@@ -111,6 +111,41 @@
   .rov-cak-tab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #E2E8F0; background: #fff; color: #475569; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; }
   .rov-cak-tab b { color: #0F172A; }
   .rov-cak-tab.is-aktif { border-color: #6366F1; background: #EEF2FF; color: #4338CA; }
+  /* Kartu KPI yang membuka modal per site. */
+  .rov-cak-buka { width: 100%; text-align: left; color: inherit; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+  .rov-cak-buka:hover { border-color: #C7D2FE; box-shadow: 0 4px 14px rgba(79, 70, 229, .08) !important; }
+  .rov-cak-buka:focus-visible { outline: 2px solid #6366F1; outline-offset: 2px; }
+  .rov-cak-buka__ajak { display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; font-size: 12px; font-weight: 600; color: #4F46E5; }
+
+  /* Modal per site: ringkasan, bar chart sudah/kurang, daftar perusahaan. */
+  .rov-st-ringkas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .rov-st-ringkas > div { border: 1px solid #EEF2F7; border-radius: 10px; padding: 12px 14px; }
+  .rov-st-ringkas span { display: block; font-size: 12px; color: #64748B; }
+  .rov-st-ringkas b { font-size: 20px; color: #0F172A; font-variant-numeric: tabular-nums; }
+  .rov-st-legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #475569; margin-bottom: 8px; }
+  .rov-st-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .rov-st-sudah { background: #10B981; }
+  .rov-st-kurang { background: #EF4444; }
+  .rov-st-grafik { display: flex; flex-direction: column; gap: 2px; margin-bottom: 20px; }
+  .rov-st-bar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 270px; align-items: center; gap: 12px; width: 100%; border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; text-align: left; color: inherit; }
+  .rov-st-bar:hover { background: #F8FAFC; }
+  .rov-st-bar.is-aktif { background: #EEF2FF; }
+  .rov-st-bar:focus-visible { outline: 2px solid #6366F1; outline-offset: 1px; }
+  .rov-st-bar__nama { font-size: 13px; font-weight: 600; color: #0F172A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rov-st-bar__trek { display: flex; gap: 2px; height: 14px; }
+  .rov-st-bar__trek > span { display: block; height: 100%; }
+  .rov-st-bar__trek > span:first-child { border-radius: 4px 0 0 4px; }
+  .rov-st-bar__trek > span:last-child { border-radius: 0 4px 4px 0; }
+  .rov-st-bar__trek > span:only-child { border-radius: 4px; }
+  .rov-st-bar__angka { font-size: 12px; color: #475569; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .rov-st-bar__angka b { color: #DC2626; }
+  .rov-st-detail { border-top: 1px solid #EEF2F7; padding-top: 16px; }
+  .rov-st-detail__kepala { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .rov-st-detail__judul { font-weight: 600; color: #0F172A; }
+  .rov-st-mini { display: flex; gap: 2px; height: 6px; width: 120px; background: #F1F5F9; border-radius: 3px; overflow: hidden; }
+  .rov-st-mini > span { display: block; height: 100%; }
+  .rov-st-tabel td, .rov-st-tabel th { font-size: 13px; vertical-align: middle; }
+
   .rov-cak-tidakcocok { display: flex; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid #EEF2F7; font-size: 12px; color: #64748B; }
   .rov-cak-tidakcocok > iconify-icon { font-size: 16px; flex: none; margin-top: 1px; }
 
@@ -118,6 +153,9 @@
     .rov-perhatian { grid-template-columns: 1fr; }
     .rov-cak-kpi, .rov-cak-alat { padding-left: 16px; padding-right: 16px; }
     .rov-cak-filter, .rov-cak-filter .form-select, .rov-cak-cari { width: 100%; }
+    .rov-st-ringkas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rov-st-bar { grid-template-columns: 84px minmax(0, 1fr); }
+    .rov-st-bar__angka { grid-column: 1 / -1; text-align: left; }
   }
   @media (max-width: 575.98px) {
     .ro-filter > div { flex: 1 1 100%; }
@@ -522,6 +560,145 @@
         pilihSite.value = '';
         tombol.forEach(function (x) { x.classList.toggle('is-aktif', x.dataset.cakStatus === ''); });
         terapkan();
+    });
+
+    // ── Modal "Cakupan per site" (kartu Belum upload / Comply rate) ──────────
+    // Dirakit dari data-site tiap baris: [nama, status, aktif, di roster, kurang].
+    // Karyawan aktif tanpa site (tidak masuk data-site) dikumpulkan ke "Tanpa
+    // site" supaya jumlah semua site = angka KPI.
+    var siteModalEl = document.getElementById('roSiteModal');
+    if (!siteModalEl || typeof bootstrap === 'undefined') { return; }
+    var siteModal = bootstrap.Modal.getOrCreateInstance(siteModalEl);
+    var siteIsi = siteModalEl.querySelector('[data-site-isi]');
+    var TANPA_SITE = 'Tanpa site';
+    var siteData = [], sitePilih = '', siteTab = 'kurang';
+
+    function esc(t) {
+        return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+    }
+
+    function rakitSite() {
+        var peta = {};
+        function tambah(nama, pt, status, aktif, kurang) {
+            if (aktif <= 0) { return; }
+            kurang = Math.min(aktif, Math.max(0, kurang));
+            var s = peta[nama] = peta[nama] || { nama: nama, aktif: 0, kurang: 0, ptBelum: 0, pt: [] };
+            s.aktif += aktif;
+            s.kurang += kurang;
+            if (status === 'belum') { s.ptBelum++; }
+            s.pt.push({ nama: pt, status: status === 'sudah' && kurang > 0 ? 'sebagian' : status, aktif: aktif, kurang: kurang });
+        }
+        baris.forEach(function (b) {
+            var kurangPt = parseInt(b.tr.dataset.kurang, 10) || 0, nA = 0, nK = 0;
+            b.site.forEach(function (s) {
+                tambah(s[0], b.nama, s[1], s[2], s[4]);
+                nA += s[2];
+                nK += s[4];
+            });
+            tambah(TANPA_SITE, b.nama, b.status === 'sebagian' ? 'sudah' : b.status, b.karyawan - nA, kurangPt - nK);
+        });
+
+        return Object.keys(peta).map(function (k) { return peta[k]; })
+            .sort(function (a, b) { return b.kurang - a.kurang || b.aktif - a.aktif || a.nama.localeCompare(b.nama); });
+    }
+
+    function htmlGrafik() {
+        var maks = Math.max.apply(null, siteData.map(function (s) { return s.aktif; }).concat([1]));
+        return siteData.map(function (s) {
+            var sudah = s.aktif - s.kurang;
+            var lebar = s.aktif / maks * 100;
+            var seg = '';
+            if (sudah > 0) { seg += '<span class="rov-st-sudah" style="width:' + (sudah / s.aktif * lebar) + '%"></span>'; }
+            if (s.kurang > 0) { seg += '<span class="rov-st-kurang" style="width:' + (s.kurang / s.aktif * lebar) + '%"></span>'; }
+            var info = s.nama + ': ' + angka(s.aktif) + ' karyawan aktif, ' + angka(sudah) + ' sudah di roster, ' + angka(s.kurang) + ' belum';
+            return '<button type="button" class="rov-st-bar' + (s.nama === sitePilih ? ' is-aktif' : '') + '" data-st-site="' + esc(s.nama) + '" title="' + esc(info) + '" aria-label="' + esc(info) + '" aria-pressed="' + (s.nama === sitePilih) + '">'
+                + '<span class="rov-st-bar__nama">' + esc(s.nama) + '</span>'
+                + '<span class="rov-st-bar__trek">' + seg + '</span>'
+                + '<span class="rov-st-bar__angka"><b>' + angka(s.kurang) + '</b> belum · ' + persen(sudah, s.aktif) + '% sudah · ' + angka(s.ptBelum) + ' PT belum upload</span>'
+                + '</button>';
+        }).join('');
+    }
+
+    function htmlDetail() {
+        var s = siteData.filter(function (x) { return x.nama === sitePilih; })[0];
+        if (!s) { return ''; }
+        var nKurang = s.pt.filter(function (p) { return p.kurang > 0; }).length;
+        var daftar = s.pt.filter(function (p) {
+            return siteTab === '' || (siteTab === 'kurang' ? p.kurang > 0 : p.kurang === 0);
+        }).sort(function (a, b) { return b.kurang - a.kurang || b.aktif - a.aktif || a.nama.localeCompare(b.nama); });
+
+        var tab = [['', 'Semua', s.pt.length], ['kurang', 'Masih kurang', nKurang], ['lengkap', 'Sudah lengkap', s.pt.length - nKurang]]
+            .map(function (t) {
+                return '<button type="button" class="rov-cak-tab' + (siteTab === t[0] ? ' is-aktif' : '') + '" data-st-tab="' + t[0] + '">' + t[1] + ' <b>' + angka(t[2]) + '</b></button>';
+            }).join(' ');
+
+        var isi = daftar.map(function (p) {
+            var sudah = p.aktif - p.kurang;
+            return '<tr>'
+                + '<td class="ps-0"><div class="ro-pt-nama">' + esc(p.nama) + '</div></td>'
+                + '<td><span class="rov-cak-status is-' + p.status + '"><iconify-icon icon="' + IKON[p.status] + '"></iconify-icon>' + LABEL[p.status] + '</span></td>'
+                + '<td class="text-end">' + angka(p.aktif) + '</td>'
+                + '<td class="text-end">' + angka(sudah) + '</td>'
+                + '<td class="text-end">' + (p.kurang > 0 ? '<span class="rov-cak-kurang-angka">' + angka(p.kurang) + '</span>' : '<span class="rov-cak-lengkap"><iconify-icon icon="solar:check-circle-bold"></iconify-icon>0</span>') + '</td>'
+                + '<td class="pe-0"><div class="d-flex align-items-center gap-8"><span class="rov-st-mini">'
+                + (sudah > 0 ? '<span class="rov-st-sudah" style="width:' + (sudah / p.aktif * 100) + '%"></span>' : '')
+                + (p.kurang > 0 ? '<span class="rov-st-kurang" style="width:' + (p.kurang / p.aktif * 100) + '%"></span>' : '')
+                + '</span><span class="text-sm text-secondary-light">' + persen(sudah, p.aktif) + '%</span></div></td>'
+                + '</tr>';
+        }).join('') || '<tr><td colspan="6" class="text-center text-secondary-light py-16">Tidak ada perusahaan.</td></tr>';
+
+        return '<div class="rov-st-detail">'
+            + '<div class="rov-st-detail__kepala"><div class="rov-st-detail__judul">Perusahaan di site ' + esc(s.nama)
+            + ' <span class="text-secondary-light fw-normal">· ' + angka(s.aktif) + ' karyawan aktif, ' + angka(s.kurang) + ' belum di roster</span></div>'
+            + '<div class="d-flex flex-wrap gap-6">' + tab + '</div></div>'
+            + '<div class="table-responsive"><table class="table rov-st-tabel mb-0"><thead><tr>'
+            + '<th class="ps-0">Perusahaan</th><th>Status site ini</th><th class="text-end">Aktif</th><th class="text-end">Sudah di roster</th><th class="text-end">Kurang</th><th class="pe-0">Progres</th>'
+            + '</tr></thead><tbody>' + isi + '</tbody></table></div></div>';
+    }
+
+    function gambarSite() {
+        var aktif = 0, kurang = 0, ptBelum = 0;
+        siteData.forEach(function (s) { aktif += s.aktif; kurang += s.kurang; });
+        baris.forEach(function (b) { if (b.status === 'belum') { ptBelum++; } });
+        siteIsi.innerHTML = '<div class="rov-st-ringkas">'
+            + '<div><span>Site</span><b>' + angka(siteData.length) + '</b></div>'
+            + '<div><span>Karyawan aktif</span><b>' + angka(aktif) + '</b></div>'
+            + '<div><span>Sudah di roster</span><b>' + angka(aktif - kurang) + '</b> <span class="d-inline text-success-main fw-semibold">' + persen(aktif - kurang, aktif) + '%</span></div>'
+            + '<div><span>Belum di roster</span><b class="text-danger-main">' + angka(kurang) + '</b> <span class="d-inline">' + angka(ptBelum) + ' PT belum upload</span></div>'
+            + '</div>'
+            + '<div class="rov-st-legenda"><span><i class="rov-st-sudah"></i>Sudah di roster (disetujui / menunggu)</span><span><i class="rov-st-kurang"></i>Belum di roster</span>'
+            + '<span class="text-secondary-light">Urut dari kurang terbanyak · klik site untuk daftar perusahaan</span></div>'
+            + '<div class="rov-st-grafik">' + htmlGrafik() + '</div>'
+            + htmlDetail();
+    }
+
+    siteIsi.addEventListener('click', function (e) {
+        var bar = e.target.closest('[data-st-site]');
+        if (bar) {
+            sitePilih = bar.dataset.stSite;
+            gambarSite();
+            var detail = siteIsi.querySelector('.rov-st-detail');
+            if (detail) { detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+            return;
+        }
+        var t = e.target.closest('[data-st-tab]');
+        if (t) {
+            siteTab = t.dataset.stTab;
+            gambarSite();
+        }
+    });
+
+    kartu.querySelectorAll('[data-cak-site-buka]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            siteData = rakitSite();
+            // Bawaan: site filter tabel bila dipilih, kalau tidak site dengan kurang terbanyak.
+            sitePilih = pilihSite.value !== '' && siteData.some(function (s) { return s.nama === pilihSite.value; })
+                ? pilihSite.value : (siteData[0] ? siteData[0].nama : '');
+            siteTab = 'kurang';
+            siteModalEl.querySelector('[data-site-konteks]').textContent = 'Semua perusahaan · ' + angka(siteData.length) + ' site';
+            gambarSite();
+            siteModal.show();
+        });
     });
 })();
 </script>

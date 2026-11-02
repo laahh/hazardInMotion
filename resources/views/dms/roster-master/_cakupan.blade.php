@@ -70,15 +70,17 @@
         <div class="rov-kpi__sub"><span data-cak-n="disetujui">{{ $angka($disetujui) }}</span> disetujui · <span data-cak-n="menunggu">{{ $angka($pt['menunggu']) }}</span> menunggu approval</div>
       </div>
     </div>
-    <div class="rov-kpi__kartu">
+    {{-- Dua kartu ini membuka modal "Cakupan per site" (skrip di overview.blade.php). --}}
+    <button type="button" class="rov-kpi__kartu rov-cak-buka" data-cak-site-buka aria-haspopup="dialog">
       <span class="rov-kpi__ikon rov-ikon-merah"><iconify-icon icon="solar:danger-circle-bold"></iconify-icon></span>
       <div>
         <div class="rov-kpi__label">Belum upload</div>
         <div class="rov-kpi__nilai" data-cak-n="belum">{{ $angka($pt['belum']) }}</div>
         <div class="rov-kpi__sub"><span data-cak-n="kurang">{{ $angka($r['kurang'] ?? 0) }}</span> karyawan aktif belum di roster</div>
+        <div class="rov-cak-buka__ajak">Lihat per site <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon></div>
       </div>
-    </div>
-    <div class="rov-kpi__kartu">
+    </button>
+    <button type="button" class="rov-kpi__kartu rov-cak-buka" data-cak-site-buka aria-haspopup="dialog">
       <span class="rov-kpi__ikon rov-ikon-sky"><iconify-icon icon="solar:chart-2-bold"></iconify-icon></span>
       <div class="flex-grow-1">
         <div class="rov-kpi__label">Comply rate</div>
@@ -87,8 +89,9 @@
           <span class="is-sudah" data-cak-seg="sudah" style="width: {{ $karTotal > 0 ? round($karRoster / $karTotal * 100, 2) : 0 }}%"></span>
         </div>
         <div class="rov-kpi__sub"><span data-cak-n="kar_roster">{{ $angka($karRoster) }}</span> karyawan aktif sudah di roster ÷ total karyawan aktif</div>
+        <div class="rov-cak-buka__ajak">Lihat per site <iconify-icon icon="solar:alt-arrow-right-linear"></iconify-icon></div>
       </div>
-    </div>
+    </button>
   </div>
 
   <div class="rov-cak-alat">
@@ -199,6 +202,22 @@
       </div>
     </div>
   @endif
+</div>
+
+{{-- Modal "Cakupan per site": dirakit di browser dari data-site tiap baris tabel di atas. --}}
+<div class="modal fade" id="roSiteModal" tabindex="-1" aria-labelledby="roSiteModalJudul" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: min(1100px, 96vw)">
+    <div class="modal-content radius-12">
+      <div class="modal-header py-16 px-24">
+        <div>
+          <h6 class="modal-title fw-semibold mb-0" id="roSiteModalJudul">Cakupan roster per site</h6>
+          <div class="text-secondary-light text-sm mt-4" data-site-konteks></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body px-24 py-16" data-site-isi></div>
+    </div>
+  </div>
 </div>
 
 {{-- Modal detail "Kurang": isinya dimuat dari RosterMasterController::overviewKurang. --}}
