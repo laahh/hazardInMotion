@@ -37,6 +37,16 @@
     <a href="{{ $url(['tampil' => 'sudah', 'hal' => null]) }}" data-ro-muat role="tab" aria-selected="{{ $tampil === 'sudah' ? 'true' : 'false' }}"
        class="rov-cak-tab {{ $tampil === 'sudah' ? 'is-aktif' : '' }}"><i class="is-sudah"></i>Sudah di roster <b>{{ $angka($jumlah['aktif'] === null ? $jumlah['roster'] : $jumlah['aktif'] - $jumlah['belum']) }}</b></a>
   </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+  @if ($tampil === 'belum' && $jumlah['belum'] > 0)
+    {{-- Template Upload Roster (format sama), hanya karyawan yang belum di roster. --}}
+    <a href="{{ route('dms.master-roster.template', array_filter(['perusahaan' => $pt, 'site' => $site ?: null, 'belum' => 1, 'dari' => $bulan->format('Y-m')]), false) }}"
+       class="btn btn-sm btn-outline-primary-600 radius-8 d-inline-flex align-items-center gap-1"
+       title="Template upload roster {{ $namaBulan[$bulan->month] }} {{ $bulan->year }} berisi {{ $angka($jumlah['belum']) }} karyawan yang belum di roster">
+      <iconify-icon icon="solar:file-download-bold" class="text-md"></iconify-icon>
+      Download belum di roster ({{ $angka($jumlah['belum']) }})
+    </a>
+  @endif
   <form method="GET" action="{{ route('dms.master-roster.overview.kurang', absolute: false) }}" data-ro-filter style="width:260px;max-width:100%">
     <input type="hidden" name="pt" value="{{ $pt }}">
     <input type="hidden" name="site" value="{{ $site }}">
@@ -44,6 +54,7 @@
     <input type="hidden" name="bulan" value="{{ $bulan->format('Y-m') }}">
     <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
   </form>
+  </div>
 </div>
 
 @if ($tampil === 'belum')

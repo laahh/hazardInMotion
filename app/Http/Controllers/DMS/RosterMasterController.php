@@ -228,7 +228,7 @@ final class RosterMasterController extends Controller
         $diRoster = $this->cakupan->sidRoster($ejaan);
         $mirip = static fn (array $k): bool => $cari === '' || stripos($k['sid'].' '.$k['nama'], $cari) !== false;
 
-        $belum = $aktif === null ? [] : array_values(array_filter($aktif, static fn (array $k): bool => ! isset($diRoster[mb_strtoupper($k['sid'])])));
+        $belum = $aktif === null ? [] : $this->belumDiRoster($aktif, $diRoster);
         if ($tampil === 'belum') {
             $daftar = array_values(array_filter($belum, $mirip));
             $grid = [
@@ -254,6 +254,15 @@ final class RosterMasterController extends Controller
             'aktifTerbaca' => $aktif !== null,
             'jumlah' => ['aktif' => $aktif === null ? null : count($aktif), 'belum' => count($belum), 'roster' => count($diRoster)],
         ]);
+    }
+
+    /**
+     * Karyawan aktif yang SID-nya belum ada di roster mana pun ($diRoster =
+     * peta SID huruf besar dari DmsRosterCakupanReader::sidRoster()).
+     */
+    private function belumDiRoster(array $aktif, array $diRoster): array
+    {
+        return array_values(array_filter($aktif, static fn (array $k): bool => ! isset($diRoster[mb_strtoupper($k['sid'])])));
     }
 
     public function approval(Request $request): View
@@ -357,6 +366,8 @@ final class RosterMasterController extends Controller
      * mis. Januari–Desember). ?bulan=YYYY-MM lama tetap diterima (satu bulan).
      * ?perusahaan=<nama> mengisi baris karyawan perusahaan itu (SID, nama,
      * jabatan, site), ?site=<site> membatasi ke satu site; jadwalnya tinggal diisi.
+     * ?belum=1 (tombol di modal Overview) hanya memuat karyawan aktif yang belum
+     * ada di roster mana pun (menunggu approval maupun disetujui).
      */
     public function template(Request $request): StreamedResponse|RedirectResponse
     {
@@ -382,6 +393,14 @@ final class RosterMasterController extends Controller
                     ->with('error', 'Tidak ada karyawan aktif untuk perusahaan "'.$pt.'"'.($site !== '' ? ' di site "'.$site.'"' : '').'.');
             }
         }
+        $belum = $pt !== '' && $request->boolean('belum');
+        if ($belum) {
+            $karyawan = $this->belumDiRoster($karyawan, $this->cakupan->sidRoster($this->cakupan->ejaanUntuk($pt)));
+            if ($karyawan === []) {
+                return redirect()->route('dms.master-roster.upload')
+                    ->with('error', 'Semua karyawan aktif "'.$pt.'"'.($site !== '' ? ' di site "'.$site.'"' : '').' sudah ada di roster.');
+            }
+        }
 
         try {
             $writer = new Xlsx($this->service->template($dari, $sampai, $karyawan));
@@ -392,6 +411,7 @@ final class RosterMasterController extends Controller
         $nama = 'template_master_roster_'
             .($pt !== '' ? \Illuminate\Support\Str::slug(\App\Services\Dms\Roster\DmsRosterSyncService::kodePt($pt)).'_' : '')
             .($pt !== '' && $site !== '' ? \Illuminate\Support\Str::slug($site).'_' : '')
+            .($belum ? 'belum_roster_' : '')
             .$dari->format('Y-m').($sampai->format('Y-m') !== $dari->format('Y-m') ? '_sd_'.$sampai->format('Y-m') : '').'.xlsx';
 
         return response()->streamDownload(static function () use ($writer): void {
