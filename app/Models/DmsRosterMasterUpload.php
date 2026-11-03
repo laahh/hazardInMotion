@@ -61,7 +61,15 @@ class DmsRosterMasterUpload extends Model
             return false;
         }
 
-        return mb_strtolower(trim((string) $this->diupload_oleh)) === mb_strtolower(trim((string) $user->name))
-            || $user->isAdmin();
+        return $this->diuploadOleh($user) || $user->isAdmin();
+    }
+
+    /**
+     * User ini pengupload batch ini (dicocokkan lewat nama, lihat di atas).
+     */
+    public function diuploadOleh(?User $user): bool
+    {
+        return $user !== null
+            && mb_strtolower(trim((string) $this->diupload_oleh)) === mb_strtolower(trim((string) $user->name));
     }
 }

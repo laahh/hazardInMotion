@@ -310,7 +310,13 @@ final class RosterMasterController extends Controller
         $upload = DmsRosterMasterUpload::findOrFail($id);
         $cakupan = $this->cakupan();
         $ptUpload = $this->akses->perusahaanUpload($upload->id);
-        abort_unless(DmsRosterAksesPerusahaan::terlihat($cakupan, $ptUpload), 403, 'Roster ini bukan perusahaan yang di-assign ke akun Anda.');
+        // Upload terbuka tanpa assign, jadi pengupload selalu boleh melihat hasilnya.
+        $user = Auth::user();
+        abort_unless(
+            $upload->diuploadOleh($user instanceof User ? $user : null) || DmsRosterAksesPerusahaan::terlihat($cakupan, $ptUpload),
+            403,
+            'Roster ini bukan perusahaan yang di-assign ke akun Anda.',
+        );
         $halaman = max(1, (int) $request->query('hal', 1));
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
         $grid = $this->service->grid($upload, $halaman, 25, $cari);

@@ -165,9 +165,15 @@ final class DmsRosterAksesPerusahaan
      */
     public function perusahaanUpload(int $uploadId): array
     {
+        // Cache ringkasan disegarkan scheduler tiap menit: upload yang baru
+        // masuk belum ada di sana, jadi dibaca langsung dari jadwalnya.
+        $ejaan = DmsRosterMasterCache::ptPerUpload()[$uploadId]
+            ?? DB::table('dms_roster_master_jadwal')->where('upload_id', $uploadId)
+                ->selectRaw("DISTINCT TRIM(COALESCE(perusahaan, '')) AS pt")->pluck('pt')
+                ->map(static fn ($p): string => (string) $p)->all();
         $pt = array_values(array_unique(array_map(
             static fn (string $p): string => $p === '' ? DmsRosterMasterService::TANPA_PERUSAHAAN : $p,
-            DmsRosterMasterCache::ptPerUpload()[$uploadId] ?? [],
+            $ejaan,
         )));
         sort($pt);
 
