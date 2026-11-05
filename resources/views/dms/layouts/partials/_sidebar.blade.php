@@ -34,6 +34,12 @@
                     'url' => route('dms.master-roster.approval'),
                     'active' => request()->routeIs('dms.master-roster.approval') || request()->routeIs('dms.master-roster.show'),
                 ],
+                [
+                    'label' => 'Approval Pengajuan',
+                    'icon' => 'solar:document-add-outline',
+                    'url' => route('dms.master-roster.pengajuan.index'),
+                    'active' => request()->routeIs('dms.master-roster.pengajuan.*'),
+                ],
                 // Edit Roster: semua user bisa melihat; mengedit hanya yang di-assign (Assign Role).
                 [
                     'label' => 'Edit Roster',

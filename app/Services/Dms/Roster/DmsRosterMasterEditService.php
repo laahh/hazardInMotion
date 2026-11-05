@@ -302,6 +302,25 @@ final class DmsRosterMasterEditService
     }
 
     /**
+     * Kode yang sedang berlaku untuk beberapa tanggal satu SID (aturan pemenang
+     * sama dengan tabel); tanggal tanpa jadwal tidak ada di hasil.
+     *
+     * @param  list<string>  $tanggal
+     * @return array<string, string> tanggal => kode
+     */
+    public function kodeTanggal(string $sid, array $tanggal): array
+    {
+        $out = [];
+        foreach ($this->dasar(null)->where('j.kode_sid', $sid)->whereIn('j.tanggal', $tanggal)
+            ->orderByDesc('u.created_at')->orderByDesc('u.id')
+            ->get(['j.tanggal', 'j.kode']) as $r) {
+            $out[CarbonImmutable::parse((string) $r->tanggal)->toDateString()] ??= (string) $r->kode;
+        }
+
+        return $out;
+    }
+
+    /**
      * Daftar hari di Form Edit per SID — murni, tanpa DB. Tanggal tanpa jadwal
      * hanya boleh diisi bila ada roster karyawan itu yang periodenya mencakup
      * tanggal tsb (sama dengan penolakan di simpan()).

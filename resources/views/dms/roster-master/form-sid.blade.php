@@ -17,6 +17,7 @@
   .fs-tgl.is-pilih { border-color: var(--ocr-ink); }
   .fs-tgl.is-ubah { border-color: var(--ocr-brand); box-shadow: 0 0 0 1px var(--ocr-brand); }
   .fs-tgl:disabled { background: #f8fafc; cursor: not-allowed; opacity: .6; }
+  .fs-tgl small.fs-diajukan { margin-top: .25rem; color: #b45309; font-weight: 600; }
   .fs-pilih { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--ocr-line); }
   .fs-pilih__judul { font-weight: 700; font-size: .9rem; }
   .fs-grup { font-size: .7rem; font-weight: 600; color: var(--ocr-muted); text-transform: uppercase; letter-spacing: .04em; margin: .75rem 0 .35rem; }
@@ -38,7 +39,7 @@
     <div class="ocr-hero-body">
       <span class="ocr-badge"><span class="material-symbols-outlined" style="font-size:15px">lock_open</span>Master Roster</span>
       <h1>Edit Roster per SID</h1>
-      <p class="ocr-lead">Isi SID, lalu ubah kode roster untuk tanggal seminggu sebelum sampai seminggu sesudah hari ini. Perubahan langsung berlaku setelah disimpan.</p>
+      <p class="ocr-lead">Isi SID, lalu ajukan kode roster baru untuk tanggal seminggu sebelum sampai seminggu sesudah hari ini. Jadwal berubah setelah pengajuan disetujui.</p>
       <span class="ocr-pill"><span class="material-symbols-outlined" style="font-size:16px">calendar_today</span>{{ $hariIni->locale('id')->translatedFormat('l, d F Y') }}</span>
     </div>
   </div>
@@ -67,7 +68,7 @@
 
   <section class="ocr-card" id="fsJadwal" hidden>
     <h2 class="ocr-card-title"><span class="ocr-num">2</span> Pilih tanggal &amp; kode</h2>
-    <p class="ocr-hint" style="margin-top:-.5rem">Pastikan nama di atas benar. Tanggal abu-abu berada di luar periode roster karyawan ini, jadi perlu upload roster dulu. Garis putus oranye = roster masih menunggu approval.</p>
+    <p class="ocr-hint" style="margin-top:-.5rem">Pastikan nama di atas benar. Tanggal abu-abu berada di luar periode roster karyawan ini, jadi perlu upload roster dulu. Tanggal bertanda "Diajukan" masih menunggu approval, jadi belum bisa diajukan lagi. Garis putus oranye = roster masih menunggu approval.</p>
     <div class="fs-hari" id="fsHari"></div>
     <div class="fs-pilih" id="fsPilih" hidden>
       <div class="fs-pilih__judul" id="fsPilihJudul" aria-live="polite"></div>
@@ -76,9 +77,13 @@
   </section>
 
   <section class="ocr-card" id="fsKirim" hidden>
-    <h2 class="ocr-card-title"><span class="ocr-num">3</span> Periksa &amp; simpan</h2>
+    <h2 class="ocr-card-title"><span class="ocr-num">3</span> Periksa &amp; ajukan</h2>
     <ul class="fs-ringkas" id="fsRingkas"></ul>
-    <button type="button" class="ocr-btn ocr-btn-primary ocr-btn-block" id="fsSimpan" style="margin-top:1rem"><span class="material-symbols-outlined">save</span><span id="fsSimpanTeks">Simpan</span></button>
+    <div class="ocr-field" style="margin:1rem 0 0">
+      <label for="fsCatatan">Keterangan <span style="font-weight:400;color:var(--ocr-muted)">(opsional)</span></label>
+      <textarea class="ocr-input" id="fsCatatan" rows="2" maxlength="1000" placeholder="Mis. izin keperluan keluarga"></textarea>
+    </div>
+    <button type="button" class="ocr-btn ocr-btn-primary ocr-btn-block" id="fsSimpan" style="margin-top:1rem"><span class="material-symbols-outlined">send</span><span id="fsSimpanTeks">Kirim pengajuan</span></button>
     <button type="button" class="ocr-btn ocr-btn-secondary ocr-btn-block" id="fsBatal" style="margin-top:.65rem">Batalkan perubahan</button>
   </section>
 </div>
@@ -157,11 +162,12 @@
         wadah.textContent = '';
         data.hari.forEach(function (h) {
             var kode = kodeKini(h);
+            var diajukan = data.diajukan[h.tanggal];
             var b = document.createElement('button');
             b.type = 'button';
             b.className = 'fs-tgl' + (h.tanggal === HARI_INI ? ' is-kini' : '') + (ubah[h.tanggal] !== undefined ? ' is-ubah' : '') + (pilih === h.tanggal ? ' is-pilih' : '');
-            b.disabled = !h.boleh;
-            b.title = h.boleh ? '' : 'Di luar periode roster karyawan ini';
+            b.disabled = !h.boleh || diajukan !== undefined;
+            b.title = diajukan !== undefined ? 'Menunggu approval: diajukan menjadi ' + diajukan : (h.boleh ? '' : 'Di luar periode roster karyawan ini');
             b.setAttribute('aria-pressed', pilih === h.tanggal ? 'true' : 'false');
 
             var atas = document.createElement('small');
@@ -172,6 +178,12 @@
             sel.className = 'rm-sel ' + kelasKode(kode) + (h.menunggu && ubah[h.tanggal] === undefined ? ' rm-menunggu' : '');
             sel.textContent = kode || '–';
             b.append(atas, bawah, sel);
+            if (diajukan !== undefined) {
+                var tanda = document.createElement('small');
+                tanda.className = 'fs-diajukan';
+                tanda.textContent = 'Diajukan: ' + diajukan;
+                b.appendChild(tanda);
+            }
             b.addEventListener('click', function () { bukaKode(h.tanggal); });
             wadah.appendChild(b);
         });
@@ -228,7 +240,7 @@
             ul.appendChild(li);
         });
         var n = Object.keys(ubah).length;
-        el('fsSimpanTeks').textContent = 'Simpan ' + n + ' perubahan';
+        el('fsSimpanTeks').textContent = 'Kirim pengajuan (' + n + ' tanggal)';
         el('fsKirim').hidden = n === 0;
     }
 
@@ -236,6 +248,7 @@
         data = d;
         ubah = {};
         pilih = null;
+        el('fsCatatan').value = '';
         sidInput.value = d.sid;
         el('fsNama').textContent = d.nama || '—';
         el('fsPt').textContent = d.perusahaan || '—';
@@ -288,7 +301,7 @@
                 'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
             },
-            body: JSON.stringify({ sid: data.sid, sel: sel }),
+            body: JSON.stringify({ sid: data.sid, sel: sel, catatan: el('fsCatatan').value.trim() }),
         })
             .then(function (r) {
                 pasang(r.data);

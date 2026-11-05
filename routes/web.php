@@ -833,6 +833,12 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
             // Edit Roster: hanya user yang di-assign, hanya perusahaannya.
             Route::get('/edit', [\App\Http\Controllers\DMS\RosterMasterEditController::class, 'index'])->name('edit.index');
             Route::post('/edit', [\App\Http\Controllers\DMS\RosterMasterEditController::class, 'update'])->name('edit.update');
+            // Approval Pengajuan: pengajuan dari Form Edit per SID, wajib tanda tangan.
+            Route::get('/pengajuan', [\App\Http\Controllers\DMS\RosterPengajuanController::class, 'index'])->name('pengajuan.index');
+            Route::get('/pengajuan/{id}', [\App\Http\Controllers\DMS\RosterPengajuanController::class, 'show'])->whereNumber('id')->name('pengajuan.show');
+            Route::get('/pengajuan/{id}/ttd', [\App\Http\Controllers\DMS\RosterPengajuanController::class, 'ttd'])->whereNumber('id')->name('pengajuan.ttd');
+            Route::post('/pengajuan/{id}/approve', [\App\Http\Controllers\DMS\RosterPengajuanController::class, 'approve'])->whereNumber('id')->name('pengajuan.approve');
+            Route::post('/pengajuan/{id}/reject', [\App\Http\Controllers\DMS\RosterPengajuanController::class, 'reject'])->whereNumber('id')->name('pengajuan.reject');
             // Assign Role (admin): perusahaan yang boleh di-approve tiap user.
             Route::get('/assign-role', [\App\Http\Controllers\DMS\RosterMasterAksesController::class, 'index'])->name('assign-role');
             Route::post('/assign-role', [\App\Http\Controllers\DMS\RosterMasterAksesController::class, 'store'])->name('assign-role.store');

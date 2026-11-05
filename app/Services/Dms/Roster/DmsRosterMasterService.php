@@ -413,6 +413,16 @@ final class DmsRosterMasterService
      */
     public function simpanTtd(DmsRosterMasterUpload $upload, ?string $dataUrl, ?UploadedFile $file, bool $digambar = false): array
     {
+        return $this->simpanTtdDi('roster-master/'.$upload->id, $dataUrl, $file, $digambar);
+    }
+
+    /**
+     * Sama dengan simpanTtd(), folder penyimpanannya ditentukan pemanggil.
+     *
+     * @return array{path:string,sumber:string}
+     */
+    public function simpanTtdDi(string $folder, ?string $dataUrl, ?UploadedFile $file, bool $digambar = false): array
+    {
         if ($file !== null) {
             $isi = (string) file_get_contents($file->getRealPath());
             $sumber = $digambar ? 'GAMBAR' : 'UPLOAD';
@@ -437,7 +447,7 @@ final class DmsRosterMasterService
             throw new \RuntimeException('Tanda tangan harus berupa gambar PNG atau JPG.');
         }
 
-        $path = 'roster-master/'.$upload->id.'/ttd-approval.'.$ekstensi;
+        $path = $folder.'/ttd-approval.'.$ekstensi;
         Storage::disk('local')->put($path, $isi);
 
         return ['path' => $path, 'sumber' => $sumber];
