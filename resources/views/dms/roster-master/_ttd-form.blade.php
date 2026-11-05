@@ -1,5 +1,5 @@
 {{--
-  Panel Setujui (wajib tanda tangan) / Tolak: Approval Roster & Approval Pengajuan.
+  Panel Setujui (wajib tanda tangan) / Tolak: Approval Roster & Approval Pengajuan Edit Roster.
   Butuh _ttd-css dan _ttd-js.
 
   $aksiSetuju, $aksiTolak  URL POST

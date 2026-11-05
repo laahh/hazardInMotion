@@ -1,4 +1,4 @@
-{{-- Gaya panel Setujui (tanda tangan) / Tolak: Approval Roster & Approval Pengajuan. --}}
+{{-- Gaya panel Setujui (tanda tangan) / Tolak: Approval Roster & Approval Pengajuan Edit Roster. --}}
 <style>
   /* Tanda tangan approver (signature_pad). */
   .rm-ttd-kanvas { position: relative; height: 200px; border: 1.5px dashed #94A3B8; border-radius: 10px; background: #fff; touch-action: none; }

@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 /**
- * Master Roster → Approval Pengajuan: pengajuan dari Form Edit per SID,
+ * Master Roster → Approval Pengajuan Edit Roster: pengajuan dari Form Edit per SID,
  * disetujui dengan tanda tangan atau ditolak. Aturan aksesnya sama dengan
  * Approval Roster: hanya perusahaan yang di-assign ke user (admin tanpa
  * assignment = semua).

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Pengajuan perubahan roster dari Form Edit per SID: satu baris per kiriman,
- * jadwalnya baru berubah setelah disetujui (menu Approval Pengajuan). Hanya
+ * jadwalnya baru berubah setelah disetujui (menu Approval Pengajuan Edit Roster). Hanya
  * menambah tabel baru — tabel roster lain tidak disentuh.
  */
 return new class extends Migration

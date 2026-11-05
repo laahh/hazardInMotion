@@ -20,7 +20,7 @@ use Throwable;
  * Form Edit Roster per SID (/dms/master-roster/edit/form): TERBUKA TANPA LOGIN,
  * konsepnya sama dengan form absensi Control Room. Cari SID → jadwal hari ini
  * ± 7 hari → ajukan kode baru per tanggal. Jadwal baru berubah setelah
- * pengajuannya disetujui di menu Approval Pengajuan.
+ * pengajuannya disetujui di menu Approval Pengajuan Edit Roster.
  *
  * Satu kiriman hanya untuk satu SID, rentang tanggal dihitung ulang di
  * server, dan tidak ada opsi kosongkan. Tabel Edit Roster tidak terpengaruh.

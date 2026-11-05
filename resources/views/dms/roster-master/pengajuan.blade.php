@@ -1,6 +1,6 @@
 @extends('dms.layouts.app')
 
-@section('title', 'Approval Pengajuan')
+@section('title', 'Approval Pengajuan Edit Roster')
 
 @section('content')
 @php
@@ -11,7 +11,7 @@
   ];
 @endphp
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-  <h6 class="fw-semibold mb-0">Approval Pengajuan</h6>
+  <h6 class="fw-semibold mb-0">Approval Pengajuan Edit Roster</h6>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">
       <a href="{{ route('dms.index') }}" class="d-flex align-items-center gap-1 hover-text-primary">
@@ -21,7 +21,7 @@
     <li>-</li>
     <li class="fw-medium">Master Roster</li>
     <li>-</li>
-    <li class="fw-medium">Approval Pengajuan</li>
+    <li class="fw-medium">Approval Pengajuan Edit Roster</li>
   </ul>
 </div>
 

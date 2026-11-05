@@ -35,8 +35,8 @@
                     'active' => request()->routeIs('dms.master-roster.approval') || request()->routeIs('dms.master-roster.show'),
                 ],
                 [
-                    'label' => 'Approval Pengajuan',
-                    'icon' => 'solar:document-add-outline',
+                    'label' => 'Approval Pengajuan Edit Roster',
+                    'icon' => 'solar:clipboard-check-outline',
                     'url' => route('dms.master-roster.pengajuan.index'),
                     'active' => request()->routeIs('dms.master-roster.pengajuan.*'),
                 ],
@@ -166,6 +166,8 @@
     list-style: none;
   }
   .dms-sidebar .dms-children > li { position: relative; }
+  /* Label anak yang panjang turun baris, tidak terpotong. */
+  .dms-sidebar .sidebar-menu .dms-children li a .dms-label { white-space: normal; }
   .dms-sidebar .dms-children > li::before {
     content: '';
     position: absolute;
