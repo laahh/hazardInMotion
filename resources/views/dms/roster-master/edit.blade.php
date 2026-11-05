@@ -68,6 +68,9 @@
     <p class="text-sm text-secondary-light mb-0 mt-4">
       Gabungan semua roster yang di-upload (menunggu approval &amp; disetujui). Bila satu tanggal ada di beberapa roster, yang dipakai roster terbaru.
     </p>
+    <a href="{{ route('dms.master-roster.edit-form.index', absolute: false) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary-600 radius-8 d-inline-flex align-items-center gap-1 mt-8">
+      <iconify-icon icon="solar:user-id-linear"></iconify-icon>Form edit per SID
+    </a>
   </div>
   <ul class="d-flex align-items-center gap-2">
     <li class="fw-medium">

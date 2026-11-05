@@ -89,6 +89,17 @@ Route::prefix('control-room')
     ->name('control-room.')
     ->group(base_path('routes/ControlRoom/control-room.php'));
 
+// Form Edit Roster per SID: sengaja tanpa login, seperti form absensi Control Room.
+Route::prefix('dms/master-roster/edit/form')
+    ->name('dms.master-roster.edit-form.')
+    ->middleware('throttle:30,1')
+    ->controller(\App\Http\Controllers\DMS\RosterFormSidController::class)
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/cari', 'cari')->name('cari');
+        Route::post('/', 'simpan')->middleware('throttle:10,1')->name('simpan');
+    });
+
 Route::prefix('pnc-monitoring')
     ->name('pnc-monitoring.')
     ->group(base_path('routes/PncMonitoring/pnc-monitoring.php'));

@@ -43,6 +43,9 @@ final class DmsRosterMasterEditService
     /** Batas perubahan per simpan — jaga transaksi tetap kecil. */
     public const MAKS_PERUBAHAN = 5000;
 
+    /** Form Edit per SID: jumlah hari sebelum & sesudah hari ini yang bisa diubah. */
+    public const RENTANG_FORM_HARI = 7;
+
     /**
      * Baris jadwal perusahaan user dari upload yang tidak ditolak, upload
      * terbaru dulu — baris pertama per (SID, tanggal) adalah pemenangnya.
@@ -140,10 +143,12 @@ final class DmsRosterMasterEditService
      *
      * @param  list<array{sid:string,tanggal:string,kode:string}>  $sel
      * @param  list<array{sid:string,masuk:string,keluar:string,total:string}>  $jam
-     * @param  list<string>  $ejaan
+     * @param  list<string>|null  $ejaan  null = semua perusahaan (form publik per SID)
+     * @param  string  $dari  batas tanggal yang boleh diubah; bawaan tanpa batas
+     * @param  string  $sampai
      * @return array{galat: list<string>, ubah: int}
      */
-    public function simpan(array $sel, array $jam, array $ejaan, string $oleh): array
+    public function simpan(array $sel, array $jam, ?array $ejaan, string $oleh, string $dari = '1900-01-01', string $sampai = '2999-12-31'): array
     {
         $sids = array_values(array_unique(array_merge(array_column($sel, 'sid'), array_column($jam, 'sid'))));
         if ($sids === []) {
@@ -176,7 +181,7 @@ final class DmsRosterMasterEditService
             }
         }
 
-        $rencana = self::rencana($baris, $sel, $jam, '1900-01-01', '2999-12-31');
+        $rencana = self::rencana($baris, $sel, $jam, $dari, $sampai);
         if ($rencana['galat'] !== [] || $rencana['ops'] === []) {
             return ['galat' => $rencana['galat'], 'ubah' => 0];
         }
@@ -254,6 +259,76 @@ final class DmsRosterMasterEditService
         });
 
         return ['galat' => [], 'ubah' => count($rencana['ops'])];
+    }
+
+    /**
+     * Rentang tanggal Form Edit per SID: hari ini ± RENTANG_FORM_HARI.
+     *
+     * @return array{0:string,1:string} [dari, sampai]
+     */
+    public static function rentangForm(CarbonImmutable $hariIni): array
+    {
+        return [
+            $hariIni->subDays(self::RENTANG_FORM_HARI)->toDateString(),
+            $hariIni->addDays(self::RENTANG_FORM_HARI)->toDateString(),
+        ];
+    }
+
+    /**
+     * Identitas & jadwal satu SID untuk Form Edit per SID (gabungan semua
+     * roster, aturan pemenang sama dengan tabel). null = SID tidak ada di
+     * roster mana pun. 'sid' = ejaan tersimpan, dipakai saat simpan.
+     *
+     * @return array{sid:string,nama:?string,perusahaan:?string,jabatan:?string,site:?string,hari:list<array{tanggal:string,kode:string,menunggu:bool,boleh:bool}>}|null
+     */
+    public function jadwalSid(string $sid, CarbonImmutable $hariIni): ?array
+    {
+        $identitas = null;
+        $jadwal = [];
+        $periode = [];
+        foreach ($this->dasar(null)->where('j.kode_sid', $sid)
+            ->orderByDesc('u.created_at')->orderByDesc('u.id')
+            ->get(['j.kode_sid', 'j.nama', 'j.perusahaan', 'j.jabatan', 'j.site', 'j.tanggal', 'j.kode', 'j.upload_id', 'u.status', 'u.periode_mulai', 'u.periode_selesai']) as $r) {
+            $identitas ??= ['sid' => (string) $r->kode_sid, 'nama' => $r->nama, 'perusahaan' => $r->perusahaan, 'jabatan' => $r->jabatan, 'site' => $r->site];
+            $tgl = CarbonImmutable::parse((string) $r->tanggal)->toDateString();
+            $jadwal[$tgl] ??= ['kode' => (string) $r->kode, 'menunggu' => $r->status === DmsRosterMasterUpload::STATUS_PENDING];
+            $periode[(int) $r->upload_id] ??= [
+                CarbonImmutable::parse((string) $r->periode_mulai)->toDateString(),
+                CarbonImmutable::parse((string) $r->periode_selesai)->toDateString(),
+            ];
+        }
+
+        return $identitas === null ? null : $identitas + ['hari' => self::hariForm($hariIni, $jadwal, array_values($periode))];
+    }
+
+    /**
+     * Daftar hari di Form Edit per SID — murni, tanpa DB. Tanggal tanpa jadwal
+     * hanya boleh diisi bila ada roster karyawan itu yang periodenya mencakup
+     * tanggal tsb (sama dengan penolakan di simpan()).
+     *
+     * @param  array<string, array{kode:string,menunggu:bool}>  $jadwal  tanggal => jadwal sekarang
+     * @param  list<array{0:string,1:string}>  $periode  [mulai, selesai] per upload
+     * @return list<array{tanggal:string,kode:string,menunggu:bool,boleh:bool}>
+     */
+    public static function hariForm(CarbonImmutable $hariIni, array $jadwal, array $periode): array
+    {
+        $hari = [];
+        for ($i = -self::RENTANG_FORM_HARI; $i <= self::RENTANG_FORM_HARI; $i++) {
+            $tgl = $hariIni->addDays($i)->toDateString();
+            $ada = $jadwal[$tgl] ?? null;
+            $tercakup = false;
+            foreach ($periode as [$mulai, $selesai]) {
+                $tercakup = $tercakup || ($mulai <= $tgl && $tgl <= $selesai);
+            }
+            $hari[] = [
+                'tanggal' => $tgl,
+                'kode' => $ada['kode'] ?? '',
+                'menunggu' => $ada['menunggu'] ?? false,
+                'boleh' => $ada !== null || $tercakup,
+            ];
+        }
+
+        return $hari;
     }
 
     /**
