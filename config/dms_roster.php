@@ -79,6 +79,19 @@ return [
     */
     'master' => [
         'jabatan_dikecualikan' => ['VISITOR'],
+        // Pilihan dropdown Kegiatan on-site (kode KG) di Form Edit per SID.
+        // Opsi "Lainnya" (ketik sendiri) selalu ditambahkan oleh form.
+        'kegiatan_onsite' => [
+            'Training',
+            'Meeting Site',
+            'Induksi / Orientasi',
+            'MCU / Pemeriksaan Kesehatan',
+            'Sertifikasi / Uji Kompetensi',
+            'Audit / Inspeksi',
+            'Standby',
+            'Tugas Khusus',
+        ],
+
         // Approval Roster per departemen: manager boleh me-review roster yang
         // memuat karyawan departemennya (DmsRosterApproverDepartemen). Kunci
         // approver = SID, yaitu isi kolom email akun loginnya.
@@ -534,7 +547,7 @@ return [
     | lampau juga dicocokkan plan vs tap (kepatuhan). Dihitung dms:sync-roster-rfid
     | (Tahap 9) — hanya tampilan, tidak memicu banned.
     |
-    | Kode plan → deret: D1–D13 / DS = P, N1–N7 / NS = M, OFF/S/I = off, CT = cuti. Off
+    | Kode plan → deret: D1–D13 / DS / KG = P, N1–N7 / NS = M, OFF/S/I = off, CT = cuti. Off
     | > ambang.off_ke_cuti hari berturut tetap dianggap cuti, sama dengan RFID.
     */
     'plan_kesesuaian' => [

@@ -70,7 +70,7 @@
      Template Excel tetap memakai warna DmsRosterMasterService::KODE. */
   @php
     $warnaWeb = ['D' => ['FEF3C7', '92400E'], 'N' => ['E0E7FF', '3730A3'], 'OFF' => ['F1F5F9', '64748B'],
-                 'CT' => ['FFEDD5', '9A3412'], 'S' => ['FEE2E2', 'B91C1C'], 'I' => ['F3E8FF', '7E22CE']];
+                 'CT' => ['FFEDD5', '9A3412'], 'S' => ['FEE2E2', 'B91C1C'], 'I' => ['F3E8FF', '7E22CE'], 'KG' => ['CCFBF1', '0F766E']];
   @endphp
   @foreach (array_keys(\App\Services\Dms\Roster\DmsRosterMasterService::KODE) as $kodeCss)
   @php [$latar, $teks] = $warnaWeb[preg_replace('/\d+$/', '', $kodeCss)] ?? ['F1F5F9', '334155']; @endphp

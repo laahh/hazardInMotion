@@ -126,7 +126,7 @@
         <span class="rup-bantu text-danger-600" data-rm-galat hidden></span>
 
         <div class="rup-aksi">
-          <span class="text-xs text-secondary-light">Isi kode roster (D1–D13, N1–N7, OFF, CT, S, I) per tanggal.</span>
+          <span class="text-xs text-secondary-light">Isi kode roster (D1–D13, N1–N7, OFF, CT, S, I, KG) per tanggal. KG = kegiatan on-site seperti training atau meeting site.</span>
           <button type="submit" class="btn btn-outline-primary-600 radius-8 d-inline-flex align-items-center gap-2">
             <iconify-icon icon="solar:file-download-bold"></iconify-icon>Download template
           </button>

@@ -1087,7 +1087,7 @@
         panel.querySelector('[data-pk-info]').innerHTML =
             (d.basi ? '<div class="text-warning-main text-sm fw-medium mb-4">⚠ Sinkronisasi terakhir gagal — menampilkan hasil ' + esc(d.diambil) + '.</div>' : '')
             + '<div class="text-sm">Plan roster <b>disetujui</b> (Master Roster) disambung tap RFID s/d hari ini (' + esc(tgl(d.hari_ini)) + ') · diambil ' + esc(d.diambil) + '</div>'
-            + '<div class="text-xs text-secondary-light mt-4">Hari lampau = tap RFID, sesudah hari ini = kode plan (D/DS = kerja pagi, N/NS = malam, OFF/S/I = off, CT = cuti; off &gt; 5 hari berturut = cuti). '
+            + '<div class="text-xs text-secondary-light mt-4">Hari lampau = tap RFID, sesudah hari ini = kode plan (D/DS/KG = kerja pagi, N/NS = malam, OFF/S/I = off, CT = cuti; off &gt; 5 hari berturut = cuti). '
             + '<b>Ya</b> = sudah atau akan (menurut plan) melewati batas: on-site &gt; ' + aturan.onsite_maks + ' hari, kerja &gt; ' + aturan.beruntun_maks
             + ' hari berturut-turut, jam kerja &gt; ' + jamMaks + ' jam (tap IN→OUT yang sudah terjadi, atau jam kerja di plan). Hanya monitoring — tidak memicu banned.</div>';
 

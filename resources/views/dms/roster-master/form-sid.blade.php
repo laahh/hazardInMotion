@@ -24,6 +24,9 @@
   .fs-kodes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .35rem; }
   .fs-kode { border: 1.5px solid transparent; border-radius: 8px; height: 36px; font: inherit; font-size: .75rem; font-weight: 700; cursor: pointer; padding: 0; }
   .fs-kode.is-kini { border-color: var(--ocr-ink); }
+  .fs-kode--lebar { grid-column: span 3; }
+  .fs-kegiatan { margin-top: .75rem; padding: .75rem; border: 1px solid var(--ocr-line); border-radius: 10px; display: grid; gap: .5rem; }
+  .fs-kegiatan label { font-size: .8rem; font-weight: 600; }
   .fs-ringkas { margin: 0; padding: 0; list-style: none; font-size: .86rem; }
   .fs-ringkas li { display: flex; justify-content: space-between; gap: .75rem; padding: .35rem 0; border-bottom: 1px solid #f1f5f9; }
   .fs-ringkas li:last-child { border-bottom: 0; }
@@ -99,6 +102,9 @@
     var HARI_INI = @json($hariIni->toDateString());
     var NAMA_KODE = @json($kode);
     var KODE = Object.keys(NAMA_KODE);
+    var KODE_KEGIATAN = @json($kodeKegiatan);
+    var DAFTAR_KEGIATAN = @json($kegiatan);
+    var LAINNYA = 'Lainnya';
     var GRUP = [
         ['Day', KODE.filter(function (k) { return /^D\d/.test(k); })],
         ['Night', KODE.filter(function (k) { return /^N\d/.test(k); })],
@@ -112,6 +118,7 @@
 
     var data = null;     // jadwal dari server
     var ubah = {};       // tanggal => kode baru
+    var kegiatan = {};   // tanggal => nama kegiatan (kode KG)
     var pilih = null;    // tanggal yang sedang dipilih
 
     function kelasKode(k) { return k === '' ? 'rm-kosong' : (KODE.indexOf(k) !== -1 ? 'rm-' + k : 'rm-lain'); }
@@ -167,7 +174,7 @@
             b.type = 'button';
             b.className = 'fs-tgl' + (h.tanggal === HARI_INI ? ' is-kini' : '') + (ubah[h.tanggal] !== undefined ? ' is-ubah' : '') + (pilih === h.tanggal ? ' is-pilih' : '');
             b.disabled = !h.boleh || diajukan !== undefined;
-            b.title = diajukan !== undefined ? 'Menunggu approval: diajukan menjadi ' + diajukan : (h.boleh ? '' : 'Di luar periode roster karyawan ini');
+            b.title = diajukan !== undefined ? 'Menunggu approval: diajukan menjadi ' + diajukan : (h.boleh ? (kegiatan[h.tanggal] || '') : 'Di luar periode roster karyawan ini');
             b.setAttribute('aria-pressed', pilih === h.tanggal ? 'true' : 'false');
 
             var atas = document.createElement('small');
@@ -206,18 +213,83 @@
                 var b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'fs-kode ' + kelasKode(k) + (kodeKini(h) === k ? ' is-kini' : '');
-                b.textContent = k;
                 b.title = NAMA_KODE[k];
-                b.addEventListener('click', function () { pilihKode(h, k); });
+                if (k === KODE_KEGIATAN) {
+                    b.classList.add('fs-kode--lebar');
+                    b.textContent = NAMA_KODE[k];
+                    b.setAttribute('aria-expanded', 'false');
+                    b.addEventListener('click', function () {
+                        panel.hidden = !panel.hidden;
+                        b.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+                    });
+                } else {
+                    b.textContent = k;
+                    b.addEventListener('click', function () { pilihKode(h, k); });
+                }
                 isi.appendChild(b);
             });
             wadah.append(judul, isi);
         });
+        var panel = panelKegiatan(h);
+        wadah.appendChild(panel);
         gambarHari();
     }
 
-    function pilihKode(h, k) {
-        if (k === h.kode) { delete ubah[h.tanggal]; } else { ubah[h.tanggal] = k; }
+    function panelKegiatan(h) {
+        var panel = document.createElement('div');
+        panel.className = 'fs-kegiatan';
+        panel.hidden = true;
+
+        var label = document.createElement('label');
+        label.htmlFor = 'fsKegiatanPilih';
+        label.textContent = 'Jenis kegiatan (tanggal ini tetap dihitung on-site)';
+
+        var pilihan = document.createElement('select');
+        pilihan.className = 'ocr-input';
+        pilihan.id = 'fsKegiatanPilih';
+        pilihan.add(new Option('Pilih kegiatan…', ''));
+        DAFTAR_KEGIATAN.concat(LAINNYA).forEach(function (nama) { pilihan.add(new Option(nama, nama)); });
+
+        var ketik = document.createElement('input');
+        ketik.className = 'ocr-input';
+        ketik.type = 'text';
+        ketik.maxLength = 100;
+        ketik.placeholder = 'Tulis nama kegiatan';
+        ketik.setAttribute('aria-label', 'Nama kegiatan');
+        ketik.hidden = true;
+
+        var pakai = document.createElement('button');
+        pakai.type = 'button';
+        pakai.className = 'ocr-btn ocr-btn-secondary';
+        pakai.textContent = 'Pakai untuk tanggal ini';
+
+        function namaKegiatan() {
+            return pilihan.value === LAINNYA ? ketik.value.trim() : pilihan.value;
+        }
+        function segarkan() {
+            ketik.hidden = pilihan.value !== LAINNYA;
+            pakai.disabled = namaKegiatan() === '';
+        }
+        pilihan.addEventListener('change', function () {
+            segarkan();
+            if (!ketik.hidden) { ketik.focus(); }
+        });
+        ketik.addEventListener('input', segarkan);
+        pakai.addEventListener('click', function () { pilihKode(h, KODE_KEGIATAN, namaKegiatan()); });
+        segarkan();
+
+        panel.append(label, pilihan, ketik, pakai);
+        return panel;
+    }
+
+    function pilihKode(h, k, nama) {
+        delete kegiatan[h.tanggal];
+        if (k === h.kode) {
+            delete ubah[h.tanggal];
+        } else {
+            ubah[h.tanggal] = k;
+            if (nama) { kegiatan[h.tanggal] = nama; }
+        }
         pilih = null;
         el('fsPilih').hidden = true;
         tampil(el('fsSukses'), '');
@@ -235,7 +307,7 @@
             var kiri = document.createElement('span');
             kiri.textContent = tanggal(h.tanggal, { weekday: 'short', day: '2-digit', month: 'short' });
             var kanan = document.createElement('strong');
-            kanan.textContent = (h.kode || 'Kosong') + ' → ' + ubah[h.tanggal];
+            kanan.textContent = (h.kode || 'Kosong') + ' → ' + ubah[h.tanggal] + (kegiatan[h.tanggal] ? ' (' + kegiatan[h.tanggal] + ')' : '');
             li.append(kiri, kanan);
             ul.appendChild(li);
         });
@@ -247,6 +319,7 @@
     function pasang(d) {
         data = d;
         ubah = {};
+        kegiatan = {};
         pilih = null;
         el('fsCatatan').value = '';
         sidInput.value = d.sid;
@@ -264,6 +337,7 @@
     function kosongkan() {
         data = null;
         ubah = {};
+        kegiatan = {};
         pilih = null;
         el('fsProfil').classList.remove('is-visible');
         el('fsJadwal').hidden = true;
@@ -290,7 +364,7 @@
     });
 
     simpanBtn.addEventListener('click', function () {
-        var sel = Object.keys(ubah).map(function (t) { return { tanggal: t, kode: ubah[t] }; });
+        var sel = Object.keys(ubah).map(function (t) { return { tanggal: t, kode: ubah[t], kegiatan: kegiatan[t] || null }; });
         simpanBtn.disabled = true;
         tampil(el('fsGalat'), '');
         kirim(URL_SIMPAN, {

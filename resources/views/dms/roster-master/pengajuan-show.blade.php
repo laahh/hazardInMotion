@@ -58,7 +58,12 @@
             <tr>
               <td class="text-nowrap">{{ \Carbon\CarbonImmutable::parse($u['tanggal'])->locale('id')->translatedFormat('D, d M Y') }}</td>
               <td><span class="rm-sel {{ $kelasKode($u['lama']) }}">{{ $u['lama'] ?? '–' }}</span></td>
-              <td><span class="rm-sel {{ $kelasKode($u['baru']) }}">{{ $u['baru'] }}</span></td>
+              <td>
+                <span class="rm-sel {{ $kelasKode($u['baru']) }}">{{ $u['baru'] }}</span>
+                @if (! empty($u['kegiatan']))
+                  <span class="text-sm ms-4">{{ $u['kegiatan'] }}</span>
+                @endif
+              </td>
               @if ($pengajuan->isPending())
                 <td>
                   <span class="rm-sel {{ $kelasKode($kini) }}">{{ $kini ?? '–' }}</span>
