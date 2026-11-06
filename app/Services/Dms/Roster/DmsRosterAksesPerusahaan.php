@@ -184,14 +184,15 @@ final class DmsRosterAksesPerusahaan
      * Batasi query DmsRosterMasterUpload ke upload yang terlihat oleh cakupan.
      *
      * @param  list<string>|null  $cakupan
+     * @param  list<int>  $tambahanId  upload yang terlihat lewat jalur lain (approver departemen)
      */
-    public function batasiUpload(Builder $q, ?array $cakupan): Builder
+    public function batasiUpload(Builder $q, ?array $cakupan, array $tambahanId = []): Builder
     {
         if ($cakupan === null) {
             return $q;
         }
         if ($cakupan === []) {
-            return $q->whereRaw('1 = 0');
+            return $tambahanId === [] ? $q->whereRaw('1 = 0') : $q->whereIn('dms_roster_master_upload.id', $tambahanId);
         }
 
         $tanpa = in_array(DmsRosterMasterService::TANPA_PERUSAHAAN, $cakupan, true);
@@ -199,7 +200,7 @@ final class DmsRosterAksesPerusahaan
 
         // Upload yang punya minimal satu ejaan dalam cakupan — dari cache
         // ptPerUpload, bukan subquery EXISTS + TRIM() per baris jadwal.
-        $id = [];
+        $id = $tambahanId;
         foreach (DmsRosterMasterCache::ptPerUpload() as $uploadId => $pts) {
             foreach ($pts as $pt) {
                 if (isset($ejaan[$pt]) || ($tanpa && $pt === '')) {

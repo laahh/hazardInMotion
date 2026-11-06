@@ -79,6 +79,62 @@ return [
     */
     'master' => [
         'jabatan_dikecualikan' => ['VISITOR'],
+        // Approval Roster per departemen: manager boleh me-review roster yang
+        // memuat karyawan departemennya (DmsRosterApproverDepartemen). Kunci
+        // approver = SID, yaitu isi kolom email akun loginnya.
+        'approver_departemen' => [
+            'perusahaan' => 'PT Berau Coal',
+            'view_karyawan' => 'bcsid.bep_sid_karyawan',
+            'status_karyawan' => 'AKTIF',
+            'approver' => [
+                'S69PK' => 'HEALTH & SAFETY PERFORMANCE ASSSURANCE', // INDRA NUR SIDIQ
+                'K1I5I' => 'SYSTEM INNOVATION AND RISK MANAGEMENT', // RIDHO ILHAM MURY NANDA
+                'PFVSJ' => 'SAFETY OPERATIONS DEPARTMENT', // SALAHUDDIN AL RASYID
+                'FI7ZJ' => 'HR OPERATIONS DEPARTMENT', // MOH ADITIYA IRAWAN
+                'RB94K' => 'BINUNGAN MINE OPERATION AREA 3 DEPARTEMENT', // ROBBI DARMAN
+                'EZ08N' => 'COMMUNITY BASE DEVELOPMENT DEPARTMENT', // REZA HERMAWAN
+                'R8QD7' => 'LOGISTIC DEPARTMENT', // LAMBOK EFENDI RISPEN PANJ
+                '3OZ91' => 'MINING OPERATION', // ARINTOKO SAPUTRO
+                'BJ5RH' => 'OCCUPATIONAL HEALTH & SAFETY DIVISION', // RAHMANTHA PURBA ANGGANA
+                'N14P3' => 'SHIPPING DEPARTMENT', // SANDY SANTOSA
+                '05CLJ' => 'PORT & BARGING OPERATION DEPARTMENT', // ISHAK
+                '9KZU2' => 'GURIMBANG MINE OPERATION', // DIAN PERMANA PUTRA
+                'NBCVD' => 'BINUNGAN MINE OPERATION AREA 2 DEPARTEMENT', // PANDU ZEA ARDIANSYAH
+                '9KWOO' => 'BINUNGAN MINE OPERATION AREA 1 DEPARTEMENT', // MANDO SIRAIT
+                'JFUUC' => 'MINE PLANNING & TECHNICAL SERVICES DIVISION', // MAURYS IRWAN
+                '5ZHJW' => 'SAMBARATA MINE OPERATION DEPARTMENT', // NANANG NUR CAHYADI
+                'Q8IJ9' => 'OPERATIONS COMPLIANCE DEPARTMENT', // ANDI ZULKARNAIN
+                '069B9' => 'LATI MINE OPERATION DEPARTMENT', // AZWAR FANANI
+                '2F3K8' => 'BERAU LICENSE DEPARTMENT', // SURYONO
+                '4DFHZ' => 'GENERAL SERVICES DEPARTMENT', // EVIETHA DAMAYANTHIE SAVITRIE
+                '4HQ4E' => 'OPERATIONAL & FINANCIAL AUDIT DEPARTMENT', // EZRA BORON
+                '4K93P' => 'HSE CERTIFICATION & TRAINING DEPARTMENT', // ONGKY ELISMAN
+                '7ANJI' => 'PRODUCT QUALITY & DELIVERY CONTROL DEPARTMENT', // AHMAD SUPRIADI
+                '7PWYE' => 'SYSTEM COMPLIANCE & ENVIRONMENT DIVISON', // APRIBOWO ROSSIYANTO
+                'A5XIO' => 'EMERGENCY RESPONSES & SAFETY SERVICES DEPARTMENT', // ANDI HENRY ACHMAD
+                'BPQ59' => 'GEOLOGY & EXPLORATION DEPARTMENT', // ANDI HERLISA
+                'CYUDC' => 'K3L AUDIT DEPARTMENT', // LUHUT MARTAHI TUMBUR HASIHOLAN LUMBAN RA
+                'FN6WG' => 'ENVIRONMENT DEPARTMENT', // SARIDI
+                'GVGAI' => 'PRODUCT QUALITY & DELIVERY CONTROL DEPARTMENT', // HENDRA YUSRIZAL
+                'IECHT' => 'TALENT & DEVELOPMENT DEPARTMENT', // AGUS FAHRUDIN
+                'LSDEV' => 'MINING TECHNOLOGY DEPARTMENT', // ARIF WIDYA SUSANTO
+                'MMYIC' => 'GEOTECHNIC & HYDROLOGY DEPARTMENT', // LUKMAN HAKIM
+                'NB63E' => 'MIDTERM MINE PLAN DEPARTMENT', // ERRI JUMALIS SALAM
+                'NUDTL' => 'COMMUNITY RELATION DEPARTMENT', // MUHAMMAD SULAIMAN
+                'PKBIW' => 'HR OPERATIONS DEPARTMENT', // TOMY INDARTO
+                'QEYXM' => 'CSR FINANCIAL PLANNING & CONTROL DEPARTMENT', // WAHYU WIDODO
+                'SFBAI' => 'PARTICIPATIVE & IT AUDIT DEPARTMENT', // HENDRIANTO TAN
+                'SUP6Y' => 'MINE PLANNING & TECHNICAL SERVICES DIVISION', // SUTAMI SITORUS
+                'T66FG' => 'MARKETING & MARINE DIVISION', // OKA MUTTAKIN
+                'THZYI' => 'MINE PLANNING & TECHNICAL SERVICES DIVISION', // RAYHAN FAJUSHA
+                'TMJ4Q' => 'SECURITY DEPARTMENT', // IGNATIUS PUNTO PRABOWO
+                'TQPRE' => 'SHORT TERM MINE PLAN DEPARTMENT', // ALEX PRABUDI
+                'U5TDW' => 'LAND MANAGEMENT & DEV DEPARTMENT', // HINDARJO
+                'UC9NZ' => 'ENVIRONMENT DEPARTMENT', // BUDI SANTOSO
+                'WLUHX' => 'Environment Strategic & Sustainability Department', // HIFZIL KIRMI
+                'XGNGT' => 'BC SITE IT OPERATIONS DEPARTMENT', // MUHAMMAD RIZAL PANATAGAMA
+            ],
+        ],
         // Tidak dihitung di Overview Roster (daftar perusahaan, KPI, kartu
         // cakupan). Nama perusahaan dicocokkan tanpa awalan PT/tanda baca
         // (DmsRosterAksesPerusahaan::samaNama), site tanpa membedakan huruf.

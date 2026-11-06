@@ -8,10 +8,12 @@ use App\Http\Controllers\Controller;
 use App\Models\DmsRosterMasterUpload;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
+use App\Services\Dms\Roster\DmsRosterApproverDepartemen;
 use App\Services\Dms\Roster\DmsRosterCakupanReader;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterMasterEditService;
 use App\Services\Dms\Roster\DmsRosterMasterService;
+use App\Services\Dms\Roster\DmsRosterReviewDepartemen;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -36,6 +38,8 @@ final class RosterMasterController extends Controller
         private readonly DmsRosterKaryawanAktif $karyawanAktif,
         private readonly DmsRosterAksesPerusahaan $akses,
         private readonly DmsRosterCakupanReader $cakupan,
+        private readonly DmsRosterApproverDepartemen $approverDepartemen,
+        private readonly DmsRosterReviewDepartemen $reviewDepartemen,
     ) {}
 
     /**
@@ -276,6 +280,8 @@ final class RosterMasterController extends Controller
             'ringkas' => $this->ringkas($cakupan, true),
             'status' => $status,
             'cakupan' => $cakupan,
+            'departemenApprover' => $this->approverDepartemen->departemenUser($this->userLogin()),
+            'departemenSiap' => $this->approverDepartemen->dataTersedia(),
         ]);
     }
 
@@ -311,15 +317,21 @@ final class RosterMasterController extends Controller
         $cakupan = $this->cakupan();
         $ptUpload = $this->akses->perusahaanUpload($upload->id);
         // Upload terbuka tanpa assign, jadi pengupload selalu boleh melihat hasilnya.
-        $user = Auth::user();
+        $user = $this->userLogin();
         abort_unless(
-            $upload->diuploadOleh($user instanceof User ? $user : null) || DmsRosterAksesPerusahaan::terlihat($cakupan, $ptUpload),
+            $upload->diuploadOleh($user)
+                || DmsRosterAksesPerusahaan::terlihat($cakupan, $ptUpload)
+                || $this->approverDepartemen->bolehLihat($user, $upload->id),
             403,
             'Roster ini bukan perusahaan yang di-assign ke akun Anda.',
         );
         $halaman = max(1, (int) $request->query('hal', 1));
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
-        $grid = $this->service->grid($upload, $halaman, 25, $cari);
+        // Manager departemen hanya memutuskan karyawan departemennya, jadi hanya itu yang ditampilkan.
+        $sidDepartemen = $upload->isPending() && $this->hanyaDepartemen($upload->id, $cakupan, $ptUpload)
+            ? $this->approverDepartemen->sidUntuk($user)
+            : null;
+        $grid = $this->service->grid($upload, $halaman, 25, $cari, null, $sidDepartemen);
 
         $tanggal = [];
         for ($t = CarbonImmutable::parse($upload->periode_mulai); $t->lte($upload->periode_selesai); $t = $t->addDay()) {
@@ -333,9 +345,14 @@ final class RosterMasterController extends Controller
             'halaman' => $halaman,
             'totalHalaman' => max(1, (int) ceil($grid['total'] / 25)),
             'cari' => $cari,
-            'tumpang' => $upload->isPending() ? $this->service->jumlahTumpang($upload) : 0,
+            'tumpang' => $upload->isPending() ? $this->service->jumlahTumpang($upload, $sidDepartemen) : 0,
             'ptUpload' => $ptUpload,
-            'bolehReview' => DmsRosterAksesPerusahaan::mencakup($cakupan, $ptUpload),
+            'bolehReview' => $this->bolehReview($upload->id, $cakupan, $ptUpload),
+            'lingkupDepartemen' => $sidDepartemen === null ? null : [
+                'nama' => $this->approverDepartemen->departemenUser($user),
+                'karyawan' => $this->reviewDepartemen->jumlahKaryawan($upload, $sidDepartemen),
+                'total' => $this->reviewDepartemen->jumlahKaryawan($upload),
+            ],
         ]);
     }
 
@@ -464,34 +481,61 @@ final class RosterMasterController extends Controller
             'ttd_file.max' => 'File tanda tangan maksimal 2 MB.',
         ]);
         $upload = DmsRosterMasterUpload::findOrFail($id);
-        if (! DmsRosterAksesPerusahaan::mencakup($this->cakupan(), $this->akses->perusahaanUpload($upload->id))) {
+        $cakupan = $this->cakupan();
+        $ptUpload = $this->akses->perusahaanUpload($upload->id);
+        if (! $this->bolehReview($upload->id, $cakupan, $ptUpload)) {
             return back()->with('error', 'Anda hanya boleh '.($setuju ? 'menyetujui' : 'menolak')
-                .' roster yang seluruh perusahaannya di-assign ke akun Anda (menu Assign Role).');
+                .' roster yang seluruh perusahaannya di-assign ke akun Anda (menu Assign Role), atau karyawan departemen Anda di roster PT Berau Coal.');
         }
 
+        $simpanTtd = fn (DmsRosterMasterUpload $u): ?array => $setuju ? $this->simpanTtd($request, $data, $u) : null;
         try {
-            $ttd = null;
-            if ($setuju) {
-                if ($data['ttd_mode'] === 'upload' && ! $request->hasFile('ttd_file')) {
-                    throw new RuntimeException('Pilih file gambar tanda tangan untuk di-upload.');
-                }
-                // Mode gambar mengirim PNG hasil canvas lewat ttd_file (ttd_data
-                // hanya cadangan browser lama), jadi file dipakai di kedua mode.
-                $ttd = $this->service->simpanTtd(
+            if ($this->hanyaDepartemen($upload->id, $cakupan, $ptUpload)) {
+                $user = $this->userLogin();
+                $hasil = $this->reviewDepartemen->review(
                     $upload,
-                    $data['ttd_mode'] === 'gambar' ? ($data['ttd_data'] ?? null) : null,
-                    $request->file('ttd_file'),
-                    $data['ttd_mode'] === 'gambar',
+                    $this->approverDepartemen->sidUntuk($user),
+                    (string) $this->approverDepartemen->departemenUser($user),
+                    $setuju,
+                    $data['catatan_review'] ?? null,
+                    $this->pengguna(),
+                    $simpanTtd,
                 );
+            } else {
+                $this->service->review($upload, $setuju, $data['catatan_review'] ?? null, $this->pengguna(), $simpanTtd($upload));
+                $hasil = $upload;
             }
-            $this->service->review($upload, $setuju, $data['catatan_review'] ?? null, $this->pengguna(), $ttd);
         } catch (RuntimeException $e) {
             return back()->withInput($request->except('ttd_data', 'ttd_file'))->with('error', $e->getMessage());
         }
 
-        return redirect()
-            ->route('dms.master-roster.show', $upload->id)
-            ->with('success', 'Roster "'.$upload->judul.'" '.($setuju ? 'disetujui.' : 'ditolak.'));
+        $keputusan = $setuju ? 'disetujui' : 'ditolak';
+        $pesan = $hasil->id === $upload->id
+            ? 'Roster "'.$hasil->judul.'" '.$keputusan.'.'
+            : number_format((int) $hasil->jumlah_karyawan, 0, ',', '.').' karyawan departemen Anda '.$keputusan.' sebagai "'.$hasil->judul.'". '
+                .number_format((int) $upload->refresh()->jumlah_karyawan, 0, ',', '.').' karyawan lain tetap menunggu approval.';
+
+        return redirect()->route('dms.master-roster.show', $hasil->id)->with('success', $pesan);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data  hasil validasi review()
+     * @return array{path:string,sumber:string}
+     */
+    private function simpanTtd(Request $request, array $data, DmsRosterMasterUpload $upload): array
+    {
+        if ($data['ttd_mode'] === 'upload' && ! $request->hasFile('ttd_file')) {
+            throw new RuntimeException('Pilih file gambar tanda tangan untuk di-upload.');
+        }
+
+        // Mode gambar mengirim PNG hasil canvas lewat ttd_file (ttd_data
+        // hanya cadangan browser lama), jadi file dipakai di kedua mode.
+        return $this->service->simpanTtd(
+            $upload,
+            $data['ttd_mode'] === 'gambar' ? ($data['ttd_data'] ?? null) : null,
+            $request->file('ttd_file'),
+            $data['ttd_mode'] === 'gambar',
+        );
     }
 
     /**
@@ -501,9 +545,9 @@ final class RosterMasterController extends Controller
     {
         $q = DmsRosterMasterUpload::query()->orderByDesc('created_at');
         if ($batasi) {
-            $this->akses->batasiUpload($q, $cakupan);
+            $this->akses->batasiUpload($q, $cakupan, $this->approverDepartemen->uploadUntuk($this->userLogin()));
         }
-        if (in_array($status, [DmsRosterMasterUpload::STATUS_PENDING, DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_REJECTED], true)) {
+        if (in_array($status,[DmsRosterMasterUpload::STATUS_PENDING, DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_REJECTED], true)) {
             $q->where('status', $status);
         }
 
@@ -517,7 +561,7 @@ final class RosterMasterController extends Controller
     {
         $q = DmsRosterMasterUpload::query();
         if ($batasi) {
-            $this->akses->batasiUpload($q, $cakupan);
+            $this->akses->batasiUpload($q, $cakupan, $this->approverDepartemen->uploadUntuk($this->userLogin()));
         }
         $n = $q->selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status');
 
@@ -533,9 +577,38 @@ final class RosterMasterController extends Controller
      */
     private function cakupan(): ?array
     {
+        return $this->akses->cakupan($this->userLogin());
+    }
+
+    /**
+     * Assign Role, atau manager departemen PT Berau Coal yang ada di roster ini.
+     *
+     * @param  list<string>|null  $cakupan
+     * @param  list<string>  $ptUpload
+     */
+    private function bolehReview(int $uploadId, ?array $cakupan, array $ptUpload): bool
+    {
+        return DmsRosterAksesPerusahaan::mencakup($cakupan, $ptUpload)
+            || $this->approverDepartemen->bolehReview($this->userLogin(), $uploadId, $ptUpload);
+    }
+
+    /**
+     * Boleh review hanya karena manager departemen, bukan lewat Assign Role.
+     *
+     * @param  list<string>|null  $cakupan
+     * @param  list<string>  $ptUpload
+     */
+    private function hanyaDepartemen(int $uploadId, ?array $cakupan, array $ptUpload): bool
+    {
+        return ! DmsRosterAksesPerusahaan::mencakup($cakupan, $ptUpload)
+            && $this->approverDepartemen->bolehReview($this->userLogin(), $uploadId, $ptUpload);
+    }
+
+    private function userLogin(): ?User
+    {
         $user = Auth::user();
 
-        return $this->akses->cakupan($user instanceof User ? $user : null);
+        return $user instanceof User ? $user : null;
     }
 
     private function pengguna(): string

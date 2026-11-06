@@ -21,12 +21,25 @@
 @include('dms.roster-master._alert')
 
 {{-- Assign Role: cakupan perusahaan akun ini (null = semua). --}}
-@if ($cakupan === [])
+@if ($departemenApprover !== null)
+  @if ($departemenSiap)
+    <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+      Anda approver departemen <b>{{ $departemenApprover }}</b>: roster yang memuat karyawan departemen ini tampil di sini,
+      dan keputusan Anda hanya berlaku untuk karyawan departemen tersebut.
+      Roster yang juga memuat perusahaan selain PT Berau Coal hanya bisa dilihat.
+    </div>
+  @else
+    <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+      Anda approver departemen <b>{{ $departemenApprover }}</b>, tetapi data departemen karyawan belum tersedia. Coba lagi setelah sinkronisasi berikutnya.
+    </div>
+  @endif
+@endif
+@if ($cakupan === [] && $departemenApprover === null)
   <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8" role="alert">
     Akun Anda belum di-assign ke perusahaan mana pun, jadi belum ada roster yang bisa Anda approve.
     Minta admin menambahkan perusahaan Anda di menu <b>Assign Role</b>.
   </div>
-@elseif ($cakupan !== null)
+@elseif ($cakupan !== null && $cakupan !== [])
   <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
     Anda hanya melihat roster perusahaan: <b>{{ implode(', ', $cakupan) }}</b>.
   </div>

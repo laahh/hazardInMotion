@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands\Dms;
 
 use App\Services\Dms\Roster\DmsLongShiftService;
+use App\Services\Dms\Roster\DmsRosterApproverDepartemen;
 use App\Services\Dms\Roster\DmsRosterKaryawanAktif;
 use App\Services\Dms\Roster\DmsRosterPeringatanStore;
 use App\Services\Dms\Roster\DmsRosterPlanKesesuaianService;
@@ -124,6 +125,7 @@ final class SyncRosterRfidCommand extends Command
         $this->segarkanLongShift();
         $this->segarkanKaryawanAktif();
         $this->segarkanPlanKesesuaian();
+        $this->segarkanDepartemenApprover();
 
         $this->info('Selesai dalam '.round(microtime(true) - $mulai, 1).' detik.');
 
@@ -302,6 +304,35 @@ final class SyncRosterRfidCommand extends Command
             $this->angka($r['karyawan']), $this->angka($r['SUDAH_MELANGGAR']), $this->angka($r['AKAN_70']),
             $this->angka($r['AKAN_13']), $this->angka($r['PLAN_HABIS']), $hasil['detik'],
         ));
+    }
+
+    /**
+     * Tahap 10 — departemen karyawan untuk approver Roster per departemen, ke
+     * cache. Gagal di tahap ini tidak menggagalkan sinkronisasi.
+     */
+    private function segarkanDepartemenApprover(): void
+    {
+        $this->info('Tahap 10 — departemen karyawan untuk Approval Roster ...');
+
+        $svc = app(DmsRosterApproverDepartemen::class);
+        try {
+            $peta = $svc->segarkan();
+        } catch (Throwable $e) {
+            $this->warn('  Gagal: '.$e->getMessage());
+
+            return;
+        }
+
+        if ($peta === null) {
+            $this->warn('  Gagal: '.($svc->galatTerakhir() ?? 'tidak diketahui'));
+
+            return;
+        }
+
+        $this->line('  '.$this->angka(count($peta)).' departemen tersalin.');
+        foreach (DmsRosterApproverDepartemen::departemenTakDikenal($peta) as $departemen) {
+            $this->warn('  Departemen approver tidak ada di data karyawan: '.$departemen);
+        }
     }
 
     /**

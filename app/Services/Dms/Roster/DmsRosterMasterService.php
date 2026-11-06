@@ -472,11 +472,14 @@ final class DmsRosterMasterService
     /**
      * Jumlah jadwal di upload ini yang akan menimpa jadwal dari roster lain
      * yang sudah APPROVED (SID + tanggal sama) — informasi untuk approver.
+     *
+     * @param  list<string>|null  $hanyaSid  null = semua karyawan di upload
      */
-    public function jumlahTumpang(DmsRosterMasterUpload $upload): int
+    public function jumlahTumpang(DmsRosterMasterUpload $upload, ?array $hanyaSid = null): int
     {
         return (int) DB::table('dms_roster_master_jadwal as j')
             ->where('j.upload_id', $upload->id)
+            ->when($hanyaSid !== null, static fn ($q) => $q->whereIn('j.kode_sid', $hanyaSid))
             ->whereExists(static fn ($q) => $q->from('dms_roster_master_jadwal as j2')
                 ->join('dms_roster_master_upload as u2', 'u2.id', '=', 'j2.upload_id')
                 ->where('u2.status', DmsRosterMasterUpload::STATUS_APPROVED)
@@ -489,11 +492,15 @@ final class DmsRosterMasterService
     /**
      * Jadwal satu halaman karyawan untuk tampilan grid (SID × tanggal).
      *
+     * @param  list<string>|null  $hanyaSid  null = semua karyawan di upload
      * @return array{karyawan: list<array{sid:string,nama:?string,perusahaan:?string,jabatan:?string,site:?string,jadwal:array<string,array{kode:string,masuk:?string,keluar:?string,menit:?int}>}>, total:int}
      */
-    public function grid(DmsRosterMasterUpload $upload, int $halaman, int $perHalaman, string $cari = '', ?array $ejaan = null): array
+    public function grid(DmsRosterMasterUpload $upload, int $halaman, int $perHalaman, string $cari = '', ?array $ejaan = null, ?array $hanyaSid = null): array
     {
         $dasar = DB::table('dms_roster_master_jadwal')->where('upload_id', $upload->id);
+        if ($hanyaSid !== null) {
+            $dasar->whereIn('kode_sid', $hanyaSid);
+        }
         // Edit Roster: hanya baris perusahaan milik user (null = semua).
         if ($ejaan !== null) {
             $dasar->whereIn(DB::raw('TRIM(perusahaan)'), $ejaan === [] ? [''] : $ejaan);

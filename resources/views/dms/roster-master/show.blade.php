@@ -91,6 +91,15 @@
         Approval dilakukan oleh user yang di-assign ke seluruh perusahaan tersebut.
       </div>
     @elseif ($upload->isPending())
+      @if ($lingkupDepartemen !== null)
+        <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-12 py-8 mb-16 radius-8 text-sm">
+          Keputusan Anda hanya berlaku untuk <b>{{ number_format($lingkupDepartemen['karyawan'], 0, ',', '.') }} karyawan departemen {{ $lingkupDepartemen['nama'] }}</b>
+          dari {{ number_format($lingkupDepartemen['total'], 0, ',', '.') }} karyawan di roster ini.
+          @if ($lingkupDepartemen['karyawan'] < $lingkupDepartemen['total'])
+            Tabel di atas hanya menampilkan karyawan departemen Anda. Karyawan lainnya tetap menunggu approval.
+          @endif
+        </div>
+      @endif
       @if ($tumpang > 0)
         <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-12 py-8 mb-16 radius-8 text-sm">
           {{ number_format($tumpang, 0, ',', '.') }} jadwal di roster ini bertumpuk dengan roster lain yang sudah disetujui
