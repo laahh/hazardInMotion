@@ -20,9 +20,10 @@ use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Review (approve/reject) pengajuan bukti treatment yang masuk dari form
- * publik /form/pengajuan-treatment-banned. Read/write ke
- * sid_roster_treatment_evidence, di-auth (nested di grup pra-operasi).
+ * Review (approve/reject) pengajuan bukti treatment karyawan yang sudah tercatat
+ * di sid_roster_treatment_evidence, di-auth (nested di grup pra-operasi). Form
+ * publik /form/pengajuan-treatment-banned kini untuk unbanned pengawas dan tidak
+ * lagi menambah baris ke tabel ini.
  */
 class SidRosterTreatmentEvidenceController extends Controller
 {
@@ -192,12 +193,11 @@ class SidRosterTreatmentEvidenceController extends Controller
         }
 
         $nama = $evidence->master?->nama ?? $evidence->submitted_by ?: 'Bapak/Ibu';
-        $formUrl = route('roster-treatment.public.form');
 
         $message = "Halo {$nama},\n\n"
             ."Pengajuan bukti treatment Anda (SID: {$evidence->sid}) *DITOLAK*.\n\n"
             ."Alasan: {$rejectionReason}\n\n"
-            ."Silakan lengkapi/ajukan ulang bukti treatment melalui link berikut:\n{$formUrl}\n\n"
+            ."Silakan hubungi admin untuk langkah selanjutnya.\n\n"
             .'— PT Berau Coal, Modul Roster Banned';
 
         try {

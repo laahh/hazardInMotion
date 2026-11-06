@@ -2,28 +2,27 @@
 
 declare(strict_types=1);
 
-use App\Http\Controllers\PraOperasi\RosterTreatmentPublicController;
+use App\Http\Controllers\PraOperasi\PengawasUnbanPublicController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Form publik pengajuan bukti treatment — sid_roster_banned_master
+| Form publik pengajuan unbanned pengawas — validasi_status_banned_pengawas
 |--------------------------------------------------------------------------
-| Tanpa login, dipakai karyawan lewat HP untuk upload bukti treatment atas
-| pelanggaran yang tercatat di master roster banned. Approval-nya ada di
-| /pra-operasi/roster-banned/treatment (perlu login).
+| Tanpa login, tampilan mengikuti /form/pengajuan-treatment. Hasilnya masuk ke
+| pengawas_unban_requests.
 */
 
 Route::prefix('form/pengajuan-treatment-banned')
     ->name('roster-treatment.public.')
     ->middleware('throttle:30,1')
     ->group(function (): void {
-        Route::get('/', [RosterTreatmentPublicController::class, 'show'])->name('form');
-        Route::get('/sukses', [RosterTreatmentPublicController::class, 'success'])->name('success');
-        Route::get('/lookup', [RosterTreatmentPublicController::class, 'lookup'])->name('lookup');
-        Route::post('/', [RosterTreatmentPublicController::class, 'store'])
+        Route::get('/', [PengawasUnbanPublicController::class, 'show'])->name('form');
+        Route::get('/sukses', [PengawasUnbanPublicController::class, 'success'])->name('success');
+        Route::get('/lookup-sid', [PengawasUnbanPublicController::class, 'lookupSid'])->name('lookup-sid');
+        Route::post('/', [PengawasUnbanPublicController::class, 'store'])
             // Prefix wajib: tanpa itu counter-nya sama dengan throttle:30,1 grup,
-            // jadi buka form + Cari NIK beberapa kali sudah menghabiskan jatah submit.
+            // jadi buka form + Cari SID beberapa kali sudah menghabiskan jatah submit.
             ->middleware('throttle:6,1,roster-treatment-submit')
             ->name('store');
     });

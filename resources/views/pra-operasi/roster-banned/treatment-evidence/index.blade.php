@@ -38,11 +38,6 @@
 </div>
 @endif
 
-<div class="alert alert-info bg-info-100 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8">
-  Link form publik untuk karyawan (bisa dibagikan lewat WA):<br>
-  <code>{{ route('roster-treatment.public.form') }}</code>
-</div>
-
 <div class="card radius-8 border-0 shadow-sm">
   <div class="card-header border-bottom bg-base py-16 px-24">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
