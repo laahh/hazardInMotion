@@ -57,9 +57,9 @@ final class DmsRosterPengajuanService
      * Isi pengajuan — murni, tanpa DB. Tanggal yang kodenya sama dilewati.
      *
      * @param  list<array{tanggal:string,kode:string,menunggu:bool,boleh:bool}>  $hari  DmsRosterMasterEditService::hariForm()
-     * @param  list<array{tanggal:string,kode:string}>  $sel
+     * @param  list<array{tanggal:string,kode:string,kegiatan?:?string}>  $sel
      * @param  array<string, string>  $menunggu  tanggal yang sudah diajukan
-     * @return array{galat: list<string>, perubahan: list<array{tanggal:string,lama:?string,baru:string}>}
+     * @return array{galat: list<string>, perubahan: list<array{tanggal:string,lama:?string,baru:string,kegiatan?:string}>}
      */
     public static function rencana(array $hari, array $sel, array $menunggu): array
     {
@@ -77,6 +77,13 @@ final class DmsRosterPengajuanService
                 $galat[] = $tgl.': sudah ada pengajuan yang menunggu approval.';
             } elseif ((string) $s['kode'] !== $h['kode']) {
                 $perubahan[$tgl] = ['tanggal' => $tgl, 'lama' => $h['kode'] === '' ? null : $h['kode'], 'baru' => (string) $s['kode']];
+                if ((string) $s['kode'] === DmsRosterMasterService::KODE_KEGIATAN) {
+                    $kegiatan = trim((string) ($s['kegiatan'] ?? ''));
+                    if ($kegiatan === '') {
+                        $galat[] = $tgl.': nama kegiatan wajib diisi.';
+                    }
+                    $perubahan[$tgl]['kegiatan'] = $kegiatan;
+                }
             }
         }
         if ($galat !== []) {
@@ -89,7 +96,7 @@ final class DmsRosterPengajuanService
 
     /**
      * @param  array{sid:string,nama:?string,perusahaan:?string,jabatan:?string,site:?string,hari:list<array<string, mixed>>}  $jadwal  DmsRosterMasterEditService::jadwalSid()
-     * @param  list<array{tanggal:string,kode:string}>  $sel
+     * @param  list<array{tanggal:string,kode:string,kegiatan?:?string}>  $sel
      * @return array{galat: list<string>, pengajuan: ?DmsRosterPengajuan}
      */
     public function ajukan(array $jadwal, array $sel, ?string $catatan, string $oleh): array

@@ -102,7 +102,7 @@ class DmsRosterMasterServiceTest extends TestCase
     public function test_legenda_meringkas_d1_d13_dan_n1_n7(): void
     {
         $this->assertSame(
-            [['D1–D13', 'Day 1–13'], ['N1–N7', 'Night 1–7'], ['OFF', 'Off / libur'], ['CT', 'Cuti'], ['S', 'Sakit'], ['I', 'Izin']],
+            [['D1–D13', 'Day 1–13'], ['N1–N7', 'Night 1–7'], ['OFF', 'Off / libur'], ['CT', 'Cuti'], ['S', 'Sakit'], ['I', 'Izin'], ['KG', 'Kegiatan on-site']],
             array_map(static fn (array $l): array => [$l[0], $l[1]], DmsRosterMasterService::legenda()),
         );
     }

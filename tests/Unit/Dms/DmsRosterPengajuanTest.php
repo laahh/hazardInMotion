@@ -62,6 +62,37 @@ class DmsRosterPengajuanTest extends TestCase
         $this->assertStringContainsString('menunggu approval', $r['galat'][2]);
     }
 
+    public function test_rencana_kegiatan_onsite_menyimpan_nama_kegiatan(): void
+    {
+        $r = Pengajuan::rencana($this->hari(), [
+            ['tanggal' => '2026-11-06', 'kode' => 'KG', 'kegiatan' => '  Rapat K3 tahunan '],
+        ], []);
+
+        $this->assertSame([], $r['galat']);
+        $this->assertSame([
+            ['tanggal' => '2026-11-06', 'lama' => 'D2', 'baru' => 'KG', 'kegiatan' => 'Rapat K3 tahunan'],
+        ], $r['perubahan']);
+    }
+
+    public function test_rencana_kegiatan_onsite_tanpa_nama_ditolak(): void
+    {
+        $r = Pengajuan::rencana($this->hari(), [
+            ['tanggal' => '2026-11-06', 'kode' => 'KG', 'kegiatan' => '   '],
+        ], []);
+
+        $this->assertSame([], $r['perubahan']);
+        $this->assertStringContainsString('nama kegiatan wajib diisi', $r['galat'][0]);
+    }
+
+    public function test_rencana_kode_lain_mengabaikan_nama_kegiatan(): void
+    {
+        $r = Pengajuan::rencana($this->hari(), [
+            ['tanggal' => '2026-11-06', 'kode' => 'OFF', 'kegiatan' => 'Training'],
+        ], []);
+
+        $this->assertSame([['tanggal' => '2026-11-06', 'lama' => 'D2', 'baru' => 'OFF']], $r['perubahan']);
+    }
+
     public function test_menu_approval_wajib_login(): void
     {
         $this->getJson(route('dms.master-roster.pengajuan.index'))->assertUnauthorized();

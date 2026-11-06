@@ -372,7 +372,7 @@ final class DmsRosterPlanKesesuaianService
         $k = strtoupper(trim((string) $kode));
 
         return match (true) {
-            preg_match('/^(D\d{1,2}|DS)$/', $k) === 1 => 'P',
+            preg_match('/^(D\d{1,2}|DS)$/', $k) === 1, $k === DmsRosterMasterService::KODE_KEGIATAN => 'P',
             preg_match('/^(N\d{1,2}|NS)$/', $k) === 1 => 'M',
             $k === 'CT' => 'c',
             in_array($k, ['OFF', 'OF', 'S', 'I'], true) => 'o',
@@ -393,6 +393,10 @@ final class DmsRosterPlanKesesuaianService
         $out = ['dinilai' => 0, 'sesuai' => 0, 'kerja_tanpa_tap' => 0, 'tap_saat_off' => 0, 'beda_shift' => 0];
         $idxHariIni = (int) $awal->diffInDays($hariIni);
         foreach ($jadwal as $tgl => $kode) {
+            // Kegiatan on-site belum tentu melewati titik tap, jadi tidak dinilai.
+            if (strtoupper(trim((string) $kode)) === DmsRosterMasterService::KODE_KEGIATAN) {
+                continue;
+            }
             $c = self::kodeDeret($kode);
             $i = (int) $awal->diffInDays(CarbonImmutable::parse($tgl), false);
             if ($c === null || $i < 0 || $i > $idxHariIni || ($i === $idxHariIni && ! isset($hariScan[$i]))) {

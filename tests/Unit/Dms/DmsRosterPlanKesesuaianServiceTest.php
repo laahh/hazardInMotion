@@ -181,6 +181,32 @@ class DmsRosterPlanKesesuaianServiceTest extends TestCase
         $this->assertSame(['dinilai' => 4, 'sesuai' => 2, 'kerja_tanpa_tap' => 1, 'tap_saat_off' => 1, 'beda_shift' => 1, 'persen' => 50.0], $k);
     }
 
+    public function test_kegiatan_onsite_tidak_dinilai_menyimpang_dengan_atau_tanpa_tap(): void
+    {
+        $plan = [
+            $this->tgl(97) => 'KG',  // tidak tap
+            $this->tgl(98) => 'KG',  // tap
+            $this->tgl(99) => 'KG',  // hari ini tap
+        ];
+        $k = DmsRosterPlanKesesuaianService::kepatuhan([98 => 'P', 99 => 'M'], $this->awal, $this->hariIni, $plan);
+
+        $this->assertSame(['dinilai' => 0, 'sesuai' => 0, 'kerja_tanpa_tap' => 0, 'tap_saat_off' => 0, 'beda_shift' => 0, 'persen' => null], $k);
+    }
+
+    public function test_kegiatan_onsite_di_plan_tidak_memutus_onsite_dan_menambah_hari_beruntun(): void
+    {
+        $plan = $this->plan(100, 130);
+        foreach (range(100, 113) as $i) {
+            $plan[$this->tgl($i)] = 'KG';
+        }
+
+        $hasil = $this->nilai($this->scan(99, 99), $plan);
+
+        // Hari ke-1 = offset 99, jadi hari ke-14 berturut jatuh di offset 112.
+        $this->assertSame($this->tgl(112), $hasil['tgl_14']);
+        $this->assertSame(32, $hasil['onsite_akhir']);
+    }
+
     public function test_jam_kerja_lebih_dari_9_jam_dari_rfid_dan_plan(): void
     {
         $menitPlan = [$this->tgl(100) => 540, $this->tgl(101) => 735, $this->tgl(102) => 735];
@@ -229,6 +255,7 @@ class DmsRosterPlanKesesuaianServiceTest extends TestCase
         $this->assertSame('P', DmsRosterPlanKesesuaianService::kodeDeret('ds'));
         $this->assertSame('M', DmsRosterPlanKesesuaianService::kodeDeret('N7'));
         $this->assertSame('c', DmsRosterPlanKesesuaianService::kodeDeret('CT'));
+        $this->assertSame('P', DmsRosterPlanKesesuaianService::kodeDeret('KG'));
         $this->assertSame('o', DmsRosterPlanKesesuaianService::kodeDeret('OFF'));
         $this->assertSame('o', DmsRosterPlanKesesuaianService::kodeDeret('I'));
         $this->assertNull(DmsRosterPlanKesesuaianService::kodeDeret(''));

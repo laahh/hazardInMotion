@@ -37,6 +37,8 @@ final class RosterFormSidController extends Controller
         return view('dms.roster-master.form-sid', [
             'hariIni' => CarbonImmutable::now()->startOfDay(),
             'kode' => array_map(static fn (array $k): string => $k[0], DmsRosterMasterService::KODE),
+            'kodeKegiatan' => DmsRosterMasterService::KODE_KEGIATAN,
+            'kegiatan' => (array) config('dms_roster.master.kegiatan_onsite', []),
         ]);
     }
 
@@ -57,6 +59,8 @@ final class RosterFormSidController extends Controller
         }
     }
 
+    private const MAKS_KEGIATAN = 100;
+
     public function simpan(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -65,9 +69,11 @@ final class RosterFormSidController extends Controller
             'sel' => ['required', 'array', 'min:1', 'max:'.(DmsRosterMasterEditService::RENTANG_FORM_HARI * 2 + 1)],
             'sel.*.tanggal' => ['required', 'date_format:Y-m-d'],
             'sel.*.kode' => ['required', 'string', Rule::in(array_keys(DmsRosterMasterService::KODE))],
+            'sel.*.kegiatan' => ['nullable', 'string', 'max:'.self::MAKS_KEGIATAN],
         ], [
             'sel.required' => 'Belum ada tanggal yang diubah.',
             'sel.*.kode.in' => 'Kode roster tidak dikenal.',
+            'sel.*.kegiatan.max' => 'Nama kegiatan maksimal '.self::MAKS_KEGIATAN.' karakter.',
         ]);
 
         if (! DmsRosterPengajuanService::adaTabel()) {
@@ -84,7 +90,7 @@ final class RosterFormSidController extends Controller
 
             $hasil = $this->pengajuan->ajukan(
                 $jadwal,
-                array_map(static fn (array $s): array => ['tanggal' => $s['tanggal'], 'kode' => $s['kode']], $data['sel']),
+                array_map(static fn (array $s): array => ['tanggal' => $s['tanggal'], 'kode' => $s['kode'], 'kegiatan' => $s['kegiatan'] ?? null], $data['sel']),
                 $data['catatan'] ?? null,
                 $this->pengaju($request, $jadwal['sid']),
             );

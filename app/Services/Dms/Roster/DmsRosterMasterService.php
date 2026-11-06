@@ -74,7 +74,11 @@ final class DmsRosterMasterService
         'CT' => ['Cuti', 'F4B183', null, null],
         'S' => ['Sakit', 'FF9999', null, null],
         'I' => ['Izin', 'D9B3FF', null, null],
+        self::KODE_KEGIATAN => ['Kegiatan on-site', '99E6D0', null, null],
     ];
+
+    /** Training, meeting site, dsb.: tetap on-site dan dihitung hari kerja, tanpa jam bawaan. */
+    public const KODE_KEGIATAN = 'KG';
 
     /** Judul kolom identitas => kunci internal. Tiga kolom jam opsional. */
     private const KOLOM = [
