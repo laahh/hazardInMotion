@@ -10,11 +10,16 @@ use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
 use App\Services\Dms\Roster\DmsRosterCakupanReader;
 use App\Services\Dms\Roster\DmsRosterMasterEditService;
 use App\Services\Dms\Roster\DmsRosterMasterService;
+use App\Services\Dms\Roster\DmsRosterSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
@@ -34,6 +39,12 @@ class RosterMasterEditController extends Controller
 {
     private const PER_HALAMAN = 25;
 
+    /** Download: diambil per 500 SID supaya query tetap kecil. */
+    private const PER_HALAMAN_UNDUH = 500;
+
+    /** Batas baris per file download (±3.700 = perusahaan terbesar). */
+    private const MAKS_UNDUH = 5000;
+
     public function __construct(
         private readonly DmsRosterMasterEditService $edit,
         private readonly DmsRosterAksesPerusahaan $akses,
@@ -43,41 +54,12 @@ class RosterMasterEditController extends Controller
 
     public function index(Request $request): View
     {
-        $assignment = $this->assignment();
-        $ejaanSaya = DmsRosterAksesPerusahaan::ejaanCakupan($assignment);
-        // Pilihan perusahaan: nama resmi + semua ejaannya di roster.
-        $daftarPt = array_map(
-            static fn (array $p): array => ['nama' => $p['perusahaan'], 'ejaan' => $p['ejaan']],
-            $this->master->perusahaanTerupload($this->cakupan->peta()),
-        );
-
-        $pt = (string) $request->query('pt', '');
-        $terpilih = collect($daftarPt)->firstWhere('nama', $pt);
-        if (($terpilih === null && ! in_array($pt, ['__semua', '__saya'], true)) || ($pt === '__saya' && $assignment === [])) {
-            $pt = $assignment === [] ? '__semua' : '__saya';
-        }
-        $ejaan = match ($pt) {
-            '__semua' => null,
-            '__saya' => $ejaanSaya,
-            default => $terpilih['ejaan'],
-        };
-        $rentang = $ejaan === [] ? null : $this->edit->rentang($ejaan);
-
-        // Bulan bawaan: bulan ini bila ada di rentang roster, kalau tidak bulan terakhirnya.
-        $bulan = null;
-        if ($rentang !== null) {
-            $awal = $rentang['dari']->startOfMonth();
-            $akhir = $rentang['sampai']->startOfMonth();
-            $minta = (string) $request->query('bulan', '');
-            $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : null;
-            if ($bulan === null || $bulan->lt($awal) || $bulan->gt($akhir)) {
-                $kini = CarbonImmutable::now()->startOfMonth();
-                $bulan = $kini->betweenIncluded($awal, $akhir) ? $kini : $akhir;
-            }
-        }
+        [
+            'assignment' => $assignment, 'ejaanSaya' => $ejaanSaya, 'daftarPt' => $daftarPt, 'pt' => $pt,
+            'ejaan' => $ejaan, 'rentang' => $rentang, 'bulan' => $bulan, 'cari' => $cari,
+        ] = $this->filter($request);
 
         $halaman = max(1, (int) $request->query('hal', 1));
-        $cari = mb_substr(trim((string) $request->query('q', '')), 0, 50);
         $grid = $bulan === null ? ['karyawan' => [], 'total' => 0]
             : $this->edit->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN);
         // Baris yang boleh diedit: karyawan perusahaan yang di-assign ke user ini.
@@ -160,6 +142,124 @@ class RosterMasterEditController extends Controller
             'ubah' => $hasil['ubah'],
             'pesan' => $hasil['ubah'] === 0 ? 'Tidak ada perubahan.' : number_format($hasil['ubah'], 0, ',', '.').' jadwal diperbarui.',
         ]);
+    }
+
+    /**
+     * Download Excel tabel gabungan dengan filter yang sedang tampil (perusahaan,
+     * bulan, kata kunci) — semua halaman, bukan hanya halaman yang terlihat.
+     * Formatnya template download roster (DmsRosterMasterService::template)
+     * yang sudah terisi kode & jam kerja, jadi bisa langsung di-upload ulang.
+     */
+    public function unduh(Request $request): StreamedResponse|RedirectResponse
+    {
+        ['pt' => $pt, 'ejaan' => $ejaan, 'bulan' => $bulan, 'cari' => $cari] = $this->filter($request);
+        $kembali = static fn (string $pesan): RedirectResponse => redirect()
+            ->route('dms.master-roster.edit.index', array_filter($request->only(['pt', 'bulan', 'q'])))
+            ->with('error', $pesan);
+        if ($bulan === null) {
+            return $kembali('Belum ada roster untuk di-download.');
+        }
+
+        $dari = $bulan->startOfMonth();
+        $sampai = $bulan->endOfMonth();
+        $karyawan = [];
+        $halaman = 1;
+        do {
+            $grid = $this->edit->grid($ejaan, $dari, $sampai, $cari, $halaman, self::PER_HALAMAN_UNDUH);
+            if ($grid['total'] > self::MAKS_UNDUH) {
+                return $kembali('Terlalu banyak untuk satu file: '.number_format($grid['total'], 0, ',', '.')
+                    .' karyawan (maks '.number_format(self::MAKS_UNDUH, 0, ',', '.').'). Pilih satu perusahaan atau persempit pencarian.');
+            }
+            foreach ($grid['karyawan'] as $k) {
+                $karyawan[] = [
+                    'sid' => (string) $k['sid'],
+                    'nama' => (string) $k['nama'],
+                    'perusahaan' => (string) $k['perusahaan'],
+                    'jabatan' => (string) $k['jabatan'],
+                    'site' => (string) $k['site'],
+                    'jadwal' => array_map(static fn (array $h): string => (string) $h['kode'], $k['jadwal']),
+                    'jam_awal' => $k['jam_awal'],
+                    'jam_akhir' => $k['jam_akhir'],
+                    'jam_total' => $k['jam_total'],
+                ];
+            }
+            $halaman++;
+        } while (count($karyawan) < $grid['total'] && $grid['karyawan'] !== []);
+
+        if ($karyawan === []) {
+            return $kembali('Tidak ada karyawan dengan jadwal di bulan ini'.($cari !== '' ? ' untuk kata kunci "'.$cari.'"' : '').'.');
+        }
+
+        // Ribuan baris × 31 hari: PhpSpreadsheet butuh memori lebih dari bawaan.
+        // Hanya dinaikkan, tidak pernah menurunkan batas server yang sudah lebih besar.
+        @set_time_limit(300);
+        $batas = (string) ini_get('memory_limit');
+        if ($batas !== '-1' && (function_exists('ini_parse_quantity') ? ini_parse_quantity($batas) : (int) $batas) < 1024 ** 3) {
+            ini_set('memory_limit', '1024M');
+        }
+        $writer = new Xlsx($this->master->template($dari, $sampai, $karyawan));
+        $label = match ($pt) {
+            '__semua' => 'semua',
+            '__saya' => 'perusahaan_saya',
+            default => DmsRosterSyncService::kodePt($pt),
+        };
+        $nama = 'roster_'.Str::slug($label, '_').'_'.$bulan->format('Y-m').($cari !== '' ? '_'.Str::slug($cari, '_') : '').'.xlsx';
+
+        return response()->streamDownload(static function () use ($writer): void {
+            $writer->save('php://output');
+        }, $nama, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    /**
+     * Filter halaman Edit Roster dari query string, dipakai index & download.
+     *
+     * @return array{assignment:list<string>,ejaanSaya:list<string>,daftarPt:list<array{nama:string,ejaan:list<string>}>,pt:string,ejaan:?list<string>,rentang:?array{dari:CarbonImmutable,sampai:CarbonImmutable},bulan:?CarbonImmutable,cari:string}
+     */
+    private function filter(Request $request): array
+    {
+        $assignment = $this->assignment();
+        $ejaanSaya = DmsRosterAksesPerusahaan::ejaanCakupan($assignment);
+        // Pilihan perusahaan: nama resmi + semua ejaannya di roster.
+        $daftarPt = array_map(
+            static fn (array $p): array => ['nama' => $p['perusahaan'], 'ejaan' => $p['ejaan']],
+            $this->master->perusahaanTerupload($this->cakupan->peta()),
+        );
+
+        $pt = (string) $request->query('pt', '');
+        $terpilih = collect($daftarPt)->firstWhere('nama', $pt);
+        if (($terpilih === null && ! in_array($pt, ['__semua', '__saya'], true)) || ($pt === '__saya' && $assignment === [])) {
+            $pt = $assignment === [] ? '__semua' : '__saya';
+        }
+        $ejaan = match ($pt) {
+            '__semua' => null,
+            '__saya' => $ejaanSaya,
+            default => $terpilih['ejaan'],
+        };
+        $rentang = $ejaan === [] ? null : $this->edit->rentang($ejaan);
+
+        // Bulan bawaan: bulan ini bila ada di rentang roster, kalau tidak bulan terakhirnya.
+        $bulan = null;
+        if ($rentang !== null) {
+            $awal = $rentang['dari']->startOfMonth();
+            $akhir = $rentang['sampai']->startOfMonth();
+            $minta = (string) $request->query('bulan', '');
+            $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : null;
+            if ($bulan === null || $bulan->lt($awal) || $bulan->gt($akhir)) {
+                $kini = CarbonImmutable::now()->startOfMonth();
+                $bulan = $kini->betweenIncluded($awal, $akhir) ? $kini : $akhir;
+            }
+        }
+
+        return [
+            'assignment' => $assignment,
+            'ejaanSaya' => $ejaanSaya,
+            'daftarPt' => $daftarPt,
+            'pt' => $pt,
+            'ejaan' => $ejaan,
+            'rentang' => $rentang,
+            'bulan' => $bulan,
+            'cari' => mb_substr(trim((string) $request->query('q', '')), 0, 50),
+        ];
     }
 
     /**

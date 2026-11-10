@@ -266,6 +266,35 @@ class DmsRosterMasterServiceTest extends TestCase
         $this->assertSame([], $hasil['karyawan'][0]['jadwal'], 'Template perusahaan tidak boleh berisi jadwal contoh.');
     }
 
+    public function test_download_edit_roster_terisi_kode_dan_jam_bisa_diupload_ulang(): void
+    {
+        $karyawan = [
+            ['sid' => 'A1', 'nama' => 'Ahmad', 'perusahaan' => 'PT X', 'jabatan' => 'Operator', 'site' => 'BMO 1',
+                'jadwal' => ['2026-11-01' => 'D1', '2026-11-02' => 'D2', '2026-11-03' => 'OFF', '2026-11-30' => 'N1', '2026-12-01' => 'D1'],
+                'jam_awal' => '05:30', 'jam_akhir' => '17:30', 'jam_total' => 11.0],
+            ['sid' => '00B2', 'nama' => 'Budi', 'perusahaan' => 'PT X', 'jabatan' => 'Mekanik', 'site' => 'BMO 1',
+                'jadwal' => ['2026-11-05' => 'CT'], 'jam_awal' => null, 'jam_akhir' => null, 'jam_total' => null],
+            ['sid' => 'C3', 'nama' => 'Citra', 'perusahaan' => 'PT X', 'jabatan' => 'SO', 'site' => 'HO',
+                'jadwal' => ['2026-11-10' => 'D1'], 'jam_awal' => '07:30', 'jam_akhir' => '16:30', 'jam_total' => 9.0],
+        ];
+
+        $sh = $this->svc->template(CarbonImmutable::create(2026, 11, 1), CarbonImmutable::create(2026, 11, 1), $karyawan)->getActiveSheet();
+        $hasil = $this->svc->bacaSheet($sh->toArray(null, true, false, false));
+
+        $this->assertSame([], $hasil['galat']);
+        $this->assertCount(30, $hasil['tanggal'], 'Tanggal di luar bulan (1 Des) tidak ikut.');
+        $this->assertSame(['A1', '00B2', 'C3'], array_column($hasil['karyawan'], 'sid'), 'SID diawali nol tetap teks.');
+        $a = $hasil['karyawan'][0]['jadwal'];
+        $this->assertSame(['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-30'], array_keys($a));
+        $this->assertSame(['kode' => 'D1', 'masuk' => '05:30', 'keluar' => '17:30', 'menit' => 720, 'total' => 660], $a['2026-11-01']);
+        $this->assertSame('OFF', $a['2026-11-03']['kode']);
+        $this->assertSame(['kode' => 'CT', 'masuk' => null, 'keluar' => null, 'menit' => null, 'total' => null], $hasil['karyawan'][1]['jadwal']['2026-11-05']);
+        // Total dipotong istirahat ditulis angka; total = Akhir − Awal tetap rumus.
+        $this->assertEquals(11, $sh->getCell('I7')->getValue());
+        $this->assertStringStartsWith('=IF(', (string) $sh->getCell('I9')->getValue());
+        $this->assertSame(540, $hasil['karyawan'][2]['jadwal']['2026-11-10']['total']);
+    }
+
     public function test_template_memuat_kolom_total_jam_kerja_otomatis(): void
     {
         $sh = $this->svc->template(CarbonImmutable::create(2026, 11, 1))->getActiveSheet();

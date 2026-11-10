@@ -714,9 +714,11 @@ final class DmsRosterMasterService
      * menerima file lama yang masih memuatnya.
      */
     /**
-     * @param  list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>  $karyawan
+     * @param  list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string,jadwal?:array<string,string>,jam_awal?:?string,jam_akhir?:?string,jam_total?:?float}>  $karyawan
      *         Bila diisi (filter perusahaan), baris karyawan sudah terisi SID, nama,
      *         perusahaan, jabatan & site — sel jadwal dibiarkan kosong. Kosong = 3 baris contoh.
+     *         Download Edit Roster ikut mengisi 'jadwal' (tanggal Y-m-d => kode) dan jam
+     *         kerja, sehingga filenya bisa langsung di-upload ulang.
      */
     public function template(CarbonImmutable $dari, ?CarbonImmutable $sampai = null, array $karyawan = []): Spreadsheet
     {
@@ -833,7 +835,9 @@ final class DmsRosterMasterService
             ['10023451', 'Ahmad Fauzi', 'PT Berau Coal', 'Operator HD', 'BMO 1', ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF']],
             ['10023452', 'Budi Santoso', 'Kontraktor A', 'Mekanik', 'BMO 1', ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'OFF', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'OFF'], '05:30', '17:30'],
             ['10023453', 'Siti Rahmawati', 'PT Berau Coal', 'Safety Officer', 'HO', ['D1', 'D2', 'D3', 'D4', 'D5', 'OFF', 'OFF'], '07:30', '16:30'],
-        ] : array_map(static fn (array $k): array => [$k['sid'], $k['nama'], $k['perusahaan'], $k['jabatan'], $k['site'], []], $karyawan);
+        ] : array_map(static fn (array $k): array => [
+            $k['sid'], $k['nama'], $k['perusahaan'], $k['jabatan'], $k['site'], [], $k['jam_awal'] ?? null, $k['jam_akhir'] ?? null,
+        ], $karyawan);
         $barisAkhir = 6 + max($karyawan === [] ? 50 : 10, count($contoh) + ($karyawan === [] ? 0 : 10));
         foreach ($contoh as $i => $c0) {
             [$sid, $nama, $pt, $jab, $site, $pola] = $c0;
@@ -841,13 +845,19 @@ final class DmsRosterMasterService
             $sh->setCellValue('A'.$r, $i + 1);
             $sh->setCellValueExplicit('B'.$r, $sid, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             $sh->fromArray([$nama, $pt, $jab, $site], null, 'C'.$r);
-            if (isset($c0[6])) {
+            if (isset($c0[6], $c0[7])) {
                 $sh->setCellValue('G'.$r, $this->pecahanHari($c0[6]));
                 $sh->setCellValue('H'.$r, $this->pecahanHari($c0[7]));
             }
             if ($pola !== []) {
                 for ($h = 0; $h < $jumlahHari; $h++) {
                     $sh->setCellValue($this->kolom($kolomAwalHari + $h - 1).$r, $pola[$h % count($pola)]);
+                }
+            }
+            foreach ($karyawan[$i]['jadwal'] ?? [] as $tgl => $kode) {
+                $h = (int) $awal->diffInDays(CarbonImmutable::parse((string) $tgl), false);
+                if ($h >= 0 && $h < $jumlahHari && $kode !== '') {
+                    $sh->setCellValue($this->kolom($kolomAwalHari + $h - 1).$r, (string) $kode);
                 }
             }
         }
@@ -861,6 +871,15 @@ final class DmsRosterMasterService
         $sh->getStyle('I7:I'.$barisAkhir)->getNumberFormat()->setFormatCode('0.##');
         for ($r = 7; $r <= $barisAkhir; $r++) {
             $sh->setCellValue('I'.$r, '=IF(OR(G'.$r.'="",H'.$r.'=""),"",ROUND(MOD(H'.$r.'-G'.$r.',1)*24,2))');
+        }
+        // Total yang dipotong istirahat (lebih kecil dari Akhir − Awal) ditulis
+        // sebagai angka, menimpa rumus; total yang sama dengan rumus dibiarkan rumus.
+        foreach ($karyawan as $i => $k) {
+            $total = $k['jam_total'] ?? null;
+            if ($total !== null && isset($k['jam_awal'], $k['jam_akhir'])
+                && round($total * 60) < $this->selisihMenit($k['jam_awal'], $k['jam_akhir'])) {
+                $sh->setCellValue('I'.(7 + $i), $total);
+            }
         }
         $sh->getComment('I4')->getText()->createText('Otomatis = Jam Kerja Akhir − Awal (dalam jam). '
             .'Boleh ditimpa angka yang lebih kecil (dipotong istirahat), tidak boleh lebih besar.');

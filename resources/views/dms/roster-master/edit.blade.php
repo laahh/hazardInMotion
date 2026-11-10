@@ -139,6 +139,11 @@
           @endforeach
         </select>
         <input type="search" name="q" value="{{ $cari }}" class="form-control form-control-sm rm-cari" placeholder="Cari SID / nama… (Enter)" aria-label="Cari SID atau nama">
+        <a href="{{ route('dms.master-roster.edit.unduh', array_filter(['pt' => $pt, 'bulan' => $bulan->format('Y-m'), 'q' => $cari]), absolute: false) }}"
+           class="btn btn-sm btn-outline-success radius-8 d-inline-flex align-items-center gap-1" data-re-unduh
+           title="Semua karyawan sesuai filter ini (semua halaman), format template upload roster. Perubahan yang belum disimpan tidak ikut.">
+          <iconify-icon icon="vscode-icons:file-type-excel"></iconify-icon><span>Download Excel</span>
+        </a>
       </form>
     </div>
   </div>
