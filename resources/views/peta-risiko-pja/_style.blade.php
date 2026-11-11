@@ -105,7 +105,8 @@
   .pr-proc:hover { border-color: var(--pr-accent); }
   .pr-proc[aria-pressed="true"] { border-color: var(--pr-accent); box-shadow: 0 0 0 3px var(--pr-accent-soft); background: #fcfefe; }
   .pr-proc-name { font-weight: 600; font-size: 13px; line-height: 1.3; }
-  .pr-proc-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--pr-muted); }
+  .pr-proc-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-size: 12px; color: var(--pr-muted); }
+  .pr-proc-meta > * { white-space: nowrap; }
   .pr-proc-meta b { color: var(--pr-tindak); font-weight: 700; }
   .pr-proc-meta b.nol { color: var(--pr-muted); font-weight: 500; }
 

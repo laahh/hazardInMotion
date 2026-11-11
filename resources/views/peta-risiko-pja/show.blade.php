@@ -1,4 +1,4 @@
-@extends('layouts.master')
+@extends('peta-risiko-pja._layout')
 
 @section('title', $pja['nama'].' · Peta Risiko PJA')
 
