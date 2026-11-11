@@ -2,152 +2,134 @@
 
 @section('title', 'Peta Risiko PJA')
 
-@section('css')
-  @include('peta-risiko-pja._style')
-@endsection
-
 @section('content')
-<div class="pr" id="pr-index">
-  <div class="pr-head">
-    <div>
-      <p class="pr-eyebrow">Peta Risiko PJA</p>
-      <h1 class="pr-title">Apa yang perlu dicek di area saya?</h1>
-      @if ($meta)
-        <p class="pr-sub" id="pr-periode-label"></p>
-      @endif
-    </div>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
+  <div>
+    <h6 class="fw-semibold mb-0">Peta Risiko PJA</h6>
     @if ($meta)
-      <div class="pr-tools">
-        <div class="pr-seg" role="group" aria-label="Periode">
-          <button type="button" data-periode="wk">Minggu ini</button>
-          <button type="button" data-periode="ytd">YTD</button>
-        </div>
-        <select class="pr-select" id="pr-site" aria-label="Site">
-          <option value="">Semua site</option>
-        </select>
-        <input class="pr-input" id="pr-cari" type="search" placeholder="Cari PJA…" aria-label="Cari PJA">
-      </div>
+      <p class="text-sm text-secondary-light mb-0 mt-4" id="pr-periode-label"></p>
     @endif
   </div>
-
-  @if (! $meta)
-    <div class="pr-card pr-empty">
-      <p><strong>Snapshot belum diimpor.</strong></p>
-      <p>Jalankan <code>php artisan peta-risiko:impor &lt;Mapping_PJA_Proses_Lokasi_SAP.xlsx&gt; &lt;Peta_HIRA_Risiko_Dinamis.html&gt;</code></p>
-    </div>
-  @else
-    <div class="pr-kpis" id="pr-kpis"></div>
-    <p class="pr-note">Angka = jumlah tema bahaya per PJA × bisnis proses. Satu lokasi bisa dimiliki beberapa PJA, jadi jumlah ini tidak sama dengan jumlah lokasi. Klik kartu untuk mengurutkan.</p>
-
-    <div class="pr-card">
-      <div class="pr-list-head">
-        <span>PJA</span>
-        <span>Proses</span>
-        <span>Komposisi status</span>
-        <span>Perlu tindakan</span>
-        <span>SAP open</span>
-        <span></span>
-      </div>
-      <div id="pr-list"></div>
-    </div>
-
-    <ul class="pr-foot">
-      @foreach ($meta['catatan'] as $c)
-        <li>{{ $c }}</li>
-      @endforeach
-      <li>Snapshot dibuat {{ \Illuminate\Support\Carbon::parse($meta['dibuat'])->timezone('Asia/Makassar')->translatedFormat('d M Y H:i') }} WITA.</li>
-    </ul>
-  @endif
+  <ul class="d-flex align-items-center gap-2 mb-0 list-unstyled">
+    <li class="fw-medium d-flex align-items-center gap-1"><i class="ri-map-pin-2-line text-lg"></i> Peta Risiko PJA</li>
+    <li>-</li>
+    <li class="fw-medium">Semua PJA</li>
+  </ul>
 </div>
+
+@if (! $meta)
+  <div class="card radius-8 border-0">
+    <div class="card-body p-24 text-center">
+      <h6 class="fw-semibold text-lg mb-8">Snapshot belum diimpor</h6>
+      <p class="text-secondary-light mb-0">Jalankan <code>php artisan peta-risiko:impor &lt;Mapping_PJA_Proses_Lokasi_SAP.xlsx&gt; &lt;Peta_HIRA_Risiko_Dinamis.html&gt;</code></p>
+    </div>
+  </div>
+@else
+  <div class="row gy-4 mb-24" id="pr-kpis"></div>
+
+  <div class="card radius-8 border-0">
+    <div class="card-body p-24">
+      <div class="d-flex align-items-center flex-wrap gap-3 justify-content-between mb-20">
+        <div>
+          <h6 class="mb-0 fw-bold text-lg">Daftar PJA</h6>
+          <p class="text-sm text-secondary-light mb-0">Diurutkan dari tema yang paling perlu tindakan (ada gap + tanpa kontrol HIRA).</p>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <select class="form-select form-select-sm w-auto bg-base border text-secondary-light" id="pr-periode" aria-label="Periode">
+            <option value="wk">Minggu ini</option>
+            <option value="ytd">YTD</option>
+          </select>
+          <select class="form-select form-select-sm w-auto bg-base border text-secondary-light" id="pr-site" aria-label="Site">
+            <option value="">Semua site</option>
+          </select>
+          <input type="search" class="form-control form-control-sm bg-base border w-auto" id="pr-cari" placeholder="Cari PJA…" aria-label="Cari PJA">
+        </div>
+      </div>
+      <div class="table-responsive scroll-sm">
+        <table class="table bordered-table mb-0">
+          <thead>
+            <tr>
+              <th scope="col">PJA</th>
+              <th scope="col" class="text-center">Proses</th>
+              <th scope="col">Komposisi status</th>
+              <th scope="col" class="text-center">Perlu tindakan</th>
+              <th scope="col" class="text-center">SAP open</th>
+              <th scope="col" class="text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="pr-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-sm text-secondary-light mt-20">
+    <p class="mb-4">Angka = jumlah tema bahaya per PJA × bisnis proses. Satu lokasi bisa dimiliki beberapa PJA, jadi angka ini bukan jumlah lokasi.</p>
+    @foreach ($meta['catatan'] as $c)
+      <p class="mb-4">{{ $c }}</p>
+    @endforeach
+    <p class="mb-0">Snapshot dibuat {{ \Illuminate\Support\Carbon::parse($meta['dibuat'])->timezone('Asia/Makassar')->translatedFormat('d M Y H:i') }} WITA.</p>
+  </div>
+@endif
 @endsection
 
 @section('scripts')
 @if ($meta)
+@include('peta-risiko-pja._status')
 <script>
 (function () {
   const META = {{ \Illuminate\Support\Js::from(['periode' => $meta['periode'], 'pja' => $meta['pja']]) }};
   const URL_PJA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.show', ['pja' => '__ID__'])) }};
-  const STATUS = [
-    { k: 'gap', label: 'Ada gap', desc: 'Dilaporkan, tapi masih open atau berulang', tag: 'tindak lanjut' },
-    { k: 'tindak', label: 'Tanpa kontrol HIRA', desc: 'Belum dilaporkan dan pengendalian HIRA belum terlihat', tag: 'kendalikan' },
-    { k: 'fyi', label: 'Belum dilaporkan', desc: 'Pengendalian HIRA sudah ada, tidak perlu dicari-cari', tag: 'info' },
-    { k: 'ok', label: 'Terkontrol', desc: 'Dilaporkan dan sudah terverifikasi', tag: 'aman' },
-  ];
-  const state = { periode: @json($periode), site: @json($site), cari: '', urut: 'aksi' };
+  const { fmt, esc } = window.PR_UTIL;
+  const state = { periode: @json($periode), site: @json($site), cari: '' };
   const $ = (s) => document.querySelector(s);
-  const fmt = (n) => Number(n || 0).toLocaleString('id-ID');
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const sites = [...new Set(META.pja.map((p) => p.site))].sort();
   $('#pr-site').insertAdjacentHTML('beforeend', sites.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join(''));
   $('#pr-site').value = state.site;
+  $('#pr-periode').value = state.periode;
 
-  function terpilih() {
+  function render() {
+    const per = META.periode;
+    $('#pr-periode-label').textContent = (state.periode === 'wk' ? per.wk : per.ytd) + (per.status ? ' · temuan open ' + per.status : '');
     const q = state.cari.toLowerCase();
-    return META.pja.filter((p) => (!state.site || p.site === state.site) && (!q || p.nama.toLowerCase().includes(q)));
-  }
+    const list = META.pja.filter((p) => (!state.site || p.site === state.site) && (!q || p.nama.toLowerCase().includes(q)));
 
-  function renderKpi(list) {
     const tot = { gap: 0, tindak: 0, fyi: 0, ok: 0 };
-    list.forEach((p) => STATUS.forEach((s) => { tot[s.k] += p.ringkas[state.periode][s.k]; }));
-    $('#pr-kpis').innerHTML = STATUS.map((s) => `
-      <button type="button" class="pr-kpi s-${s.k}" data-urut="${s.k}" aria-pressed="${state.urut === s.k}">
-        <div class="pr-kpi-top"><span class="pr-dot"></span>${s.label}<span class="pr-tag">${s.tag}</span></div>
-        <div class="pr-kpi-num">${fmt(tot[s.k])}</div>
-        <div class="pr-kpi-desc">${s.desc}</div>
-      </button>`).join('');
-  }
+    list.forEach((p) => Object.keys(tot).forEach((k) => { tot[k] += p.ringkas[state.periode][k]; }));
+    $('#pr-kpis').innerHTML = Object.keys(tot).map((k) => window.PR_UTIL.kartu(k, tot[k])).join('');
 
-  function bar(r) {
-    const t = r.unit || 1;
-    return `<div class="pr-bar" title="${STATUS.map((s) => s.label + ': ' + r[s.k]).join(' · ')}">${STATUS.map((s) => r[s.k] ? `<i class="s-${s.k}" style="width:${(100 * r[s.k] / t).toFixed(2)}%"></i>` : '').join('')}</div>`;
-  }
-
-  function renderList(list) {
-    const key = state.urut === 'aksi' ? (r) => r.gap + r.tindak : (r) => r[state.urut];
-    list = [...list].sort((a, b) => key(b.ringkas[state.periode]) - key(a.ringkas[state.periode]) || a.nama.localeCompare(b.nama));
-    if (!list.length) {
-      $('#pr-list').innerHTML = '<div class="pr-empty">Tidak ada PJA yang cocok.</div>';
-      return;
-    }
-    $('#pr-list').innerHTML = list.map((p) => {
+    const urut = [...list].sort((a, b) => {
+      const ra = a.ringkas[state.periode], rb = b.ringkas[state.periode];
+      return (rb.gap + rb.tindak) - (ra.gap + ra.tindak) || a.nama.localeCompare(b.nama);
+    });
+    $('#pr-list').innerHTML = urut.length ? urut.map((p) => {
       const r = p.ringkas[state.periode];
       const aksi = r.gap + r.tindak;
       const href = URL_PJA.replace('__ID__', p.id) + '?periode=' + state.periode;
-      return `<a class="pr-row" href="${href}">
-        <div><div class="pr-row-name">${esc(p.nama)}</div><div class="pr-row-site">${esc(p.site)}</div></div>
-        <div class="pr-num">${r.proses}</div>
-        <div>${bar(r)}</div>
-        <div><span class="pr-act ${aksi ? '' : 'nol'}">${aksi ? '<span class="pr-dot s-tindak"></span>' : ''}${fmt(aksi)}</span> <small class="pr-row-site">/ ${fmt(r.unit)}</small></div>
-        <div class="pr-num">${fmt(r.open)}${r.lewat ? `<span class="pr-late">${fmt(r.lewat)} lewat janji</span>` : ''}</div>
-        <div class="pr-chev" aria-hidden="true">›</div>
-      </a>`;
-    }).join('');
-  }
+      return `<tr class="pr-row" data-href="${href}">
+        <td><span class="text-md text-primary-light fw-semibold d-block">${esc(p.nama)}</span><span class="text-sm text-secondary-light">${esc(p.site)}</span></td>
+        <td class="text-center">${r.proses}</td>
+        <td>${window.PR_UTIL.stack(r)}</td>
+        <td class="text-center">${aksi ? `<span class="bg-danger-focus text-danger-main px-12 py-4 rounded-pill fw-semibold text-sm">${fmt(aksi)}</span>` : '<span class="text-secondary-light">0</span>'} <span class="text-sm text-secondary-light">/ ${fmt(r.unit)}</span></td>
+        <td class="text-center">${fmt(r.open)}${r.lewat ? `<span class="d-block text-xs text-danger-main fw-medium">${fmt(r.lewat)} lewat janji</span>` : ''}</td>
+        <td class="text-center"><a href="${href}" class="text-primary-600 hover-text-primary fw-medium d-inline-flex align-items-center gap-1">Lihat <i class="ri-arrow-right-s-line"></i></a></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" class="text-center text-secondary-light py-24">Tidak ada PJA yang cocok.</td></tr>';
 
-  function render() {
-    document.querySelectorAll('[data-periode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.periode === state.periode));
-    const per = META.periode;
-    $('#pr-periode-label').textContent = state.periode === 'wk'
-      ? `${per.wk}${per.status ? ' · ' + per.status : ''}`
-      : `${per.ytd} · status temuan open per ${per.status ? per.status.replace(/^status per /, '') : 'snapshot'}`;
-    const list = terpilih();
-    renderKpi(list);
-    renderList(list);
     const u = new URL(location.href);
     u.searchParams.set('periode', state.periode);
     state.site ? u.searchParams.set('site', state.site) : u.searchParams.delete('site');
     history.replaceState(null, '', u);
   }
 
-  document.addEventListener('click', (e) => {
-    const p = e.target.closest('[data-periode]');
-    if (p) { state.periode = p.dataset.periode; render(); }
-    const k = e.target.closest('[data-urut]');
-    if (k) { state.urut = state.urut === k.dataset.urut ? 'aksi' : k.dataset.urut; render(); }
-  });
+  $('#pr-periode').addEventListener('change', (e) => { state.periode = e.target.value; render(); });
   $('#pr-site').addEventListener('change', (e) => { state.site = e.target.value; render(); });
   $('#pr-cari').addEventListener('input', (e) => { state.cari = e.target.value.trim(); render(); });
+  $('#pr-list').addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-href]');
+    if (tr && !e.target.closest('a')) location.href = tr.dataset.href;
+  });
   render();
 })();
 </script>
