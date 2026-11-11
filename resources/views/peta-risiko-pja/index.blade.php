@@ -2,120 +2,105 @@
 
 @section('title', 'Peta Risiko PJA')
 
+@section('hero-aksi')
+  @if ($meta)
+    <div class="pr-seg" role="group" aria-label="Periode">
+      <button type="button" data-periode="wk">Minggu ini</button>
+      <button type="button" data-periode="ytd">YTD</button>
+    </div>
+  @endif
+@endsection
+
+@section('hero')
+  <p class="pr-kicker">HSE · Peta Risiko PJA</p>
+  <h1 class="pr-title">Apa yang perlu dicek di area PJA</h1>
+  <p class="pr-sub" id="pr-periode">{{ $meta ? '' : 'Data belum diimpor' }}</p>
+@endsection
+
 @section('content')
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-24">
-  <div>
-    <h6 class="fw-semibold mb-0">Peta Risiko PJA</h6>
-    @if ($meta)
-      <p class="text-sm text-secondary-light mb-0 mt-4" id="pr-periode-label"></p>
-    @endif
-  </div>
-  <ul class="d-flex align-items-center gap-2 mb-0 list-unstyled">
-    <li class="fw-medium d-flex align-items-center gap-1"><i class="ri-map-pin-2-line text-lg"></i> Peta Risiko PJA</li>
-    <li>-</li>
-    <li class="fw-medium">Semua PJA</li>
-  </ul>
-</div>
-
 @if (! $meta)
-  <div class="card radius-8 border-0">
-    <div class="card-body p-24 text-center">
-      <h6 class="fw-semibold text-lg mb-8">Snapshot belum diimpor</h6>
-      <p class="text-secondary-light mb-0">Jalankan <code>php artisan peta-risiko:impor &lt;Mapping_PJA_Proses_Lokasi_SAP.xlsx&gt; &lt;Peta_HIRA_Risiko_Dinamis.html&gt;</code></p>
-    </div>
-  </div>
+  <div class="pr-card"><div class="pr-empty">
+    Jalankan <code>php artisan peta-risiko:impor &lt;Mapping_PJA_Proses_Lokasi_SAP.xlsx&gt; &lt;Peta_HIRA_Risiko_Dinamis.html&gt;</code> lalu muat ulang halaman ini.
+  </div></div>
 @else
-  <div class="row gy-4 mb-24" id="pr-kpis"></div>
-
-  <div class="card radius-8 border-0">
-    <div class="card-body p-24">
-      <div class="d-flex align-items-center flex-wrap gap-3 justify-content-between mb-20">
-        <div>
-          <h6 class="mb-0 fw-bold text-lg">Daftar PJA</h6>
-          <p class="text-sm text-secondary-light mb-0">Diurutkan dari tema yang paling perlu tindakan (ada gap + tanpa kontrol HIRA).</p>
-        </div>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-          <select class="form-select form-select-sm w-auto bg-base border text-secondary-light" id="pr-periode" aria-label="Periode">
-            <option value="wk">Minggu ini</option>
-            <option value="ytd">YTD</option>
-          </select>
-          <select class="form-select form-select-sm w-auto bg-base border text-secondary-light" id="pr-site" aria-label="Site">
-            <option value="">Semua site</option>
-          </select>
-          <input type="search" class="form-control form-control-sm bg-base border w-auto" id="pr-cari" placeholder="Cari PJA…" aria-label="Cari PJA">
-        </div>
-      </div>
-      <div class="table-responsive scroll-sm">
-        <table class="table bordered-table mb-0">
-          <thead>
-            <tr>
-              <th scope="col">PJA</th>
-              <th scope="col" class="text-center">Proses</th>
-              <th scope="col">Komposisi status</th>
-              <th scope="col" class="text-center">Perlu tindakan</th>
-              <th scope="col" class="text-center">SAP open</th>
-              <th scope="col" class="text-center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="pr-list"></tbody>
-        </table>
-      </div>
-    </div>
+  <div class="pr-card">
+    <div class="pr-kpis" id="pr-kpis"></div>
+    <p class="pr-note">Jumlah tema bahaya per PJA × bisnis proses. Lokasi yang dimiliki beberapa PJA dihitung di setiap PJA.</p>
   </div>
 
-  <div class="text-sm text-secondary-light mt-20">
-    <p class="mb-4">Angka = jumlah tema bahaya per PJA × bisnis proses. Satu lokasi bisa dimiliki beberapa PJA, jadi angka ini bukan jumlah lokasi.</p>
+  <div class="pr-card">
+    <div class="pr-card-head">
+      <div>
+        <b>Daftar PJA</b>
+        <small>Diurutkan dari tema yang paling perlu tindakan</small>
+      </div>
+      <div class="pr-filters">
+        <div class="pr-chips" id="pr-sites" role="group" aria-label="Filter site"></div>
+        <input type="search" class="pr-search" id="pr-cari" placeholder="Cari nama PJA" aria-label="Cari nama PJA">
+      </div>
+    </div>
+    <table class="pr-tbl">
+      <thead>
+        <tr>
+          <th>PJA</th>
+          <th class="hide-sm">Komposisi status tema</th>
+          <th class="r">Perlu tindakan</th>
+          <th class="r hide-sm">SAP open</th>
+        </tr>
+      </thead>
+      <tbody id="pr-list"></tbody>
+    </table>
+  </div>
+
+  <div class="pr-foot">
     @foreach ($meta['catatan'] as $c)
-      <p class="mb-4">{{ $c }}</p>
+      <p>{{ $c }}</p>
     @endforeach
-    <p class="mb-0">Snapshot dibuat {{ \Illuminate\Support\Carbon::parse($meta['dibuat'])->timezone('Asia/Makassar')->translatedFormat('d M Y H:i') }} WITA.</p>
+    <p>Data per {{ \Illuminate\Support\Carbon::parse($meta['dibuat'])->timezone('Asia/Makassar')->translatedFormat('d M Y, H:i') }} WITA.</p>
   </div>
 @endif
 @endsection
 
 @section('scripts')
 @if ($meta)
-@include('peta-risiko-pja._status')
 <script>
 (function () {
   const META = {{ \Illuminate\Support\Js::from(['periode' => $meta['periode'], 'pja' => $meta['pja']]) }};
   const URL_PJA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.show', ['pja' => '__ID__'])) }};
-  const { fmt, esc } = window.PR_UTIL;
+  const { fmt, esc } = PR;
   const state = { periode: @json($periode), site: @json($site), cari: '' };
   const $ = (s) => document.querySelector(s);
-
   const sites = [...new Set(META.pja.map((p) => p.site))].sort();
-  $('#pr-site').insertAdjacentHTML('beforeend', sites.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join(''));
-  $('#pr-site').value = state.site;
-  $('#pr-periode').value = state.periode;
 
   function render() {
     const per = META.periode;
-    $('#pr-periode-label').textContent = (state.periode === 'wk' ? per.wk : per.ytd) + (per.status ? ' · temuan open ' + per.status : '');
+    $('#pr-periode').textContent = (state.periode === 'wk' ? per.wk : per.ytd) + (per.status ? ' · temuan open ' + per.status : '');
+    document.querySelectorAll('[data-periode]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.periode === state.periode));
+
+    const r = (p) => p.ringkas[state.periode];
+    const diSite = META.pja.filter((p) => !state.site || p.site === state.site);
     const q = state.cari.toLowerCase();
-    const list = META.pja.filter((p) => (!state.site || p.site === state.site) && (!q || p.nama.toLowerCase().includes(q)));
+    const list = diSite.filter((p) => !q || p.nama.toLowerCase().includes(q));
 
     const tot = { gap: 0, tindak: 0, fyi: 0, ok: 0 };
-    list.forEach((p) => Object.keys(tot).forEach((k) => { tot[k] += p.ringkas[state.periode][k]; }));
-    $('#pr-kpis').innerHTML = Object.keys(tot).map((k) => window.PR_UTIL.kartu(k, tot[k])).join('');
+    diSite.forEach((p) => PR.URUT.forEach((k) => { tot[k] += r(p)[k]; }));
+    $('#pr-kpis').innerHTML = PR.kpis(tot);
 
-    const urut = [...list].sort((a, b) => {
-      const ra = a.ringkas[state.periode], rb = b.ringkas[state.periode];
-      return (rb.gap + rb.tindak) - (ra.gap + ra.tindak) || a.nama.localeCompare(b.nama);
-    });
+    $('#pr-sites').innerHTML = [['', 'Semua', META.pja.length], ...sites.map((s) => [s, s, META.pja.filter((p) => p.site === s).length])]
+      .map(([v, l, n]) => `<button type="button" class="pr-chip" data-site="${esc(v)}" aria-pressed="${state.site === v}">${esc(l)}<small>${n}</small></button>`).join('');
+
+    const urut = [...list].sort((a, b) => (r(b).gap + r(b).tindak) - (r(a).gap + r(a).tindak) || a.nama.localeCompare(b.nama));
     $('#pr-list').innerHTML = urut.length ? urut.map((p) => {
-      const r = p.ringkas[state.periode];
-      const aksi = r.gap + r.tindak;
+      const x = r(p);
+      const aksi = x.gap + x.tindak;
       const href = URL_PJA.replace('__ID__', p.id) + '?periode=' + state.periode;
-      return `<tr class="pr-row" data-href="${href}">
-        <td><span class="text-md text-primary-light fw-semibold d-block">${esc(p.nama)}</span><span class="text-sm text-secondary-light">${esc(p.site)}</span></td>
-        <td class="text-center">${r.proses}</td>
-        <td>${window.PR_UTIL.stack(r)}</td>
-        <td class="text-center">${aksi ? `<span class="bg-danger-focus text-danger-main px-12 py-4 rounded-pill fw-semibold text-sm">${fmt(aksi)}</span>` : '<span class="text-secondary-light">0</span>'} <span class="text-sm text-secondary-light">/ ${fmt(r.unit)}</span></td>
-        <td class="text-center">${fmt(r.open)}${r.lewat ? `<span class="d-block text-xs text-danger-main fw-medium">${fmt(r.lewat)} lewat janji</span>` : ''}</td>
-        <td class="text-center"><a href="${href}" class="text-primary-600 hover-text-primary fw-medium d-inline-flex align-items-center gap-1">Lihat <i class="ri-arrow-right-s-line"></i></a></td>
+      return `<tr data-href="${href}">
+        <td><a class="pr-name" href="${href}">${esc(p.nama)}</a><span class="pr-meta">${esc(p.site)} · ${x.proses} bisnis proses</span></td>
+        <td class="hide-sm" style="width:34%">${PR.comp(x)}</td>
+        <td class="r"><span class="pr-big ${aksi ? 'amber' : 'zero'}">${fmt(aksi)}</span><span class="pr-of">dari ${fmt(x.unit)} tema</span></td>
+        <td class="r hide-sm"><span class="pr-big">${fmt(x.open)}</span>${x.lewat ? `<span class="pr-late">${fmt(x.lewat)} lewat janji</span>` : '<span class="pr-of">temuan</span>'}</td>
       </tr>`;
-    }).join('') : '<tr><td colspan="6" class="text-center text-secondary-light py-24">Tidak ada PJA yang cocok.</td></tr>';
+    }).join('') : `<tr><td colspan="4" class="pr-empty">Tidak ada PJA dengan nama "${esc(state.cari)}"${state.site ? ' di ' + esc(state.site) : ''}.</td></tr>`;
 
     const u = new URL(location.href);
     u.searchParams.set('periode', state.periode);
@@ -123,13 +108,15 @@
     history.replaceState(null, '', u);
   }
 
-  $('#pr-periode').addEventListener('change', (e) => { state.periode = e.target.value; render(); });
-  $('#pr-site').addEventListener('change', (e) => { state.site = e.target.value; render(); });
-  $('#pr-cari').addEventListener('input', (e) => { state.cari = e.target.value.trim(); render(); });
-  $('#pr-list').addEventListener('click', (e) => {
+  document.addEventListener('click', (e) => {
+    const p = e.target.closest('[data-periode]');
+    if (p) { state.periode = p.dataset.periode; render(); return; }
+    const s = e.target.closest('[data-site]');
+    if (s) { state.site = s.dataset.site; render(); return; }
     const tr = e.target.closest('tr[data-href]');
     if (tr && !e.target.closest('a')) location.href = tr.dataset.href;
   });
+  $('#pr-cari').addEventListener('input', (e) => { state.cari = e.target.value.trim(); render(); });
   render();
 })();
 </script>
