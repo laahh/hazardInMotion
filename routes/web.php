@@ -1143,6 +1143,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     require __DIR__ . '/Isc/isc.php';
     require __DIR__ . '/MonitoringOhsDivisi/monitoring-ohs-divisi.php';
     require __DIR__ . '/DwhRedshift/dwh-redshift.php';
+    require __DIR__ . '/PetaRisikoPja/peta-risiko-pja.php';
 
 
     // Define a GET route with dynamic placeholders for route parameters
