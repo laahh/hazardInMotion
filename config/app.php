@@ -57,6 +57,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Diisi hanya di server lama (mis. besentry-dev): halaman utama & /login
+    // berganti jadi pemberitahuan bahwa aplikasi sudah pindah ke URL ini.
+    'pindah_ke' => env('APP_PINDAH_KE'),
+
     // Paksa semua URL buatan Laravel memakai https (lihat AppServiceProvider).
     'force_https' => (bool) env('FORCE_HTTPS', false),
 

@@ -1150,3 +1150,12 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     Route::get('{routeName}/{name?}', [HomeController::class, 'pageView'])
         ->where('routeName', '^(?!sid-meeting$|attendance$|hsecm$|ohs-dashboard$|login$).+');
 });
+
+// Server lama: halaman utama & /login jadi pemberitahuan pindah situs.
+// Didaftarkan paling akhir agar menimpa '/' dan GET /login di atas.
+// Aktif hanya bila APP_PINDAH_KE diisi di .env server tersebut.
+if (filter_var(config('app.pindah_ke'), FILTER_VALIDATE_URL)) {
+    Route::get('/', static fn () => view('pindah-situs', ['tujuan' => config('app.pindah_ke')]))
+        ->name('pindah-situs');
+    Route::get('/login', static fn () => view('pindah-situs', ['tujuan' => config('app.pindah_ke')]));
+}
