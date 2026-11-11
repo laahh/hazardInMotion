@@ -25,7 +25,7 @@
   *, *::before, *::after { box-sizing: border-box; }
   body.pr {
     margin: 0;
-    background: var(--sky);
+    background: #FFFFFF;
     color: var(--ink);
     font: 16px/1.5 "Source Sans 3", "Segoe UI", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -36,24 +36,24 @@
   .pr .jk { font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif; }
 
   /* Banner */
-  .pr-hero { position: relative; color: #fff; background: var(--navy) var(--hero) center 62% / cover no-repeat; }
-  .pr-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, rgba(15, 45, 107, .94) 0%, rgba(22, 41, 79, .86) 45%, rgba(22, 41, 79, .45) 100%); }
-  .pr-hero-in { position: relative; max-width: 1280px; margin: 0 auto; padding: 22px 32px 96px; }
+  .pr-hero { position: relative; color: var(--ink); background: #fff var(--hero) center 62% / cover no-repeat; }
+  .pr-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, #fff 100%), linear-gradient(100deg, #fff 0%, rgba(255, 255, 255, .95) 42%, rgba(255, 255, 255, .55) 100%); }
+  .pr-hero-in { position: relative; padding: 22px 40px 96px; }
   .pr-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 34px; }
-  .pr-logo { display: inline-flex; background: #fff; border-radius: 10px; padding: 4px 14px; }
+  .pr-logo { display: inline-flex; }
   .pr-logo img { height: 40px; display: block; }
-  .pr-kicker { display: flex; align-items: center; gap: 12px; font: 700 12px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: rgba(255, 255, 255, .78); margin: 0 0 14px; }
+  .pr-kicker { display: flex; align-items: center; gap: 12px; font: 700 12px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--mute); margin: 0 0 14px; }
   .pr-kicker::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--green-d), var(--lime)); }
-  .pr-title { font: 800 clamp(26px, 3.4vw, 40px)/1.15 "Plus Jakarta Sans", sans-serif; letter-spacing: -.02em; margin: 0; }
-  .pr-sub { margin: 10px 0 0; color: rgba(255, 255, 255, .78); font-size: 16px; }
-  .pr-back { display: inline-flex; align-items: center; gap: 8px; color: rgba(255, 255, 255, .85); font: 600 14px/1 "Plus Jakarta Sans", sans-serif; padding: 8px 12px; border-radius: 8px; background: rgba(255, 255, 255, .12); transition: background .2s; }
-  .pr-back:hover { background: rgba(255, 255, 255, .2); }
+  .pr-title { font: 800 clamp(26px, 3.4vw, 40px)/1.15 "Plus Jakarta Sans", sans-serif; letter-spacing: -.02em; margin: 0; color: var(--navy); }
+  .pr-sub { margin: 10px 0 0; color: var(--mute); font-size: 16px; }
+  .pr-back { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font: 600 14px/1 "Plus Jakarta Sans", sans-serif; padding: 9px 12px; border-radius: 8px; background: #fff; border: 1px solid var(--line-2); transition: border-color .2s; }
+  .pr-back:hover { border-color: var(--navy); }
 
-  .pr-seg { display: inline-flex; background: rgba(255, 255, 255, .14); border-radius: 10px; padding: 3px; }
-  .pr-seg button { font: 700 13px/1 "Plus Jakarta Sans", sans-serif; padding: 9px 14px; border-radius: 8px; color: rgba(255, 255, 255, .85); transition: background .25s var(--ease), color .25s; }
-  .pr-seg button[aria-pressed="true"] { background: #fff; color: var(--navy); }
+  .pr-seg { display: inline-flex; background: #fff; border: 1px solid var(--line-2); border-radius: 10px; padding: 3px; }
+  .pr-seg button { font: 700 13px/1 "Plus Jakarta Sans", sans-serif; padding: 9px 14px; border-radius: 8px; color: var(--mute); transition: background .25s var(--ease), color .25s; }
+  .pr-seg button[aria-pressed="true"] { background: var(--navy); color: #fff; }
 
-  .pr-main { position: relative; max-width: 1280px; margin: -64px auto 0; padding: 0 32px 64px; }
+  .pr-main { position: relative; margin: -64px 0 0; padding: 0 40px 64px; }
 
   /* Kartu */
   .pr-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
@@ -142,16 +142,16 @@
   .pr-desc { margin: 0 0 16px; font-size: 14px; color: var(--mute); }
 
   /* Panel detail */
-  .pr-scrim { position: fixed; inset: 0; background: rgba(15, 45, 107, .28); opacity: 0; pointer-events: none; transition: opacity .3s var(--ease); z-index: 40; backdrop-filter: blur(2px); }
-  .pr-panel { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(620px, calc(100vw - 24px)); background: var(--sky); border-radius: 18px; z-index: 41; transform: translateX(calc(100% + 24px)); transition: transform .45s var(--ease); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(15, 45, 107, .25); }
+  .pr-scrim { position: fixed; inset: 0; background: rgba(20, 26, 34, .25); opacity: 0; pointer-events: none; transition: opacity .3s var(--ease); z-index: 40; backdrop-filter: blur(2px); }
+  .pr-panel { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(620px, calc(100vw - 24px)); background: #F7F9FB; border-radius: 18px; z-index: 41; transform: translateX(calc(100% + 24px)); transition: transform .45s var(--ease); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(15, 45, 107, .25); }
   .is-open .pr-scrim { opacity: 1; pointer-events: auto; }
   .is-open .pr-panel { transform: none; }
   .is-open { overflow: hidden; }
-  .pr-panel-head { position: relative; color: #fff; padding: 22px 24px 20px; background: linear-gradient(100deg, var(--navy-2), var(--navy)); }
+  .pr-panel-head { position: relative; color: var(--ink); padding: 22px 24px 20px; background: #fff; border-bottom: 1px solid var(--line); }
   .pr-panel-head .pr-kicker { margin-bottom: 10px; }
-  .pr-panel-head h2 { margin: 0; font: 800 22px/1.25 "Plus Jakarta Sans", sans-serif; letter-spacing: -.01em; padding-right: 40px; }
-  .pr-x { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(255, 255, 255, .14); color: #fff; transition: background .2s; }
-  .pr-x:hover { background: rgba(255, 255, 255, .26); }
+  .pr-panel-head h2 { margin: 0; font: 800 22px/1.25 "Plus Jakarta Sans", sans-serif; letter-spacing: -.01em; padding-right: 40px; color: var(--navy); }
+  .pr-x { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--grey-bg); color: var(--ink); transition: background .2s; }
+  .pr-x:hover { background: #E1E7EE; }
   .pr-panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
   .pr-panel-body > * { flex: none; }
   .pr-verdict { border-radius: 12px; padding: 14px 16px; background: var(--bg); border: 1px solid color-mix(in srgb, var(--c) 22%, transparent); font-size: 15px; }
@@ -179,6 +179,7 @@
   }
   @media (max-width: 760px) {
     .pr-hero-in { padding: 16px 16px 84px; }
+    .pr-hero::before { background: linear-gradient(180deg, rgba(255, 255, 255, .9), #fff); }
     .pr-main { padding: 0 12px 48px; }
     .pr-stage { grid-template-columns: 1fr; gap: 8px; padding: 14px 16px; }
     .pr-stage-name { padding-top: 0; }
