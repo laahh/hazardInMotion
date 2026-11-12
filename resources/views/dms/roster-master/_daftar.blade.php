@@ -41,7 +41,7 @@
               <span class="d-block text-xs text-secondary-light mt-4">{{ $u->direview_oleh }} · {{ $u->direview_pada?->format('d/m/Y H:i') }}</span>
             @endif
           </td>
-          <td class="text-nowrap">{{ $u->diupload_oleh }}<span class="d-block text-xs text-secondary-light">{{ $u->created_at?->format('d/m/Y H:i') }}</span></td>
+          <td class="text-nowrap">{{ $u->namaPengupload() }}<span class="d-block text-xs text-secondary-light">{{ $u->created_at?->format('d/m/Y H:i') }}</span></td>
           <td class="text-nowrap">
             <a href="{{ route('dms.master-roster.show', $u->id) }}" class="btn btn-sm btn-outline-primary-600 radius-8">
               {{ $u->isPending() ? 'Review' : 'Lihat' }}

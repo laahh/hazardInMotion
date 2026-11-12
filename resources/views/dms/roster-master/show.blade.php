@@ -68,8 +68,10 @@
           {{ $upload->judul }} &middot; {{ $upload->periode_mulai->format('d/m/Y') }} – {{ $upload->periode_selesai->format('d/m/Y') }}
           &middot; {{ number_format($upload->jumlah_karyawan, 0, ',', '.') }} karyawan
           &middot; {{ implode(', ', $ptUpload) }}
-          &middot; diupload {{ $upload->diupload_oleh }} {{ $upload->created_at?->format('d/m/Y H:i') }}
+          &middot; diupload {{ $upload->namaPengupload() }} {{ $upload->created_at?->format('d/m/Y H:i') }}
+          @unless ($upload->isOtomatis() || $upload->path_file === '')
           &middot; <a href="{{ route('dms.master-roster.file', $upload->id) }}" class="text-primary-600">file asli</a>
+          @endunless
         </p>
       </div>
       @if ($upload->bolehDihapusOleh(auth()->user()))

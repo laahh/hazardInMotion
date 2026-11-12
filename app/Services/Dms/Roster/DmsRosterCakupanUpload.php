@@ -65,6 +65,7 @@ final class DmsRosterCakupanUpload
                     'menunggu' => ($perSite[$k]['menunggu'] ?? false) || $r['menunggu'],
                     'nama' => $perSite[$k]['nama'] ?? $r['site'],
                     'roster' => ($perSite[$k]['roster'] ?? 0) + $r['karyawan'],
+                    'otomatis' => ($perSite[$k]['otomatis'] ?? 0) + ($r['otomatis'] ?? 0),
                 ];
             }
 
@@ -82,6 +83,8 @@ final class DmsRosterCakupanUpload
                     'status' => self::status($perSite[$k] ?? null),
                     // Karyawan di roster yang site-nya ini (untuk filter site).
                     'roster' => $perSite[$k]['roster'] ?? 0,
+                    // Karyawan site ini yang jadwalnya hanya dari jadwal otomatis.
+                    'otomatis' => $perSite[$k]['otomatis'] ?? 0,
                 ];
             }
             $siteLain = [];
@@ -101,6 +104,8 @@ final class DmsRosterCakupanUpload
                 // Ejaan upload yang berbeda dari nama di data karyawan.
                 'alias' => array_values(array_filter($alias, static fn (string $a): bool => self::tulisan($a) !== self::tulisan($pt['nama']))),
                 'karyawan_roster' => array_sum(array_column($rows, 'karyawan')),
+                // Karyawan yang jadwalnya hanya dari jadwal otomatis (belum di-upload PT).
+                'karyawan_otomatis' => array_sum(array_map(static fn (array $r): int => (int) ($r['otomatis'] ?? 0), $rows)),
                 'site' => $site,
                 'site_sudah' => count(array_filter($site, static fn (array $s): bool => $s['status'] === 'sudah')),
                 // Site di roster yang tidak ada di data karyawan aktif PT ini.

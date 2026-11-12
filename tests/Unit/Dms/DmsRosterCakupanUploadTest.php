@@ -48,7 +48,7 @@ class DmsRosterCakupanUploadTest extends TestCase
         $this->assertSame('sudah', $pt['PT Pamapersada Nusantara']['status']);
         $this->assertSame(['PT Pama Persada Nusantara'], $pt['PT Pamapersada Nusantara']['alias']);
         $this->assertSame(
-            [['nama' => 'BMO 2', 'karyawan' => 60, 'status' => 'sudah', 'roster' => 58], ['nama' => 'GMO', 'karyawan' => 35, 'status' => 'menunggu', 'roster' => 30]],
+            [['nama' => 'BMO 2', 'karyawan' => 60, 'status' => 'sudah', 'roster' => 58, 'otomatis' => 0], ['nama' => 'GMO', 'karyawan' => 35, 'status' => 'menunggu', 'roster' => 30, 'otomatis' => 0]],
             $pt['PT Pamapersada Nusantara']['site'],
         );
         $this->assertSame(1, $pt['PT Pamapersada Nusantara']['site_sudah']);
@@ -57,6 +57,21 @@ class DmsRosterCakupanUploadTest extends TestCase
         $this->assertSame('belum', $pt['PT Trakindo Utama']['status']);
         // PT tanpa site: tidak menyumbang site.
         $this->assertSame([], $pt['CV Damayanti']['site']);
+        $this->assertSame(0, $pt['PT Pamapersada Nusantara']['karyawan_otomatis']);
+    }
+
+    public function test_karyawan_berjadwal_otomatis_dihitung_terpisah(): void
+    {
+        $hasil = Cakupan::bandingkan(self::AKTIF, [
+            $this->up('PT Pama Persada Nusantara', 'BMO 2', true, false, 58, 40),
+            $this->up('PT Pama Persada Nusantara', 'GMO', true, false, 30, 5),
+        ]);
+        $pt = array_column($hasil['perusahaan'], null, 'nama')['PT Pamapersada Nusantara'];
+
+        $this->assertSame('sudah', $pt['status']);
+        $this->assertSame(88, $pt['karyawan_roster']);
+        $this->assertSame(45, $pt['karyawan_otomatis']);
+        $this->assertSame([40, 5], array_column($pt['site'], 'otomatis'));
     }
 
     public function test_ringkasan_perusahaan_site_dan_karyawan(): void
@@ -142,8 +157,8 @@ class DmsRosterCakupanUploadTest extends TestCase
     /**
      * @return array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}
      */
-    private function up(string $pt, string $site, bool $ok, bool $tunggu, int $n): array
+    private function up(string $pt, string $site, bool $ok, bool $tunggu, int $n, int $otomatis = 0): array
     {
-        return ['perusahaan' => $pt, 'site' => $site, 'disetujui' => $ok, 'menunggu' => $tunggu, 'karyawan' => $n];
+        return ['perusahaan' => $pt, 'site' => $site, 'disetujui' => $ok, 'menunggu' => $tunggu, 'karyawan' => $n, 'otomatis' => $otomatis];
     }
 }

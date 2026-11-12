@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class DmsRosterMasterCache
 {
-    private const KUNCI = 'dms_roster:master_ringkas:v1';
+    private const KUNCI = 'dms_roster:master_ringkas:v2';
 
     private const TUNGGU_KUNCI_DETIK = 120;
 
@@ -144,24 +144,30 @@ final class DmsRosterMasterCache
      * Per (perusahaan, site) di upload tidak ditolak — lihat
      * DmsRosterMasterService::uploadPerSite().
      *
-     * @return list<array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int}>
+     * @return list<array{perusahaan:string,site:string,disetujui:bool,menunggu:bool,karyawan:int,otomatis:int}>
      */
     public static function uploadPerSite(): array
     {
         $grup = [];
-        foreach (self::ringkas()['b'] as [$pt, $site, $sid, $ok, $tunggu]) {
+        foreach (self::ringkas()['b'] as $baris) {
+            [$pt, $site, $sid, $ok, $tunggu] = $baris;
             $nama = $pt === '' ? DmsRosterMasterService::TANPA_PERUSAHAAN : $pt;
             // MySQL dulu mengelompokkan tanpa membedakan huruf.
             $k = mb_strtolower($nama)."\0".mb_strtolower($site);
-            $grup[$k] ??= ['perusahaan' => $nama, 'site' => $site, 'disetujui' => false, 'menunggu' => false, 'sid' => []];
+            $grup[$k] ??= ['perusahaan' => $nama, 'site' => $site, 'disetujui' => false, 'menunggu' => false, 'sid' => [], 'oto' => []];
             $grup[$k]['disetujui'] = $grup[$k]['disetujui'] || $ok;
             $grup[$k]['menunggu'] = $grup[$k]['menunggu'] || $tunggu;
             $grup[$k]['sid'][$sid] = true;
+            // Indeks 5: semua jadwal SID ini dari jadwal otomatis (belum di-upload PT).
+            if ($baris[5] ?? false) {
+                $grup[$k]['oto'][$sid] = true;
+            }
         }
 
         return array_values(array_map(static function (array $g): array {
             $g['karyawan'] = count($g['sid']);
-            unset($g['sid']);
+            $g['otomatis'] = count($g['oto']);
+            unset($g['sid'], $g['oto']);
 
             return $g;
         }, $grup));
@@ -282,12 +288,12 @@ final class DmsRosterMasterCache
 
         $b = [];
         foreach (DB::select("SELECT TRIM(COALESCE(j.perusahaan, '')) AS pt, TRIM(COALESCE(j.site, '')) AS site, UPPER(TRIM(j.kode_sid)) AS sid,
-                    MAX(u.status = ?) AS ok, MAX(u.status = ?) AS tunggu
+                    MAX(u.status = ?) AS ok, MAX(u.status = ?) AS tunggu, MIN(u.diupload_oleh = ?) AS oto
                 FROM dms_roster_master_jadwal j
                 JOIN dms_roster_master_upload u ON u.id = j.upload_id
                 WHERE u.status <> ?
-                GROUP BY 1, 2, 3", [DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_PENDING, DmsRosterMasterUpload::STATUS_REJECTED]) as $x) {
-            $b[] = [(string) $x->pt, (string) $x->site, (string) $x->sid, (bool) $x->ok, (bool) $x->tunggu];
+                GROUP BY 1, 2, 3", [DmsRosterMasterUpload::STATUS_APPROVED, DmsRosterMasterUpload::STATUS_PENDING, DmsRosterOtomatisService::penanda(), DmsRosterMasterUpload::STATUS_REJECTED]) as $x) {
+            $b[] = [(string) $x->pt, (string) $x->site, (string) $x->sid, (bool) $x->ok, (bool) $x->tunggu, (bool) $x->oto];
         }
 
         $upload = [];

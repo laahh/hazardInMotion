@@ -158,6 +158,20 @@ return [
             ],
             'site' => ['MARINE'],
         ],
+
+        // Jadwal otomatis (DmsRosterOtomatisService, command dms:master-roster-otomatis):
+        // karyawan aktif PT di bawah yang tanggalnya belum tertutup roster upload
+        // (PENDING/APPROVED) dibuatkan jadwal Senin–Jumat D1–D5, Sabtu/Minggu OFF.
+        // Disimpan sebagai upload APPROVED dengan diupload_oleh = penanda.
+        'otomatis' => [
+            'perusahaan' => ['PT Berau Coal', 'PT Berau Coal Energy'],
+            'jam_awal' => '07:30',
+            'jam_akhir' => '16:30',
+            // ISO hari (1 = Senin … 7 = Minggu) => kode; hari tanpa kode = OFF.
+            'kode_hari' => [1 => 'D1', 2 => 'D2', 3 => 'D3', 4 => 'D4', 5 => 'D5'],
+            'bulan_ke_depan' => 1,
+            'penanda' => 'SISTEM:OTOMATIS',
+        ],
     ],
 
     'populasi' => [

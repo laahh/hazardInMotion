@@ -120,6 +120,14 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/dms-sync-roster-rfid.log'));
 
+        // Jadwal otomatis Master Roster PT Berau Coal & PT Berau Coal Energy
+        // (Sen–Jum D1–D5, Sab/Min OFF) untuk karyawan yang belum punya roster.
+        $schedule->command('dms:master-roster-otomatis')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('05:30')
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/dms-master-roster-otomatis.log'));
+
         // Generate planning roster dari DOP & IKK setiap 10 menit (hari ini). Skip jika job periode yang sama masih pending/processing.
         $schedule->command('roster:generate-planning')
             ->everyMinute()

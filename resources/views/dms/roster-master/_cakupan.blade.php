@@ -162,7 +162,7 @@
                 <div class="rov-cak-jumlah" data-cak-jumlah>{{ $p['site_sudah'] }} / {{ count($p['site']) }}</div>
                 <div class="rov-cak-situs">
                   @foreach ($p['site'] as $s)
-                    <span class="rov-cak-chip is-{{ $s['status'] }}" data-cak-chip="{{ $s['nama'] }}" title="{{ $s['nama'] }} · {{ $label[$s['status']] }} · {{ $angka($s['karyawan']) }} karyawan aktif">
+                    <span class="rov-cak-chip is-{{ $s['status'] }}" data-cak-chip="{{ $s['nama'] }}" title="{{ $s['nama'] }} · {{ $label[$s['status']] }} · {{ $angka($s['karyawan']) }} karyawan aktif{{ ($s['otomatis'] ?? 0) > 0 ? ' · '.$angka($s['otomatis']).' jadwal otomatis' : '' }}">
                       <iconify-icon icon="{{ $ikon[$s['status']] }}"></iconify-icon>{{ $s['nama'] }}
                     </span>
                   @endforeach
@@ -175,6 +175,11 @@
             <td class="text-end" data-cak-sel="roster">
               @if ($p['karyawan_roster'] > 0)
                 <span class="rov-angka">{{ $angka($p['karyawan_roster']) }}</span>
+                @if (($p['karyawan_otomatis'] ?? 0) > 0)
+                  <div class="ro-pt-site" title="Karyawan yang jadwalnya dibuat otomatis oleh sistem (Senin–Jumat D1–D5) karena belum ada di roster upload">
+                    <iconify-icon icon="solar:magic-stick-3-linear"></iconify-icon> Otomatis {{ $angka($p['karyawan_otomatis']) }}
+                  </div>
+                @endif
               @else
                 <span class="ro-pt-site">—</span>
               @endif

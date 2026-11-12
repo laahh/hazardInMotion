@@ -50,6 +50,18 @@ class DmsRosterMasterUpload extends Model
         return $this->status === self::STATUS_PENDING;
     }
 
+    /** Jadwal otomatis buatan sistem (DmsRosterOtomatisService), bukan file upload. */
+    public function isOtomatis(): bool
+    {
+        return $this->diupload_oleh === \App\Services\Dms\Roster\DmsRosterOtomatisService::penanda();
+    }
+
+    /** Nama pengupload untuk ditampilkan. */
+    public function namaPengupload(): string
+    {
+        return $this->isOtomatis() ? 'Otomatis (sistem)' : (string) $this->diupload_oleh;
+    }
+
     /**
      * Batch salah upload boleh dihapus (beserta seluruh jadwalnya) oleh
      * pengupload-nya atau admin, selama belum disetujui. diupload_oleh berisi
