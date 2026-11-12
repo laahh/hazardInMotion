@@ -24,6 +24,9 @@ final class SportEvaluationPvtDashboardService
      */
     private const CHART_CACHE_TTL = 600;
 
+    /** Chart yang rentangnya sampai hari ini: sama dengan snapshot RFID hari ini (5 menit) agar angka hari ini ikut naik. */
+    private const CHART_TODAY_CACHE_TTL = 120;
+
     private const OPERATOR_CACHE_TTL = 600;
 
     private const PVT_STATUSES = ['belum', 'lulus', 'tidak_lulus'];
@@ -1057,8 +1060,13 @@ final class SportEvaluationPvtDashboardService
             $filters['companies'] ?? [],
         ], JSON_THROW_ON_ERROR));
 
+        // Rentang yang memuat hari ini: batang hari ini terus bertambah (RFID masuk
+        // tiap jam), jadi jangan dibekukan 10 menit seperti hari-hari lampau.
+        $hariIni = Carbon::now((string) config('app.timezone'))->toDateString();
+        $ttl = (string) $filters['date'] >= $hariIni ? self::CHART_TODAY_CACHE_TTL : self::CHART_CACHE_TTL;
+
         /** @var array{categories: list<string>, dates: list<string>, checkin: list<int>, lulus: list<int>, tidak_lulus: list<int>, belum: list<int>, pct_sudah: list<float>} */
-        return Cache::remember($cacheKey, self::CHART_CACHE_TTL, fn (): array => $this->buildCheckinChart($filters));
+        return Cache::remember($cacheKey, $ttl, fn (): array => $this->buildCheckinChart($filters));
     }
 
     /**
