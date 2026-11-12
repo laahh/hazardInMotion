@@ -87,7 +87,11 @@
 
 @include('dms.roster-master._alert')
 
-@if ($assignment === [])
+@if ($assignment === [] && $departemen !== null)
+  <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+    Anda manager <b>{{ $departemen }}</b> PT Berau Coal: bisa mengedit roster karyawan departemen ini. Perusahaan/departemen lain hanya bisa dilihat.
+  </div>
+@elseif ($assignment === [])
   <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
     <b>Mode lihat saja.</b> Mengedit roster hanya untuk akun yang di-assign ke perusahaan di menu <b>Assign Role</b>.
   </div>
@@ -130,6 +134,9 @@
         </div>
         <input type="hidden" name="bulan" value="{{ $bulan->format('Y-m') }}">
         <select name="pt" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filter perusahaan">
+          @if ($departemen !== null)
+            <option value="__dept" @selected($pt === '__dept')>Departemen saya — {{ $departemen }}</option>
+          @endif
           @if ($assignment !== [])
             <option value="__saya" @selected($pt === '__saya')>Perusahaan saya ({{ count($assignment) }})</option>
           @endif

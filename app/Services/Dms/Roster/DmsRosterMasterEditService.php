@@ -66,9 +66,11 @@ final class DmsRosterMasterEditService
      * @param  list<string>|null  $ejaan  null = semua perusahaan
      * @return array{dari:CarbonImmutable,sampai:CarbonImmutable}|null
      */
-    public function rentang(?array $ejaan): ?array
+    public function rentang(?array $ejaan, ?array $hanyaSid = null): ?array
     {
-        $r = $this->dasar($ejaan)->selectRaw('MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai')->first();
+        $r = $this->dasar($ejaan)
+            ->when($hanyaSid !== null, static fn ($q) => $q->whereIn('j.kode_sid', $hanyaSid === [] ? [''] : $hanyaSid))
+            ->selectRaw('MIN(j.tanggal) AS dari, MAX(j.tanggal) AS sampai')->first();
 
         return $r === null || $r->dari === null ? null
             : ['dari' => CarbonImmutable::parse((string) $r->dari), 'sampai' => CarbonImmutable::parse((string) $r->sampai)];
@@ -80,11 +82,13 @@ final class DmsRosterMasterEditService
      *
      * @param  list<string>|null  $ejaan  null = semua perusahaan
      * @param  string  $site  '' = semua site; dicocokkan tanpa beda huruf & spasi ("BMO 1" = "bmo1")
+     * @param  list<string>|null  $hanyaSid  null = semua; diisi = hanya SID ini (mis. karyawan departemen manager)
      * @return array{karyawan: list<array<string, mixed>>, total: int}
      */
-    public function grid(?array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman, string $site = ''): array
+    public function grid(?array $ejaan, CarbonImmutable $dari, CarbonImmutable $sampai, string $cari, int $halaman, int $perHalaman, string $site = '', ?array $hanyaSid = null): array
     {
-        $rentang = $this->dasar($ejaan)->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()]);
+        $rentang = $this->dasar($ejaan)->whereBetween('j.tanggal', [$dari->toDateString(), $sampai->toDateString()])
+            ->when($hanyaSid !== null, static fn ($q) => $q->whereIn('j.kode_sid', $hanyaSid === [] ? [''] : $hanyaSid));
         if ($site !== '') {
             $rentang->whereRaw("UPPER(REPLACE(TRIM(j.site), ' ', '')) = ?", [mb_strtoupper(str_replace(' ', '', trim($site)))]);
         }

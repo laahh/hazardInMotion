@@ -7,6 +7,7 @@ namespace App\Http\Controllers\DMS;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
+use App\Services\Dms\Roster\DmsRosterApproverDepartemen;
 use App\Services\Dms\Roster\DmsRosterCakupanReader;
 use App\Services\Dms\Roster\DmsRosterMasterEditService;
 use App\Services\Dms\Roster\DmsRosterMasterService;
@@ -32,6 +33,8 @@ use Throwable;
  * user (DmsRosterMasterEditService::simpan). Filter perusahaan:
  *   ''        bawaan: perusahaan saya (bila di-assign), kalau tidak semua
  *   '__saya'  semua perusahaan yang di-assign ke user
+ *   '__dept'  manager departemen PT Berau Coal (config approver_departemen):
+ *             hanya karyawan departemennya, dan baris itu boleh ia edit
  *   '__semua' semua perusahaan
  *   <nama>    satu perusahaan (nama resmi, ejaan di roster digabung)
  */
@@ -50,6 +53,7 @@ class RosterMasterEditController extends Controller
         private readonly DmsRosterAksesPerusahaan $akses,
         private readonly DmsRosterMasterService $master,
         private readonly DmsRosterCakupanReader $cakupan,
+        private readonly DmsRosterApproverDepartemen $approverDepartemen,
     ) {}
 
     public function index(Request $request): View
@@ -57,15 +61,19 @@ class RosterMasterEditController extends Controller
         [
             'assignment' => $assignment, 'ejaanSaya' => $ejaanSaya, 'daftarPt' => $daftarPt, 'pt' => $pt,
             'ejaan' => $ejaan, 'rentang' => $rentang, 'bulan' => $bulan, 'cari' => $cari,
+            'departemen' => $departemen, 'sidDepartemen' => $sidDepartemen, 'hanyaSid' => $hanyaSid,
         ] = $this->filter($request);
 
         $halaman = max(1, (int) $request->query('hal', 1));
         $grid = $bulan === null ? ['karyawan' => [], 'total' => 0]
-            : $this->edit->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN);
-        // Baris yang boleh diedit: karyawan perusahaan yang di-assign ke user ini.
+            : $this->edit->grid($ejaan, $bulan->startOfMonth(), $bulan->endOfMonth(), $cari, $halaman, self::PER_HALAMAN, '', $hanyaSid);
+        // Baris yang boleh diedit: karyawan perusahaan yang di-assign ke user ini,
+        // atau (manager departemen BC) karyawan departemennya.
         $milikSaya = array_fill_keys(array_map(static fn (string $e): string => mb_strtoupper(trim($e)), $ejaanSaya), true);
+        $sidSaya = array_fill_keys($sidDepartemen, true);
         foreach ($grid['karyawan'] as &$k) {
-            $k['boleh'] = isset($milikSaya[mb_strtoupper(trim((string) $k['perusahaan']))]);
+            $k['boleh'] = isset($milikSaya[mb_strtoupper(trim((string) $k['perusahaan']))])
+                || isset($sidSaya[mb_strtoupper(trim((string) $k['sid']))]);
         }
         unset($k);
 
@@ -78,6 +86,7 @@ class RosterMasterEditController extends Controller
 
         return view('dms.roster-master.edit', [
             'assignment' => $assignment,
+            'departemen' => $departemen,
             'pt' => $pt,
             'daftarPt' => array_column($daftarPt, 'nama'),
             'bolehEdit' => in_array(true, array_column($grid['karyawan'], 'boleh'), true),
@@ -102,7 +111,8 @@ class RosterMasterEditController extends Controller
     public function update(Request $request): JsonResponse
     {
         $assignment = $this->assignment();
-        abort_if($assignment === [], 403, 'Edit roster hanya untuk user yang di-assign ke perusahaan di menu Assign Role.');
+        $sidDepartemen = $this->sidDepartemen();
+        abort_if($assignment === [] && $sidDepartemen === [], 403, 'Edit roster hanya untuk user yang di-assign ke perusahaan di menu Assign Role atau manager departemen PT Berau Coal.');
 
         $data = $request->validate([
             'sel' => ['array', 'max:'.DmsRosterMasterEditService::MAKS_PERUBAHAN],
@@ -120,11 +130,27 @@ class RosterMasterEditController extends Controller
             $baris,
         );
 
+        $sel = $normal($data['sel'] ?? [], ['sid', 'tanggal', 'kode']);
+        $jam = $normal($data['jam'] ?? [], ['sid', 'masuk', 'keluar', 'total']);
+        $cakupan = DmsRosterAksesPerusahaan::ejaanCakupan($assignment);
+        if ($assignment === []) {
+            // Manager departemen: hanya SID karyawan departemennya, roster PT Berau Coal.
+            $boleh = array_fill_keys($sidDepartemen, true);
+            $luar = array_values(array_unique(array_filter(
+                array_merge(array_column($sel, 'sid'), array_column($jam, 'sid')),
+                static fn (string $sid): bool => ! isset($boleh[mb_strtoupper($sid)]),
+            )));
+            if ($luar !== []) {
+                return response()->json(['ok' => false, 'galat' => ['SID di luar departemen Anda: '.implode(', ', array_slice($luar, 0, 10))]], 403);
+            }
+            $cakupan = $this->ejaanBerauCoal();
+        }
+
         try {
             $hasil = $this->edit->simpan(
-                $normal($data['sel'] ?? [], ['sid', 'tanggal', 'kode']),
-                $normal($data['jam'] ?? [], ['sid', 'masuk', 'keluar', 'total']),
-                DmsRosterAksesPerusahaan::ejaanCakupan($assignment),
+                $sel,
+                $jam,
+                $cakupan,
                 mb_substr((string) (Auth::user()?->name ?? 'system'), 0, 150),
             );
         } catch (Throwable $e) {
@@ -152,7 +178,7 @@ class RosterMasterEditController extends Controller
      */
     public function unduh(Request $request): StreamedResponse|RedirectResponse
     {
-        ['pt' => $pt, 'ejaan' => $ejaan, 'bulan' => $bulan, 'cari' => $cari] = $this->filter($request);
+        ['pt' => $pt, 'ejaan' => $ejaan, 'bulan' => $bulan, 'cari' => $cari, 'hanyaSid' => $hanyaSid] = $this->filter($request);
         $kembali = static fn (string $pesan): RedirectResponse => redirect()
             ->route('dms.master-roster.edit.index', array_filter($request->only(['pt', 'bulan', 'q'])))
             ->with('error', $pesan);
@@ -165,7 +191,7 @@ class RosterMasterEditController extends Controller
         $karyawan = [];
         $halaman = 1;
         do {
-            $grid = $this->edit->grid($ejaan, $dari, $sampai, $cari, $halaman, self::PER_HALAMAN_UNDUH);
+            $grid = $this->edit->grid($ejaan, $dari, $sampai, $cari, $halaman, self::PER_HALAMAN_UNDUH, '', $hanyaSid);
             if ($grid['total'] > self::MAKS_UNDUH) {
                 return $kembali('Terlalu banyak untuk satu file: '.number_format($grid['total'], 0, ',', '.')
                     .' karyawan (maks '.number_format(self::MAKS_UNDUH, 0, ',', '.').'). Pilih satu perusahaan atau persempit pencarian.');
@@ -225,17 +251,25 @@ class RosterMasterEditController extends Controller
             $this->master->perusahaanTerupload($this->cakupan->peta()),
         );
 
+        $user = Auth::user();
+        $departemen = $this->approverDepartemen->departemenUser($user instanceof User ? $user : null);
+        $sidDepartemen = $this->sidDepartemen();
+
         $pt = (string) $request->query('pt', '');
         $terpilih = collect($daftarPt)->firstWhere('nama', $pt);
-        if (($terpilih === null && ! in_array($pt, ['__semua', '__saya'], true)) || ($pt === '__saya' && $assignment === [])) {
-            $pt = $assignment === [] ? '__semua' : '__saya';
+        $valid = $terpilih !== null || $pt === '__semua' || ($pt === '__saya' && $assignment !== []) || ($pt === '__dept' && $departemen !== null);
+        if (! $valid) {
+            // Bawaan: perusahaan saya (Assign Role), lalu departemen saya (manager BC), lalu semua.
+            $pt = $assignment !== [] ? '__saya' : ($departemen !== null ? '__dept' : '__semua');
         }
+        $hanyaSid = $pt === '__dept' ? $sidDepartemen : null;
         $ejaan = match ($pt) {
             '__semua' => null,
             '__saya' => $ejaanSaya,
+            '__dept' => $this->ejaanBerauCoal($daftarPt),
             default => $terpilih['ejaan'],
         };
-        $rentang = $ejaan === [] ? null : $this->edit->rentang($ejaan);
+        $rentang = $ejaan === [] ? null : $this->edit->rentang($ejaan, $hanyaSid);
 
         // Bulan bawaan: bulan ini bila ada di rentang roster, kalau tidak bulan terakhirnya.
         $bulan = null;
@@ -259,7 +293,44 @@ class RosterMasterEditController extends Controller
             'rentang' => $rentang,
             'bulan' => $bulan,
             'cari' => mb_substr(trim((string) $request->query('q', '')), 0, 50),
+            'departemen' => $departemen,
+            'sidDepartemen' => $sidDepartemen,
+            'hanyaSid' => $hanyaSid,
         ];
+    }
+
+    /**
+     * SID karyawan departemen akun ini bila ia manager departemen PT Berau Coal
+     * (config approver_departemen; departemen per SID dari cache Tahap 10 sync).
+     *
+     * @return list<string> huruf besar
+     */
+    private function sidDepartemen(): array
+    {
+        $user = Auth::user();
+
+        return array_values(array_map(
+            static fn ($s): string => mb_strtoupper(trim((string) $s)),
+            $this->approverDepartemen->sidUntuk($user instanceof User ? $user : null),
+        ));
+    }
+
+    /**
+     * Semua ejaan nama PT Berau Coal di roster.
+     *
+     * @param  list<array{nama:string,ejaan:list<string>}>|null  $daftarPt
+     * @return list<string>
+     */
+    private function ejaanBerauCoal(?array $daftarPt = null): array
+    {
+        $nama = (string) config('dms_roster.master.approver_departemen.perusahaan', 'PT Berau Coal');
+        $daftarPt ??= array_map(
+            static fn (array $p): array => ['nama' => $p['perusahaan'], 'ejaan' => $p['ejaan']],
+            $this->master->perusahaanTerupload($this->cakupan->peta()),
+        );
+        $p = collect($daftarPt)->firstWhere('nama', $nama);
+
+        return $p['ejaan'] ?? [$nama];
     }
 
     /**
