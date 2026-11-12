@@ -359,8 +359,9 @@ final class SyncRosterRfidCommand extends Command
             return;
         }
 
-        $this->line(sprintf('  %s karyawan aktif dari %s perusahaan (%.1f dtk).',
-            $this->angka(count($hasil['karyawan'])), $this->angka(count($svc->perusahaan() ?? [])), microtime(true) - $mulai));
+        $this->line(sprintf('  %s karyawan aktif dari %s perusahaan (%.1f dtk%s).',
+            $this->angka(count($hasil['karyawan'])), $this->angka(count($svc->perusahaan() ?? [])), microtime(true) - $mulai,
+            ($hasil['sumber'] ?? 'olap') === 'clickhouse' ? ', view OLAP timeout — dari salinan ClickHouse' : ''));
     }
 
     /**

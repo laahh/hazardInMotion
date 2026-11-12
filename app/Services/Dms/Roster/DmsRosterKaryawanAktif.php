@@ -261,6 +261,7 @@ final class DmsRosterKaryawanAktif
      */
     public function segarkan(): ?array
     {
+        $sumber = 'olap';
         try {
             $rows = $this->olap->select(
                 "SELECT trim(kode_sid) AS sid, nama, trim(nama_perusahaan) AS perusahaan,
@@ -270,17 +271,64 @@ final class DmsRosterKaryawanAktif
                 (int) config('dms_roster.reg_live.timeout_lengkap_ms', 180000),
             );
         } catch (Throwable $e) {
-            $this->catatGagal($e);
+            // View OLAP makin lambat (statement timeout di server OLAP). Cadangan:
+            // salinan Airbyte view yang sama di ClickHouse OBDS (sinkron tiap jam).
+            $rows = $this->dariClickHouse();
+            if ($rows === null) {
+                $this->catatGagal($e);
 
-            return null;
+                return null;
+            }
+            $sumber = 'clickhouse';
+            Log::warning('DmsRosterKaryawanAktif: view OLAP gagal, memakai salinan ClickHouse.', ['galat' => mb_substr($e->getMessage(), 0, 300)]);
         }
 
-        $data = ['diambil' => now()->toDateTimeString(), 'karyawan' => self::rapikan($rows)];
+        $data = ['diambil' => now()->toDateTimeString(), 'sumber' => $sumber, 'karyawan' => self::rapikan($rows)];
         Cache::put(self::KUNCI_LENGKAP, $data, now()->addDays(2));
         Cache::put(self::KUNCI_PT, $pt = self::hitungPerusahaan($data['karyawan']), self::TTL_DETIK);
         Cache::forever(self::KUNCI_PT_CADANGAN, $pt);
 
         return $data;
+    }
+
+    /**
+     * Seluruh karyawan aktif dari salinan lengkap Tahap 8 (tanpa jabatan yang
+     * dikecualikan). Null bila salinan belum ada — tidak query view.
+     *
+     * @return list<array{sid:string,nama:string,perusahaan:string,jabatan:string,site:string}>|null
+     */
+    public function semua(): ?array
+    {
+        $lengkap = Cache::get(self::KUNCI_LENGKAP);
+        if (! is_array($lengkap)) {
+            return null;
+        }
+
+        return array_values(array_filter($lengkap['karyawan'], static fn (array $k): bool => ! self::dikecualikan($k['jabatan'])));
+    }
+
+    /**
+     * Karyawan aktif dari salinan ClickHouse `obds.bep_vw_safety_karyawan_aktif`
+     * (kolom sama dengan view OLAP). Null bila ClickHouse tidak bisa dibaca/kosong.
+     *
+     * @return list<object>|null
+     */
+    private function dariClickHouse(): ?array
+    {
+        try {
+            $rows = app(\App\Services\SportEvaluation\RfidClickHouseClient::class)->select(
+                "SELECT trimBoth(ifNull(kode_sid, '')) AS sid, ifNull(nama, '') AS nama,
+                        trimBoth(ifNull(nama_perusahaan, '')) AS perusahaan,
+                        ifNull(jabatan_struktural, '') AS jabatan, ifNull(site_dedicated, '') AS site
+                 FROM obds.bep_vw_safety_karyawan_aktif FINAL"
+            );
+        } catch (Throwable $e) {
+            Log::warning('DmsRosterKaryawanAktif: salinan ClickHouse juga gagal.', ['galat' => mb_substr($e->getMessage(), 0, 300)]);
+
+            return null;
+        }
+
+        return $rows === [] ? null : array_map(static fn (array $r): object => (object) $r, $rows);
     }
 
     public function galatTerakhir(): ?string

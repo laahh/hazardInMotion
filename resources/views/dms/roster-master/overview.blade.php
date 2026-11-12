@@ -157,8 +157,56 @@
     .rov-st-bar { grid-template-columns: 84px minmax(0, 1fr); }
     .rov-st-bar__angka { grid-column: 1 / -1; text-align: left; }
   }
+  /* ── Sub-menu Overview (People / Org chart / Time off) ── */
+  .ovt-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #E2E8F0; }
+  .ovt-tab { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 0; background: none; color: #64748B; font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color .15s, border-color .2s; }
+  .ovt-tab:hover { color: #0F172A; }
+  .ovt-tab.is-aktif { color: var(--primary-600, #487FFF); border-bottom-color: var(--primary-600, #487FFF); }
+  .ovt-filter > div { min-width: 160px; }
+  .ovt-tabel th { font-size: 12px; font-weight: 600; color: #64748B; background: #F8FAFC; white-space: nowrap; }
+  .ovt-tabel td { vertical-align: middle; }
+  .ovt-kaki { border-top: 1px solid #EEF2F7; }
+  .ovt-pil { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: #F1F5F9; color: #475569; }
+  .ovt-pil.is-sudah { background: #E2F3E5; color: #16712C; }
+  .ovt-pil.is-menunggu { background: #FFF2D6; color: #B26A00; }
+  .ovt-pil.is-belum { background: #FDE7EA; color: #C8102E; }
+  .ovt-pil.is-oto { background: #EEF4FF; color: #2F5BD3; }
+  .ovt-node { margin: 2px 0; }
+  .ovt-node > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+  .ovt-node > summary::-webkit-details-marker { display: none; }
+  .ovt-node > summary:hover { background: #F8FAFC; }
+  .ovt-node--pt > summary { font-weight: 700; font-size: 15px; background: #F8FAFC; }
+  .ovt-node--site > summary { font-weight: 600; }
+  .ovt-node__ikon { color: #94A3B8; font-size: 18px; }
+  .ovt-node__nama { flex: 1; min-width: 0; }
+  .ovt-node__jml { font-size: 12px; font-weight: 600; color: #475569; background: #EEF2F7; padding: 1px 8px; border-radius: 999px; }
+  .ovt-node__anak { margin-left: 18px; padding-left: 14px; border-left: 1px dashed #CBD5E1; }
+  .ovt-jab { padding: 6px 12px; }
+  .ovt-jab__kepala { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; color: #334155; }
+  .ovt-jab__orang { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .ovt-orang { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #F1F5F9; color: #334155; }
+  .ovt-orang.is-lain { background: none; color: #64748B; }
+  .ovt-ringkas { display: flex; flex-wrap: wrap; gap: 12px; }
+  .ovt-ringkas__kartu { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border: 1px solid #EEF2F7; border-radius: 10px; }
+  .ovt-ringkas__angka { font-size: 22px; font-weight: 700; color: #0F172A; }
+  .ovt-ringkas__label { font-size: 12px; color: #64748B; line-height: 1.3; }
+  .ovt-ringkas__kartu.is-ct .ovt-ringkas__angka { color: #2F5BD3; }
+  .ovt-ringkas__kartu.is-s .ovt-ringkas__angka { color: #C8102E; }
+  .ovt-ringkas__kartu.is-i .ovt-ringkas__angka { color: #B26A00; }
+  .ovt-kal { border-collapse: separate; border-spacing: 2px; font-size: 11px; }
+  .ovt-kal th { font-weight: 600; color: #64748B; text-align: center; min-width: 24px; }
+  .ovt-kal td { text-align: center; height: 28px; min-width: 24px; border-radius: 4px; background: #F8FAFC; font-weight: 700; }
+  .ovt-kal .is-libur { background: #F1F5F9; color: #94A3B8; }
+  .ovt-kal th.is-kini { color: var(--primary-600, #487FFF); }
+  .ovt-kal td.is-ct { background: #DCE7FF; color: #2F5BD3; }
+  .ovt-kal td.is-s { background: #FDE7EA; color: #C8102E; }
+  .ovt-kal td.is-i { background: #FFF2D6; color: #B26A00; }
+  .ovt-kal__nama { text-align: left !important; min-width: 220px; padding-right: 12px; position: sticky; left: 0; background-color: #fff !important; z-index: 1; }
+  .ovt-kal__jml { background: none !important; font-weight: 700; padding-left: 8px; }
+
   @media (max-width: 575.98px) {
     .ro-filter > div { flex: 1 1 100%; }
+    .ovt-filter > div { flex: 1 1 100%; }
     .ro-sc-detail { padding: 12px; }
     .ro-sc-detail__panel { padding: 12px; }
   }
@@ -190,6 +238,15 @@
   </ul>
 </div>
 
+{{-- Sub-menu Overview: Roster (isi lama) / People / Org chart / Time off. Tab selain Roster dimuat lewat AJAX saat dibuka. --}}
+<nav class="ovt-tabs mb-24" role="tablist" aria-label="Sub-menu Overview Roster">
+  <button type="button" class="ovt-tab is-aktif" role="tab" aria-selected="true" data-ovt-tab="roster"><iconify-icon icon="solar:calendar-mark-bold"></iconify-icon>Roster</button>
+  <button type="button" class="ovt-tab" role="tab" aria-selected="false" data-ovt-tab="people" data-url="{{ route('dms.master-roster.overview.people') }}"><iconify-icon icon="solar:users-group-rounded-bold"></iconify-icon>People</button>
+  <button type="button" class="ovt-tab" role="tab" aria-selected="false" data-ovt-tab="org" data-url="{{ route('dms.master-roster.overview.org') }}"><iconify-icon icon="solar:structure-bold"></iconify-icon>Org chart</button>
+  <button type="button" class="ovt-tab" role="tab" aria-selected="false" data-ovt-tab="time-off" data-url="{{ route('dms.master-roster.overview.time-off') }}"><iconify-icon icon="solar:calendar-minimalistic-bold"></iconify-icon>Time off</button>
+</nav>
+
+<div data-ovt-panel="roster">
 @if ($cakupan !== null)
   @include('dms.roster-master._cakupan', ['cakupan' => $cakupan])
 @endif
@@ -355,9 +412,72 @@
     </div>
   </div>
 @endif
+</div>{{-- /panel roster --}}
+
+<div data-ovt-panel="people" hidden></div>
+<div data-ovt-panel="org" hidden></div>
+<div data-ovt-panel="time-off" hidden></div>
 @endsection
 
 @section('page-scripts')
+<script>
+// Sub-menu Overview: tab People / Org chart / Time off dimuat dari server saat dibuka.
+(function () {
+  const tabs = document.querySelectorAll('[data-ovt-tab]');
+  const panel = (nama) => document.querySelector('[data-ovt-panel="' + nama + '"]');
+  const muat = (nama, query) => {
+    const tab = document.querySelector('[data-ovt-tab="' + nama + '"]');
+    const el = panel(nama);
+    if (!tab || !tab.dataset.url || !el) return;
+    el.innerHTML = '<div class="rov-kartu p-24 text-center text-secondary-light">Memuat…</div>';
+    const url = tab.dataset.url + (query ? '?' + query : '');
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then((html) => { el.innerHTML = html; el.dataset.dimuat = '1'; el.dataset.query = query || ''; })
+      .catch((e) => { el.innerHTML = '<div class="rov-kartu p-24 text-center text-danger-main">Gagal memuat (' + e.message + '). Coba lagi.</div>'; });
+  };
+  const buka = (nama, simpan) => {
+    tabs.forEach((t) => { const on = t.dataset.ovtTab === nama; t.classList.toggle('is-aktif', on); t.setAttribute('aria-selected', on); });
+    document.querySelectorAll('[data-ovt-panel]').forEach((p) => { p.hidden = p.dataset.ovtPanel !== nama; });
+    const el = panel(nama);
+    if (nama !== 'roster' && el && !el.dataset.dimuat) muat(nama, '');
+    if (simpan) { const u = new URL(location.href); if (nama === 'roster') { u.searchParams.delete('tab'); } else { u.searchParams.set('tab', nama); } history.replaceState(null, '', u); }
+  };
+  tabs.forEach((t) => t.addEventListener('click', () => buka(t.dataset.ovtTab, true)));
+
+  // Form filter & tombol halaman di dalam panel.
+  document.addEventListener('submit', (e) => {
+    const f = e.target.closest('[data-ovt-form]');
+    if (!f) return;
+    e.preventDefault();
+    const q = new URLSearchParams(new FormData(f));
+    [...q.keys()].forEach((k) => { if (q.get(k) === '') q.delete(k); });
+    muat(f.dataset.ovtForm, q.toString());
+  });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ovt-hal]');
+    if (!b) return;
+    const el = b.closest('[data-ovt-panel]');
+    const q = new URLSearchParams(el.dataset.query || '');
+    q.set('hal', b.dataset.ovtHal);
+    muat(el.dataset.ovtPanel, q.toString());
+  });
+  // Site mengikuti perusahaan.
+  document.addEventListener('change', (e) => {
+    const pt = e.target.closest('[data-ovt-pt]');
+    if (!pt) return;
+    const site = pt.closest('form').querySelector('[data-ovt-site]');
+    const pilih = pt.selectedOptions[0];
+    const opsi = pilih && pilih.dataset.site ? JSON.parse(pilih.dataset.site) : null;
+    const semua = opsi || [...new Set([...pt.options].flatMap((o) => (o.dataset.site ? JSON.parse(o.dataset.site) : [])))].sort();
+    const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    site.innerHTML = '<option value="">Semua site</option>' + semua.map((v) => '<option value="' + esc(v) + '">' + (v === '-' ? 'Tanpa site' : esc(v)) + '</option>').join('');
+  });
+
+  const awal = new URL(location.href).searchParams.get('tab');
+  if (awal && panel(awal)) buka(awal, false);
+})();
+</script>
 <script>
 // Kotak Search di navbar: di halaman ini menyaring tabel Cakupan upload roster
 // (lewat kotak cari kartu itu) dan tabel Roster per perusahaan. Enter tidak
