@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Tap RFID dibaca dari ClickHouse OBDS (obds.aaj_vw_checkinout_rfid), bukan view Postgres OLAP.
+ * Tap RFID dibaca dari ClickHouse OBDS (obds.ch_rfid_sap_cuti_all_site, jenis_data RFID), bukan view Postgres OLAP.
  */
 class PvtRfidClickHouseTest extends TestCase
 {
@@ -23,7 +23,7 @@ class PvtRfidClickHouseTest extends TestCase
         Cache::flush();
     }
 
-    public function test_check_in_harian_dibaca_dari_clickhouse_dengan_final_dan_satu_baris_per_sid(): void
+    public function test_check_in_harian_dibaca_dari_baris_rfid_clickhouse_satu_baris_per_sid(): void
     {
         $sql = [];
         Http::fake(function (Request $req) use (&$sql) {
@@ -42,9 +42,10 @@ class PvtRfidClickHouseTest extends TestCase
         $this->assertSame(['AB12C'], array_keys($hasil));
         $this->assertSame('2026-11-11 05:40:12', $hasil['AB12C']['checked_in_at']);
         $query = end($sql);
-        $this->assertStringContainsString('FROM obds.aaj_vw_checkinout_rfid FINAL', $query);
-        $this->assertStringContainsString("toDateTime64('2026-11-11 00:00:00', 3)", $query);
-        $this->assertStringContainsString('LIMIT 1 BY upperUTF8(trimBoth(kode_sid))', $query);
+        $this->assertStringContainsString('FROM obds.ch_rfid_sap_cuti_all_site', $query);
+        $this->assertStringContainsString("jenis_data = 'RFID'", $query);
+        $this->assertStringContainsString("`date time` >= toDateTime64('2026-11-11 00:00:00', 3)", $query);
+        $this->assertStringContainsString('LIMIT 1 BY upperUTF8(kode_sid)', $query);
         $this->assertStringEndsWith('FORMAT JSONEachRow', trim($query));
     }
 

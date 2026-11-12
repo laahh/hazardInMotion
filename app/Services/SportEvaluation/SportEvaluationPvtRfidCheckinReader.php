@@ -12,11 +12,12 @@ use Throwable;
 /**
  * Pembaca read-only tap RFID (check-IN lolos pertama / check-OUT lolos terakhir).
  *
- * Sumber data RFID: ClickHouse OBDS `obds.aaj_vw_checkinout_rfid` (koneksi
- * clickhouse_obds, lihat RfidClickHouseClient) — salinan view Postgres OLAP
- * bcsid.aaj_vw_checkinout_rfid. Dulu view itu di-query langsung, tapi butuh
- * driver pgsql + join m_karyawan ±6 GB tiap query; ClickHouse jauh lebih ringan.
- * Kecepatan data sama dengan sumbernya (dicek 12 Nov 2026: jumlah per hari identik).
+ * Sumber data RFID: ClickHouse OBDS `obds.ch_rfid_sap_cuti_all_site`, baris
+ * jenis_data = 'RFID' (koneksi clickhouse_obds, lihat RfidClickHouseClient).
+ * Tabel gabungan RFID/SAP/cuti yang di-refresh tiap 10 menit dari view
+ * obds.vw_rfid_sap_cuti_all_site. Dulu dibaca dari view Postgres OLAP
+ * bcsid.aaj_vw_checkinout_rfid (butuh driver pgsql + join m_karyawan ±6 GB).
+ * Dicek 12 Nov 2026: check-in lolos pertama per SID identik dengan OLAP.
  *
  * PENTING: connectionName()/isUp() TETAP menunjuk ke Postgres OLAP (pgsql_direct)
  * karena ±80 pemanggil lain (PraOperasi, DMS, ISC, Fatigue) memakainya sebagai
@@ -24,7 +25,7 @@ use Throwable;
  */
 final class SportEvaluationPvtRfidCheckinReader
 {
-    public const TABLE = 'obds.aaj_vw_checkinout_rfid';
+    public const TABLE = 'obds.ch_rfid_sap_cuti_all_site';
 
     /** Sumber lama (Postgres OLAP), hanya untuk rujukan. */
     public const TABLE_OLAP = 'bcsid.aaj_vw_checkinout_rfid';
@@ -513,44 +514,47 @@ final class SportEvaluationPvtRfidCheckinReader
             static fn ($x): string => RfidClickHouseClient::quote((string) $x),
             $v
         ));
-        $ringkas = static fn (string $kolom): string => "replaceAll(replaceAll(upperUTF8(trimBoth(ifNull({$kolom}, ''))), ' ', ''), '-', '')";
+        $ringkas = static fn (string $kolom): string => "replaceAll(replaceAll(upperUTF8({$kolom}), ' ', ''), '-', '')";
         $compactTypes = array_map(static fn (string $t): string => str_replace([' ', '-'], '', strtoupper($t)), $types);
 
-        $sid = 'upperUTF8(trimBoth(kode_sid))';
+        $sid = 'upperUTF8(kode_sid)';
         $sidClause = $upperSids === [] ? '' : "AND {$sid} IN (".$q($upperSids).')';
 
         // Satu baris per SID (atau per hari+SID) langsung di ClickHouse:
-        // ORDER BY ... LIMIT 1 BY = padanan DISTINCT ON di Postgres.
+        // ORDER BY ... LIMIT 1 BY = padanan DISTINCT ON di Postgres. Tabel gabungan
+        // ini bisa memuat baris RFID ganda (hasil join view), dedup juga di sini.
         if ($firstPerDayPerSid) {
-            $tail = "ORDER BY toDate(date), {$sid}, date {$direction} LIMIT 1 BY toDate(date), {$sid}";
+            $tail = "ORDER BY toDate(waktu), {$sid}, waktu {$direction} LIMIT 1 BY toDate(waktu), {$sid}";
         } elseif ($firstPerSidOnly) {
-            $tail = "ORDER BY {$sid}, date {$direction} LIMIT 1 BY {$sid}";
+            $tail = "ORDER BY {$sid}, waktu {$direction} LIMIT 1 BY {$sid}";
         } else {
-            $tail = "ORDER BY date {$direction}";
+            $tail = "ORDER BY waktu {$direction} LIMIT 1 BY {$sid}, waktu, upperUTF8(jenis_checkinout)";
         }
 
-        // Alias kolom ke nama lama supaya mapCheckinRow() dan pemanggil tidak berubah.
-        // Kolom `date` berisi waktu lokal (WITA) tanpa zona, sama seperti di OLAP.
+        // Baris jenis_data = 'RFID' dari tabel gabungan obds.ch_rfid_sap_cuti_all_site;
+        // alias ke nama kolom lama supaya mapCheckinRow() dan pemanggil tidak berubah.
+        // `date time` = waktu lokal (WITA) tanpa zona, sama seperti di OLAP.
         $template = <<<'SQL'
-            SELECT
-                trimBoth(assumeNotNull(kode_sid)) AS kode_sid,
-                toString(date) AS tanggal_checkinout,
-                trimBoth(ifNull(nama_karyawan, '')) AS nama_karyawan,
-                trimBoth(ifNull(nama_perusahaan, '')) AS perusahaan,
-                trimBoth(ifNull(pintu_gate, '')) AS gate,
-                trimBoth(ifNull(status_checkin_out, '')) AS jenis_checkinout,
-                trimBoth(ifNull(status_passed, '')) AS status_lolos
-            FROM %1$s FINAL
-            WHERE date >= toDateTime64(%2$s, 3)
-              AND date < toDateTime64(%3$s, 3)
-              AND kode_sid IS NOT NULL
-              AND trimBoth(kode_sid) != ''
-              %4$s
-              AND (
-                    upperUTF8(trimBoth(ifNull(status_checkin_out, ''))) IN (%5$s)
-                 OR %6$s IN (%7$s)
-              )
+            SELECT kode_sid, toString(waktu) AS tanggal_checkinout, nama_karyawan, perusahaan, gate, jenis_checkinout, status_lolos
+            FROM (
+                SELECT
+                    trimBoth(assumeNotNull(kode_sid_pelapor)) AS kode_sid,
+                    `date time` AS waktu,
+                    coalesce(nullIf(trimBoth(ifNull(`pelapor all karyawan`, '')), ''), trimBoth(ifNull(pelapor, ''))) AS nama_karyawan,
+                    coalesce(nullIf(trimBoth(ifNull(`perusahaan pelapor all karyawan`, '')), ''), trimBoth(ifNull(`perusahaan pelapor`, ''))) AS perusahaan,
+                    trimBoth(ifNull(`pintu_gate RFID`, '')) AS gate,
+                    trimBoth(ifNull(`status_checkin_out RFID`, '')) AS jenis_checkinout,
+                    trimBoth(ifNull(`status_passed RFID`, '')) AS status_lolos
+                FROM %1$s
+                WHERE jenis_data = 'RFID'
+                  AND `date time` >= toDateTime64(%2$s, 3)
+                  AND `date time` < toDateTime64(%3$s, 3)
+                  AND kode_sid_pelapor IS NOT NULL
+                  AND trimBoth(kode_sid_pelapor) != ''
+            )
+            WHERE (upperUTF8(jenis_checkinout) IN (%5$s) OR %6$s IN (%7$s))
               AND %8$s IN (%9$s)
+              %4$s
             %10$s
             SQL;
         $sql = sprintf(
@@ -560,9 +564,9 @@ final class SportEvaluationPvtRfidCheckinReader
             RfidClickHouseClient::quote($end),
             $sidClause,
             $q($types),
-            $ringkas('status_checkin_out'),
+            $ringkas('jenis_checkinout'),
             $q($compactTypes),
-            $ringkas('status_passed'),
+            $ringkas('status_lolos'),
             $q(self::PASSED_STATUSES),
             $tail,
         );

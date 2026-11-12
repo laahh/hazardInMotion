@@ -10,10 +10,8 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Klien HTTP read-only ke ClickHouse OBDS (koneksi `clickhouse_obds`) untuk
- * data tap RFID `obds.aaj_vw_checkinout_rfid` — salinan Airbyte dari view
- * Postgres OLAP bcsid.aaj_vw_checkinout_rfid (ReplacingMergeTree per `id`,
- * jadi query wajib memakai FINAL agar baris ganda hasil sinkron terbuang).
+ * Klien HTTP read-only ke ClickHouse OBDS (koneksi `clickhouse_obds`, 10.42.7.39)
+ * untuk data tap RFID di `obds.ch_rfid_sap_cuti_all_site` (baris jenis_data = 'RFID').
  */
 final class RfidClickHouseClient
 {
