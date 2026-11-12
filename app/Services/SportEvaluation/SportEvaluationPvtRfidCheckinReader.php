@@ -10,19 +10,24 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Pembaca read-only check-IN lolos dari bcsid.aaj_vw_checkinout_rfid.
- * View biasa (bukan materialized view) sehingga datanya real-time — dipakai
- * menggantikan bcsid.mv_checkinout_rfid yang ternyata refresh-nya bisa
- * tertinggal berjam-jam (lihat riwayat: HUD "Check-in RFID" di /isc/maps
- * pernah macet di angka lama karena materialized view itu tidak ter-refresh).
- * Koneksi: LANGSUNG ke RDS (PG_HOST:PG_PORT) dengan kredensial
- * PG_SSH_DATABASE / PG_SSH_USER / PG_SSH_PASSWORD — tunnel SSH/jump host
- * (pgsql_ssh) sengaja TIDAK dipakai lagi atas permintaan eksplisit (tunnel
- * di server tidak selalu aktif, langsung akses RDS lebih andal).
+ * Pembaca read-only tap RFID (check-IN lolos pertama / check-OUT lolos terakhir).
+ *
+ * Sumber data RFID: ClickHouse OBDS `obds.aaj_vw_checkinout_rfid` (koneksi
+ * clickhouse_obds, lihat RfidClickHouseClient) — salinan view Postgres OLAP
+ * bcsid.aaj_vw_checkinout_rfid. Dulu view itu di-query langsung, tapi butuh
+ * driver pgsql + join m_karyawan ±6 GB tiap query; ClickHouse jauh lebih ringan.
+ * Kecepatan data sama dengan sumbernya (dicek 12 Nov 2026: jumlah per hari identik).
+ *
+ * PENTING: connectionName()/isUp() TETAP menunjuk ke Postgres OLAP (pgsql_direct)
+ * karena ±80 pemanggil lain (PraOperasi, DMS, ISC, Fatigue) memakainya sebagai
+ * "sumber koneksi" untuk query OLAP mereka sendiri. Ketersediaan RFID = rfidUp().
  */
 final class SportEvaluationPvtRfidCheckinReader
 {
-    public const TABLE = 'bcsid.aaj_vw_checkinout_rfid';
+    public const TABLE = 'obds.aaj_vw_checkinout_rfid';
+
+    /** Sumber lama (Postgres OLAP), hanya untuk rujukan. */
+    public const TABLE_OLAP = 'bcsid.aaj_vw_checkinout_rfid';
 
     public const CONNECTION_TUNNEL = 'pgsql_ssh';
 
@@ -35,6 +40,10 @@ final class SportEvaluationPvtRfidCheckinReader
     private const UP_CACHE_TTL = 20;
 
     private ?string $activeConnection = null;
+
+    public function __construct(private readonly RfidClickHouseClient $clickhouse)
+    {
+    }
 
     /**
      * Snapshot RFID per tanggal (semua SID) di cache. Query view dengan daftar
@@ -95,9 +104,16 @@ final class SportEvaluationPvtRfidCheckinReader
         'Y',
     ];
 
+    /** Postgres OLAP hidup (dipakai pemanggil lain untuk query OLAP mereka sendiri). */
     public function isUp(): bool
     {
         return $this->connectionName() !== null;
+    }
+
+    /** Sumber RFID (ClickHouse OBDS) bisa dijangkau. */
+    public function rfidUp(): bool
+    {
+        return $this->clickhouse->up();
     }
 
     /**
@@ -212,7 +228,7 @@ final class SportEvaluationPvtRfidCheckinReader
      */
     public function firstPassedCheckinsForDate(string $date): array
     {
-        if (! $this->isUp()) {
+        if (! $this->rfidUp()) {
             return [];
         }
 
@@ -241,7 +257,7 @@ final class SportEvaluationPvtRfidCheckinReader
      */
     public function lastPassedCheckoutsForDate(string $date): array
     {
-        if (! $this->isUp()) {
+        if (! $this->rfidUp()) {
             return [];
         }
 
@@ -393,7 +409,7 @@ final class SportEvaluationPvtRfidCheckinReader
                         return $ada;
                     }
 
-                    $this->queryGagal = ! $this->isUp();
+                    $this->queryGagal = ! $this->rfidUp();
                     $data = $checkout ? $this->lastPassedCheckoutsForDate($tanggal) : $this->firstPassedCheckinsForDate($tanggal);
                     if (! $this->queryGagal) {
                         Cache::put($kunci, $data, $this->ttlHari($tanggal));
@@ -451,7 +467,7 @@ final class SportEvaluationPvtRfidCheckinReader
      */
     public function lastPassedForSidsBetween(string $start, string $end, array $sids, bool $checkout = false): array
     {
-        if (! $this->isUp() || $sids === []) {
+        if (! $this->rfidUp() || $sids === []) {
             return [];
         }
 
@@ -487,71 +503,72 @@ final class SportEvaluationPvtRfidCheckinReader
     {
         $types ??= self::CHECKIN_TYPES;
         $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+        if (! self::waktuValid($start) || ! self::waktuValid($end)) {
+            $this->queryGagal = true;
 
-        $sidPlaceholders = $upperSids === [] ? '' : implode(',', array_fill(0, count($upperSids), '?'));
-        $sidClause = $upperSids === [] ? '' : 'AND UPPER(TRIM(kode_sid)) IN ('.$sidPlaceholders.')';
-        $typePlaceholders = implode(',', array_fill(0, count($types), '?'));
-        $statusPlaceholders = implode(',', array_fill(0, count(self::PASSED_STATUSES), '?'));
-        $compactTypes = array_map(
-            static fn (string $t): string => str_replace([' ', '-'], '', strtoupper($t)),
-            $types
-        );
-        $compactPlaceholders = implode(',', array_fill(0, count($compactTypes), '?'));
-
-        if ($firstPerDayPerSid) {
-            // Rentang multi-hari (mis. chart 7 hari terakhir): dedup ke SATU
-            // baris per (tanggal, SID) langsung di database, bukan ambil semua
-            // baris mentah lalu dibuang di PHP — lihat catatan pemanggil.
-            $selectHead = 'SELECT DISTINCT ON ("date"::date, UPPER(TRIM(kode_sid)))';
-            $orderBy = 'ORDER BY "date"::date, UPPER(TRIM(kode_sid)), "date" '.$direction;
-        } elseif ($firstPerSidOnly) {
-            $selectHead = 'SELECT DISTINCT ON (UPPER(TRIM(kode_sid)))';
-            $orderBy = 'ORDER BY UPPER(TRIM(kode_sid)), "date" '.$direction;
-        } else {
-            $selectHead = 'SELECT';
-            $orderBy = 'ORDER BY "date" '.$direction;
+            return [];
         }
 
-        // Alias kolom ke nama lama (tanggal_checkinout/perusahaan/gate/
-        // jenis_checkinout/status_lolos) supaya mapCheckinRow() dan semua
-        // pemanggil di bawahnya tidak perlu berubah sama sekali.
-        $sql = '
-            '.$selectHead.'
-                TRIM(kode_sid) AS kode_sid,
-                "date" AS tanggal_checkinout,
-                TRIM(COALESCE(nama_karyawan::text, \'\')) AS nama_karyawan,
-                TRIM(COALESCE(nama_perusahaan::text, \'\')) AS perusahaan,
-                TRIM(COALESCE(pintu_gate::text, \'\')) AS gate,
-                TRIM(COALESCE(status_checkin_out::text, \'\')) AS jenis_checkinout,
-                TRIM(COALESCE(status_passed::text, \'\')) AS status_lolos
-            FROM '.self::TABLE.'
-            WHERE "date" >= ?
-              AND "date" < ?
-              AND kode_sid IS NOT NULL
-              AND TRIM(kode_sid) <> \'\'
-              '.$sidClause.'
-              AND (
-                    UPPER(TRIM(status_checkin_out::text)) IN ('.$typePlaceholders.')
-                 OR REPLACE(REPLACE(UPPER(TRIM(status_checkin_out::text)), \' \', \'\'), \'-\', \'\') IN ('.$compactPlaceholders.')
-              )
-              AND REPLACE(REPLACE(UPPER(TRIM(status_passed::text)), \' \', \'\'), \'-\', \'\') IN ('.$statusPlaceholders.')
-            '.$orderBy.'
-        ';
+        $q = static fn (array $v): string => implode(',', array_map(
+            static fn ($x): string => RfidClickHouseClient::quote((string) $x),
+            $v
+        ));
+        $ringkas = static fn (string $kolom): string => "replaceAll(replaceAll(upperUTF8(trimBoth(ifNull({$kolom}, ''))), ' ', ''), '-', '')";
+        $compactTypes = array_map(static fn (string $t): string => str_replace([' ', '-'], '', strtoupper($t)), $types);
 
-        $bindings = array_merge(
-            [$start, $end],
-            $upperSids,
-            $types,
-            $compactTypes,
-            self::PASSED_STATUSES,
+        $sid = 'upperUTF8(trimBoth(kode_sid))';
+        $sidClause = $upperSids === [] ? '' : "AND {$sid} IN (".$q($upperSids).')';
+
+        // Satu baris per SID (atau per hari+SID) langsung di ClickHouse:
+        // ORDER BY ... LIMIT 1 BY = padanan DISTINCT ON di Postgres.
+        if ($firstPerDayPerSid) {
+            $tail = "ORDER BY toDate(date), {$sid}, date {$direction} LIMIT 1 BY toDate(date), {$sid}";
+        } elseif ($firstPerSidOnly) {
+            $tail = "ORDER BY {$sid}, date {$direction} LIMIT 1 BY {$sid}";
+        } else {
+            $tail = "ORDER BY date {$direction}";
+        }
+
+        // Alias kolom ke nama lama supaya mapCheckinRow() dan pemanggil tidak berubah.
+        // Kolom `date` berisi waktu lokal (WITA) tanpa zona, sama seperti di OLAP.
+        $template = <<<'SQL'
+            SELECT
+                trimBoth(assumeNotNull(kode_sid)) AS kode_sid,
+                toString(date) AS tanggal_checkinout,
+                trimBoth(ifNull(nama_karyawan, '')) AS nama_karyawan,
+                trimBoth(ifNull(nama_perusahaan, '')) AS perusahaan,
+                trimBoth(ifNull(pintu_gate, '')) AS gate,
+                trimBoth(ifNull(status_checkin_out, '')) AS jenis_checkinout,
+                trimBoth(ifNull(status_passed, '')) AS status_lolos
+            FROM %1$s FINAL
+            WHERE date >= toDateTime64(%2$s, 3)
+              AND date < toDateTime64(%3$s, 3)
+              AND kode_sid IS NOT NULL
+              AND trimBoth(kode_sid) != ''
+              %4$s
+              AND (
+                    upperUTF8(trimBoth(ifNull(status_checkin_out, ''))) IN (%5$s)
+                 OR %6$s IN (%7$s)
+              )
+              AND %8$s IN (%9$s)
+            %10$s
+            SQL;
+        $sql = sprintf(
+            $template,
+            self::TABLE,
+            RfidClickHouseClient::quote($start),
+            RfidClickHouseClient::quote($end),
+            $sidClause,
+            $q($types),
+            $ringkas('status_checkin_out'),
+            $q($compactTypes),
+            $ringkas('status_passed'),
+            $q(self::PASSED_STATUSES),
+            $tail,
         );
 
         try {
-            $connection = $this->connectionName();
-            if ($connection === null) {
-                return [];
-            }
-            $rows = DB::connection($connection)->select($sql, $bindings);
+            $rows = $this->clickhouse->select($sql);
         } catch (Throwable $e) {
             report($e);
             $this->queryGagal = true;
@@ -561,13 +578,18 @@ final class SportEvaluationPvtRfidCheckinReader
 
         $list = [];
         foreach ($rows as $row) {
-            $mapped = $this->mapCheckinRow($row);
+            $mapped = $this->mapCheckinRow((object) $row);
             if ($mapped !== null) {
                 $list[] = $mapped;
             }
         }
 
         return $list;
+    }
+
+    private static function waktuValid(string $waktu): bool
+    {
+        return (bool) preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $waktu);
     }
 
     /**

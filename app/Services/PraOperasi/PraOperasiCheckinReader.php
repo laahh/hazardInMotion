@@ -34,7 +34,7 @@ final class PraOperasiCheckinReader
 
     public function isUp(): bool
     {
-        return $this->rfidReader->isUp();
+        return $this->rfidReader->rfidUp();
     }
 
     /**

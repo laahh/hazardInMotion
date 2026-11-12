@@ -44,7 +44,7 @@ final class OhsDivisiStatusService
             $karyawan = $this->karyawan->karyawan();
             $sids = array_keys($karyawan ?? []);
 
-            $tersedia = $this->rfid->isUp();
+            $tersedia = $this->rfid->rfidUp();
             $mulai = $dari->format('Y-m-d H:i:s');
             $akhir = $kini->addMinute()->format('Y-m-d H:i:s');
             $masuk = $tersedia ? $this->rfid->lastPassedForSidsBetween($mulai, $akhir, $sids) : [];

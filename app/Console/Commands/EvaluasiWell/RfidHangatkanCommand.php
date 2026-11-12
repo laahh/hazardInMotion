@@ -25,7 +25,7 @@ final class RfidHangatkanCommand extends Command
 
     public function handle(SportEvaluationPvtRfidCheckinReader $rfid): int
     {
-        if (! $rfid->isUp()) {
+        if (! $rfid->rfidUp()) {
             $this->warn('OLAP RFID tidak terjangkau — dilewati.');
 
             return self::SUCCESS;

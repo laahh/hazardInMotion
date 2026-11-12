@@ -342,7 +342,7 @@ class DmsMonitoringKpiDetailService
      */
     private function operatorCheckinCohort(string $start, string $end): array
     {
-        if (! $this->rfidReader->isUp()) {
+        if (! $this->rfidReader->rfidUp()) {
             return [];
         }
 

@@ -16,7 +16,7 @@ final class IscRfidOnsiteReader
 
     public function isUp(): bool
     {
-        return $this->rfid->isUp();
+        return $this->rfid->rfidUp();
     }
 
     /**

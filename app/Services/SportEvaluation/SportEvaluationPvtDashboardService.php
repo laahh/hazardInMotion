@@ -52,7 +52,7 @@ final class SportEvaluationPvtDashboardService
         $empty = array_merge($this->emptyPayload($filters), $this->viewScopeMeta($filters));
 
         $bewellUp = $this->bewell->isUp();
-        $rfidUp = $this->rfidReader->isUp();
+        $rfidUp = $this->rfidReader->rfidUp();
         $empty['bewellUp'] = $bewellUp;
         $empty['rfidUp'] = $rfidUp;
 
@@ -1089,7 +1089,7 @@ final class SportEvaluationPvtDashboardService
         }
 
         $empty = $this->presentCheckinChart($dates, []);
-        if (! $this->rfidReader->isUp()) {
+        if (! $this->rfidReader->rfidUp()) {
             return $empty;
         }
 

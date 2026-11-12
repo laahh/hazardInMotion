@@ -245,7 +245,7 @@ class SidRosterTreatmentEvidenceController extends Controller
             return response()->json(['available' => false, 'message' => 'Belum ada periode cuti yang diajukan untuk data ini.']);
         }
 
-        if (! $this->rfidReader->isUp()) {
+        if (! $this->rfidReader->rfidUp()) {
             return response()->json(['available' => false, 'message' => 'Koneksi ke data RFID sedang tidak tersedia. Coba lagi nanti.']);
         }
 

@@ -165,6 +165,21 @@ return [
             ],
         ],
 
+        // ClickHouse OBDS (VPC 10.42): tap RFID obds.aaj_vw_checkinout_rfid untuk
+        // SportEvaluationPvtRfidCheckinReader, menggantikan view Postgres OLAP.
+        'clickhouse_obds' => [
+            'driver' => 'clickhouse',
+            'host' => env('CLICKHOUSE_OBDS_HOST', '10.42.7.39'),
+            'port' => env('CLICKHOUSE_OBDS_PORT', '8123'),
+            'database' => env('CLICKHOUSE_OBDS_DATABASE', 'obds'),
+            'username' => env('CLICKHOUSE_OBDS_USERNAME', 'default'),
+            'password' => env('CLICKHOUSE_OBDS_PASSWORD', ''),
+            'options' => [
+                'timeout' => (int) env('CLICKHOUSE_OBDS_TIMEOUT', 60),
+                'protocol' => env('CLICKHOUSE_OBDS_PROTOCOL', 'http'),
+            ],
+        ],
+
         'clickhouse_nitip' => [
             'driver' => 'clickhouse',
             'host' => env('CLICKHOUSE_NITIP_HOST', '172.21.1.29'),

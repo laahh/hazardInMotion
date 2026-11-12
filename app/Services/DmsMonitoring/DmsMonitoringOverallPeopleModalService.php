@@ -35,7 +35,7 @@ final class DmsMonitoringOverallPeopleModalService
             $filters['perusahaan'] !== '' ? $filters['perusahaan'] : null,
         );
 
-        if (! $this->reader->isUp() || ! $this->rfidReader->isUp()) {
+        if (! $this->reader->isUp() || ! $this->rfidReader->rfidUp()) {
             return $this->errorPayload('Koneksi ke sumber data operator tidak tersedia.');
         }
 
