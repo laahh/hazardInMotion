@@ -20,13 +20,14 @@ use RuntimeException;
  *   halaman / GROUP BY), bukan memuat semua karyawan ke PHP.
  * - Time off: MySQL. Detail per orang hanya untuk satu perusahaan (SID-nya lewat
  *   index kode_sid+tanggal); "semua perusahaan" cukup jumlah per perusahaan.
- * - Perusahaan/site yang dikecualikan Overview & jabatan VISITOR tidak ikut.
+ * - Semua perusahaan & site ikut (termasuk PT Berau Coal, yang dikecualikan di kartu
+ *   Cakupan Overview); hanya jabatan VISITOR yang tidak ikut.
  */
 final class DmsRosterPeopleService
 {
     private const T = 'obds.bep_vw_safety_karyawan_aktif';
 
-    private const KUNCI_OPSI = 'dms_roster:people:opsi:v2';
+    private const KUNCI_OPSI = 'dms_roster:people:opsi:v3';
 
     private const TTL_OPSI = 1800;
 
@@ -48,7 +49,7 @@ final class DmsRosterPeopleService
     }
 
     /**
-     * Pilihan filter: perusahaan => [site => jumlah karyawan], tanpa yang dikecualikan.
+     * Pilihan filter: perusahaan => [site => jumlah karyawan].
      * Null bila ClickHouse tidak terjangkau.
      *
      * @return array<string, array<string, int>>|null
@@ -71,7 +72,7 @@ final class DmsRosterPeopleService
         foreach ($rows as $r) {
             $pt = (string) $r['pt'];
             $site = (string) $r['site'];
-            if ($pt === '' || DmsRosterOverviewPengecualian::perusahaan($pt) || DmsRosterOverviewPengecualian::site($site)) {
+            if ($pt === '') {
                 continue;
             }
             $out[$pt][$site === '' ? '-' : $site] = (int) $r['n'];
@@ -215,7 +216,7 @@ final class DmsRosterPeopleService
                 ->get();
             $out = [];
             foreach ($rows as $r) {
-                if ((string) $r->pt === '' || DmsRosterOverviewPengecualian::perusahaan((string) $r->pt)) {
+                if ((string) $r->pt === '') {
                     continue;
                 }
                 $out[] = ['perusahaan' => (string) $r->pt, 'orang' => (int) $r->orang, 'CT' => (int) $r->ct, 'S' => (int) $r->s, 'I' => (int) $r->i, 'total' => (int) $r->total];
@@ -379,13 +380,6 @@ final class DmsRosterPeopleService
         }
         if ($site !== '') {
             $w[] = self::KOLOM_SITE.' = '.$q($site === '-' ? '' : $site);
-        } else {
-            // Site yang dikecualikan Overview (mis. MARINE).
-            $semua = [];
-            foreach ($opsi as $s) {
-                $semua += $s;
-            }
-            $w[] = '('.self::KOLOM_SITE.' = \'\' OR '.self::KOLOM_SITE.' IN ('.implode(',', array_map($q, array_keys($semua) ?: [''])).'))';
         }
         $cari = trim($cari);
         if ($cari !== '') {

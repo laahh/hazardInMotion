@@ -159,6 +159,10 @@ return [
             'site' => ['MARINE'],
         ],
 
+        // Perusahaan yang langsung tampil saat tab People / Org chart / Time off
+        // di Overview Roster dibuka (pilihan "Semua perusahaan" tetap ada).
+        'people_default_pt' => 'PT Berau Coal',
+
         // Jadwal otomatis (DmsRosterOtomatisService, command dms:master-roster-otomatis):
         // karyawan aktif PT di bawah yang tanggalnya belum tertutup roster upload
         // (PENDING/APPROVED) dibuatkan jadwal Senin–Jumat D1–D5, Sabtu/Minggu OFF.

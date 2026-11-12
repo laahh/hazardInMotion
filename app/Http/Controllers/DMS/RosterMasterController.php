@@ -223,7 +223,8 @@ final class RosterMasterController extends Controller
      */
     private function filterPeople(Request $request, array $opsi): array
     {
-        $pt = (string) $request->query('pt', '');
+        // Tanpa parameter pt (tab baru dibuka) = perusahaan bawaan; pt kosong = semua perusahaan.
+        $pt = $request->has('pt') ? (string) $request->query('pt', '') : (string) config('dms_roster.master.people_default_pt', '');
         $site = (string) $request->query('site', '');
         if (! isset($opsi[$pt])) {
             $pt = '';

@@ -501,7 +501,8 @@
     if (!f) return;
     e.preventDefault();
     const q = new URLSearchParams(new FormData(f));
-    [...q.keys()].forEach((k) => { if (q.get(k) === '') q.delete(k); });
+    // pt dipertahankan walau kosong: "Semua perusahaan" beda dengan perusahaan bawaan.
+    [...q.keys()].forEach((k) => { if (q.get(k) === '' && k !== 'pt') q.delete(k); });
     muat(f.dataset.ovtForm, q.toString());
   });
   document.addEventListener('click', (e) => {
