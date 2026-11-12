@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * Klien HTTP read-only ke ClickHouse OBDS (koneksi `clickhouse_obds`, 10.42.7.39)
- * untuk data tap RFID di `obds.ch_rfid_sap_cuti_all_site` (baris jenis_data = 'RFID').
+ * untuk data tap RFID di `obds.aaj_vw_checkinout_rfid`.
  */
 final class RfidClickHouseClient
 {
