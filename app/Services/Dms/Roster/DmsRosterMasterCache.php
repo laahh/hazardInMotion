@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Dms\Roster;
 
 use App\Models\DmsRosterMasterUpload;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -28,7 +29,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class DmsRosterMasterCache
 {
-    private const KUNCI = 'dms_roster:master_ringkas:v3';
+    private const KUNCI = 'dms_roster:master_ringkas:v4';
 
     /** Kode roster yang dihitung sebagai tidak masuk (tab Time off): cuti, sakit, izin. */
     public const KODE_TIDAK_MASUK = ['CT', 'S', 'I'];
@@ -267,81 +268,6 @@ final class DmsRosterMasterCache
         return md5(implode('|', [$u->n ?? 0, $u->id ?? 0, $u->ubah ?? '', $j ?? 0, $e ?? 0]));
     }
 
-    /**
-     * Status roster per SID (huruf besar) dari snapshot B: ada di roster disetujui,
-     * menunggu approval, dan apakah seluruh jadwalnya dari jadwal otomatis.
-     *
-     * @return array<string, array{disetujui:bool,menunggu:bool,otomatis:bool}>
-     */
-    public static function statusSid(): array
-    {
-        $out = [];
-        foreach (self::ringkas()['b'] as $baris) {
-            [, , $sid, $ok, $tunggu] = $baris;
-            $oto = (bool) ($baris[5] ?? false);
-            if (! isset($out[$sid])) {
-                $out[$sid] = ['disetujui' => $ok, 'menunggu' => $tunggu, 'otomatis' => $oto];
-
-                continue;
-            }
-            $out[$sid]['disetujui'] = $out[$sid]['disetujui'] || $ok;
-            $out[$sid]['menunggu'] = $out[$sid]['menunggu'] || $tunggu;
-            $out[$sid]['otomatis'] = $out[$sid]['otomatis'] && $oto;
-        }
-
-        return $out;
-    }
-
-    /**
-     * Hari tidak masuk (CT/S/I) yang BERLAKU dari snapshot C — lihat hitungTidakMasuk().
-     *
-     * @return list<array{0:string,1:string,2:string,3:string,4:string,5:string}> [pt, site, sid, nama, tanggal, kode]
-     */
-    public static function tidakMasuk(): array
-    {
-        return self::ringkas()['c'] ?? [];
-    }
-
-    /**
-     * (SID, tanggal) berkode CT/S/I yang berlaku: hanya roster disetujui, dan bila
-     * tanggal itu ada di beberapa roster disetujui, yang disetujui paling akhir
-     * menang (aturan sama dengan jadwalBerlaku) — CT yang sudah ditimpa D1 tidak ikut.
-     *
-     * @return list<array{0:string,1:string,2:string,3:string,4:string,5:string}>
-     */
-    private static function hitungTidakMasuk(): array
-    {
-        $kode = self::KODE_TIDAK_MASUK;
-        $tanda = implode(',', array_fill(0, count($kode), '?'));
-        $rows = DB::select("SELECT UPPER(TRIM(j.kode_sid)) AS sid, j.tanggal, j.kode, TRIM(COALESCE(j.perusahaan, '')) AS pt,
-                    TRIM(COALESCE(j.site, '')) AS site, COALESCE(j.nama, '') AS nama, j.upload_id,
-                    COALESCE(u.direview_pada, u.created_at) AS urut
-                FROM dms_roster_master_jadwal j
-                JOIN dms_roster_master_upload u ON u.id = j.upload_id
-                WHERE u.status = ?
-                  AND (j.kode_sid, j.tanggal) IN (SELECT j2.kode_sid, j2.tanggal FROM dms_roster_master_jadwal j2 WHERE j2.kode IN ({$tanda}))",
-            array_merge([DmsRosterMasterUpload::STATUS_APPROVED], $kode));
-
-        $menang = [];
-        foreach ($rows as $r) {
-            $k = $r->sid.'|'.$r->tanggal;
-            $urut = [(string) $r->urut, (int) $r->upload_id];
-            if (! isset($menang[$k]) || $urut > $menang[$k]['urut']) {
-                $menang[$k] = ['urut' => $urut, 'r' => $r];
-            }
-        }
-
-        $out = [];
-        foreach ($menang as $m) {
-            $r = $m['r'];
-            if (in_array(strtoupper((string) $r->kode), $kode, true)) {
-                $out[] = [(string) $r->pt, (string) $r->site, (string) $r->sid, trim((string) $r->nama), substr((string) $r->tanggal, 0, 10), strtoupper((string) $r->kode)];
-            }
-        }
-
-        return $out;
-    }
-
     /** Untuk tes. */
     public static function lupakan(): void
     {
@@ -379,7 +305,7 @@ final class DmsRosterMasterCache
             $upload[(int) $x->id] = ['status' => (string) $x->status, 'dibuat' => $x->created_at === null ? null : (string) $x->created_at];
         }
 
-        $hasil = ['versi' => $versi, 'dihitung' => now()->toDateTimeString(), 'a' => $a, 'b' => $b, 'c' => self::hitungTidakMasuk(), 'upload' => $upload];
+        $hasil = ['versi' => $versi, 'dihitung' => now()->toDateTimeString(), 'a' => $a, 'b' => $b, 'upload' => $upload];
         Cache::forever(self::KUNCI, $hasil);
 
         return self::$ringkas = $hasil;

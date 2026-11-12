@@ -6,7 +6,7 @@ namespace Tests\Unit\Dms;
 
 use App\Services\Dms\Roster\DmsRosterPeopleService as People;
 use Carbon\CarbonImmutable;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 /** Tab People / Org chart / Time off di Overview Roster. */
 class DmsRosterPeopleServiceTest extends TestCase
@@ -31,7 +31,7 @@ class DmsRosterPeopleServiceTest extends TestCase
 
     public function test_org_chart_pt_site_departemen_jabatan_urut_tingkat(): void
     {
-        $pohon = People::org($this->data());
+        $pohon = People::org(People::grupDariOrang($this->data()));
 
         $this->assertSame(['PT Alfa', 'PT Beta'], array_column($pohon, 'nama'));
         $this->assertSame([4, 1], array_column($pohon, 'jumlah'));
@@ -47,26 +47,46 @@ class DmsRosterPeopleServiceTest extends TestCase
         $this->assertSame('-', $pohon[1]['site'][0]['nama']);
     }
 
-    public function test_saring_dan_opsi(): void
+    public function test_org_dari_grup_jumlah_clickhouse_tanpa_nama(): void
     {
-        $data = $this->data();
+        $pohon = People::org([
+            ['perusahaan' => 'PT Alfa', 'site' => 'BMO 1', 'departemen' => 'Mining', 'jabatan' => 'Operator', 'jumlah' => 120, 'orang' => []],
+            ['perusahaan' => 'PT Alfa', 'site' => 'BMO 1', 'departemen' => 'Mining', 'jabatan' => 'Manager', 'jumlah' => 2, 'orang' => []],
+            ['perusahaan' => 'PT Alfa', 'site' => '', 'departemen' => '', 'jabatan' => '', 'jumlah' => 3, 'orang' => []],
+        ]);
 
-        $this->assertSame(['A1', 'A2', 'A3'], array_column(People::saring($data, 'PT Alfa', 'BMO 1'), 'sid'));
-        $this->assertSame(['B1'], array_column(People::saring($data, '', '-'), 'sid'));
-        $this->assertSame(['A2'], array_column(People::saring($data, '', '', 'manager'), 'sid'));
-        $this->assertSame(['PT Alfa' => ['BMO 1', 'LMO'], 'PT Beta' => ['-']], People::opsi($data));
+        $this->assertSame(125, $pohon[0]['jumlah']);
+        $this->assertSame(['-', 'BMO 1'], array_column($pohon[0]['site'], 'nama'));
+        $this->assertSame(['Manager', 'Operator'], array_column($pohon[0]['site'][1]['departemen'][0]['jabatan'], 'nama'));
+        $this->assertSame('Tanpa departemen', $pohon[0]['site'][0]['departemen'][0]['nama']);
+    }
+
+    public function test_saringan_clickhouse_meng_escape_input(): void
+    {
+        $opsi = ['PT Alfa' => ['BMO 1' => 3], "PT O'Neil" => ['-' => 1]];
+
+        $w = People::saringan($opsi, "PT O'Neil", '-', "50% o'k");
+        $this->assertStringContainsString("= 'PT O\'Neil'", $w);
+        $this->assertStringContainsString("trimBoth(ifNull(site_dedicated, '')) = ''", $w);
+        // % dari input di-escape jadi \% untuk ILIKE, lalu backslash-nya di-escape lagi oleh literal string ClickHouse.
+        $this->assertStringContainsString('ILIKE \'%50\\\\% o\\\'k%\'', $w);
+
+        $semua = People::saringan($opsi, '', '', '');
+        $this->assertStringContainsString("IN ('PT Alfa','PT O\'Neil')", $semua);
+        $this->assertStringContainsString("NOT IN ('VISITOR')", $semua);
     }
 
     public function test_time_off_bulan_ini_hanya_karyawan_terpilih(): void
     {
         $tidakMasuk = [
-            ['PT Alfa', 'BMO 1', 'A1', 'Budi', '2026-11-03', 'CT'],
-            ['PT Alfa', 'BMO 1', 'A1', 'Budi', '2026-11-04', 'CT'],
-            ['PT Alfa', 'BMO 1', 'A2', 'Ani', '2026-11-04', 'S'],
-            ['PT Alfa', 'BMO 1', 'A3', 'Cici', '2026-10-31', 'I'],   // bulan lain
-            ['PT Gamma', 'X', 'Z9', 'Luar', '2026-11-05', 'I'],       // bukan karyawan terpilih
+            ['A1', '2026-11-03', 'CT'],
+            ['A1', '2026-11-04', 'CT'],
+            ['A2', '2026-11-04', 'S'],
+            ['A3', '2026-10-31', 'I'],   // bulan lain
+            ['Z9', '2026-11-05', 'I'],   // bukan karyawan terpilih
         ];
-        $hasil = People::timeOff($tidakMasuk, People::saring($this->data(), 'PT Alfa'), CarbonImmutable::parse('2026-11-01'));
+        $alfa = array_values(array_filter($this->data(), static fn (array $k): bool => $k['perusahaan'] === 'PT Alfa'));
+        $hasil = People::timeOff($tidakMasuk, $alfa, CarbonImmutable::parse('2026-11-01'));
 
         $this->assertSame(['A1', 'A2'], array_column($hasil['orang'], 'sid'));
         $this->assertSame(['2026-11-03' => 'CT', '2026-11-04' => 'CT'], $hasil['orang'][0]['hari']);

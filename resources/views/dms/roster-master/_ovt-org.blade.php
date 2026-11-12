@@ -10,7 +10,6 @@
       <h6 class="rov-kartu__judul">Org chart</h6>
       <p class="rov-kartu__sub">Susunan karyawan aktif per perusahaan → site → departemen → tingkat jabatan ({{ $angka($total) }} orang).
         {{ $denganOrang ? '' : 'Pilih satu perusahaan untuk melihat nama orangnya.' }}
-        @if ($sumber === 'tahap8') <span class="text-warning-main">Departemen belum tersedia (ClickHouse tidak terjangkau).</span> @endif
       </p>
     </div>
     <form class="d-flex flex-wrap align-items-end gap-12 ovt-filter" data-ovt-form="org">
@@ -20,7 +19,7 @@
   </div>
 
   @if (! $tersedia)
-    <div class="p-24 text-center text-secondary-light">Daftar karyawan aktif belum tersedia.</div>
+    <div class="p-24 text-center text-secondary-light">Data karyawan aktif tidak bisa dibaca: ClickHouse OBDS tidak terjangkau dari server ini.</div>
   @elseif ($pohon === [])
     <div class="p-24 text-center text-secondary-light">Tidak ada karyawan untuk filter ini.</div>
   @else

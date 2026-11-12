@@ -4,9 +4,7 @@
   <div class="rov-kartu__kepala">
     <div>
       <h6 class="rov-kartu__judul">People</h6>
-      <p class="rov-kartu__sub">Karyawan aktif beserta departemen, jabatan, dan status roster masing-masing.
-        @if ($sumber === 'tahap8') <span class="text-warning-main">Departemen &amp; jabatan fungsional belum tersedia (ClickHouse tidak terjangkau).</span> @endif
-      </p>
+      <p class="rov-kartu__sub">Karyawan aktif beserta departemen, jabatan, dan status roster masing-masing.</p>
     </div>
     <form class="d-flex flex-wrap align-items-end gap-12 ovt-filter" data-ovt-form="people">
       @include('dms.roster-master._ovt-filter')
@@ -19,7 +17,7 @@
   </div>
 
   @if (! $tersedia)
-    <div class="p-24 text-center text-secondary-light">Daftar karyawan aktif belum tersedia. Jalankan <code>php artisan dms:sync-roster-rfid</code> (Tahap 8) atau pastikan ClickHouse OBDS terjangkau.</div>
+    <div class="p-24 text-center text-secondary-light">Data karyawan aktif tidak bisa dibaca: ClickHouse OBDS (koneksi <code>clickhouse_obds</code>) tidak terjangkau dari server ini.</div>
   @else
     <div class="table-responsive">
       <table class="table mb-0 ovt-tabel">

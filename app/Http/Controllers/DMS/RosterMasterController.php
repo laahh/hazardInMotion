@@ -218,7 +218,7 @@ final class RosterMasterController extends Controller
     /**
      * Filter tab People / Org chart / Time off: perusahaan & site yang valid.
      *
-     * @param  array<string, list<string>>  $opsi
+     * @param  array<string, array<string, int>>  $opsi
      * @return array{0:string,1:string}
      */
     private function filterPeople(Request $request, array $opsi): array
@@ -228,73 +228,90 @@ final class RosterMasterController extends Controller
         if (! isset($opsi[$pt])) {
             $pt = '';
         }
-        if ($site !== '' && ($pt === '' ? ! in_array($site, array_merge(...array_values($opsi ?: [[]])), true) : ! in_array($site, $opsi[$pt], true))) {
+        $sites = [];
+        foreach ($pt === '' ? $opsi : [$opsi[$pt]] as $s) {
+            $sites += $s;
+        }
+        if (! isset($sites[$site])) {
             $site = '';
         }
 
         return [$pt, $site];
     }
 
-    /** Tab People: direktori karyawan aktif + status roster per orang. */
+    /** Opsi filter untuk view: perusahaan => list site. */
+    private static function opsiView(array $opsi): array
+    {
+        return array_map(static fn (array $s): array => array_map('strval', array_keys($s)), $opsi);
+    }
+
+    /** Tab People: direktori karyawan aktif + status roster per orang (query per halaman). */
     public function overviewPeople(Request $request, DmsRosterPeopleService $people): View
     {
-        $semua = $people->karyawan();
-        $opsi = $semua === null ? [] : DmsRosterPeopleService::opsi($semua);
-        [$pt, $site] = $this->filterPeople($request, $opsi);
+        $opsi = $people->opsi();
+        [$pt, $site] = $this->filterPeople($request, $opsi ?? []);
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 60);
-        $hasil = $semua === null ? [] : DmsRosterPeopleService::saring($semua, $pt, $site, $cari);
-        usort($hasil, static fn (array $a, array $b): int => [$a['perusahaan'], $a['nama']] <=> [$b['perusahaan'], $b['nama']]);
-
-        $total = count($hasil);
-        $halaman = min(max(1, (int) $request->query('hal', 1)), max(1, (int) ceil($total / self::PER_HALAMAN_PEOPLE)));
+        $halaman = max(1, (int) $request->query('hal', 1));
+        $data = $opsi === null ? ['baris' => [], 'total' => 0] : $people->halaman($opsi, $pt, $site, $cari, $halaman, self::PER_HALAMAN_PEOPLE);
 
         return view('dms.roster-master._ovt-people', [
-            'tersedia' => $semua !== null,
-            'sumber' => $people->sumber(),
-            'opsi' => $opsi, 'pt' => $pt, 'site' => $site, 'cari' => $cari,
-            'baris' => array_slice($hasil, ($halaman - 1) * self::PER_HALAMAN_PEOPLE, self::PER_HALAMAN_PEOPLE),
-            'total' => $total, 'halaman' => $halaman, 'perHalaman' => self::PER_HALAMAN_PEOPLE,
-            'statusSid' => DmsRosterMasterCache::statusSid(),
+            'tersedia' => $opsi !== null,
+            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'cari' => $cari,
+            'baris' => $data['baris'], 'total' => $data['total'], 'halaman' => $halaman, 'perHalaman' => self::PER_HALAMAN_PEOPLE,
+            'statusSid' => DmsRosterPeopleService::statusRoster(array_column($data['baris'], 'sid')),
         ]);
     }
 
-    /** Tab Org chart: perusahaan → site → departemen → tingkat jabatan. */
+    /** Tab Org chart: perusahaan → site → departemen → tingkat jabatan (jumlah dihitung ClickHouse). */
     public function overviewOrg(Request $request, DmsRosterPeopleService $people): View
     {
-        $semua = $people->karyawan();
-        $opsi = $semua === null ? [] : DmsRosterPeopleService::opsi($semua);
-        [$pt, $site] = $this->filterPeople($request, $opsi);
-        $terpilih = $semua === null ? [] : DmsRosterPeopleService::saring($semua, $pt, $site);
+        $opsi = $people->opsi();
+        [$pt, $site] = $this->filterPeople($request, $opsi ?? []);
+        $pohon = $opsi === null ? [] : DmsRosterPeopleService::org($people->grupOrg($opsi, $pt, $site));
 
         return view('dms.roster-master._ovt-org', [
-            'tersedia' => $semua !== null,
-            'sumber' => $people->sumber(),
-            'opsi' => $opsi, 'pt' => $pt, 'site' => $site,
-            'pohon' => DmsRosterPeopleService::org($terpilih),
-            'total' => count($terpilih),
+            'tersedia' => $opsi !== null,
+            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site,
+            'pohon' => $pohon,
+            'total' => array_sum(array_column($pohon, 'jumlah')),
         ]);
     }
 
-    /** Tab Time off: hari cuti / sakit / izin (kode roster CT, S, I) satu bulan. */
+    /**
+     * Tab Time off: hari cuti / sakit / izin (kode roster CT, S, I) satu bulan.
+     * Detail per orang hanya untuk satu perusahaan; semua perusahaan = jumlah per perusahaan.
+     */
     public function overviewTimeOff(Request $request, DmsRosterPeopleService $people): View
     {
-        $semua = $people->karyawan();
-        $opsi = $semua === null ? [] : DmsRosterPeopleService::opsi($semua);
-        [$pt, $site] = $this->filterPeople($request, $opsi);
+        $opsi = $people->opsi();
+        [$pt, $site] = $this->filterPeople($request, $opsi ?? []);
         $minta = (string) $request->query('bulan', '');
         $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : CarbonImmutable::now()->startOfMonth();
-        $terpilih = $semua === null ? [] : DmsRosterPeopleService::saring($semua, $pt, $site);
 
         $tanggal = [];
         for ($t = $bulan->startOfMonth(); $t->lte($bulan->endOfMonth()); $t = $t->addDay()) {
             $tanggal[] = $t;
         }
 
+        $data = null;
+        $perPt = [];
+        $populasi = 0;
+        if ($opsi !== null && $pt !== '') {
+            $karyawan = $people->karyawanPt($opsi, $pt, $site);
+            $populasi = count($karyawan);
+            $data = DmsRosterPeopleService::timeOff(
+                DmsRosterPeopleService::tidakMasukSid(array_column($karyawan, 'sid'), $bulan),
+                $karyawan,
+                $bulan,
+            );
+        } elseif ($opsi !== null) {
+            $perPt = DmsRosterPeopleService::tidakMasukPerPt($bulan);
+        }
+
         return view('dms.roster-master._ovt-timeoff', [
-            'tersedia' => $semua !== null,
-            'opsi' => $opsi, 'pt' => $pt, 'site' => $site, 'bulan' => $bulan, 'tanggal' => $tanggal,
-            'data' => DmsRosterPeopleService::timeOff(DmsRosterMasterCache::tidakMasuk(), $terpilih, $bulan),
-            'populasi' => count($terpilih),
+            'tersedia' => $opsi !== null,
+            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'bulan' => $bulan, 'tanggal' => $tanggal,
+            'data' => $data, 'perPt' => $perPt, 'populasi' => $populasi,
         ]);
     }
 
