@@ -204,6 +204,56 @@
   .ovt-kal__nama { text-align: left !important; min-width: 220px; padding-right: 12px; position: sticky; left: 0; background-color: #fff !important; z-index: 1; }
   .ovt-kal__jml { background: none !important; font-weight: 700; padding-left: 8px; }
 
+  /* ── Org chart bagan (kartu bertingkat dengan garis penghubung) ── */
+  .oc-alat { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+  .oc-mode, .oc-zoom { display: inline-flex; align-items: center; gap: 2px; background: #F1F5F9; border-radius: 10px; padding: 3px; }
+  .oc-mode button, .oc-zoom button { border: 0; background: none; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #475569; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .oc-mode button.is-aktif { background: #fff; color: #0F172A; box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+  .oc-zoom button:hover { background: #fff; }
+  .oc-zoom span { font-size: 12px; font-weight: 600; color: #64748B; min-width: 44px; text-align: center; }
+  .oc-kanvas { overflow: auto; cursor: grab; margin: 12px 24px 24px; border: 1px solid #EEF2F7; border-radius: 12px; height: 70vh; min-height: 420px;
+    background: #F8FAFC radial-gradient(circle, #E2E8F0 1px, transparent 1px) 0 0 / 18px 18px; }
+  .oc-kanvas.is-geser { cursor: grabbing; user-select: none; }
+  .oc-pohon { display: inline-block; padding: 28px; transform-origin: 0 0; min-width: 100%; }
+  .oc-pohon ul { display: flex; justify-content: center; padding: 22px 0 0; margin: 0; position: relative; }
+  .oc-pohon > ul { padding-top: 0; }
+  .oc-pohon li { list-style: none; position: relative; padding: 22px 8px 0; display: flex; flex-direction: column; align-items: center; }
+  .oc-pohon > ul > li { padding-top: 0; }
+  .oc-pohon li::before, .oc-pohon li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 22px; border-top: 2px solid #CBD5E1; }
+  .oc-pohon li::after { right: auto; left: 50%; border-left: 2px solid #CBD5E1; }
+  .oc-pohon li:only-child::before, .oc-pohon li:only-child::after { display: none; }
+  .oc-pohon li:only-child { padding-top: 22px; }
+  .oc-pohon > ul > li:only-child { padding-top: 0; }
+  .oc-pohon li:first-child::before, .oc-pohon li:last-child::after { border: 0 none; }
+  .oc-pohon li:last-child::before { border-right: 2px solid #CBD5E1; border-radius: 0 8px 0 0; }
+  .oc-pohon li:first-child::after { border-radius: 8px 0 0 0; }
+  .oc-pohon ul ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 22px; border-left: 2px solid #CBD5E1; }
+  .oc-pohon li:only-child > .oc-simpul, .oc-pohon li:only-child > .oc-dept { position: relative; }
+  .oc-pohon ul ul > li:only-child::before { display: block; content: ''; position: absolute; top: 0; left: 50%; height: 22px; width: 0; border-left: 2px solid #CBD5E1; border-top: 0; }
+  .oc-simpul { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px 16px; box-shadow: 0 2px 6px rgba(15, 23, 42, .06); white-space: nowrap; }
+  .oc-simpul iconify-icon { font-size: 22px; color: var(--primary-600, #487FFF); }
+  .oc-simpul.is-pt { background: #1E293B; border-color: #1E293B; color: #fff; }
+  .oc-simpul.is-pt iconify-icon { color: #93C5FD; }
+  .oc-simpul__nama { font-weight: 700; font-size: 14px; }
+  .oc-simpul__jml { font-size: 11px; opacity: .7; }
+  .oc-dept { width: 220px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .oc-dept__judul { text-align: center; font-size: 12px; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: .02em; background: #E2E8F0; border-radius: 8px; padding: 6px 8px; }
+  .oc-dept__judul span { font-weight: 600; color: #64748B; margin-left: 4px; }
+  .oc-anggota { position: relative; display: flex; flex-direction: column; gap: 8px; padding-left: 16px; }
+  .oc-anggota::before { content: ''; position: absolute; left: 6px; top: -8px; bottom: 18px; border-left: 2px solid #CBD5E1; }
+  .oc-anggota > .oc-kartu::before { content: ''; position: absolute; left: -10px; top: 18px; width: 10px; border-top: 2px solid #CBD5E1; }
+  .oc-kartu { position: relative; background: #fff; border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(15, 23, 42, .06); text-align: left; }
+  .oc-kartu__kepala { background: #4B5563; color: #fff; padding: 6px 10px; }
+  .oc-kartu__nama { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oc-kartu__jabatan { font-size: 10px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oc-kartu__isi { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+  .oc-avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .oc-kartu__detail { font-size: 11px; color: #475569; line-height: 1.35; min-width: 0; }
+  .oc-kartu__sub { color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+  .oc-kartu.is-kecil .oc-kartu__kepala { background: #64748B; }
+  .oc-kartu.is-kecil .oc-avatar { width: 28px; height: 28px; font-size: 11px; }
+  .oc-lain { font-size: 12px; font-weight: 600; color: #64748B; text-align: center; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 6px; background: #fff; }
+
   @media (max-width: 575.98px) {
     .ro-filter > div { flex: 1 1 100%; }
     .ovt-filter > div { flex: 1 1 100%; }
@@ -473,6 +523,62 @@
     const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     site.innerHTML = '<option value="">Semua site</option>' + semua.map((v) => '<option value="' + esc(v) + '">' + (v === '-' ? 'Tanpa site' : esc(v)) + '</option>').join('');
   });
+
+  // Org chart bagan: ganti mode, zoom, dan geser dengan seret.
+  const zoomOc = (kanvas, nilai) => {
+    const pohon = kanvas.querySelector('[data-oc-pohon]');
+    const z = Math.min(1.6, Math.max(0.25, nilai));
+    kanvas.dataset.zoom = z;
+    pohon.style.transform = 'scale(' + z + ')';
+    pohon.style.width = (100 / z) + '%';
+    const label = kanvas.closest('.rov-kartu').querySelector('[data-oc-zoom-nilai]');
+    if (label) label.textContent = Math.round(z * 100) + '%';
+  };
+  const pasLayar = (kanvas) => {
+    const pohon = kanvas.querySelector('[data-oc-pohon]');
+    pohon.style.transform = 'none';
+    pohon.style.width = 'auto';
+    const lebar = pohon.scrollWidth || 1;
+    zoomOc(kanvas, Math.min(1, (kanvas.clientWidth - 8) / lebar));
+    kanvas.scrollLeft = 0;
+    kanvas.scrollTop = 0;
+  };
+  document.addEventListener('click', (e) => {
+    const mode = e.target.closest('[data-oc-mode]');
+    if (mode) {
+      const kartu = mode.closest('.rov-kartu');
+      kartu.querySelectorAll('[data-oc-mode]').forEach((b) => b.classList.toggle('is-aktif', b === mode));
+      const bagan = mode.dataset.ocMode === 'bagan';
+      kartu.querySelector('[data-oc-kanvas]').hidden = !bagan;
+      kartu.querySelector('[data-oc-zoom-alat]').hidden = !bagan;
+      kartu.querySelector('[data-oc-daftar]').hidden = bagan;
+      return;
+    }
+    const zb = e.target.closest('[data-oc-zoom]');
+    if (zb) {
+      const kanvas = zb.closest('.rov-kartu').querySelector('[data-oc-kanvas]');
+      const langkah = Number(zb.dataset.ocZoom);
+      if (langkah === 0) pasLayar(kanvas); else zoomOc(kanvas, Number(kanvas.dataset.zoom || 1) + langkah * 0.15);
+    }
+  });
+  let geser = null;
+  document.addEventListener('pointerdown', (e) => {
+    const kanvas = e.target.closest('[data-oc-kanvas]');
+    if (!kanvas || e.button !== 0) return;
+    geser = { kanvas, x: e.clientX, y: e.clientY, kiri: kanvas.scrollLeft, atas: kanvas.scrollTop };
+    kanvas.classList.add('is-geser');
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!geser) return;
+    geser.kanvas.scrollLeft = geser.kiri - (e.clientX - geser.x);
+    geser.kanvas.scrollTop = geser.atas - (e.clientY - geser.y);
+  });
+  document.addEventListener('pointerup', () => { if (geser) { geser.kanvas.classList.remove('is-geser'); geser = null; } });
+  // Saat panel Org chart selesai dimuat: bagan langsung pas layar.
+  new MutationObserver(() => {
+    const kanvas = document.querySelector('[data-ovt-panel="org"] [data-oc-kanvas]');
+    if (kanvas && !kanvas.dataset.siap) { kanvas.dataset.siap = '1'; requestAnimationFrame(() => pasLayar(kanvas)); }
+  }).observe(document.querySelector('[data-ovt-panel="org"]'), { childList: true, subtree: false });
 
   const awal = new URL(location.href).searchParams.get('tab');
   if (awal && panel(awal)) buka(awal, false);

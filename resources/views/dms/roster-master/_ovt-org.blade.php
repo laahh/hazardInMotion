@@ -23,7 +23,72 @@
   @elseif ($pohon === [])
     <div class="p-24 text-center text-secondary-light">Tidak ada karyawan untuk filter ini.</div>
   @else
-    <div class="ovt-org p-24">
+    @if ($denganOrang)
+      @php $batasAnggota = 8; $batasKepala = 3; @endphp
+      <div class="oc-alat px-24 pt-16">
+        <div class="oc-mode" role="group" aria-label="Tampilan org chart">
+          <button type="button" class="is-aktif" data-oc-mode="bagan"><iconify-icon icon="solar:structure-linear"></iconify-icon>Bagan</button>
+          <button type="button" data-oc-mode="daftar"><iconify-icon icon="solar:list-linear"></iconify-icon>Daftar</button>
+        </div>
+        <div class="oc-zoom" data-oc-zoom-alat>
+          <button type="button" data-oc-zoom="-1" aria-label="Perkecil">−</button>
+          <span data-oc-zoom-nilai>100%</span>
+          <button type="button" data-oc-zoom="1" aria-label="Perbesar">+</button>
+          <button type="button" data-oc-zoom="0" class="oc-zoom__pas">Pas layar</button>
+        </div>
+      </div>
+
+      {{-- Bagan: PT → site → departemen; kartu teratas = jabatan tertinggi di departemen, anggota berjajar ke bawah. --}}
+      <div class="oc-kanvas" data-oc-kanvas>
+        <div class="oc-pohon" data-oc-pohon>
+          @foreach ($pohon as $p)
+            <ul>
+              <li>
+                <div class="oc-simpul is-pt"><iconify-icon icon="solar:buildings-2-bold"></iconify-icon><div><div class="oc-simpul__nama">{{ $p['nama'] }}</div><div class="oc-simpul__jml">{{ $angka($p['jumlah']) }} karyawan</div></div></div>
+                <ul>
+                  @foreach ($p['site'] as $s)
+                    <li>
+                      <div class="oc-simpul is-site"><iconify-icon icon="solar:map-point-bold"></iconify-icon><div><div class="oc-simpul__nama">{{ $s['nama'] === '-' ? 'Tanpa site' : $s['nama'] }}</div><div class="oc-simpul__jml">{{ $angka($s['jumlah']) }} orang · {{ count($s['departemen']) }} departemen</div></div></div>
+                      <ul>
+                        @foreach ($s['departemen'] as $d)
+                          @php
+                            $atas = $d['jabatan'][0] ?? ['nama' => '', 'orang' => []];
+                            $kepala = array_slice($atas['orang'], 0, $batasKepala);
+                            $anggota = [];
+                            foreach (array_slice($atas['orang'], $batasKepala) as $o) { $anggota[] = [$o, $atas['nama']]; }
+                            foreach (array_slice($d['jabatan'], 1) as $j) { foreach ($j['orang'] as $o) { $anggota[] = [$o, $j['nama']]; } }
+                          @endphp
+                          <li>
+                            <div class="oc-dept">
+                              <div class="oc-dept__judul">{{ $d['nama'] }} <span>{{ $angka($d['jumlah']) }}</span></div>
+                              @foreach ($kepala as $o)
+                                @include('dms.roster-master._ovt-org-kartu', ['o' => $o, 'tingkat' => $atas['nama']])
+                              @endforeach
+                              @if ($anggota !== [])
+                                <div class="oc-anggota">
+                                  @foreach (array_slice($anggota, 0, $batasAnggota) as [$o, $tingkat])
+                                    @include('dms.roster-master._ovt-org-kartu', ['o' => $o, 'tingkat' => $tingkat, 'kecil' => true])
+                                  @endforeach
+                                  @if (count($anggota) > $batasAnggota)
+                                    <div class="oc-lain">+{{ $angka(count($anggota) - $batasAnggota) }} lainnya</div>
+                                  @endif
+                                </div>
+                              @endif
+                            </div>
+                          </li>
+                        @endforeach
+                      </ul>
+                    </li>
+                  @endforeach
+                </ul>
+              </li>
+            </ul>
+          @endforeach
+        </div>
+      </div>
+    @endif
+
+    <div class="ovt-org p-24" @if ($denganOrang) data-oc-daftar hidden @endif>
       @foreach ($pohon as $p)
         <details class="ovt-node ovt-node--pt" @if ($denganOrang || count($pohon) === 1) open @endif>
           <summary><iconify-icon icon="solar:buildings-2-bold" class="ovt-node__ikon"></iconify-icon><span class="ovt-node__nama">{{ $p['nama'] }}</span><span class="ovt-node__jml">{{ $angka($p['jumlah']) }}</span></summary>
