@@ -151,11 +151,11 @@ return [
         // Tidak dihitung di Overview Roster (daftar perusahaan, KPI, kartu
         // cakupan). Nama perusahaan dicocokkan tanpa awalan PT/tanda baca
         // (DmsRosterAksesPerusahaan::samaNama), site tanpa membedakan huruf.
+        // 13 Nov 2026: semua perusahaan ditampilkan (sebelumnya PT Berau Coal, PT Berau
+        // Coal Energy, PT Unggul Jaya Berkah, Politeknik Sinar Mas Berau Coal, Yayasan
+        // Dharma Bakti Berau Coal, KAMPUS MERDEKA dikecualikan).
         'overview_dikecualikan' => [
-            'perusahaan' => [
-                'PT Berau Coal', 'PT Berau Coal Energy', 'PT Unggul Jaya Berkah',
-                'Politeknik Sinar Mas Berau Coal', 'Yayasan Dharma Bakti Berau Coal', 'KAMPUS MERDEKA',
-            ],
+            'perusahaan' => [],
             'site' => ['MARINE'],
         ],
 
