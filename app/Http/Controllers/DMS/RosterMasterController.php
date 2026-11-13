@@ -240,6 +240,28 @@ final class RosterMasterController extends Controller
         return [$pt, $site];
     }
 
+    /**
+     * Filter departemen: daftar pilihan untuk perusahaan/site terpilih + nilai yang valid.
+     *
+     * @param  array<string, array<string, int>>|null  $opsi
+     * @return array{0: array<string,int>, 1: string}
+     */
+    private function filterDept(Request $request, DmsRosterPeopleService $people, ?array $opsi, string $pt, string $site): array
+    {
+        if ($opsi === null) {
+            return [[], ''];
+        }
+        try {
+            $depts = $people->departemen($opsi, $pt, $site);
+        } catch (\Throwable $e) {
+            report($e);
+            $depts = [];
+        }
+        $dept = (string) $request->query('dept', '');
+
+        return [$depts, isset($depts[$dept]) ? $dept : ''];
+    }
+
     /** Opsi filter untuk view: perusahaan => list site. */
     private static function opsiView(array $opsi): array
     {
@@ -251,13 +273,14 @@ final class RosterMasterController extends Controller
     {
         $opsi = $people->opsi();
         [$pt, $site] = $this->filterPeople($request, $opsi ?? []);
+        [$depts, $dept] = $this->filterDept($request, $people, $opsi, $pt, $site);
         $cari = mb_substr(trim((string) $request->query('q', '')), 0, 60);
         $halaman = max(1, (int) $request->query('hal', 1));
-        $data = $opsi === null ? ['baris' => [], 'total' => 0] : $people->halaman($opsi, $pt, $site, $cari, $halaman, self::PER_HALAMAN_PEOPLE);
+        $data = $opsi === null ? ['baris' => [], 'total' => 0] : $people->halaman($opsi, $pt, $site, $cari, $halaman, self::PER_HALAMAN_PEOPLE, $dept);
 
         return view('dms.roster-master._ovt-people', [
             'tersedia' => $opsi !== null,
-            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'cari' => $cari,
+            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'depts' => $depts, 'dept' => $dept, 'cari' => $cari,
             'baris' => $data['baris'], 'total' => $data['total'], 'halaman' => $halaman, 'perHalaman' => self::PER_HALAMAN_PEOPLE,
             'statusSid' => DmsRosterPeopleService::statusRoster(array_column($data['baris'], 'sid')),
         ]);
@@ -268,11 +291,12 @@ final class RosterMasterController extends Controller
     {
         $opsi = $people->opsi();
         [$pt, $site] = $this->filterPeople($request, $opsi ?? []);
-        $pohon = $opsi === null ? [] : DmsRosterPeopleService::org($people->grupOrg($opsi, $pt, $site));
+        [$depts, $dept] = $this->filterDept($request, $people, $opsi, $pt, $site);
+        $pohon = $opsi === null ? [] : DmsRosterPeopleService::org($people->grupOrg($opsi, $pt, $site, $dept));
 
         return view('dms.roster-master._ovt-org', [
             'tersedia' => $opsi !== null,
-            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site,
+            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'depts' => $depts, 'dept' => $dept,
             'pohon' => $pohon,
             'total' => array_sum(array_column($pohon, 'jumlah')),
         ]);
@@ -286,6 +310,7 @@ final class RosterMasterController extends Controller
     {
         $opsi = $people->opsi();
         [$pt, $site] = $this->filterPeople($request, $opsi ?? []);
+        [$depts, $dept] = $this->filterDept($request, $people, $opsi, $pt, $site);
         $minta = (string) $request->query('bulan', '');
         $bulan = preg_match('/^\d{4}-\d{2}$/', $minta) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $minta) : CarbonImmutable::now()->startOfMonth();
 
@@ -298,7 +323,7 @@ final class RosterMasterController extends Controller
         $perPt = [];
         $populasi = 0;
         if ($opsi !== null && $pt !== '') {
-            $karyawan = $people->karyawanPt($opsi, $pt, $site);
+            $karyawan = $people->karyawanPt($opsi, $pt, $site, $dept);
             $populasi = count($karyawan);
             $data = DmsRosterPeopleService::timeOff(
                 DmsRosterPeopleService::tidakMasukSid(array_column($karyawan, 'sid'), $bulan),
@@ -311,7 +336,7 @@ final class RosterMasterController extends Controller
 
         return view('dms.roster-master._ovt-timeoff', [
             'tersedia' => $opsi !== null,
-            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'bulan' => $bulan, 'tanggal' => $tanggal,
+            'opsi' => self::opsiView($opsi ?? []), 'pt' => $pt, 'site' => $site, 'depts' => $depts, 'dept' => $dept, 'bulan' => $bulan, 'tanggal' => $tanggal,
             'data' => $data, 'perPt' => $perPt, 'populasi' => $populasi,
         ]);
     }

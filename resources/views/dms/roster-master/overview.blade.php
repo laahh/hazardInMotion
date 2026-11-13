@@ -349,37 +349,6 @@
     </div>
   </div>
 
-  {{-- Perlu perhatian --}}
-  <div class="rov-perhatian">
-    <div class="rov-perhatian__kartu">
-      <iconify-icon icon="solar:hourglass-line-bold" class="{{ $ringkas['pt_menunggu'] === [] ? 'text-success-main' : 'text-warning-main' }}"></iconify-icon>
-      <div>
-        <div class="rov-perhatian__judul">
-          {{ $ringkas['pt_menunggu'] === [] ? 'Tidak ada roster yang menunggu approval' : count($ringkas['pt_menunggu']).' perusahaan menunggu approval' }}
-        </div>
-        @if ($ringkas['pt_menunggu'] !== [])
-          <div>@foreach ($ringkas['pt_menunggu'] as $nama)<span class="rov-chip">{{ $nama }}</span>@endforeach</div>
-        @else
-          <div class="rov-perhatian__isi">Semua upload sudah disetujui atau ditolak.</div>
-        @endif
-      </div>
-    </div>
-    <div class="rov-perhatian__kartu">
-      <iconify-icon icon="solar:calendar-minimalistic-bold" class="{{ $ringkas['pt_segera'] === [] ? 'text-success-main' : 'text-warning-main' }}"></iconify-icon>
-      <div>
-        <div class="rov-perhatian__judul">
-          {{ $ringkas['pt_segera'] === [] ? 'Tidak ada roster yang habis dalam '.$ringkas['segera_hari'].' hari' : count($ringkas['pt_segera']).' roster habis dalam '.$ringkas['segera_hari'].' hari' }}
-        </div>
-        @if ($ringkas['pt_segera'] !== [])
-          <div>@foreach ($ringkas['pt_segera'] as $nama)<span class="rov-chip">{{ $nama }}</span>@endforeach</div>
-          <div class="rov-perhatian__isi">Minta perusahaan ini meng-upload roster periode berikutnya.</div>
-        @else
-          <div class="rov-perhatian__isi">Roster yang berlaku masih cukup panjang.</div>
-        @endif
-      </div>
-    </div>
-  </div>
-
   {{-- Daftar perusahaan --}}
   <div class="rov-kartu">
     <div class="rov-kartu__kepala">
@@ -513,8 +482,17 @@
     q.set('hal', b.dataset.ovtHal);
     muat(el.dataset.ovtPanel, q.toString());
   });
-  // Site mengikuti perusahaan.
+  // Site mengikuti perusahaan; ganti perusahaan/site langsung memuat ulang panel
+  // supaya pilihan departemen ikut perusahaan/site yang baru.
   document.addEventListener('change', (e) => {
+    const siteEl = e.target.closest('[data-ovt-site]');
+    if (siteEl) {
+      const f = siteEl.closest('form');
+      const d = f.querySelector('[data-ovt-dept]');
+      if (d) d.value = '';
+      f.requestSubmit();
+      return;
+    }
     const pt = e.target.closest('[data-ovt-pt]');
     if (!pt) return;
     const site = pt.closest('form').querySelector('[data-ovt-site]');
@@ -523,6 +501,9 @@
     const semua = opsi || [...new Set([...pt.options].flatMap((o) => (o.dataset.site ? JSON.parse(o.dataset.site) : [])))].sort();
     const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     site.innerHTML = '<option value="">Semua site</option>' + semua.map((v) => '<option value="' + esc(v) + '">' + (v === '-' ? 'Tanpa site' : esc(v)) + '</option>').join('');
+    const d = pt.closest('form').querySelector('[data-ovt-dept]');
+    if (d) d.value = '';
+    pt.closest('form').requestSubmit();
   });
 
   // Org chart bagan: ganti mode, zoom, dan geser dengan seret.

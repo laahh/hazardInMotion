@@ -93,9 +93,9 @@ final class DmsRosterPeopleService
      * @param  array<string, array<string, int>>  $opsi
      * @return array{baris: list<array<string,mixed>>, total: int}
      */
-    public function halaman(array $opsi, string $pt, string $site, string $cari, int $halaman, int $perHalaman): array
+    public function halaman(array $opsi, string $pt, string $site, string $cari, int $halaman, int $perHalaman, string $dept = ''): array
     {
-        $where = self::saringan($opsi, $pt, $site, $cari);
+        $where = self::saringan($opsi, $pt, $site, $cari, $dept);
         $total = (int) ($this->clickhouse->select('SELECT count() AS n FROM '.self::T.' FINAL WHERE '.$where)[0]['n'] ?? 0);
         $baris = $total === 0 ? [] : $this->clickhouse->select('SELECT '.self::KOLOM_ORANG.' FROM '.self::T.' FINAL WHERE '.$where
             .' ORDER BY pt, nama LIMIT '.max(1, $perHalaman).' OFFSET '.max(0, ($halaman - 1) * $perHalaman));
@@ -110,12 +110,12 @@ final class DmsRosterPeopleService
      * @param  array<string, array<string, int>>  $opsi
      * @return list<array{perusahaan:string,site:string,departemen:string,jabatan:string,jumlah:int,orang:list<array<string,mixed>>}>
      */
-    public function grupOrg(array $opsi, string $pt, string $site): array
+    public function grupOrg(array $opsi, string $pt, string $site, string $dept = ''): array
     {
-        $kunci = 'dms_roster:people:org:v1:'.md5($pt.'|'.$site);
+        $kunci = 'dms_roster:people:org:v2:'.md5($pt.'|'.$site.'|'.$dept);
 
-        return Cache::remember($kunci, self::TTL_DATA, function () use ($opsi, $pt, $site): array {
-            $where = self::saringan($opsi, $pt, $site, '');
+        return Cache::remember($kunci, self::TTL_DATA, function () use ($opsi, $pt, $site, $dept): array {
+            $where = self::saringan($opsi, $pt, $site, '', $dept);
             if ($pt === '') {
                 $rows = $this->clickhouse->select('SELECT '.self::KOLOM_PT.' AS pt, '.self::KOLOM_SITE.' AS site, '.self::KOLOM_DEPT.' AS departemen, '
                     .self::KOLOM_JABATAN.' AS jab, count() AS n FROM '.self::T.' FINAL WHERE '.$where.' GROUP BY pt, site, departemen, jab');
@@ -138,11 +138,34 @@ final class DmsRosterPeopleService
      * @param  array<string, array<string, int>>  $opsi
      * @return list<array<string, mixed>>
      */
-    public function karyawanPt(array $opsi, string $pt, string $site): array
+    public function karyawanPt(array $opsi, string $pt, string $site, string $dept = ''): array
     {
         return array_map([self::class, 'rapikan'], $this->clickhouse->select(
-            'SELECT '.self::KOLOM_ORANG.' FROM '.self::T.' FINAL WHERE '.self::saringan($opsi, $pt, $site, '')
+            'SELECT '.self::KOLOM_ORANG.' FROM '.self::T.' FINAL WHERE '.self::saringan($opsi, $pt, $site, '', $dept)
         ));
+    }
+
+    /**
+     * Departemen (beserta jumlah karyawan) untuk perusahaan/site terpilih — pilihan filter.
+     * Dihitung ClickHouse, di-cache 30 menit.
+     *
+     * @param  array<string, array<string, int>>  $opsi
+     * @return array<string, int> departemen => jumlah ('-' = tanpa departemen)
+     */
+    public function departemen(array $opsi, string $pt, string $site): array
+    {
+        $kunci = 'dms_roster:people:dept:v1:'.md5($pt.'|'.$site);
+
+        return Cache::remember($kunci, self::TTL_OPSI, function () use ($opsi, $pt, $site): array {
+            $out = [];
+            foreach ($this->clickhouse->select('SELECT '.self::KOLOM_DEPT.' AS d, count() AS n FROM '.self::T.' FINAL WHERE '
+                .self::saringan($opsi, $pt, $site, '').' GROUP BY d') as $r) {
+                $out[(string) $r['d'] === '' ? '-' : (string) $r['d']] = (int) $r['n'];
+            }
+            uksort($out, static fn ($a, $b): int => strnatcasecmp((string) $a, (string) $b));
+
+            return $out;
+        });
     }
 
     /**
@@ -369,7 +392,7 @@ final class DmsRosterPeopleService
      *
      * @param  array<string, array<string, int>>  $opsi
      */
-    public static function saringan(array $opsi, string $pt, string $site, string $cari): string
+    public static function saringan(array $opsi, string $pt, string $site, string $cari, string $dept = ''): string
     {
         $q = [RfidClickHouseClient::class, 'quote'];
         $w = [self::dasar()];
@@ -380,6 +403,9 @@ final class DmsRosterPeopleService
         }
         if ($site !== '') {
             $w[] = self::KOLOM_SITE.' = '.$q($site === '-' ? '' : $site);
+        }
+        if ($dept !== '') {
+            $w[] = self::KOLOM_DEPT.' = '.$q($dept === '-' ? '' : $dept);
         }
         $cari = trim($cari);
         if ($cari !== '') {

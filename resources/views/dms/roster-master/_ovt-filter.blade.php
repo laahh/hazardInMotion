@@ -17,3 +17,12 @@
     @endforeach
   </select>
 </div>
+<div>
+  <label class="form-label text-sm fw-medium mb-4">Departemen</label>
+  <select name="dept" class="form-select form-select-sm" data-ovt-dept>
+    <option value="">Semua departemen ({{ count($depts ?? []) }})</option>
+    @foreach (($depts ?? []) as $d => $n)
+      <option value="{{ $d }}" @selected($d === ($dept ?? ''))>{{ $d === '-' ? 'Tanpa departemen' : $d }} · {{ number_format($n, 0, ',', '.') }}</option>
+    @endforeach
+  </select>
+</div>

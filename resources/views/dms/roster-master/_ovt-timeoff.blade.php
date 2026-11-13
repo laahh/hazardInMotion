@@ -10,7 +10,8 @@
     <div>
       <h6 class="rov-kartu__judul">Time off</h6>
       <p class="rov-kartu__sub">Hari cuti (CT), sakit (S), dan izin (I) dari roster yang disetujui, {{ $bulan->locale('id')->translatedFormat('F Y') }}.
-        {{ $pt === '' ? 'Pilih satu perusahaan untuk melihat kalender per orang.' : '' }}</p>
+        {{ $pt === '' ? 'Pilih satu perusahaan untuk melihat kalender per orang.' : '' }}
+        {{ $pt === '' && ($dept ?? '') !== '' ? 'Filter departemen berlaku setelah satu perusahaan dipilih.' : '' }}</p>
     </div>
     <form class="d-flex flex-wrap align-items-end gap-12 ovt-filter" data-ovt-form="time-off">
       @include('dms.roster-master._ovt-filter')

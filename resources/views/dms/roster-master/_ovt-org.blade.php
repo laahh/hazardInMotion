@@ -8,7 +8,7 @@
   <div class="rov-kartu__kepala">
     <div>
       <h6 class="rov-kartu__judul">Org chart</h6>
-      <p class="rov-kartu__sub">Susunan karyawan aktif per perusahaan → site → departemen → tingkat jabatan ({{ $angka($total) }} orang).
+      <p class="rov-kartu__sub">Susunan karyawan aktif per perusahaan → site → departemen → tingkat jabatan ({{ $angka($total) }} orang{{ ($dept ?? '') !== '' ? ' · departemen '.(($dept === '-') ? 'tanpa departemen' : $dept) : '' }}).
         {{ $denganOrang ? '' : 'Pilih satu perusahaan untuk melihat nama orangnya.' }}
       </p>
     </div>
