@@ -6,6 +6,7 @@ namespace App\Services\Dms\Roster;
 
 use App\Models\User;
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
+use App\Services\SportEvaluation\RfidClickHouseClient;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,8 +15,9 @@ use Throwable;
 
 /**
  * Approver Roster per departemen: manager di config
- * dms_roster.master.approver_departemen boleh me-review roster yang memuat
- * karyawan departemennya, selain jalur Assign Role yang sudah ada.
+ * dms_roster.master.approver_departemen ditambah karyawan berjabatan fungsional
+ * Manager (data karyawan aktif) boleh me-review roster yang memuat karyawan
+ * departemennya, selain jalur Assign Role yang sudah ada.
  *
  * File roster tidak menyimpan departemen, jadi departemen dibaca per SID dari
  * salinan cache yang diisi dms:sync-roster-rfid: request web di server tidak
@@ -32,6 +34,17 @@ final class DmsRosterApproverDepartemen
     private const TTL_HARI = 2;
 
     private const TIMEOUT_MS = 180000;
+
+    /** SID manager (dari jabatan) => departemen. */
+    public const KUNCI_MANAGER = 'dms_roster:manager_jabatan:v1';
+
+    private const TTL_MANAGER_MENIT = 360;
+
+    /** Gagal/kosong membaca ClickHouse: jangan dicoba ulang di tiap request. */
+    private const TTL_GAGAL_MENIT = 5;
+
+    /** @var array<string, string>|null */
+    private ?array $manager = null;
 
     /** @var array<string, list<int>> */
     private array $uploadPerDepartemen = [];
@@ -68,16 +81,94 @@ final class DmsRosterApproverDepartemen
         return $peta;
     }
 
-    /** Departemen akun ini (SID login ada di kolom email), null bila bukan approver. */
+    /**
+     * Departemen akun ini (SID login ada di kolom email), null bila bukan approver.
+     * Urutan: daftar di config (penimpa manual), lalu jabatan fungsional Manager
+     * perusahaan approver dari data karyawan aktif.
+     */
     public function departemenUser(?User $user): ?string
     {
         if ($user === null) {
             return null;
         }
         $sid = mb_strtoupper(trim((string) $user->email));
+        if ($sid === '') {
+            return null;
+        }
         $departemen = config('dms_roster.master.approver_departemen.approver.'.$sid);
+        if (is_string($departemen)) {
+            return $departemen;
+        }
 
-        return is_string($departemen) ? $departemen : null;
+        return $this->managerJabatan()[$sid] ?? null;
+    }
+
+    /**
+     * Manager menurut jabatan (jabatan_fungsional di config jabatan_manager) di
+     * perusahaan approver, dari ClickHouse obds. Cache 6 jam.
+     *
+     * @return array<string, string>
+     */
+    public function managerJabatan(): array
+    {
+        if ($this->manager !== null) {
+            return $this->manager;
+        }
+        $simpan = Cache::get(self::KUNCI_MANAGER);
+        if (is_array($simpan)) {
+            return $this->manager = $simpan;
+        }
+
+        $jabatan = array_map(
+            static fn ($j): string => RfidClickHouseClient::quote(mb_strtoupper(trim((string) $j))),
+            (array) config('dms_roster.master.approver_departemen.jabatan_manager', ['MANAGER']),
+        );
+        if ($jabatan === []) {
+            return $this->manager = [];
+        }
+
+        try {
+            $rows = app(RfidClickHouseClient::class)->select(sprintf(
+                "SELECT upper(trimBoth(ifNull(kode_sid, ''))) AS sid, any(trimBoth(ifNull(departement, ''))) AS departemen
+                 FROM obds.bep_vw_safety_karyawan_aktif FINAL
+                 WHERE upper(trimBoth(ifNull(nama_perusahaan, ''))) = upper(%s)
+                   AND upper(trimBoth(ifNull(jabatan_fungsional, ''))) IN (%s)
+                   AND trimBoth(ifNull(kode_sid, '')) <> '' AND trimBoth(ifNull(departement, '')) <> ''
+                 GROUP BY sid",
+                RfidClickHouseClient::quote($this->perusahaan()),
+                implode(', ', $jabatan),
+            ));
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster manager dari jabatan gagal: '.mb_substr($e->getMessage(), 0, 300));
+            Cache::put(self::KUNCI_MANAGER, [], now()->addMinutes(self::TTL_GAGAL_MENIT));
+
+            return $this->manager = [];
+        }
+
+        $peta = self::petakanManager($rows);
+        Cache::put(self::KUNCI_MANAGER, $peta, now()->addMinutes($peta === [] ? self::TTL_GAGAL_MENIT : self::TTL_MANAGER_MENIT));
+
+        return $this->manager = $peta;
+    }
+
+    /**
+     * Baris (sid, departemen) → SID huruf besar => departemen. Murni.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, string>
+     */
+    public static function petakanManager(array $rows): array
+    {
+        $peta = [];
+        foreach ($rows as $r) {
+            $sid = mb_strtoupper(trim((string) ($r['sid'] ?? '')));
+            $departemen = trim((string) ($r['departemen'] ?? ''));
+            if ($sid !== '' && $departemen !== '') {
+                $peta[$sid] = $departemen;
+            }
+        }
+
+        return $peta;
     }
 
     public function dataTersedia(): bool
@@ -123,8 +214,15 @@ final class DmsRosterApproverDepartemen
     public function sidUntuk(?User $user): array
     {
         $departemen = $this->departemenUser($user);
+        if ($departemen === null) {
+            return [];
+        }
         $peta = Cache::get(self::KUNCI);
-        if ($departemen === null || ! is_array($peta)) {
+        if (! is_array($peta)) {
+            // Salinan Tahap 10 belum ada / kedaluwarsa: isi dari ClickHouse.
+            $peta = $this->segarkanClickHouse();
+        }
+        if (! is_array($peta)) {
             return [];
         }
 
@@ -170,10 +268,37 @@ final class DmsRosterApproverDepartemen
             $this->galat = $e->getMessage();
             Log::warning('DmsRoster departemen karyawan gagal: '.$this->galat);
 
-            return null;
+            return $this->segarkanClickHouse();
         }
 
         return $this->simpanSalinan($rows);
+    }
+
+    /**
+     * Departemen karyawan dari salinan ClickHouse obds (dipakai bila OLAP tak
+     * terjangkau, mis. di server prod). Gagal = null.
+     *
+     * @return array<string, list<string>>|null
+     */
+    public function segarkanClickHouse(): ?array
+    {
+        try {
+            $rows = app(RfidClickHouseClient::class)->select(sprintf(
+                "SELECT trimBoth(ifNull(kode_sid, '')) AS sid, any(ifNull(departement, '')) AS departemen
+                 FROM obds.bep_vw_safety_karyawan_aktif FINAL
+                 WHERE upper(trimBoth(ifNull(nama_perusahaan, ''))) = upper(%s)
+                   AND trimBoth(ifNull(kode_sid, '')) <> ''
+                 GROUP BY sid",
+                RfidClickHouseClient::quote($this->perusahaan()),
+            ));
+        } catch (Throwable $e) {
+            $this->galat = $e->getMessage();
+            Log::warning('DmsRoster departemen karyawan (ClickHouse) gagal: '.mb_substr($this->galat, 0, 300));
+
+            return null;
+        }
+
+        return $this->simpanSalinan(array_map(static fn (array $r): object => (object) $r, $rows));
     }
 
     /**

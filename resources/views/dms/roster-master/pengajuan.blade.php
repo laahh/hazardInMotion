@@ -33,7 +33,15 @@
   </div>
 @endunless
 
-@if ($cakupan === [])
+@if (($departemen ?? null) !== null && $cakupan !== null)
+  <div class="alert alert-info bg-info-50 text-info-600 border-info-100 px-24 py-13 mb-24 radius-8 text-sm" role="alert">
+    Sebagai manager <b>{{ $departemen }}</b>, Anda melihat pengajuan karyawan {{ $ptDepartemen }} di departemen ini
+    ({{ number_format($jumlahSidDepartemen, 0, ',', '.') }} karyawan){{ $cakupan !== [] ? ', ditambah perusahaan: '.implode(', ', $cakupan) : '' }}.
+    @if ($jumlahSidDepartemen === 0)
+      <br>Daftar karyawan departemen belum terbaca, coba muat ulang beberapa saat lagi.
+    @endif
+  </div>
+@elseif ($cakupan === [])
   <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 px-24 py-13 mb-24 radius-8" role="alert">
     Akun Anda belum di-assign ke perusahaan mana pun, jadi belum ada pengajuan yang bisa Anda approve.
     Minta admin menambahkan perusahaan Anda di menu <b>Assign Role</b>.

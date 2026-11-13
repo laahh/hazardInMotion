@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DmsRosterPengajuan;
 use App\Models\User;
 use App\Services\Dms\Roster\DmsRosterAksesPerusahaan;
+use App\Services\Dms\Roster\DmsRosterApproverDepartemen;
 use App\Services\Dms\Roster\DmsRosterMasterEditService;
 use App\Services\Dms\Roster\DmsRosterMasterService;
 use App\Services\Dms\Roster\DmsRosterPengajuanService;
@@ -30,11 +31,15 @@ final class RosterPengajuanController extends Controller
 {
     private const PER_HALAMAN = 20;
 
+    /** @var list<string>|null */
+    private ?array $sidDept = null;
+
     public function __construct(
         private readonly DmsRosterPengajuanService $pengajuan,
         private readonly DmsRosterMasterService $master,
         private readonly DmsRosterMasterEditService $edit,
         private readonly DmsRosterAksesPerusahaan $akses,
+        private readonly DmsRosterApproverDepartemen $approverDepartemen,
     ) {}
 
     public function index(Request $request): View
@@ -42,11 +47,12 @@ final class RosterPengajuanController extends Controller
         $status = (string) $request->query('status', DmsRosterPengajuan::STATUS_PENDING);
         $cakupan = $this->cakupan();
         $siap = DmsRosterPengajuanService::adaTabel();
+        $sidDept = $this->sidDepartemen();
 
         $daftar = new LengthAwarePaginator([], 0, self::PER_HALAMAN);
         $ringkas = [];
         if ($siap) {
-            $q = $this->batasi(DmsRosterPengajuan::query(), $cakupan);
+            $q = $this->batasi(DmsRosterPengajuan::query(), $cakupan, $sidDept);
             $ringkas = (clone $q)->selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status')->all();
             $daftar = $q->when(
                 in_array($status, [DmsRosterPengajuan::STATUS_PENDING, DmsRosterPengajuan::STATUS_APPROVED, DmsRosterPengajuan::STATUS_REJECTED], true),
@@ -60,6 +66,9 @@ final class RosterPengajuanController extends Controller
             'status' => $status,
             'cakupan' => $cakupan,
             'siap' => $siap,
+            'departemen' => $this->approverDepartemen->departemenUser($this->user()),
+            'ptDepartemen' => self::ptDepartemen(),
+            'jumlahSidDepartemen' => count($sidDept),
         ]);
     }
 
@@ -138,25 +147,74 @@ final class RosterPengajuanController extends Controller
             ->with('success', 'Pengajuan '.$pengajuan->kode_sid.' '.($setuju ? 'disetujui, jadwal sudah diperbarui.' : 'ditolak.'));
     }
 
+    /**
+     * Boleh lewat Assign Role, atau sebagai manager departemen (config/jabatan)
+     * untuk karyawan departemennya di perusahaan approver.
+     */
     private function bolehReview(DmsRosterPengajuan $pengajuan): bool
     {
-        return DmsRosterAksesPerusahaan::mencakup($this->cakupan(), [self::namaPt($pengajuan->perusahaan)]);
+        $pt = self::namaPt($pengajuan->perusahaan);
+        if (DmsRosterAksesPerusahaan::mencakup($this->cakupan(), [$pt])) {
+            return true;
+        }
+
+        return DmsRosterAksesPerusahaan::mencakup([self::ptDepartemen()], [$pt])
+            && in_array(mb_strtoupper(trim((string) $pengajuan->kode_sid)), $this->sidDepartemen(), true);
     }
 
     /**
      * @param  list<string>|null  $cakupan
+     * @param  list<string>  $sidDept  karyawan departemen bila user manager departemen
      */
-    private function batasi(Builder $q, ?array $cakupan): Builder
+    private function batasi(Builder $q, ?array $cakupan, array $sidDept = []): Builder
     {
         if ($cakupan === null) {
             return $q;
         }
         // Tabel pengajuan kecil: ejaan perusahaannya dicocokkan satu per satu.
-        $ejaan = DmsRosterPengajuan::query()->distinct()->pluck('perusahaan')
+        $semuaEjaan = DmsRosterPengajuan::query()->distinct()->pluck('perusahaan');
+        $ejaan = $semuaEjaan
             ->filter(static fn (?string $pt): bool => DmsRosterAksesPerusahaan::mencakup($cakupan, [self::namaPt($pt)]))
             ->values()->all();
+        $ejaanDept = $sidDept === [] ? [] : $semuaEjaan
+            ->filter(static fn (?string $pt): bool => DmsRosterAksesPerusahaan::mencakup([self::ptDepartemen()], [self::namaPt($pt)]))
+            ->values()->all();
 
-        return $ejaan === [] ? $q->whereRaw('1 = 0') : $q->whereIn('perusahaan', $ejaan);
+        if ($ejaan === [] && $ejaanDept === []) {
+            return $q->whereRaw('1 = 0');
+        }
+
+        return $q->where(static function (Builder $w) use ($ejaan, $ejaanDept, $sidDept): void {
+            if ($ejaan !== []) {
+                $w->orWhereIn('perusahaan', $ejaan);
+            }
+            if ($ejaanDept !== []) {
+                $w->orWhere(static fn (Builder $d) => $d->whereIn('perusahaan', $ejaanDept)->whereIn('kode_sid', $sidDept));
+            }
+        });
+    }
+
+    /**
+     * SID karyawan departemen user bila ia manager departemen (config atau
+     * jabatan Manager); kosong bila bukan.
+     *
+     * @return list<string>
+     */
+    private function sidDepartemen(): array
+    {
+        return $this->sidDept ??= $this->approverDepartemen->sidUntuk($this->user());
+    }
+
+    private static function ptDepartemen(): string
+    {
+        return (string) config('dms_roster.master.approver_departemen.perusahaan', 'PT Berau Coal');
+    }
+
+    private function user(): ?User
+    {
+        $user = Auth::user();
+
+        return $user instanceof User ? $user : null;
     }
 
     private static function namaPt(?string $perusahaan): string

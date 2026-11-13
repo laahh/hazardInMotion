@@ -99,6 +99,10 @@ return [
             'perusahaan' => 'PT Berau Coal',
             'view_karyawan' => 'bcsid.bep_sid_karyawan',
             'status_karyawan' => 'AKTIF',
+            // Selain daftar `approver` di bawah, karyawan perusahaan ini dengan
+            // jabatan_fungsional berikut otomatis jadi approver departemennya
+            // (dibaca dari ClickHouse obds.bep_vw_safety_karyawan_aktif).
+            'jabatan_manager' => ['MANAGER'],
             'approver' => [
                 'S69PK' => 'HEALTH & SAFETY PERFORMANCE ASSSURANCE', // INDRA NUR SIDIQ
                 'K1I5I' => 'SYSTEM INNOVATION AND RISK MANAGEMENT', // RIDHO ILHAM MURY NANDA
