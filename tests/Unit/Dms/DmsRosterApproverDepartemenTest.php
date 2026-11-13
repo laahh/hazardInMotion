@@ -41,13 +41,15 @@ class DmsRosterApproverDepartemenTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_daftar_tertanam_berisi_46_manager_berau_coal(): void
+    public function test_daftar_tertanam_berisi_manager_berau_coal(): void
     {
         $config = require base_path('config/dms_roster.php');
         $tanam = $config['master']['approver_departemen'];
 
         $this->assertSame('PT Berau Coal', $tanam['perusahaan']);
-        $this->assertCount(46, $tanam['approver']);
+        // 46 manager + SID kedua Ridho (W2PAR).
+        $this->assertCount(47, $tanam['approver']);
+        $this->assertContains('QUALITY & RISK MANAGEMENT SYSTEM DEPARTMENT', $tanam['approver']['K1I5I']);
         $this->assertSame('BINUNGAN MINE OPERATION AREA 1 DEPARTEMENT', $tanam['approver']['9KWOO']);
     }
 

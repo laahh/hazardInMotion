@@ -23,4 +23,11 @@ final class DmsRosterManagerJabatanTest extends TestCase
             'UC9NZ' => 'ENVIRONMENT DEPARTMENT',
         ], $peta);
     }
+
+    public function test_daftar_nama_menerima_string_atau_daftar_departemen(): void
+    {
+        $this->assertSame(['HR'], DmsRosterApproverDepartemen::daftarNama(' HR '));
+        $this->assertSame(['A', 'B'], DmsRosterApproverDepartemen::daftarNama(['A', ' B ', '', 'A', null]));
+        $this->assertSame([], DmsRosterApproverDepartemen::daftarNama(null));
+    }
 }

@@ -105,7 +105,9 @@ return [
             'jabatan_manager' => ['MANAGER'],
             'approver' => [
                 'S69PK' => 'HEALTH & SAFETY PERFORMANCE ASSSURANCE', // INDRA NUR SIDIQ
-                'K1I5I' => 'SYSTEM INNOVATION AND RISK MANAGEMENT', // RIDHO ILHAM MURY NANDA
+                // Satu manager boleh memegang beberapa departemen: tulis sebagai daftar.
+                'K1I5I' => ['SYSTEM INNOVATION AND RISK MANAGEMENT', 'QUALITY & RISK MANAGEMENT SYSTEM DEPARTMENT'], // RIDHO ILHAM MURY NANDA
+                'W2PAR' => ['SYSTEM INNOVATION AND RISK MANAGEMENT', 'QUALITY & RISK MANAGEMENT SYSTEM DEPARTMENT'], // RIDHO ILHAM MURY NANDA (SID kedua)
                 'PFVSJ' => 'SAFETY OPERATIONS DEPARTMENT', // SALAHUDDIN AL RASYID
                 'FI7ZJ' => 'HR OPERATIONS DEPARTMENT', // MOH ADITIYA IRAWAN
                 'RB94K' => 'BINUNGAN MINE OPERATION AREA 3 DEPARTEMENT', // ROBBI DARMAN

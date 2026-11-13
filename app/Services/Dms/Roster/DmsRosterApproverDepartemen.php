@@ -88,19 +88,48 @@ final class DmsRosterApproverDepartemen
      */
     public function departemenUser(?User $user): ?string
     {
+        $daftar = $this->daftarDepartemenUser($user);
+
+        return $daftar === [] ? null : implode(' & ', $daftar);
+    }
+
+    /**
+     * Semua departemen yang dipegang akun ini. Config boleh berisi satu nama
+     * atau daftar nama (manager yang memegang lebih dari satu departemen).
+     *
+     * @return list<string>
+     */
+    public function daftarDepartemenUser(?User $user): array
+    {
         if ($user === null) {
-            return null;
+            return [];
         }
         $sid = mb_strtoupper(trim((string) $user->email));
         if ($sid === '') {
-            return null;
+            return [];
         }
-        $departemen = config('dms_roster.master.approver_departemen.approver.'.$sid);
-        if (is_string($departemen)) {
-            return $departemen;
+        $config = self::daftarNama(config('dms_roster.master.approver_departemen.approver.'.$sid));
+        if ($config !== []) {
+            return $config;
         }
+        $jabatan = $this->managerJabatan()[$sid] ?? null;
 
-        return $this->managerJabatan()[$sid] ?? null;
+        return $jabatan === null ? [] : [$jabatan];
+    }
+
+    /**
+     * Nilai config (string atau daftar) → daftar nama tak kosong. Murni.
+     *
+     * @return list<string>
+     */
+    public static function daftarNama(mixed $nilai): array
+    {
+        $daftar = is_array($nilai) ? $nilai : [$nilai];
+
+        return array_values(array_unique(array_filter(
+            array_map(static fn ($d): string => is_string($d) ? trim($d) : '', $daftar),
+            static fn (string $d): bool => $d !== '',
+        )));
     }
 
     /**
@@ -213,8 +242,8 @@ final class DmsRosterApproverDepartemen
      */
     public function sidUntuk(?User $user): array
     {
-        $departemen = $this->departemenUser($user);
-        if ($departemen === null) {
+        $daftar = $this->daftarDepartemenUser($user);
+        if ($daftar === []) {
             return [];
         }
         $peta = Cache::get(self::KUNCI);
@@ -226,7 +255,12 @@ final class DmsRosterApproverDepartemen
             return [];
         }
 
-        return $peta[self::kunciDepartemen($departemen)] ?? [];
+        $sids = [];
+        foreach ($daftar as $departemen) {
+            array_push($sids, ...($peta[self::kunciDepartemen($departemen)] ?? []));
+        }
+
+        return array_values(array_unique($sids));
     }
 
     public function bolehLihat(?User $user, int $uploadId): bool
@@ -267,8 +301,13 @@ final class DmsRosterApproverDepartemen
         } catch (Throwable $e) {
             $this->galat = $e->getMessage();
             Log::warning('DmsRoster departemen karyawan gagal: '.$this->galat);
+            $galatOlap = $this->galat;
+            $peta = $this->segarkanClickHouse();
+            if ($peta === null) {
+                $this->galat = $galatOlap.' | cadangan ClickHouse: '.$this->galat;
+            }
 
-            return $this->segarkanClickHouse();
+            return $peta;
         }
 
         return $this->simpanSalinan($rows);
@@ -332,8 +371,11 @@ final class DmsRosterApproverDepartemen
      */
     public static function departemenTakDikenal(array $peta): array
     {
-        $daftar = (array) config('dms_roster.master.approver_departemen.approver', []);
-        $tak = array_filter($daftar, static fn ($d): bool => ! isset($peta[self::kunciDepartemen((string) $d)]));
+        $daftar = [];
+        foreach ((array) config('dms_roster.master.approver_departemen.approver', []) as $nilai) {
+            array_push($daftar, ...self::daftarNama($nilai));
+        }
+        $tak = array_filter($daftar, static fn (string $d): bool => ! isset($peta[self::kunciDepartemen($d)]));
 
         return array_values(array_unique($tak));
     }
