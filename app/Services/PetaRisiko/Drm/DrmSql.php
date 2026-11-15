@@ -283,26 +283,29 @@ inc AS (
     AND ifNull(i.Kategori_Kecelakaan, \'\') NOT IN ('.$buang.')
 ),
 incx AS (
-  SELECT *, arrayMap(x -> x.1, arrayFilter(x -> match(tx, x.2), th)) AS ta,
+  SELECT *, arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr)) AS ta,
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx)))) AS ts
   FROM inc
 ),
-it AS (SELECT no, t FROM incx ARRAY JOIN ts AS t WHERE dl IS NOT NULL AND dl != 0),
+-- Lokasi dulu, baru kata: kata insiden hanya dipasangkan dengan kata bahaya yang ada di
+-- baseline DETAIL LOKASI insiden itu sendiri (JOIN pada dl + kata). Sisi kecil (kata insiden)
+-- jadi tabel hash; pasangan baseline × kata dialirkan, sehingga memori tetap rendah.
+it AS (SELECT no, toInt64(dl) AS dl, t FROM incx ARRAY JOIN ts AS t WHERE dl IS NOT NULL AND dl != 0),
 ht AS (SELECT hid, t FROM hbx ARRAY JOIN tsb AS t),
-kandidat AS (
-  -- JOIN per kata kunci (paralel), bukan CROSS JOIN insiden × bahaya (satu thread, sangat lambat).
-  SELECT i.no AS no, h.hid AS hid, count() AS kuat FROM it i JOIN ht h ON h.t = i.t
-  GROUP BY no, hid HAVING kuat >= 2
+bt AS (
+  SELECT b.dl AS dl, b.hid AS hid, h.t AS t
+  FROM (SELECT DISTINCT dl, hid FROM base WHERE dl IN (SELECT dl FROM it)) b
+  JOIN ht h ON h.hid = b.hid
 ),
-cocok0 AS (
-  SELECT k.no AS no, x.dl AS dl, k.hid AS hid, k.kuat AS kuat
-  FROM kandidat k JOIN incx x ON x.no = k.no JOIN hbx hb ON hb.hid = k.hid
-  WHERE hasAny(x.ta, hb.tb)
+kandidat AS (
+  SELECT i.no AS no, bt.dl AS dl, bt.hid AS hid, count() AS kuat
+  FROM bt JOIN it i ON i.dl = bt.dl AND i.t = bt.t
+  GROUP BY no, dl, hid HAVING kuat >= 2
 ),
 cocok AS (
-  -- Cocokkan teks dulu (insiden × bahaya HIRA), baru saring ke baseline detail lokasinya:
-  -- jauh lebih ringan daripada menggandakan insiden ke semua pasangan baseline lebih dulu.
-  SELECT no, hid, kuat FROM cocok0 WHERE (dl, hid) IN (SELECT dl, hid FROM base)
+  SELECT k.no AS no, k.hid AS hid, k.kuat AS kuat
+  FROM kandidat k JOIN incx x ON x.no = k.no JOIN hbx hb ON hb.hid = k.hid
+  WHERE hasAny(x.ta, hb.tb)
 )';
     }
 
@@ -387,7 +390,8 @@ WITH
   t_end - '.((int) $c['jendela_hari'] - 1).' AS t_win,
   t_end - '.((int) $c['strip_hari'] - 1).' AS t_strip,
   toDate('.$this->q($mulaiData).') AS t_open,
-  '.$this->pasangan($c['tema']).' AS th,
+  '.$this->larik(array_keys($c['tema'])).' AS thn,
+  '.$this->larik(array_values($c['tema'])).' AS thr,
   '.$this->larik($c['stopword']).' AS sw,
   '.$this->pasangan($c['grup_detail_lokasi']).' AS gd,
   '.$this->pasangan($c['grup_aktivitas']).' AS ga,
@@ -449,13 +453,13 @@ sap AS (
     AND ifNull(status, \'\') NOT IN ('.$this->daftar($c['status_buang']).')
 ),
 labx AS (
-  SELECT k, sk, arrayMap(x -> x.1, arrayFilter(x -> match(concat(k, \' \', sk), x.2), th)) AS ta,
+  SELECT k, sk, arrayMap(i -> thn[i], multiMatchAllIndices(concat(k, \' \', sk), thr)) AS ta,
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(sk)))) AS ts
   FROM (SELECT DISTINCT k, sk FROM sap WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\')
 ),
 hbx AS (
   SELECT hid, a, s,
-         arrayMap(x -> x.1, arrayFilter(x -> match(concat(b, \' \', lower(p)), x.2), th)) AS tb,
+         arrayMap(i -> thn[i], multiMatchAllIndices(concat(b, \' \', lower(p)), thr)) AS tb,
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p)))))) AS tsb
   FROM hira
 ),
@@ -464,12 +468,12 @@ ma AS (
   WHERE hasAny(l.ta, h.tb) AND length(arrayIntersect(l.ts, h.tsb)) >= 1
 ),
 otx AS (
-  SELECT tx, arrayMap(x -> x.1, arrayFilter(x -> match(tx, x.2), th)) AS ta,
+  SELECT tx, arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr)) AS ta,
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx)))) AS ts
   FROM (SELECT DISTINCT tx FROM sap WHERE j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND trim(tx) != \'\')
 ),
 asx AS (
-  SELECT a, s, arrayMap(x -> x.1, arrayFilter(x -> match(concat(a, \' \', s), x.2), th)) AS tb,
+  SELECT a, s, arrayMap(i -> thn[i], multiMatchAllIndices(concat(a, \' \', s), thr)) AS tb,
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(a, \' \', s))))) AS tsb
   FROM (SELECT DISTINCT a, s FROM hira)
 ),
