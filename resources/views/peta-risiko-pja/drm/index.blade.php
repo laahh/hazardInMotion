@@ -267,7 +267,9 @@
 
   function renderPja() {
     const panel = $('#dr-panel-pja');
-    if (!M.beranda || !M.beranda.mgmt) { panel.innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data Beranda PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
+    // Snapshot dari kode lama: ringkasan PJA belum satuan ketat (tanpa kolom "tot") atau tanpa statistik temuan.
+    const formatBaru = M.beranda && M.beranda.mgmt && (M.beranda.kolomMgmt || []).includes('tot') && M.pja.every((p) => Array.isArray(p.tm));
+    if (!formatBaru) { panel.innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot masih format lama (dihitung ' + DR.esc(String(M.dibuat || '').slice(0, 16).replace('T', ' ')) + '). Jalankan ulang <code>php artisan peta-risiko:sync</code> agar tab ini terisi.</div></div>'; return; }
     const semua = dataPja();
     const diSite = semua.filter((o) => state.site === 'ALL' || o.site === state.site);
     const tampil = diSite.filter((o) => (state.pri === 'all' || o.pri === state.pri) && (!state.cari || o.nama.toLowerCase().includes(state.cari)));

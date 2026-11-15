@@ -419,6 +419,7 @@
   // ------------------------------------------------------------ manajemen
   function tabelMgmt() {
     const K = BR.kolomMgmt, ix = Object.fromEntries(K.map((k, i) => [k, i]));
+    if (!('tot' in ix)) return '<div class="pr-empty">Snapshot masih format lama. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div>';
     const jumlah = (obj, f) => LV.forEach((lv) => { if (S.kb[lv]) Object.entries((obj || {})[lv] || {}).forEach(([k, v]) => f(k, v)); });
     const L = BR.mgmt.map((p) => {
       const c = Array(K.length).fill(0), kel = {}, kg = {};
