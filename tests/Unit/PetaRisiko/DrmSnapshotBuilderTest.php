@@ -83,8 +83,8 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertStringContainsString('toInt64(id_oak_activity) AS aid', $status);
         $this->assertStringContainsString('length(arrayIntersect(i.ts, h.tbb)) >= 1', $status);
         $this->assertStringContainsString('OR ifNull(gd.ts_d, 0) > 0', $status);
-        // Label spesifik (≤ 2 aktivitas) ikut menandai aktivitas; dipakai juga di tren mingguan.
-        $this->assertStringContainsString('HAVING uniqExact(h.a) <= 2', $status);
+        // Label spesifik (≤ 2 kelompok aktivitas) ikut menandai aktivitas; dipakai juga di tren mingguan.
+        $this->assertStringContainsString('HAVING uniqExact(h.proses) <= 2', $status);
         $this->assertStringContainsString('FROM eva', $mingguan);
         $this->assertStringContainsString('SELECT dl, hid, minggu, toUInt8(if(ts = 1, 4, 3)) FROM ed', $mingguan);
     }

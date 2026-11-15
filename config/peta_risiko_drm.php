@@ -69,6 +69,25 @@ return [
     */
     'hazard_spesifik_maks_aktivitas' => 2,
 
+    /*
+    | Beranda PJA (halaman /peta-risiko-pja/pja/{id}), mengikuti konsep "Beranda PJA" DRM 2.1:
+    | - Satu baris = kelompok aktivitas (proses bisnis) × detail lokasi × bahaya-risiko.
+    | - Periode = minggu kalender Minggu–Sabtu; status per minggu: terkontrol / gap (laporan
+    |   bermasalah atau tanpa laporan). Tanpa laporan dihitung GAP, bukan aman.
+    | - Laporan bermasalah: belum closed pada akhir minggu, berulang (≥ ambang_berulang laporan
+    |   bahaya sama di detail lokasi sama dalam seminggu), OAK Stop Pekerjaan, butir checklist tidak sesuai.
+    | - Bahaya umum: teks bahaya sama di ≥ umum_min_kelompok kelompok dalam satu grup lokasi →
+    |   ditampilkan terpisah, tidak masuk pembagi.
+    */
+    'beranda' => [
+        'minggu' => 12,
+        'hari' => 28,
+        'ambang_berulang' => 3,
+        'umum_min_kelompok' => 4,
+        'tekanan' => ['u4_tinggi' => 0.6, 'u4_sedang' => 0.3, 'hari_tinggi' => 5, 'beruntun_tinggi' => 3, 'hari_sedang' => 3],
+        'lokasi_lama_hari' => 14,
+    ],
+
     /* Status SAP yang tidak dihitung sama sekali. */
     'status_buang' => ['DELETED', 'BUKAN TEMUAN'],
 

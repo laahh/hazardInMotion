@@ -259,6 +259,198 @@ SELECT toString(h.hid) AS hid, ifNull(a.n, 0) AS n_a, a.contoh AS label_a, ifNul
 FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid LEFT JOIN mapd dd ON dd.hid = h.hid';
     }
 
+    // ---------------------------------------------------------- Beranda PJA
+
+    /**
+     * Beranda PJA — bukti tingkat KELOMPOK aktivitas per (detail lokasi, kelompok), dijalankan per site.
+     * Kelompok terdeteksi oleh: Observasi/OAK yang aktivitasnya terpetakan ke kelompok itu, atau label
+     * Hazard/Inspeksi spesifik (cocok ke ≤ N kelompok di detail lokasi itu).
+     * w / h: daftar jarang "indeks:bit" per minggu (0 = minggu berjalan) / per hari (0 = hari pertama strip).
+     * Bit: 1 = terdeteksi, 16 = OAK Stop Pekerjaan. last = laporan terakhir (rentang data).
+     * Baris kel = '' berisi laporan SAP terakhir apa pun di detail lokasi itu.
+     */
+    public function berandaKelompok(): string
+    {
+        return $this->prelude().$this->berandaDasarCte().',
+ap AS (SELECT DISTINCT a, s, proses FROM hira),
+bk AS (SELECT DISTINCT b.dl AS dl, h.proses AS kel FROM basek b JOIN hira h ON h.hid = b.hid),
+kev AS (
+  SELECT dl, kel, d, stop FROM (
+    SELECT e.dl AS dl, p.proses AS kel, e.d AS d, toUInt8(e.stop) AS stop FROM evo e JOIN ap p ON p.a = e.a AND p.s = e.s
+    UNION ALL
+    SELECT x.dl, h.proses, x.d, toUInt8(0) FROM evh x JOIN hira h ON h.hid = x.hid
+    WHERE (x.dl, x.k, x.sk) IN (SELECT dl, k, sk FROM spes)
+  ) WHERE (dl, kel) IN (SELECT dl, kel FROM bk)
+),
+kw AS (
+  SELECT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, groupBitOr(toUInt8(1 + 16 * stop)) AS bit
+  FROM kev WHERE d >= wk_awal GROUP BY dl, kel, wi
+),
+kh AS (
+  SELECT dl, kel, dateDiff(\'day\', h0, d) AS di, groupBitOr(toUInt8(1 + 16 * stop)) AS bit
+  FROM kev WHERE d >= h0 GROUP BY dl, kel, di
+),
+kl AS (SELECT dl, kel, max(d) AS last FROM kev GROUP BY dl, kel),
+kwa AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w FROM kw GROUP BY dl, kel),
+kha AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM kh GROUP BY dl, kel)
+SELECT toString(l.dl) AS dl, l.kel AS kel, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h, toString(l.last) AS last
+FROM kl l LEFT JOIN kwa a ON a.dl = l.dl AND a.kel = l.kel LEFT JOIN kha b ON b.dl = l.dl AND b.kel = l.kel
+UNION ALL
+SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
+    }
+
+    /**
+     * Beranda PJA — bukti SPESIFIK per (detail lokasi, bahaya baseline), dijalankan per site:
+     * label Hazard/Inspeksi yang cocok ke bahaya dan butir checklist OAK.
+     * Bit: 2 = teridentifikasi spesifik, 4 = belum closed (pada akhir minggu / pada tanggal akhir untuk harian),
+     * 8 = berulang (≥ ambang laporan dalam minggu yang sama), 32 = butir checklist tidak sesuai,
+     * 64 (harian) = insiden pada hari itu yang root cause-nya terpetakan ke bahaya ini.
+     */
+    public function berandaSpesifik(): string
+    {
+        $ulang = (int) $this->cfg['beranda']['ambang_berulang'];
+
+        return $this->prelude().$this->berandaDasarCte().$this->rootCauseCte().',
+sx AS (
+  SELECT dl, hid, d, sum(n) AS n,
+         max(toUInt8(ifNull(cd > least(toStartOfWeek(d, 0) + 6, t_end), 1))) AS open_w,
+         max(toUInt8(ifNull(cd > t_end, 1))) AS open_h
+  FROM evh GROUP BY dl, hid, d
+),
+sxw AS (SELECT dl, hid, d, n, open_w, open_h, sum(n) OVER (PARTITION BY dl, hid, toStartOfWeek(d, 0)) AS nw FROM sx),
+dx AS (SELECT dl, hid, d, ts FROM evd WHERE (dl, hid) IN (SELECT dl, hid FROM basek)),
+ix AS (
+  SELECT DISTINCT r.dl AS dl, m.hid AS hid, r.tgl AS d FROM rci r JOIN mar m ON m.k = r.k AND m.sk = r.sk
+  WHERE r.tgl >= h0 AND r.tgl <= t_end AND (r.dl, m.hid) IN (SELECT dl, hid FROM basek)
+),
+sw AS (
+  SELECT dl, hid, wi, groupBitOr(bit) AS bit FROM (
+    SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi,
+           toUInt8(2 + 4 * open_w + 8 * (nw >= '.$ulang.')) AS bit FROM sxw WHERE d >= wk_awal
+    UNION ALL
+    SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7), toUInt8(2 + 32 * ts) FROM dx WHERE d >= wk_awal
+  ) GROUP BY dl, hid, wi
+),
+shd AS (
+  SELECT dl, hid, di, groupBitOr(bit) AS bit FROM (
+    SELECT dl, hid, dateDiff(\'day\', h0, d) AS di, toUInt8(2 + 4 * open_h + 8 * (nw >= '.$ulang.')) AS bit FROM sxw WHERE d >= h0
+    UNION ALL
+    SELECT dl, hid, dateDiff(\'day\', h0, d), toUInt8(2 + 32 * ts) FROM dx WHERE d >= h0
+    UNION ALL
+    SELECT dl, hid, dateDiff(\'day\', h0, d), toUInt8(64) FROM ix
+  ) GROUP BY dl, hid, di
+),
+swa AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w FROM sw GROUP BY dl, hid),
+sha AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM shd GROUP BY dl, hid),
+kunci AS (SELECT dl, hid FROM swa UNION DISTINCT SELECT dl, hid FROM sha)
+SELECT toString(k.dl) AS dl, toString(k.hid) AS hid, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h
+FROM kunci k LEFT JOIN swa a ON a.dl = k.dl AND a.hid = k.hid LEFT JOIN sha b ON b.dl = k.dl AND b.hid = k.hid';
+    }
+
+    /**
+     * Beranda PJA — panel "Insiden dan laporan SAP terkait root cause" (semua site sekaligus; kecil).
+     * Root cause = obds.Hazard_Related_Incident berstatus ROOT CAUSE, insiden tahun berjalan. Laporan
+     * HAZARD/INSPEKSI berlabel sama (ketidaksesuaian + sub) di detail lokasi insiden dihitung per bulan
+     * kalender: 3 bulan sebelum, bulan kejadian, sesudah. Belum closed = semua laporan label itu sejak
+     * 3 bulan sebelum awal tahun yang belum CLOSED/DONE (REJECT dihitung belum closed).
+     */
+    public function berandaInsiden(): string
+    {
+        $c = $this->cfg;
+        $akhir = $this->sampai->toDateString();
+        $sejak = $this->sampai->startOfYear()->subMonths(3)->toDateString();
+        $selesai = $this->daftar(self::STATUS_SELESAI);
+        $label = '(s.k = r.k AND s.sk = r.sk)';
+
+        return '
+WITH toDate('.$this->q($akhir).') AS t_end'.$this->rootCauseDasarCte().',
+s0 AS (
+  SELECT toInt64(`id detail lokasi`) AS dl, toDate(`date time`) AS d,
+         lower(trim(ifNull(ketidaksesuaian, \'\'))) AS k, lower(trim(ifNull(subketidaksesuaian, \'\'))) AS sk,
+         ifNull(status, \'\') AS st
+  FROM obds.ch_rfid_sap_cuti_all_site
+  WHERE jenis_data IN (\'HAZARD\', \'INSPEKSI\')
+    AND `date time` >= toDate('.$this->q($sejak).') AND `date time` < t_end + 1
+    AND `id detail lokasi` IN (SELECT dl FROM rci)
+    AND ifNull(status, \'\') NOT IN ('.$this->daftar($c['status_buang']).')
+),
+ri AS (
+  SELECT no, dl, tgl, any(kategori) AS kategori, any(site) AS site, any(lokasi) AS lokasi, any(detlok) AS detlok,
+         k, sk, any(label) AS label, toStartOfMonth(tgl) AS bln
+  FROM rci WHERE toYear(tgl) = toYear(t_end) AND sk != \'\'
+  GROUP BY no, dl, tgl, k, sk
+)
+SELECT r.no AS no, toString(r.dl) AS dl, toString(r.tgl) AS tanggal, r.kategori AS kategori, r.site AS site,
+       r.lokasi AS lokasi, r.detlok AS detlok, r.label AS label,
+       countIf('.$label.' AND s.d >= addMonths(r.bln, -3) AND s.d < r.bln) AS sebelum,
+       countIf('.$label.' AND s.d >= r.bln AND s.d < addMonths(r.bln, 1)) AS bulan,
+       countIf('.$label.' AND s.d >= addMonths(r.bln, 1)) AS sesudah,
+       countIf(s.k = r.k AND s.d >= addMonths(r.bln, -3) AND s.d < r.bln) AS k_sebelum,
+       countIf(s.k = r.k AND s.d >= addMonths(r.bln, 1)) AS k_sesudah,
+       toString(maxIf(s.d, '.$label.')) AS terakhir,
+       countIf('.$label.' AND s.st NOT IN ('.$selesai.')) AS belum_closed
+FROM ri r LEFT JOIN s0 s ON s.dl = r.dl
+GROUP BY r.no, r.dl, r.tgl, r.kategori, r.site, r.lokasi, r.detlok, r.k, r.sk, r.label
+ORDER BY r.tgl DESC';
+    }
+
+    /** CTE bersama Beranda: minggu kalender (Minggu awal), hari strip, basek, sh, bukti Hazard. */
+    private function berandaDasarCte(): string
+    {
+        $b = $this->cfg['beranda'];
+
+        return ',
+toStartOfWeek(t_end, 0) AS wk0,
+wk0 - '.(7 * ((int) $b['minggu'] - 1)).' AS wk_awal,
+t_end - '.((int) $b['hari'] - 1).' AS h0,
+basek AS (SELECT dl, hid FROM base GROUP BY dl, hid),
+sh AS (
+  SELECT dl, k, sk, d, cd, count() AS n FROM sap
+  WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\' GROUP BY dl, k, sk, d, cd
+),
+'.$this->hazardCte();
+    }
+
+    /** Root cause insiden (ROOT CAUSE) + detail lokasinya; tanpa prelude (dipakai juga oleh berandaInsiden). */
+    private function rootCauseDasarCte(): string
+    {
+        return ',
+rdl AS (
+  SELECT lower(trim(site)) AS s, lower(trim(lokasi)) AS l, lower(trim(Detil_Lokasi)) AS d, any(toInt64(id_detil_lokasi)) AS dl
+  FROM obds.bep_vw_site_lokasi_detil_lokasi GROUP BY s, l, d
+),
+rci AS (
+  SELECT ifNull(r.No_Incident, \'\') AS no, toDate(parseDateTimeBestEffortUSOrNull(r.Tanggal_Kejadian)) AS tgl, x.dl AS dl,
+         ifNull(r.Kategori_Incident, \'\') AS kategori, ifNull(r.Site, \'\') AS site, ifNull(r.Lokasi, \'\') AS lokasi,
+         ifNull(r.Detail_Lokasi, \'\') AS detlok,
+         lower(trim(ifNull(r.Ketidaksesuaian, \'\'))) AS k, lower(trim(ifNull(r.Sub_Ketidaksesuaian, \'\'))) AS sk,
+         concat(trim(ifNull(r.Ketidaksesuaian, \'\')), \' › \', trim(ifNull(r.Sub_Ketidaksesuaian, \'\'))) AS label
+  FROM obds.Hazard_Related_Incident AS r
+  JOIN rdl x ON x.s = lower(trim(r.Site)) AND x.l = lower(trim(r.Lokasi)) AND x.d = lower(trim(r.Detail_Lokasi))
+  WHERE r.Status_Causal = \'ROOT CAUSE\' AND parseDateTimeBestEffortUSOrNull(r.Tanggal_Kejadian) IS NOT NULL
+    AND ifNull(r.Kategori_Incident, \'\') NOT IN ('.$this->daftar($this->cfg['insiden']['kategori_buang']).')
+)';
+    }
+
+    /** Root cause + pemetaan labelnya ke bahaya (aturan sama dengan Master A); butuh prelude. */
+    private function rootCauseCte(): string
+    {
+        $c = $this->cfg;
+
+        return $this->rootCauseDasarCte().',
+labr AS (
+  SELECT k, sk, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(k, \' \', sk), thr))) AS ta,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(sk))) AS ts
+  FROM (SELECT DISTINCT k, sk FROM rci WHERE sk != \'\')
+),
+mar AS (
+  SELECT l.k AS k, l.sk AS sk, h.hid AS hid FROM labr l CROSS JOIN hbx h
+  WHERE hasAny(l.ta, h.tb)
+    AND length(arrayIntersect(l.ts, h.tsb)) >= '.(int) $c['pemetaan']['kata_min'].'
+    AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_a), t), arrayIntersect(l.ts, h.tsb))) >= 1
+)';
+    }
+
     /** Temuan Hazard/Inspeksi yang masih open per tanggal akhir, di detail lokasi yang punya baseline. */
     public function temuanOpen(): string
     {
@@ -790,7 +982,7 @@ sb AS (
     /**
      * Bukti Hazard/Inspeksi (butuh CTE sh & basek):
      * evh  : temuan → bahaya baseline yang labelnya cocok, di detail lokasi temuan (konfirmasi bahaya).
-     * spes : label SPESIFIK di detail lokasi itu = cocok ke bahaya dari ≤ N aktivitas HIRA.
+     * spes : label SPESIFIK di detail lokasi itu = cocok ke bahaya dari ≤ N kelompok aktivitas (proses bisnis).
      * evs  : label spesifik ikut menandai aktivitas (a, s) bahaya yang cocok sebagai terdeteksi.
      * eva  : bukti tingkat aktivitas = Observasi/OAK (evo) + Hazard/Inspeksi spesifik (evs).
      */
@@ -803,7 +995,7 @@ sb AS (
 ),
 spes AS (
   SELECT e.dl AS dl, e.k AS k, e.sk AS sk FROM evh e JOIN hira h ON h.hid = e.hid
-  GROUP BY e.dl, e.k, e.sk HAVING uniqExact(h.a) <= '.(int) $this->cfg['hazard_spesifik_maks_aktivitas'].'
+  GROUP BY e.dl, e.k, e.sk HAVING uniqExact(h.proses) <= '.(int) $this->cfg['hazard_spesifik_maks_aktivitas'].'
 ),
 evs AS (
   SELECT DISTINCT e.dl AS dl, h.a AS a, h.s AS s, e.d AS d FROM evh e JOIN hira h ON h.hid = e.hid

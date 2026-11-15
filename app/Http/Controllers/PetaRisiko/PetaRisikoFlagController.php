@@ -55,9 +55,14 @@ class PetaRisikoFlagController extends Controller
         ]);
 
         $lokasi = collect($data['lokasi'])->firstWhere('dl', $v['dl']);
-        $baris = collect($data['akt'])->first(fn ($r) => $r[0] === $v['dl'] && $r[1] === $v['aktivitas']);
-        if ($lokasi === null || $baris === null) {
-            throw ValidationException::withMessages(['aktivitas' => 'Aktivitas / detail lokasi ini bukan bagian dari PJA tersebut.']);
+        // Beranda PJA: flag per kelompok aktivitas (proses bisnis) di satu detail lokasi, kunci "kel:KODE".
+        $kelompok = str_starts_with($v['aktivitas'], 'kel:') ? substr($v['aktivitas'], 4) : null;
+        $namaProses = array_map(fn ($p) => $p[0], (array) config('peta_risiko_drm.proses_bisnis')) + ['X' => 'Belum terpetakan'];
+        $sah = $kelompok !== null
+            ? isset($namaProses[$kelompok])
+            : collect($data['akt'])->contains(fn ($r) => $r[0] === $v['dl'] && $r[1] === $v['aktivitas']);
+        if ($lokasi === null || ! $sah) {
+            throw ValidationException::withMessages(['aktivitas' => 'Kelompok aktivitas / detail lokasi ini bukan bagian dari PJA tersebut.']);
         }
         $adaPending = Flag::where('detail_lokasi_id', $v['dl'])->where('aktivitas_hash', Flag::hash($v['aktivitas']))
             ->where('status_review', Flag::PENDING)->exists();
@@ -73,7 +78,7 @@ class PetaRisikoFlagController extends Controller
             'detail_lokasi_nama' => $lokasi['detlok'] ?? null,
             'aktivitas_kunci' => $v['aktivitas'],
             'aktivitas_hash' => Flag::hash($v['aktivitas']),
-            'aktivitas_nama' => mb_substr((string) ($data['namaAkt'][$v['aktivitas']] ?? $v['aktivitas']), 0, 500),
+            'aktivitas_nama' => mb_substr((string) ($kelompok !== null ? $namaProses[$kelompok] : ($data['namaAkt'][$v['aktivitas']] ?? $v['aktivitas'])), 0, 500),
             'status_aktivitas' => $v['status'],
             'mulai' => $v['mulai'],
             'selesai' => $v['selesai'] ?? null,

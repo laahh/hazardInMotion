@@ -62,7 +62,8 @@ class DrmSnapshotBuilder
             'bearc' => $this->ambil('BeARC mingguan', $sql->bearc()),
             'coverage' => $this->ambil('coverage', $sql->coverage()),
             'mapping' => $this->ambil('mapping SAP per bahaya (Excel)', $sql->mappingBahaya()),
-            'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [], 'pasangan' => [],
+            'brc' => $this->ambil('beranda: insiden & root cause', $sql->berandaInsiden()),
+            'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [], 'pasangan' => [], 'bkel' => [], 'bspe' => [],
         ];
         foreach ($d['sites'] as $site) {
             $s = $sql->untukSite($site);
@@ -71,6 +72,8 @@ class DrmSnapshotBuilder
             array_push($d['temuan'], ...$this->ambil("temuan open {$site}", $s->temuanOpen()));
             array_push($d['statusBahaya'], ...$this->ambil("status per bahaya {$site} (Excel)", $s->statusPerBahaya()));
             array_push($d['pasangan'], ...$this->ambil("pasangan baseline {$site}", $s->pasanganBaseline()));
+            array_push($d['bkel'], ...$this->ambil("beranda: bukti kelompok {$site}", $s->berandaKelompok()));
+            array_push($d['bspe'], ...$this->ambil("beranda: bukti spesifik {$site}", $s->berandaSpesifik()));
         }
 
         return $this->susun($d, $sampai, $cfg);
@@ -93,6 +96,8 @@ class DrmSnapshotBuilder
             'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(), 'mapping SAP per bahaya' => $sql->mappingBahaya(),
             "aktivitas × detail lokasi ({$site})" => $s->aktivitasDetailLokasi(), "bahaya sorot ({$site})" => $s->bahayaSorot(),
             "temuan open ({$site})" => $s->temuanOpen(), "status per bahaya ({$site})" => $s->statusPerBahaya(), "pasangan baseline ({$site})" => $s->pasanganBaseline(),
+            'beranda: insiden & root cause' => $sql->berandaInsiden(),
+            "beranda: bukti kelompok ({$site})" => $s->berandaKelompok(), "beranda: bukti spesifik ({$site})" => $s->berandaSpesifik(),
         ];
 
         $hasil = [];
@@ -142,6 +147,7 @@ class DrmSnapshotBuilder
         foreach ($pjaBc as $id => $info) {
             $berkas[$id] = $this->berkasPja($info, $dl, $hira, $hiraPerA, $pasanganPerDl, $perDl, $personil, $bearcPerSid, $coveragePerPja[$id] ?? []);
         }
+        $beranda = $this->beranda($d, $sampai, $cfg, $pjaBc, $berkas, $hira, $dl, $pasanganPerDl);
 
         return [
             'meta' => [
@@ -162,9 +168,52 @@ class DrmSnapshotBuilder
                 'pja' => array_values(array_map(fn ($p) => $this->ringkasPja($p, $cakupan, $berkas[$p['id']]), $pjaBc)),
                 'kolomAkt' => self::KOLOM_AKT,
                 'kolomBahaya' => self::KOLOM_BAHAYA,
+                'beranda' => $beranda,
             ],
             'pja' => $berkas,
             'ekspor' => $this->barisEkspor($hira, $d['mapping'] ?? [], $d['statusBahaya'] ?? [], $sorot, $cfg),
+        ];
+    }
+
+    // ------------------------------------------------------------ beranda
+
+    /**
+     * Isi blok `beranda` tiap berkas PJA dan kembalikan meta Beranda (minggu, hari, tabel antar PJA).
+     *
+     * @param  array<string, mixed>  $d
+     * @param  array<string, mixed>  $cfg
+     * @param  array<string, array<string, mixed>>  $pjaBc
+     * @param  array<string, array<string, mixed>>  $berkas  diubah di tempat (ditambah kunci 'beranda')
+     * @param  array<string, array<string, mixed>>  $hira
+     * @param  array<string, array<string, mixed>>  $dl
+     * @param  array<string, string>  $pasanganPerDl
+     * @return array<string, mixed>
+     */
+    private function beranda(array $d, CarbonImmutable $sampai, array $cfg, array $pjaBc, array &$berkas, array $hira, array $dl, array $pasanganPerDl): array
+    {
+        $b = (new DrmBeranda($cfg, $sampai))->denganGrup($dl);
+        $idx = $b->indeks($d['bkel'] ?? [], $d['bspe'] ?? []);
+        $rcPerDl = $this->kelompok($d['brc'] ?? [], 'dl');
+        $hidPerDl = array_map(fn (string $isi) => $isi === '' ? [] : array_map(fn ($p) => (string) strstr($p, ':', true), explode(',', $isi)), $pasanganPerDl);
+
+        $mgmt = [];
+        foreach ($pjaBc as $id => $info) {
+            $dlIds = array_map('strval', $info['dl']);
+            $berkas[$id]['beranda'] = $b->berkas($dlIds, $hidPerDl, $hira, $dl, $idx, $rcPerDl);
+            $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds),
+                ...$b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden'])];
+        }
+
+        return [
+            'minggu' => $b->minggu(),
+            'hari0' => $b->hari0(),
+            'hari' => (int) $cfg['beranda']['hari'],
+            'ambangUlang' => (int) $cfg['beranda']['ambang_berulang'],
+            'umumMin' => (int) $cfg['beranda']['umum_min_kelompok'],
+            'tekanan' => $cfg['beranda']['tekanan'],
+            'lamaHari' => (int) $cfg['beranda']['lokasi_lama_hari'],
+            'kolomMgmt' => DrmBeranda::KOLOM_MGMT,
+            'mgmt' => $mgmt,
         ];
     }
 
