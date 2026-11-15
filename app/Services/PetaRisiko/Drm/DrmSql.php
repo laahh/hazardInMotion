@@ -169,9 +169,9 @@ anggota AS (
   LEFT JOIN pjalok pl ON pl.location_id = d.id_lok
 ),
 ev AS (
-  SELECT k, hid, CAST((groupArray(minggu), groupArray(r)), \'Map(Date, UInt8)\') AS mp
+  SELECT k, hid, CAST((groupArray(minggu), groupArray(rmax)), \'Map(Date, UInt8)\') AS mp
   FROM (
-    SELECT k, a.hid AS hid, s.minggu AS minggu, max(s.r) AS r
+    SELECT k, a.hid AS hid, s.minggu AS minggu, max(s.r) AS rmax
     FROM sb s JOIN anggota a ON a.dl = s.dl AND a.hid = s.hid
     ARRAY JOIN a.ks AS k
     GROUP BY k, hid, minggu
@@ -566,13 +566,13 @@ eo AS (
   GROUP BY dl, a, s, minggu
 ),
 sb AS (
-  SELECT dl, hid, minggu, max(r) AS r FROM (
-    SELECT dl, hid, minggu, toUInt8(if(open_n > 0 OR rep >= '.$ambang.', 4, if(rep > 0, 3, 0))) AS r FROM eh
+  SELECT dl, hid, minggu, max(rr) AS r FROM (
+    SELECT dl, hid, minggu, toUInt8(if(open_n > 0 OR rep >= '.$ambang.', 4, if(rep > 0, 3, 0))) AS rr FROM eh
     UNION ALL
     SELECT e.dl, h.hid, e.minggu, toUInt8(if(e.stop, 4, 3))
     FROM eo e JOIN hira h ON h.a = e.a AND h.s = e.s
     WHERE (e.dl, h.hid) IN (SELECT dl, hid FROM basek)
-  ) WHERE r > 0
+  ) WHERE rr > 0
   GROUP BY dl, hid, minggu
 )';
     }
