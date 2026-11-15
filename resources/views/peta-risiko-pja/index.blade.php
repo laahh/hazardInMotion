@@ -66,7 +66,7 @@
 <script>
 (function () {
   const META = {{ \Illuminate\Support\Js::from(['periode' => $meta['periode'], 'pja' => $meta['pja']]) }};
-  const URL_PJA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.show', ['pja' => '__ID__'])) }};
+  const URL_PJA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.arsip.show', ['pja' => '__ID__'])) }};
   const { fmt, esc } = PR;
   const state = { periode: @json($periode), site: @json($site), cari: '' };
   const $ = (s) => document.querySelector(s);

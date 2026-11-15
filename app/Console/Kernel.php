@@ -31,6 +31,13 @@ class Kernel extends ConsoleKernel
             ->dailyAt('17:00')
             ->appendOutputTo(storage_path('logs/dashboard-screenshot.log'));
 
+        // Peta Risiko PJA (DRM 2.1): hitung ulang dari ClickHouse OBDS tiap pagi (data sampai kemarin)
+        $schedule->command('peta-risiko:sync')
+            ->timezone('Asia/Makassar')
+            ->dailyAt('05:30')
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/peta-risiko-sync.log'));
+
         // Supervisory alert log: perbarui data alert 3x sehari (pagi, siang, sore) timezone Asia/Makassar
         $schedule->command('supervisory:update-alert-log')
             ->timezone('Asia/Makassar')

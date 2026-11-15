@@ -36,14 +36,15 @@ final class RfidClickHouseClient
 
     /**
      * Jalankan SELECT dan kembalikan baris sebagai array asosiatif.
+     * $timeout (detik) menimpa timeout koneksi untuk query berat (mis. sync Peta Risiko).
      *
      * @return list<array<string, mixed>>
      *
      * @throws RuntimeException bila konfigurasi kosong, koneksi gagal, atau ClickHouse mengembalikan error
      */
-    public function select(string $sql): array
+    public function select(string $sql, ?int $timeout = null): array
     {
-        $body = $this->kirim(rtrim(trim($sql), ';').' FORMAT JSONEachRow', (int) ($this->config()['options']['timeout'] ?? 60));
+        $body = $this->kirim(rtrim(trim($sql), ';').' FORMAT JSONEachRow', $timeout ?? (int) ($this->config()['options']['timeout'] ?? 60));
 
         $rows = [];
         foreach (preg_split('/\r?\n/', $body) as $line) {

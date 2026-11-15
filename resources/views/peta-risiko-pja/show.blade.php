@@ -4,7 +4,7 @@
 
 @section('hero-aksi')
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <a class="pr-back" href="{{ route('peta-risiko-pja.index', ['periode' => $periode, 'site' => $pja['site']]) }}">← Semua PJA</a>
+    <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index', ['periode' => $periode, 'site' => $pja['site']]) }}">← Semua PJA</a>
     <div class="pr-seg" role="group" aria-label="Periode">
       <button type="button" data-periode="wk">Minggu ini</button>
       <button type="button" data-periode="ytd">YTD</button>
