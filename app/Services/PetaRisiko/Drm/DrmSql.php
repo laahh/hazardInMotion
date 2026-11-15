@@ -142,38 +142,56 @@ GROUP BY st.dl, st.a', ['{ambang}' => (string) (int) $this->cfg['ambang_berulang
     }
 
     /**
-     * Status per bahaya-risiko UNIK dalam satu cakupan (SITE / GRUP / PJA), per minggu
+     * Status per bahaya-risiko UNIK dalam satu cakupan (SITE / GRUP / PROSES / PJA), per minggu
      * (tanggal akhir mundur 7 hari × tren_minggu). Status unik = terburuk antar detail lokasi:
      * G > K > T > X. Hasil diagregasi ke sel matriks agar baris tetap sedikit.
+     *
+     * Hemat memori: status mingguan hanya dihitung untuk pasangan yang punya bukti SAP (sb).
+     * Pasangan tanpa bukti statusnya tetap: X bila bahaya tak terpetakan, selain itu T.
      */
     public function matriksCakupan(): string
     {
         return $this->prelude().$this->statusMingguanCte().',
-cak AS (
-  SELECT \'SITE\' AS jenis, d.site AS kunci, sm.minggu, sm.hid, sm.status FROM sm JOIN dl d ON d.dl = sm.dl
-  UNION ALL SELECT \'SITE\', \'ALL\', sm.minggu, sm.hid, sm.status FROM sm
-  UNION ALL SELECT \'GRUP\', concat(d.grp, \'|\', d.site), sm.minggu, sm.hid, sm.status FROM sm JOIN dl d ON d.dl = sm.dl
-  UNION ALL SELECT \'GRUP\', concat(d.grp, \'|ALL\'), sm.minggu, sm.hid, sm.status FROM sm JOIN dl d ON d.dl = sm.dl
-  UNION ALL SELECT \'PROSES\', concat(hp.proses, \'|\', d.site), sm.minggu, sm.hid, sm.status
-            FROM sm JOIN dl d ON d.dl = sm.dl JOIN hira hp ON hp.hid = sm.hid
-  UNION ALL SELECT \'PROSES\', concat(hp.proses, \'|ALL\'), sm.minggu, sm.hid, sm.status
-            FROM sm JOIN hira hp ON hp.hid = sm.hid
-  UNION ALL SELECT \'PJA\', toString(pl.pja_id), sm.minggu, sm.hid, sm.status FROM sm JOIN dl d ON d.dl = sm.dl
-            JOIN (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations) pl
-              ON pl.location_id = d.id_lok
+pjalok AS (
+  SELECT location_id, groupUniqArray(pja_id) AS pjas
+  FROM (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations)
+  GROUP BY location_id
 ),
+anggota AS (
+  SELECT b.dl AS dl, b.hid AS hid,
+         arrayConcat([concat(\'SITE|\', d.site), \'SITE|ALL\',
+                      concat(\'GRUP|\', d.grp, \'|\', d.site), concat(\'GRUP|\', d.grp, \'|ALL\'),
+                      concat(\'PROSES|\', h.proses, \'|\', d.site), concat(\'PROSES|\', h.proses, \'|ALL\')],
+                     arrayMap(x -> concat(\'PJA|\', toString(x)), ifNull(pl.pjas, []))) AS ks
+  FROM basek b
+  JOIN dl d ON d.dl = b.dl
+  JOIN hira h ON h.hid = b.hid
+  LEFT JOIN pjalok pl ON pl.location_id = d.id_lok
+),
+ev AS (
+  SELECT k, hid, CAST((groupArray(minggu), groupArray(r)), \'Map(Date, UInt8)\') AS mp
+  FROM (
+    SELECT k, a.hid AS hid, s.minggu AS minggu, max(s.r) AS r
+    FROM sb s JOIN anggota a ON a.dl = s.dl AND a.hid = s.hid
+    ARRAY JOIN a.ks AS k
+    GROUP BY k, hid, minggu
+  )
+  GROUP BY k, hid
+),
+uk AS (SELECT DISTINCT k, hid FROM anggota ARRAY JOIN ks AS k),
 u AS (
-  SELECT jenis, kunci, minggu, hid,
-         multiIf(has(groupArray(status), \'G\'), \'G\', has(groupArray(status), \'K\'), \'K\',
-                 has(groupArray(status), \'T\'), \'T\', \'X\') AS status
-  FROM cak GROUP BY jenis, kunci, minggu, hid
+  SELECT uk.k AS k, uk.hid AS hid, w AS minggu, ev.mp[w] AS r
+  FROM uk LEFT JOIN ev ON ev.k = uk.k AND ev.hid = uk.hid
+  ARRAY JOIN ws AS w
 )
-SELECT u.jenis AS jenis, u.kunci AS kunci, toString(u.minggu) AS minggu, u.status AS status,
+SELECT splitByChar(\'|\', u.k)[1] AS jenis, substring(u.k, length(splitByChar(\'|\', u.k)[1]) + 2) AS kunci,
+       toString(u.minggu) AS minggu,
+       multiIf(u.r = 4, \'G\', u.r = 3, \'K\', h.hid IN (SELECT hid FROM petakan), \'T\', \'X\') AS status,
        h.k1 AS k1, h.c1 AS c1, h.n1 AS n1,
-       if(u.status = \'K\', h.k2, h.k1) AS kf, if(u.status = \'K\', h.c2, h.c1) AS cf, if(u.status = \'K\', h.n2, h.n1) AS nf,
+       if(status = \'K\', h.k2, h.k1) AS kf, if(status = \'K\', h.c2, h.c1) AS cf, if(status = \'K\', h.n2, h.n1) AS nf,
        count() AS n
 FROM u JOIN hira h ON h.hid = u.hid
-GROUP BY u.jenis, u.kunci, u.minggu, u.status, h.k1, h.c1, h.n1, kf, cf, nf';
+GROUP BY jenis, kunci, minggu, status, k1, c1, n1, kf, cf, nf';
     }
 
     /** Temuan Hazard/Inspeksi yang masih open per tanggal akhir, di detail lokasi yang punya baseline. */
@@ -342,11 +360,8 @@ GROUP BY pl.pja_id, d.dl';
     {
         $c = $this->cfg;
         $akhir = $this->sampai->toDateString();
-        $mulaiData = min(
-            $c['open_sejak'],
-            $this->sampai->subDays((int) $c['strip_hari'])->toDateString(),
-            $this->sampai->subDays((int) $c['jendela_hari'] + 7 * (int) $c['tren_minggu'])->toDateString(),
-        );
+        // Semua data SAP dibatasi ke rentang_hari ke belakang (3 bulan) agar query ringan.
+        $mulaiData = $this->sampai->subDays((int) $c['rentang_hari'] - 1)->toDateString();
         $selesai = $this->daftar(self::STATUS_SELESAI);
 
         return '
@@ -354,7 +369,7 @@ WITH
   toDate('.$this->q($akhir).') AS t_end,
   t_end - '.((int) $c['jendela_hari'] - 1).' AS t_win,
   t_end - '.((int) $c['strip_hari'] - 1).' AS t_strip,
-  toDate('.$this->q($c['open_sejak']).') AS t_open,
+  toDate('.$this->q($mulaiData).') AS t_open,
   '.$this->pasangan($c['tema']).' AS th,
   '.$this->larik($c['stopword']).' AS sw,
   '.$this->pasangan($c['grup_detail_lokasi']).' AS gd,
@@ -512,7 +527,11 @@ st AS (
 )');
     }
 
-    /** Status per (detail lokasi, bahaya) untuk setiap tanggal akhir mingguan (tren). */
+    /**
+     * Bukti SAP mingguan per (detail lokasi, bahaya): sb.r = 4 (ADA GAP) atau 3 (TERKONTROL).
+     * Tiap baris bukti hanya dipecah ke minggu yang dipengaruhinya (ARRAY JOIN terfilter),
+     * bukan dikalikan ke semua minggu.
+     */
     private function statusMingguanCte(): string
     {
         $ambang = (int) $this->cfg['ambang_berulang'];
@@ -520,8 +539,9 @@ st AS (
         $n = (int) $this->cfg['tren_minggu'];
 
         return ',
+arrayMap(i -> t_end - 7 * i, range('.$n.')) AS ws,
 basek AS (SELECT dl, hid FROM base GROUP BY dl, hid),
-mg AS (SELECT arrayJoin(arrayMap(i -> t_end - 7 * i, range('.$n.'))) AS minggu),
+petakan AS (SELECT hid FROM hira WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb)),
 sh AS (
   SELECT dl, k, sk, d, cd, count() AS n FROM sap
   WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\' GROUP BY dl, k, sk, d, cd
@@ -531,28 +551,29 @@ evh AS (
   FROM sh JOIN ma m ON m.k = sh.k AND m.sk = sh.sk
   WHERE (sh.dl, m.hid) IN (SELECT dl, hid FROM basek)
 ),
-agh AS (
-  SELECT e.dl AS dl, e.hid AS hid, mg.minggu AS minggu,
-         sumIf(e.n, e.d > mg.minggu - '.$win.' AND e.d <= mg.minggu) AS rep,
-         sumIf(e.n, e.d <= mg.minggu AND (e.cd IS NULL OR e.cd > mg.minggu)) AS open_n
-  FROM evh e CROSS JOIN mg GROUP BY e.dl, e.hid, mg.minggu
+eh AS (
+  SELECT dl, hid, w AS minggu,
+         sumIf(n, d > w - '.$win.') AS rep,
+         sumIf(n, cd IS NULL OR cd > w) AS open_n
+  FROM evh
+  ARRAY JOIN arrayFilter(w -> d <= w AND (d > w - '.$win.' OR cd IS NULL OR cd > w), ws) AS w
+  GROUP BY dl, hid, minggu
 ),
-ago AS (
-  SELECT o.dl AS dl, o.a AS a, o.s AS s, mg.minggu AS minggu,
-         countIf(o.d > mg.minggu - '.$win.' AND o.d <= mg.minggu) AS sig_o,
-         countIf(o.d > mg.minggu - '.$win.' AND o.d <= mg.minggu AND o.stop) AS stop
-  FROM evo o CROSS JOIN mg GROUP BY o.dl, o.a, o.s, mg.minggu
+eo AS (
+  SELECT dl, a, s, w AS minggu, max(stop) AS stop
+  FROM evo
+  ARRAY JOIN arrayFilter(w -> d <= w AND d > w - '.$win.', ws) AS w
+  GROUP BY dl, a, s, minggu
 ),
-petakan AS (SELECT hid FROM hira WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb)),
-sm AS (
-  SELECT b.dl AS dl, b.hid AS hid, mg.minggu AS minggu,
-         multiIf(ifNull(gh.open_n, 0) > 0 OR ifNull(gh.rep, 0) >= '.$ambang.' OR ifNull(go.stop, 0) > 0, \'G\',
-                 ifNull(gh.rep, 0) > 0 OR ifNull(go.sig_o, 0) > 0, \'K\',
-                 b.hid NOT IN (SELECT hid FROM petakan), \'X\', \'T\') AS status
-  FROM basek b CROSS JOIN mg
-  JOIN hira h ON h.hid = b.hid
-  LEFT JOIN agh gh ON gh.dl = b.dl AND gh.hid = b.hid AND gh.minggu = mg.minggu
-  LEFT JOIN ago go ON go.dl = b.dl AND go.a = h.a AND go.s = h.s AND go.minggu = mg.minggu
+sb AS (
+  SELECT dl, hid, minggu, max(r) AS r FROM (
+    SELECT dl, hid, minggu, toUInt8(if(open_n > 0 OR rep >= '.$ambang.', 4, if(rep > 0, 3, 0))) AS r FROM eh
+    UNION ALL
+    SELECT e.dl, h.hid, e.minggu, toUInt8(if(e.stop, 4, 3))
+    FROM eo e JOIN hira h ON h.a = e.a AND h.s = e.s
+    WHERE (e.dl, h.hid) IN (SELECT dl, hid FROM basek)
+  ) WHERE r > 0
+  GROUP BY dl, hid, minggu
 )';
     }
 

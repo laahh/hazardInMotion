@@ -12,13 +12,18 @@ return [
     /* Jendela sinyal SAP untuk status (hari) dan panjang strip harian (hari). */
     'jendela_hari' => (int) env('PETA_RISIKO_JENDELA_HARI', 28),
     'strip_hari' => (int) env('PETA_RISIKO_STRIP_HARI', 84),
-    'tren_minggu' => (int) env('PETA_RISIKO_TREN_MINGGU', 12),
+
+    /*
+    | Rentang data SAP yang dibaca (hari ke belakang dari tanggal akhir) — 3 bulan.
+    | Berlaku untuk semua sinyal: temuan open, Observasi/OAK, strip, tren. Temuan yang dilaporkan
+    | sebelum rentang ini tidak dihitung walau masih open. Tren minggu dibatasi agar minggu paling
+    | tua tetap punya jendela penuh: (tren_minggu − 1) × 7 + jendela_hari ≤ rentang_hari.
+    */
+    'rentang_hari' => (int) env('PETA_RISIKO_RENTANG_HARI', 91),
+    'tren_minggu' => (int) env('PETA_RISIKO_TREN_MINGGU', 9),
 
     /* Batas waktu per query ClickHouse saat sync (detik). */
     'timeout_detik' => (int) env('PETA_RISIKO_TIMEOUT_DETIK', 900),
-
-    /* Temuan open dihitung sejak tanggal ini (kapan pun dilaporkan). */
-    'open_sejak' => env('PETA_RISIKO_OPEN_SEJAK', '2026-01-01'),
 
     /* Flag status aktivitas: tanggal mulai paling jauh N hari ke belakang. */
     'flag_maks_mundur_hari' => 14,
