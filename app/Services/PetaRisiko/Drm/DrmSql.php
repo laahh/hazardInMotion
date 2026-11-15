@@ -564,11 +564,17 @@ evo AS (
   WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
   GROUP BY s.dl, m.a, m.s, s.d
 ),
+-- Bahaya yang BISA diidentifikasi lewat SAP: punya pasangan Master A (label Hazard/Inspeksi)
+-- atau aktivitasnya punya pasangan Master B (Observasi/OAK). Hanya ini yang masuk baseline;
+-- bahaya tanpa pasangan SAP tidak dihitung sama sekali (keputusan user 15 Nov 2026).
+petakan AS (SELECT hid FROM hira WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb)),
 base AS (
   SELECT d.dl AS dl, h.hid AS hid, 0 AS via_bukti
   FROM dl d JOIN (SELECT hid, st, g FROM hira ARRAY JOIN sites AS st ARRAY JOIN grp AS g) h ON h.st = d.site AND h.g = d.grp
+  WHERE h.hid IN (SELECT hid FROM petakan)
   UNION DISTINCT
   SELECT e.dl, h.hid, 1 FROM (SELECT DISTINCT dl, a, s FROM evo) e JOIN hira h ON h.a = e.a AND h.s = e.s
+  WHERE h.hid IN (SELECT hid FROM petakan)
 )';
     }
 
@@ -635,7 +641,6 @@ st AS (
         return ',
 arrayMap(i -> t_end - 7 * i, range('.$n.')) AS ws,
 basek AS (SELECT dl, hid FROM base GROUP BY dl, hid),
-petakan AS (SELECT hid FROM hira WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb)),
 sh AS (
   SELECT dl, k, sk, d, cd, count() AS n FROM sap
   WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\' GROUP BY dl, k, sk, d, cd

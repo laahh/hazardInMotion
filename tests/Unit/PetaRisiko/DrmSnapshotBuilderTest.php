@@ -50,7 +50,7 @@ class DrmSnapshotBuilderTest extends TestCase
     {
         $baris = array_column($this->susun()['ekspor'], null, 'hid');
 
-        $this->assertCount(3, $baris);
+        $this->assertCount(4, $baris);
         // hid 1: tidak teridentifikasi di semua DL + insiden → laten.
         $this->assertSame('T', $baris['1']['status']);
         $this->assertTrue($baris['1']['laten']);
@@ -62,6 +62,10 @@ class DrmSnapshotBuilderTest extends TestCase
         // hid 3: tidak punya DL baseline.
         $this->assertSame('-', $baris['3']['status']);
         $this->assertSame('OB Removal', $baris['3']['proses']);
+        // hid 4: tidak punya pasangan SAP (Master A/B) → di luar baseline, tidak dipaksakan.
+        $this->assertSame('X', $baris['4']['status']);
+        $this->assertSame('', $baris['4']['final']);
+        $this->assertFalse($baris['4']['laten']);
     }
 
     public function test_file_excel_mapping_valid_dan_bisa_dibaca(): void
@@ -74,10 +78,10 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(['Mapping bahaya-risiko', 'Ringkasan', 'Keterangan'], $wb->getSheetNames());
         $ws = $wb->getSheet(0);
         $this->assertSame('Bahaya / penyebab potensial', (string) $ws->getCell('D1')->getValue());
-        $this->assertSame(4, $ws->getHighestRow());
+        $this->assertSame(5, $ws->getHighestRow());
         $this->assertSame(1, $ws->getCell('A2')->getValue());
         $ringkas = $wb->getSheet(1)->toArray();
-        $this->assertEquals(['Masuk baseline (punya detail lokasi)', 2], array_slice($ringkas[2], 0, 2));
+        $this->assertEquals(['BASELINE (terpetakan ke SAP + punya detail lokasi)', 2], array_slice($ringkas[2], 0, 2));
         @unlink($file);
     }
 
@@ -161,7 +165,7 @@ class DrmSnapshotBuilderTest extends TestCase
 
         $data = [
             'sites' => ['LMO'],
-            'hira' => [$hira('1', 'loading ob'), $hira('2', 'loading ob'), $hira('3', 'dumping')],
+            'hira' => [$hira('1', 'loading ob'), $hira('2', 'loading ob'), $hira('3', 'dumping'), [...$hira('4', 'pumping'), 'di_a' => 0, 'di_b' => 0]],
             'dl' => [
                 ['dl' => '101', 'site' => 'LMO', 'id_lok' => '1', 'lokasi' => 'Pit A', 'detlok' => 'Front Loading', 'grp' => 'Loading Point', 'pja' => ['10']],
                 ['dl' => '102', 'site' => 'LMO', 'id_lok' => '1', 'lokasi' => 'Pit A', 'detlok' => 'Disposal', 'grp' => 'Disposal', 'pja' => ['10']],
