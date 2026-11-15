@@ -28,6 +28,9 @@ class DrmSnapshotBuilder
 
     private const TEMUAN_MAKS_PER_PJA = 400;
 
+    /** Temuan open lebih lama dari ini (hari) dihitung "open lama" di tab Per PJA. */
+    private const TEMUAN_LAMA_HARI = 30;
+
     /** @var Closure(string): void */
     private Closure $log;
 
@@ -148,6 +151,7 @@ class DrmSnapshotBuilder
             $berkas[$id] = $this->berkasPja($info, $dl, $hira, $hiraPerA, $pasanganPerDl, $perDl, $personil, $bearcPerSid, $coveragePerPja[$id] ?? []);
         }
         $beranda = $this->beranda($d, $sampai, $cfg, $pjaBc, $berkas, $hira, $dl, $pasanganPerDl);
+        $statTemuan = array_map(fn ($info) => $this->statTemuan(array_map('strval', $info['dl']), $perDl['temuan'], $sampai), $pjaBc);
 
         return [
             'meta' => [
@@ -165,7 +169,7 @@ class DrmSnapshotBuilder
                 'grupDl' => $this->jumlahDlPerGrup($dl),
                 'proses' => $this->daftarProses($cfg),
                 'cakupan' => $cakupan,
-                'pja' => array_values(array_map(fn ($p) => $this->ringkasPja($p, $cakupan, $berkas[$p['id']]), $pjaBc)),
+                'pja' => array_values(array_map(fn ($p) => [...$this->ringkasPja($p, $cakupan, $berkas[$p['id']]), 'tm' => $statTemuan[$p['id']]], $pjaBc)),
                 'kolomAkt' => self::KOLOM_AKT,
                 'kolomBahaya' => self::KOLOM_BAHAYA,
                 'beranda' => $beranda,
@@ -562,6 +566,32 @@ class DrmSnapshotBuilder
             'insiden' => count(array_filter($berkas['insiden'], fn ($i) => $i['tanggal'] >= $setahun)),
             'personil' => count($berkas['personil']),
         ];
+    }
+
+    /**
+     * Temuan Hazard/Inspeksi open di detail lokasi PJA untuk tab Per PJA:
+     * [open, lewat tanggal janji, open > 30 hari, eskalasi level ≥ 3].
+     *
+     * @param  list<string>  $dlIds
+     * @param  array<string, list<array<string, mixed>>>  $temuanPerDl
+     * @return array{0: int, 1: int, 2: int, 3: int}
+     */
+    private function statTemuan(array $dlIds, array $temuanPerDl, CarbonImmutable $sampai): array
+    {
+        $hari = $sampai->toDateString();
+        $batas30 = $sampai->subDays(self::TEMUAN_LAMA_HARI)->toDateString();
+        $s = [0, 0, 0, 0];
+        foreach ($dlIds as $d) {
+            foreach ($temuanPerDl[$d] ?? [] as $t) {
+                $janji = (string) ($t['janji'] ?? '');
+                $s[0]++;
+                $s[1] += (int) ($janji !== '' && $janji !== '1970-01-01' && $janji < $hari);
+                $s[2] += (int) ((string) ($t['tanggal'] ?? $hari) < $batas30);
+                $s[3] += (int) (preg_match('/ESKALASI\s*(\d)/i', (string) ($t['status'] ?? ''), $m) === 1 && (int) $m[1] >= 3);
+            }
+        }
+
+        return $s;
     }
 
     // ------------------------------------------------------------- utilitas

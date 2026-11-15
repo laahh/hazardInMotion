@@ -143,5 +143,24 @@
     legendaStatus() {
       return `<div class="dr-legend">${this.URUT.map((k) => `<span><i class="st-${k}"></i>${this.ST[k].simbol} ${this.ST[k].label}</span>`).join('')}</div>`;
     },
+
+    // ---- Beranda PJA (satuan ketat): warna & komposisi terkontrol penuh / sebagian / hanya bermasalah / tanpa laporan.
+    BW: { ok: '#1F9A3A', part: '#E3B341', bm: '#D0640C', none: '#F5C7A2' },
+    sb4(ok, pt, pb, no, besar = false) {
+      const t = ok + pt + pb + no, W = this.BW;
+      if (!t) return '<div class="br-sb"></div>';
+      const w = (x) => (100 * x / t).toFixed(2) + '%';
+      return `<div class="br-sb${besar ? ' big' : ''}" title="${this.fmt(ok)} terkontrol penuh; ${this.fmt(pt)} sebagian; ${this.fmt(pb)} hanya bermasalah; ${this.fmt(no)} tanpa laporan"><i style="width:${w(ok)};background:${W.ok}"></i><i style="width:${w(pt)};background:${W.part}"></i><i style="width:${w(pb)};background:${W.bm}"></i><i style="width:${w(no)};background:${W.none}"></i></div>`;
+    },
+    /** Minggu kalender (Minggu–Sabtu) beranda: kode W ISO dari hari Senin-nya dan label rentang tanggal. */
+    minggu(awal, sampai, i) {
+      const tgl = (s) => new Date(s + 'T00:00:00');
+      const geser = (s, n) => { const d = tgl(s); d.setDate(d.getDate() + n); return d; };
+      const sen = geser(awal, 1), t = new Date(Date.UTC(sen.getFullYear(), sen.getMonth(), sen.getDate()));
+      t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+      const w = Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+      const pendek = (d) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+      return { kode: 'W' + w, label: `W${w} · ${pendek(tgl(awal))} – ${pendek(geser(awal, 6))}${i === 0 ? ' (berjalan, s.d. ' + pendek(tgl(sampai)) + ')' : ''}` };
+    },
   };
 </script>
