@@ -282,14 +282,21 @@
   function personil() {
     const akhirBearc = {};
     D.bearc.forEach((b) => { if (!akhirBearc[b.sid] || akhirBearc[b.sid].mulai < b.mulai) akhirBearc[b.sid] = b; });
-    const bc = D.personil.filter((p) => p.pja === D.info.nama);
-    const mk = D.personil.filter((p) => p.pja !== D.info.nama);
+    // Satu baris per orang per PJA; kategori (Layer/Superior/Inspector) digabung bila lebih dari satu.
+    const gabung = (rows) => Object.values(rows.reduce((acc, p) => {
+      const k = p.pja_id + '|' + p.sid;
+      if (!acc[k]) acc[k] = { ...p, kat: new Set() };
+      if (p.kategori) acc[k].kat.add(p.kategori.trim());
+      return acc;
+    }, {})).map((p) => ({ ...p, kategori: [...p.kat].join(', ') }));
+    const bc = gabung(D.personil.filter((p) => p.bc));
+    const mk = gabung(D.personil.filter((p) => !p.bc));
     const tabel = (rows) => rows.length ? `<table class="pr-tbl dr-tbl"><thead><tr><th>Personil</th><th>SAP 14 hari</th><th class="r">Total</th><th class="r">%SAP minggu lalu</th><th>BeARC</th></tr></thead><tbody>${
       rows.map((p) => {
         const tot = p.harian.reduce((a, n) => a + Number(n), 0);
         const mx = Math.max(1, ...p.harian.map(Number));
         const b = akhirBearc[p.sid];
-        return `<tr><td><span class="pr-name" style="font-size:14px">${E(p.nama)}</span><span class="pr-meta">${E(p.sid)} · ${E(p.perusahaan)}${p.pja !== D.info.nama ? ' · ' + E(p.pja) : ''}</span></td>
+        return `<tr><td><span class="pr-name" style="font-size:14px">${E(p.nama)}</span><span class="pr-meta">${E(p.sid)} · ${E(p.perusahaan)}${p.kategori ? ' · ' + E(p.kategori) : ''}${!p.bc ? ' · ' + E(p.pja) : ''}</span></td>
           <td><span class="dr-spark" title="${p.harian.join(', ')}">${p.harian.map((n) => Number(n) ? `<i style="height:${(100 * n / mx).toFixed(0)}%"></i>` : '<i class="z"></i>').join('')}</span></td>
           <td class="r dr-num">${F(tot)}</td>
           <td class="r">${!b ? '–' : b.persen === null ? 'N/A' : Number(b.persen).toFixed(0) + '%'}</td>

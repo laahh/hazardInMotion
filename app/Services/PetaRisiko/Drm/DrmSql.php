@@ -313,13 +313,9 @@ cocok AS (
     public function personil(): string
     {
         return '
-WITH toDate('.$this->q($this->sampai->toDateString()).') AS t_end
-SELECT e.pja AS pja, e.pja_parent AS parent, e.kode_sid AS sid, e.nama AS nama, e.nama_perusahaan AS perusahaan,
-       e.pja_site AS site, e.id_mk AS id_mk,
-       arrayMap(i -> toUInt32(ifNull(hr.mp[t_end - 13 + i], 0)), range(14)) AS harian
-FROM (SELECT DISTINCT pja, pja_parent, kode_sid, nama, nama_perusahaan, pja_site, toString(id_mk) AS id_mk
-      FROM obds.bep_vw_pja_employee WHERE kode_sid != \'\') e
-LEFT JOIN (
+WITH toDate('.$this->q($this->sampai->toDateString()).') AS t_end,
+'.$this->personilCte().',
+hr AS (
   SELECT kode_sid_pelapor AS sid, CAST((groupArray(d), groupArray(n)), \'Map(Date, UInt32)\') AS mp
   FROM (SELECT kode_sid_pelapor, toDate(`date time`) AS d, toUInt32(count()) AS n
         FROM obds.ch_rfid_sap_cuti_all_site
@@ -327,7 +323,34 @@ LEFT JOIN (
           AND `date time` >= t_end - 13 AND `date time` < t_end + 1
         GROUP BY kode_sid_pelapor, d)
   GROUP BY sid
-) hr ON hr.sid = e.kode_sid';
+)
+SELECT o.pja_id AS pja_id, o.pja AS pja, o.tipe AS tipe, o.kategori AS kategori,
+       o.sid AS sid, o.nama AS nama, o.perusahaan AS perusahaan, o.site AS site,
+       arrayMap(i -> toUInt32(hr.mp[t_end - 13 + i]), range(14)) AS harian
+FROM orang_pja o LEFT JOIN hr ON hr.sid = o.sid';
+    }
+
+    /**
+     * Personil per PJA dari penugasan resmi `m_pja_emp` (berdasarkan ID PJA, lengkap tipe BC/Mitra
+     * dan kategori Layer/Superior/Inspector). id_employee diterjemahkan ke SID lewat
+     * bep_vw_safety_all_karyawan. (bep_vw_pja_employee tidak lengkap: ±420 orang di 120 PJA.)
+     */
+    private function personilCte(): string
+    {
+        return 'orang_pja AS (
+  SELECT toString(pe.id_pja) AS pja_id, toInt64(pe.id_pja) AS pja_num, toInt64(ifNull(pj.parent, 0)) AS parent_num,
+         ifNull(pj.name, \'\') AS pja, ifNull(t.name, \'\') AS tipe, ifNull(c.name, \'\') AS kategori,
+         k.kode_sid AS sid, ifNull(k.nama, \'\') AS nama, ifNull(k.perusahaan, \'\') AS perusahaan, ifNull(k.site, \'\') AS site
+  FROM (SELECT DISTINCT toInt64(id_pja) AS id_pja, toInt64(id_employee) AS id_emp, id_pja_type, category_id
+        FROM obds.m_pja_emp WHERE is_active = 1) pe
+  JOIN (SELECT toInt64(id) AS id, any(kode_sid) AS kode_sid, any(nama) AS nama, any(nama_perusahaan) AS perusahaan,
+               any(site_dedicated) AS site
+        FROM obds.bep_vw_safety_all_karyawan GROUP BY id) k ON k.id = pe.id_emp
+  LEFT JOIN (SELECT id, any(name) AS name, any(id_parent) AS parent FROM obds.m_pja GROUP BY id) pj ON pj.id = pe.id_pja
+  LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_type GROUP BY id) t ON t.id = pe.id_pja_type
+  LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_category GROUP BY id) c ON c.id = pe.category_id
+  WHERE ifNull(k.kode_sid, \'\') != \'\'
+)';
     }
 
     /** Pemenuhan SAP mingguan (BeARC) per SID, beberapa minggu terakhir. */
@@ -336,6 +359,7 @@ LEFT JOIN (
         $minggu = (int) $this->cfg['tren_minggu'];
 
         return '
+WITH '.$this->personilCte().'
 SELECT `sid pelapor all karyawan` AS sid, toString(`minggu mulai`) AS mulai, toString(`minggu selesai`) AS selesai,
        `layer pengawasan` AS layer, `bc mk` AS bcmk, `status banned` AS status_banned, toUInt8(is_banned) AS banned,
        toUInt8(position(`status banned`, \'BANNED SAP\') > 0) AS banned_sap,
@@ -348,7 +372,7 @@ SELECT `sid pelapor all karyawan` AS sid, toString(`minggu mulai`) AS mulai, toS
 FROM obds.ch_banned_layer_weekly
 WHERE `minggu selesai` <= toDate('.$this->q($this->sampai->toDateString()).')
   AND `minggu selesai` > toDate('.$this->q($this->sampai->toDateString()).') - '.(7 * $minggu).'
-  AND `sid pelapor all karyawan` IN (SELECT kode_sid FROM obds.bep_vw_pja_employee)';
+  AND `sid pelapor all karyawan` IN (SELECT sid FROM orang_pja)';
     }
 
     /** Coverage per (PJA, detail lokasi) dalam jendela: semua pelapor vs personil PJA itu sendiri (BC + Mitra anak). */
@@ -356,13 +380,12 @@ WHERE `minggu selesai` <= toDate('.$this->q($this->sampai->toDateString()).')
     {
         return $this->prelude().',
 pl AS (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations),
-pjanama AS (SELECT id, any(name) AS name, any(id_parent) AS parent FROM obds.m_pja GROUP BY id),
+'.$this->personilCte().',
 orang AS (
-  SELECT DISTINCT toInt64(p.id) AS pja_id, e.kode_sid AS sid
-  FROM obds.bep_vw_pja_employee e JOIN pjanama p ON p.name = e.pja
+  -- Personil PJA itu sendiri + personil PJA Mitra anaknya (dihitung juga untuk PJA BC induk).
+  SELECT DISTINCT pja_num AS pja_id, sid FROM orang_pja
   UNION DISTINCT
-  SELECT DISTINCT toInt64(p.parent), e.kode_sid
-  FROM obds.bep_vw_pja_employee e JOIN pjanama p ON p.name = e.pja WHERE ifNull(p.parent, 0) != 0
+  SELECT DISTINCT parent_num, sid FROM orang_pja WHERE parent_num != 0
 ),
 lap AS (
   SELECT dl, sid, count() AS n FROM sap WHERE d >= t_win GROUP BY dl, sid

@@ -48,6 +48,8 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(['101', 'loading ob'], array_slice($p['akt'][0], 0, 2));
         $this->assertSame(1, $p['temuanTotal']);
         $this->assertEqualsCanonicalizing(['S1', 'S2'], array_column($p['personil'], 'sid'));
+        // Personil dicocokkan lewat ID PJA: S1 milik PJA BC, S2 milik PJA Mitra anaknya.
+        $this->assertSame(['S1' => true, 'S2' => false], array_column($p['personil'], 'bc', 'sid'));
         $this->assertCount(1, $p['bearc']);
         $this->assertSame('PJA Pit BC', $p['info']['nama']);
         $this->assertSame([['id' => '11', 'nama' => 'PJA Pit Mitra']], $p['info']['mitra']);
@@ -132,9 +134,9 @@ class DrmSnapshotBuilderTest extends TestCase
             'insiden' => [['no' => 'I1', 'dl' => '101', 'tanggal' => now()->subMonth()->toDateString(), 'kategori' => 'Near Miss', 'site' => 'LMO',
                 'lokasi' => 'Pit A', 'detlok' => 'Front Loading', 'kronologi' => 'x', 'potensi' => '', 'pja_bc' => '', 'pja_mk' => '', 'akar' => [], 'bahaya' => ['1']]],
             'personil' => [
-                ['pja' => 'PJA Pit BC', 'parent' => '', 'sid' => 'S1', 'nama' => 'A', 'perusahaan' => 'BC', 'site' => 'LMO', 'id_mk' => '0', 'harian' => [0, 1]],
-                ['pja' => 'PJA Pit Mitra', 'parent' => 'PJA Pit BC', 'sid' => 'S2', 'nama' => 'B', 'perusahaan' => 'MK', 'site' => 'LMO', 'id_mk' => '1', 'harian' => [2, 0]],
-                ['pja' => 'PJA Lain', 'parent' => '', 'sid' => 'S3', 'nama' => 'C', 'perusahaan' => 'BC', 'site' => 'LMO', 'id_mk' => '0', 'harian' => [0, 0]],
+                ['pja_id' => '10', 'pja' => 'PJA Pit BC', 'tipe' => 'BC', 'kategori' => 'PJA Layer 1', 'sid' => 'S1', 'nama' => 'A', 'perusahaan' => 'BC', 'site' => 'LMO', 'id_mk' => '0', 'harian' => [0, 1]],
+                ['pja_id' => '11', 'pja' => 'PJA Pit Mitra', 'tipe' => 'Mitra Kerja', 'kategori' => 'PJA Layer 2', 'sid' => 'S2', 'nama' => 'B', 'perusahaan' => 'MK', 'site' => 'LMO', 'id_mk' => '1', 'harian' => [2, 0]],
+                ['pja_id' => '99', 'pja' => 'PJA Lain', 'tipe' => 'BC', 'kategori' => '', 'sid' => 'S3', 'nama' => 'C', 'perusahaan' => 'BC', 'site' => 'LMO', 'id_mk' => '0', 'harian' => [0, 0]],
             ],
             'bearc' => [['sid' => 'S1', 'mulai' => '2026-11-03', 'persen' => 0.8, 'banned' => 0], ['sid' => 'S3', 'mulai' => '2026-11-03', 'persen' => 0.1, 'banned' => 1]],
             'coverage' => [['pja' => '10', 'dl' => '101', 'semua' => '5', 'dedicated' => '2']],

@@ -373,10 +373,15 @@ class DrmSnapshotBuilder
             }
         }
 
-        $namaBc = $info['nama'];
-        $namaMitra = array_flip(array_column($info['mitra'], 'nama'));
-        $orang = array_values(array_filter($personil, fn ($p) => $p['pja'] === $namaBc || isset($namaMitra[$p['pja']]) || $p['parent'] === $namaBc));
-        $bearc = array_merge(...array_map(fn ($p) => $bearcPerSid[$p['sid']] ?? [], $orang));
+        // Personil = penugasan m_pja_emp pada PJA BC ini + PJA Mitra anaknya (dicocokkan lewat ID, bukan nama).
+        $idPja = array_flip([(string) $info['id'], ...array_map('strval', array_column($info['mitra'], 'id'))]);
+        $orang = [];
+        foreach ($personil as $p) {
+            if (isset($idPja[(string) $p['pja_id']])) {
+                $orang[] = [...$p, 'bc' => (string) $p['pja_id'] === (string) $info['id']];
+            }
+        }
+        $bearc = array_merge(...array_map(fn ($sid) => $bearcPerSid[$sid] ?? [], array_unique(array_column($orang, 'sid'))));
         $insiden = $ambilDl('insiden');
         usort($insiden, fn ($a, $b) => strcmp($b['tanggal'], $a['tanggal']));
 
