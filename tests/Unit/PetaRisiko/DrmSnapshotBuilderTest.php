@@ -75,7 +75,7 @@ class DrmSnapshotBuilderTest extends TestCase
     {
         $sql = (new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))->matriksCakupan();
 
-        $this->assertStringContainsString("concat('PROSES|', h.proses, '|ALL')", $sql);
+        $this->assertStringContainsString("('PROSES', concat(h.proses, '|ALL'))", $sql);
         $this->assertStringContainsString("toDate('2026-08-16') AS t_open", $sql);
         $this->assertStringContainsString("('DNB', 'blast|", $sql);
         $this->assertStringContainsString(' AS pb,', $sql);

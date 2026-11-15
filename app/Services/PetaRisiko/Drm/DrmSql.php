@@ -159,39 +159,44 @@ pjalok AS (
 ),
 anggota AS (
   SELECT b.dl AS dl, b.hid AS hid,
-         arrayConcat([concat(\'SITE|\', d.site), \'SITE|ALL\',
-                      concat(\'GRUP|\', d.grp, \'|\', d.site), concat(\'GRUP|\', d.grp, \'|ALL\'),
-                      concat(\'PROSES|\', h.proses, \'|\', d.site), concat(\'PROSES|\', h.proses, \'|ALL\')],
-                     arrayMap(x -> concat(\'PJA|\', toString(x)), ifNull(pl.pjas, []))) AS ks
+         arrayConcat([(\'SITE\', d.site), (\'SITE\', \'ALL\'),
+                      (\'GRUP\', concat(d.grp, \'|\', d.site)), (\'GRUP\', concat(d.grp, \'|ALL\')),
+                      (\'PROSES\', concat(h.proses, \'|\', d.site)), (\'PROSES\', concat(h.proses, \'|ALL\'))],
+                     arrayMap(x -> (\'PJA\', toString(x)), pl.pjas)) AS ks
   FROM basek b
   JOIN dl d ON d.dl = b.dl
   JOIN hira h ON h.hid = b.hid
   LEFT JOIN pjalok pl ON pl.location_id = d.id_lok
 ),
-ev AS (
-  SELECT k, hid, CAST((groupArray(minggu), groupArray(rmax)), \'Map(Date, UInt8)\') AS mp
-  FROM (
-    SELECT k, a.hid AS hid, s.minggu AS minggu, max(s.r) AS rmax
-    FROM sb s JOIN anggota a ON a.dl = s.dl AND a.hid = s.hid
-    ARRAY JOIN a.ks AS k
-    GROUP BY k, hid, minggu
-  )
-  GROUP BY k, hid
+ak AS (
+  SELECT dl, hid, kk.1 AS jenis, kk.2 AS kunci FROM anggota ARRAY JOIN ks AS kk
 ),
-uk AS (SELECT DISTINCT k, hid FROM anggota ARRAY JOIN ks AS k),
+ev0 AS (
+  SELECT a.jenis AS jenis, a.kunci AS kunci, a.hid AS hid, s.minggu AS minggu, max(s.r) AS rmax
+  FROM ak a JOIN sb s ON s.dl = a.dl AND s.hid = a.hid
+  GROUP BY jenis, kunci, hid, minggu
+),
+ev AS (
+  SELECT jenis, kunci, hid, CAST((groupArray(minggu), groupArray(rmax)), \'Map(Date, UInt8)\') AS mp
+  FROM ev0 GROUP BY jenis, kunci, hid
+),
+uk AS (SELECT DISTINCT jenis, kunci, hid FROM ak),
+ukw AS (SELECT jenis, kunci, hid, w AS minggu FROM uk ARRAY JOIN ws AS w),
 u AS (
-  SELECT uk.k AS k, uk.hid AS hid, w AS minggu, ev.mp[w] AS r
-  FROM uk LEFT JOIN ev ON ev.k = uk.k AND ev.hid = uk.hid
-  ARRAY JOIN ws AS w
+  SELECT x.jenis AS jenis, x.kunci AS kunci, x.hid AS hid, x.minggu AS minggu, ev.mp[x.minggu] AS r
+  FROM ukw AS x LEFT JOIN ev ON ev.jenis = x.jenis AND ev.kunci = x.kunci AND ev.hid = x.hid
+),
+us AS (
+  SELECT jenis, kunci, hid, minggu,
+         multiIf(r = 4, \'G\', r = 3, \'K\', hid IN (SELECT hid FROM petakan), \'T\', \'X\') AS status
+  FROM u
 )
-SELECT splitByChar(\'|\', u.k)[1] AS jenis, substring(u.k, length(splitByChar(\'|\', u.k)[1]) + 2) AS kunci,
-       toString(u.minggu) AS minggu,
-       multiIf(u.r = 4, \'G\', u.r = 3, \'K\', h.hid IN (SELECT hid FROM petakan), \'T\', \'X\') AS status,
+SELECT us.jenis AS jenis, us.kunci AS kunci, toString(us.minggu) AS minggu, us.status AS status,
        h.k1 AS k1, h.c1 AS c1, h.n1 AS n1,
-       if(status = \'K\', h.k2, h.k1) AS kf, if(status = \'K\', h.c2, h.c1) AS cf, if(status = \'K\', h.n2, h.n1) AS nf,
+       if(us.status = \'K\', h.k2, h.k1) AS kf, if(us.status = \'K\', h.c2, h.c1) AS cf, if(us.status = \'K\', h.n2, h.n1) AS nf,
        count() AS n
-FROM u JOIN hira h ON h.hid = u.hid
-GROUP BY jenis, kunci, minggu, status, k1, c1, n1, kf, cf, nf';
+FROM us JOIN hira h ON h.hid = us.hid
+GROUP BY us.jenis, us.kunci, us.minggu, us.status, h.k1, h.c1, h.n1, kf, cf, nf';
     }
 
     /** Temuan Hazard/Inspeksi yang masih open per tanggal akhir, di detail lokasi yang punya baseline. */
