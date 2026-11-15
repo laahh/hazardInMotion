@@ -1167,7 +1167,7 @@
             <table class="min-w-full border-collapse text-sm">
               <tr>
                 <td rowspan="3" class="w-[140px] border border-slate-950 p-3 align-middle text-center">
-                  <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="Berau Coal logo" style="max-width:120px; max-height:58px; object-fit:contain; display:block; margin:0 auto;" />
+                  <img src="https://besentry.beraucoal.co.id/build/images/logo-removebg.png" alt="Berau Coal logo" style="max-width:120px; max-height:58px; object-fit:contain; display:block; margin:0 auto;" />
                 </td>
                 <td class="border border-slate-950 py-1 text-center text-xs font-black">BERAU COAL</td>
               </tr>

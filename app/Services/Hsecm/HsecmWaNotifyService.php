@@ -459,7 +459,7 @@ class HsecmWaNotifyService
      */
     private function buildHsecmPublicUrl(string $path, array $query = []): string
     {
-        $base = rtrim((string) config('hsecm.public_url', 'https://besentry-dev.beraucoal.co.id'), '/');
+        $base = rtrim((string) config('hsecm.public_url', 'https://besentry.beraucoal.co.id'), '/');
         $path = '/'.ltrim($path, '/');
         $filtered = array_filter(
             $query,

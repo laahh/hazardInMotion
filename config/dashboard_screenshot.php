@@ -7,7 +7,7 @@ return [
     | Dashboard URL untuk screenshot
     |--------------------------------------------------------------------------
     */
-    'url' => env('DASHBOARD_SCREENSHOT_URL', 'https://besentry-dev.beraucoal.co.id/dopmikk/dopm/dashboard'),
+    'url' => env('DASHBOARD_SCREENSHOT_URL', 'https://besentry.beraucoal.co.id/dopmikk/dopm/dashboard'),
 
     /*
     |--------------------------------------------------------------------------

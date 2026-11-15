@@ -632,7 +632,7 @@ class HsecmTasklistService
 
     public function publicUrl(HsecmTasklist $tasklist): string
     {
-        $base = rtrim((string) config('hsecm.public_url', 'https://besentry-dev.beraucoal.co.id'), '/');
+        $base = rtrim((string) config('hsecm.public_url', 'https://besentry.beraucoal.co.id'), '/');
 
         return $base.'/hsecm/tasklist/'.$tasklist->token;
     }
@@ -642,7 +642,7 @@ class HsecmTasklistService
      */
     public function openUrl(?string $site, string $perusahaan, ?string $batchSlot = null): string
     {
-        $base = rtrim((string) config('hsecm.public_url', 'https://besentry-dev.beraucoal.co.id'), '/');
+        $base = rtrim((string) config('hsecm.public_url', 'https://besentry.beraucoal.co.id'), '/');
         $query = array_filter([
             'site' => $site !== null && trim($site) !== '' ? trim($site) : null,
             'perusahaan' => trim($perusahaan),

@@ -2137,7 +2137,7 @@ Hanya return JSON array, tanpa markdown, tanpa penjelasan tambahan.";
                 }
                 $pesan .= "PIC: " . ($picInfo['username'] ?? '') . " - " . ($picInfo['nama'] ?? '') . "\n";
                 $pesan .= "Issue:\n" . $validated['issue'] . "\n\n";
-                $pesan .= "Link: https://besentry-dev.beraucoal.co.id/cctv-data-control-room/intervensi";
+                $pesan .= "Link: https://besentry.beraucoal.co.id/cctv-data-control-room/intervensi";
                 
                 $whatsappUrl = "https://wa.me/" . $cleanNumber . "?text=" . urlencode($pesan);
             }

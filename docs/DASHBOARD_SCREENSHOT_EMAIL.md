@@ -58,7 +58,7 @@ DASHBOARD_SCREENSHOT_TOKEN=your-secret-token-minimal-16-karakter
 DASHBOARD_SCREENSHOT_USER_ID=1
 
 # Jika DASHBOARD_SCREENSHOT_TOKEN tidak di-set, URL di bawah yang dipakai (bisa dapat halaman login)
-# DASHBOARD_SCREENSHOT_URL=https://besentry-dev.beraucoal.co.id/dopmikk/dopm/dashboard
+# DASHBOARD_SCREENSHOT_URL=https://besentry.beraucoal.co.id/dopmikk/dopm/dashboard
 
 # Email penerima, pisahkan dengan koma untuk banyak penerima
 DASHBOARD_SCREENSHOT_EMAILS=admin@example.com,manager@example.com
@@ -129,7 +129,7 @@ php artisan dashboard:screenshot-send --slot=pagi
 php artisan dashboard:screenshot-send --slot=siang --no-email
 
 # Override URL (opsional)
-php artisan dashboard:screenshot-send --slot=sore --url=https://besentry-dev.beraucoal.co.id/dopmikk/dopm/dashboard
+php artisan dashboard:screenshot-send --slot=sore --url=https://besentry.beraucoal.co.id/dopmikk/dopm/dashboard
 ```
 
 Log perintah ini ditulis ke: `storage/logs/dashboard-screenshot.log`

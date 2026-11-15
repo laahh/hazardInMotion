@@ -8,7 +8,7 @@ return [
     | Public base URL untuk link di email (bukan APP_URL lokal)
     |--------------------------------------------------------------------------
     */
-    'public_url' => rtrim((string) env('HSECM_PUBLIC_URL', 'https://besentry-dev.beraucoal.co.id'), '/'),
+    'public_url' => rtrim((string) env('HSECM_PUBLIC_URL', 'https://besentry.beraucoal.co.id'), '/'),
 
     /*
     |--------------------------------------------------------------------------

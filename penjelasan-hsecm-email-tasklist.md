@@ -85,7 +85,7 @@ Sumber sama dengan WA Notify:
 
 Setiap penerima mendapat email **hanya untuk scope site + perusahaannya**.
 
-Public URL di email memakai `HSECM_PUBLIC_URL` (bukan `APP_URL` lokal), default `https://besentry-dev.beraucoal.co.id`.
+Public URL di email memakai `HSECM_PUBLIC_URL` (bukan `APP_URL` lokal), default `https://besentry.beraucoal.co.id`.
 
 ### Uji ke satu email
 

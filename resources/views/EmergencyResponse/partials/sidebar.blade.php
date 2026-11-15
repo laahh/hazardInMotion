@@ -9,7 +9,7 @@
     </button>
     <div>
         <a href="{{ $rr('emergency-response.dashboard') }}" class="sidebar-logo">
-            <img src="https://besentry-dev.beraucoal.co.id/build/images/logo-removebg.png" alt="Berau Coal" style="max-height: 40px; width: auto;">
+            <img src="https://besentry.beraucoal.co.id/build/images/logo-removebg.png" alt="Berau Coal" style="max-height: 40px; width: auto;">
         </a>
     </div>
     <div class="sidebar-menu-area">

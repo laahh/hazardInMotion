@@ -1873,7 +1873,7 @@ class MapBaseController extends Controller
                     $pesan .= "PIC: " . ($picUsername ?? '') . " - " . $picNama . "\n";
                 }
                 $pesan .= "Issue:\n" . $validated['issue'] . "\n\n";
-                $pesan .= "Link: https://besentry-dev.beraucoal.co.id/maps";
+                $pesan .= "Link: https://besentry.beraucoal.co.id/maps";
                 
                 $whatsappUrl = "https://wa.me/" . $cleanNumber . "?text=" . urlencode($pesan);
             }
