@@ -287,10 +287,15 @@ incx AS (
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx)))) AS ts
   FROM inc
 ),
-cocok AS (
-  SELECT x.no AS no, b.hid AS hid, length(arrayIntersect(x.ts, hb.tsb)) AS kuat
-  FROM incx x JOIN base b ON b.dl = x.dl JOIN hbx hb ON hb.hid = b.hid
+cocok0 AS (
+  SELECT x.no AS no, x.dl AS dl, hb.hid AS hid, length(arrayIntersect(x.ts, hb.tsb)) AS kuat
+  FROM (SELECT no, dl, ta, ts FROM incx WHERE dl IS NOT NULL AND dl != 0) x CROSS JOIN hbx hb
   WHERE hasAny(x.ta, hb.tb) AND length(arrayIntersect(x.ts, hb.tsb)) >= 2
+),
+cocok AS (
+  -- Cocokkan teks dulu (insiden × bahaya HIRA), baru saring ke baseline detail lokasinya:
+  -- jauh lebih ringan daripada menggandakan insiden ke semua pasangan baseline lebih dulu.
+  SELECT no, hid, kuat FROM cocok0 WHERE (dl, hid) IN (SELECT dl, hid FROM base)
 )';
     }
 
