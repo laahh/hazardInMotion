@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\PetaRisiko\Drm\DrmMappingEkspor;
 use App\Services\PetaRisiko\Drm\DrmRepository;
 use App\Services\PetaRisiko\Drm\DrmSnapshotBuilder;
 use Carbon\CarbonImmutable;
@@ -16,7 +17,7 @@ class PetaRisikoSyncCommand extends Command
 
     protected $description = 'Hitung ulang Peta Risiko PJA (DRM 2.1) dari ClickHouse OBDS: HIRA → SAP → status per PJA/site/Group Lokasi';
 
-    public function handle(DrmSnapshotBuilder $builder, DrmRepository $repo): int
+    public function handle(DrmSnapshotBuilder $builder, DrmRepository $repo, DrmMappingEkspor $ekspor): int
     {
         ini_set('memory_limit', '2048M');
         $mulai = microtime(true);
@@ -44,6 +45,17 @@ class PetaRisikoSyncCommand extends Command
             $this->error('Gagal: '.$e->getMessage());
 
             return self::FAILURE;
+        }
+
+        // Excel mapping ditulis setelah snapshot tersimpan; gagal di sini tidak membatalkan snapshot.
+        try {
+            $mulaiExcel = microtime(true);
+            $ekspor->tulis($snapshot['ekspor'], $sampai, (array) config('peta_risiko_drm'), $repo->pathEkspor());
+            @chmod($repo->pathEkspor(), 0644);
+            $this->line(sprintf('  %-45s %7s baris  %5.1f dtk', 'Excel mapping bahaya-risiko', number_format(count($snapshot['ekspor']), 0, ',', '.'), microtime(true) - $mulaiExcel));
+        } catch (Throwable $e) {
+            report($e);
+            $this->warn('Snapshot tersimpan, tetapi Excel mapping gagal ditulis: '.$e->getMessage());
         }
 
         $semua = $snapshot['meta']['cakupan']['SITE|ALL']['kpi'] ?? [];

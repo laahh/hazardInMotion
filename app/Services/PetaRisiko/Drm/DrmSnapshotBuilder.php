@@ -61,13 +61,15 @@ class DrmSnapshotBuilder
             'personil' => $this->ambil('personil PJA', $sql->personil()),
             'bearc' => $this->ambil('BeARC mingguan', $sql->bearc()),
             'coverage' => $this->ambil('coverage', $sql->coverage()),
-            'akt' => [], 'sorot' => [], 'temuan' => [],
+            'mapping' => $this->ambil('mapping SAP per bahaya (Excel)', $sql->mappingBahaya()),
+            'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [],
         ];
         foreach ($d['sites'] as $site) {
             $s = $sql->untukSite($site);
             array_push($d['akt'], ...$this->ambil("aktivitas × detail lokasi {$site}", $s->aktivitasDetailLokasi()));
             array_push($d['sorot'], ...$this->ambil("bahaya sorot {$site}", $s->bahayaSorot()));
             array_push($d['temuan'], ...$this->ambil("temuan open {$site}", $s->temuanOpen()));
+            array_push($d['statusBahaya'], ...$this->ambil("status per bahaya {$site} (Excel)", $s->statusPerBahaya()));
         }
 
         return $this->susun($d, $sampai, $cfg);
@@ -87,9 +89,9 @@ class DrmSnapshotBuilder
         $daftar = [
             'baseline HIRA' => $sql->hira(), 'detail lokasi' => $sql->detailLokasi(), 'master PJA' => $sql->pja(),
             'matriks per cakupan' => $sql->matriksCakupan(), 'insiden' => $sql->insiden(), 'personil PJA' => $sql->personil(),
-            'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(),
+            'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(), 'mapping SAP per bahaya' => $sql->mappingBahaya(),
             "aktivitas × detail lokasi ({$site})" => $s->aktivitasDetailLokasi(), "bahaya sorot ({$site})" => $s->bahayaSorot(),
-            "temuan open ({$site})" => $s->temuanOpen(),
+            "temuan open ({$site})" => $s->temuanOpen(), "status per bahaya ({$site})" => $s->statusPerBahaya(),
         ];
 
         $hasil = [];
@@ -122,7 +124,6 @@ class DrmSnapshotBuilder
             'akt' => $akt, 'sorot' => $sorot, 'temuan' => $temuan] = $d;
 
         $cakupan = $this->cakupan($d['matriks'], $sampai->toDateString());
-        $this->tambahLaten($cakupan, $sorot, $dl, $hira);
         $pjaBc = $this->pjaBc($pja, $dl);
 
         $perDl = [
@@ -161,6 +162,7 @@ class DrmSnapshotBuilder
                 'kolomBahaya' => self::KOLOM_BAHAYA,
             ],
             'pja' => $berkas,
+            'ekspor' => $this->barisEkspor($hira, $d['mapping'] ?? [], $d['statusBahaya'] ?? [], $sorot, $cfg),
         ];
     }
 
@@ -196,6 +198,7 @@ class DrmSnapshotBuilder
             if ($r['status'] === DrmSql::STATUS_TERKONTROL && $this->level($r['nf']) < $this->level($r['n1'])) {
                 $kpi['turun'] += $n;
             }
+            $kpi['laten'] += (int) ($r['laten'] ?? 0) === 1 ? $n : 0;
             unset($kpi);
             $this->isiSel($hasil[$kunci]['mAwal'], $r['k1'], $r['c1'], $n);
             $this->isiSel($hasil[$kunci]['mFinal'], $r['kf'], $r['cf'], $n);
@@ -209,39 +212,72 @@ class DrmSnapshotBuilder
     }
 
     /**
-     * Risiko laten = bahaya unik yang terkait insiden 12 bulan di cakupan itu tapi kini tidak teridentifikasi SAP.
+     * Satu baris per bahaya-risiko HIRA untuk Excel mapping. Status gabungan = terburuk antar
+     * detail lokasi baseline (G > K > T > X), sama dengan cakupan SITE|ALL di dashboard.
      *
-     * @param  array<string, array<string, mixed>>  $cakupan
-     * @param  list<array<string, mixed>>  $sorot
-     * @param  array<string, array<string, mixed>>  $dl
      * @param  array<string, array<string, mixed>>  $hira
+     * @param  list<array<string, mixed>>  $mapping
+     * @param  list<array<string, mixed>>  $statusBahaya  per site, dijumlahkan di sini
+     * @param  list<array<string, mixed>>  $sorot
+     * @param  array<string, mixed>  $cfg
+     * @return list<array<string, mixed>>
      */
-    private function tambahLaten(array &$cakupan, array $sorot, array $dl, array $hira): void
+    private function barisEkspor(array $hira, array $mapping, array $statusBahaya, array $sorot, array $cfg): array
     {
-        $laten = [];
+        $map = $this->indeks($mapping, 'hid');
+        $st = [];
+        foreach ($statusBahaya as $r) {
+            $a = &$st[(string) $r['hid']];
+            foreach (['dl_n', 'g', 'k', 't', 'x', 'dl_open', 'dl_ulang', 'dl_stop', 'temuan_open', 'temuan_jendela'] as $kol) {
+                $a[$kol] = ($a[$kol] ?? 0) + (int) $r[$kol];
+            }
+            $terakhir = $r['terakhir'] === '1970-01-01' ? '' : (string) $r['terakhir'];
+            $a['terakhir'] = max($a['terakhir'] ?? '', $terakhir);
+            unset($a);
+        }
+        $inc = [];
         foreach ($sorot as $r) {
-            if ((int) $r['n_inc'] === 0 || ! in_array($r['status'], [DrmSql::STATUS_TIDAK, DrmSql::STATUS_TIDAK_TERPETAKAN], true)) {
-                continue;
-            }
-            $d = $dl[(string) $r['dl']] ?? null;
-            if ($d === null) {
-                continue;
-            }
-            $kunci = ['SITE|ALL', 'SITE|'.$d['site'], 'GRUP|'.$d['grp'].'|ALL', 'GRUP|'.$d['grp'].'|'.$d['site']];
-            $proses = $hira[$r['hid']]['proses'] ?? null;
-            if ($proses !== null) {
-                array_push($kunci, 'PROSES|'.$proses.'|ALL', 'PROSES|'.$proses.'|'.$d['site']);
-            }
-            foreach ($d['pja'] as $p) {
-                $kunci[] = 'PJA|'.$p;
-            }
-            foreach ($kunci as $k) {
-                $laten[$k][$r['hid']] = true;
+            if ((int) $r['n_inc'] > 0) {
+                $i = &$inc[(string) $r['hid']];
+                $i['dl'] = ($i['dl'] ?? 0) + 1;
+                $i['n'] = ($i['n'] ?? 0) + (int) $r['n_inc'];
+                $i['tgl'] = max($i['tgl'] ?? '', (string) $r['tgl_inc']);
+                unset($i);
             }
         }
-        foreach ($cakupan as $k => &$c) {
-            $c['kpi']['laten'] = count($laten[$k] ?? []);
+        $namaProses = array_map(fn ($p) => $p[0], $cfg['proses_bisnis']) + ['X' => 'Belum terpetakan'];
+
+        $hasil = [];
+        foreach ($hira as $hid => $h) {
+            $s = $st[$hid] ?? [];
+            $status = match (true) {
+                ($s['g'] ?? 0) > 0 => DrmSql::STATUS_GAP,
+                ($s['k'] ?? 0) > 0 => DrmSql::STATUS_TERKONTROL,
+                ($s['t'] ?? 0) > 0 => DrmSql::STATUS_TIDAK,
+                ($s['x'] ?? 0) > 0 => DrmSql::STATUS_TIDAK_TERPETAKAN,
+                default => '-',
+            };
+            $m = $map[$hid] ?? [];
+            $i = $inc[$hid] ?? [];
+            $hasil[] = [
+                'hid' => (string) $hid, 'aktivitas' => $h['an'], 'sub' => $h['sn'], 'bahaya' => $h['bn'], 'potensi' => $h['p'],
+                'sites' => implode(', ', (array) $h['sites']), 'grup' => implode(', ', (array) $h['grp']),
+                'proses' => $namaProses[$h['proses'] ?? 'X'] ?? (string) ($h['proses'] ?? ''), 'faktor' => $h['faktor'],
+                'n1' => $h['n1'], 'k1' => $h['k1'], 'c1' => $h['c1'], 'n2' => $h['n2'], 'k2' => $h['k2'], 'c2' => $h['c2'],
+                'kontrol' => $h['kt'], 'status' => $status,
+                'final' => $status === DrmSql::STATUS_TERKONTROL ? $h['n2'] : ($status === '-' ? '' : $h['n1']),
+                'dl_n' => $s['dl_n'] ?? 0, 'dl_k' => $s['k'] ?? 0, 'dl_g' => $s['g'] ?? 0, 'dl_t' => $s['t'] ?? 0, 'dl_x' => $s['x'] ?? 0,
+                'dl_open' => $s['dl_open'] ?? 0, 'dl_ulang' => $s['dl_ulang'] ?? 0, 'dl_stop' => $s['dl_stop'] ?? 0,
+                'temuan_open' => $s['temuan_open'] ?? 0, 'temuan_jendela' => $s['temuan_jendela'] ?? 0, 'terakhir' => $s['terakhir'] ?? '',
+                'n_a' => (int) ($m['n_a'] ?? 0), 'label_a' => implode(' | ', (array) ($m['label_a'] ?? [])),
+                'n_b' => (int) ($m['n_b'] ?? 0), 'teks_b' => implode(' | ', (array) ($m['teks_b'] ?? [])),
+                'inc_dl' => $i['dl'] ?? 0, 'inc_n' => $i['n'] ?? 0, 'inc_tgl' => $i['tgl'] ?? '',
+                'laten' => ($i['dl'] ?? 0) > 0 && in_array($status, [DrmSql::STATUS_TIDAK, DrmSql::STATUS_TIDAK_TERPETAKAN], true),
+            ];
         }
+        usort($hasil, fn ($a, $b) => [$a['aktivitas'], $a['sub'], $a['bahaya']] <=> [$b['aktivitas'], $b['sub'], $b['bahaya']]);
+
+        return $hasil;
     }
 
     /** @return array<string, mixed> */

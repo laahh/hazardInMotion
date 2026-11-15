@@ -151,7 +151,7 @@ GROUP BY st.dl, st.a', ['{ambang}' => (string) (int) $this->cfg['ambang_berulang
      */
     public function matriksCakupan(): string
     {
-        return $this->prelude().$this->statusMingguanCte().',
+        return $this->prelude().$this->statusMingguanCte().$this->insidenCte().',
 pjalok AS (
   SELECT location_id, groupUniqArray(pja_id) AS pjas
   FROM (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations)
@@ -186,17 +186,52 @@ u AS (
   SELECT x.jenis AS jenis, x.kunci AS kunci, x.hid AS hid, x.minggu AS minggu, ev.mp[x.minggu] AS r
   FROM ukw AS x LEFT JOIN ev ON ev.jenis = x.jenis AND ev.kunci = x.kunci AND ev.hid = x.hid
 ),
+inck AS (
+  -- (cakupan, bahaya) yang terkait insiden 12 bulan terakhir di salah satu detail lokasi cakupan itu.
+  SELECT DISTINCT a.jenis AS jenis, a.kunci AS kunci, a.hid AS hid
+  FROM cocok c JOIN incx x ON x.no = c.no JOIN ak a ON a.dl = toInt64(x.dl) AND a.hid = c.hid
+  WHERE x.tgl > t_end - 365
+),
 us AS (
   SELECT jenis, kunci, hid, minggu,
-         multiIf(r = 4, \'G\', r = 3, \'K\', hid IN (SELECT hid FROM petakan), \'T\', \'X\') AS status
+         multiIf(r = 4, \'G\', r = 3, \'K\', hid IN (SELECT hid FROM petakan), \'T\', \'X\') AS status,
+         (jenis, kunci, hid) IN (SELECT jenis, kunci, hid FROM inck) AS ada_insiden
   FROM u
 )
 SELECT us.jenis AS jenis, us.kunci AS kunci, toString(us.minggu) AS minggu, us.status AS status,
        h.k1 AS k1, h.c1 AS c1, h.n1 AS n1,
        if(us.status = \'K\', h.k2, h.k1) AS kf, if(us.status = \'K\', h.c2, h.c1) AS cf, if(us.status = \'K\', h.n2, h.n1) AS nf,
+       -- Laten = terkait insiden TAPI status gabungan di cakupan ini tidak teridentifikasi / tidak terpetakan.
+       toUInt8(us.ada_insiden AND us.status IN (\'T\', \'X\')) AS laten,
        count() AS n
 FROM us JOIN hira h ON h.hid = us.hid
-GROUP BY us.jenis, us.kunci, us.minggu, us.status, h.k1, h.c1, h.n1, kf, cf, nf';
+GROUP BY us.jenis, us.kunci, us.minggu, us.status, h.k1, h.c1, h.n1, kf, cf, nf, laten';
+    }
+
+    /** Untuk Excel mapping: per bahaya, jumlah detail lokasi baseline per status + sinyal SAP (dijalankan per site). */
+    public function statusPerBahaya(): string
+    {
+        return strtr($this->prelude().$this->statusCte().'
+SELECT toString(st.hid) AS hid, count() AS dl_n,
+       countIf(st.status = \'G\') AS g, countIf(st.status = \'K\') AS k,
+       countIf(st.status = \'T\') AS t, countIf(st.status = \'X\') AS x,
+       countIf(st.open_n > 0) AS dl_open, countIf(st.rep >= {ambang}) AS dl_ulang, countIf(st.stop > 0) AS dl_stop,
+       sum(st.open_n) AS temuan_open, sum(st.rep) AS temuan_jendela,
+       toString(max(st.last)) AS terakhir
+FROM st GROUP BY st.hid', ['{ambang}' => (string) (int) $this->cfg['ambang_berulang']]);
+    }
+
+    /** Untuk Excel mapping: label SAP (Master A) dan teks aktivitas Observasi/OAK (Master B) per bahaya. */
+    public function mappingBahaya(): string
+    {
+        return $this->prelude().',
+mapa AS (SELECT hid, count() AS n, arraySlice(groupArray(concat(k, \' › \', sk)), 1, 25) AS contoh FROM ma GROUP BY hid),
+mapb AS (
+  SELECT h.hid AS hid, count() AS n, arraySlice(groupUniqArray(m.tx), 1, 10) AS contoh
+  FROM mb m JOIN hira h ON h.a = m.a AND h.s = m.s GROUP BY hid
+)
+SELECT toString(h.hid) AS hid, ifNull(a.n, 0) AS n_a, a.contoh AS label_a, ifNull(b.n, 0) AS n_b, b.contoh AS teks_b
+FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid';
     }
 
     /** Temuan Hazard/Inspeksi yang masih open per tanggal akhir, di detail lokasi yang punya baseline. */

@@ -16,6 +16,7 @@ Route::prefix('peta-risiko-pja')
         Route::controller(PetaRisikoDrmController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/data/meta', 'meta')->name('meta');
+            Route::get('/unduh/mapping', 'unduhMapping')->name('unduh.mapping');
             Route::get('/pja/{pja}', 'pja')->where('pja', '[0-9]+')->name('pja');
             Route::get('/pja/{pja}/data', 'pjaData')->where('pja', '[0-9]+')->name('pja.data');
         });

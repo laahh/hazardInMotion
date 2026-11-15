@@ -3,7 +3,12 @@
 @section('title', 'Peta Risiko PJA')
 
 @section('hero-aksi')
-  <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}">Versi lama (impor)</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    @if ($adaExcel)
+      <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}">⬇ Unduh Excel mapping</a>
+    @endif
+    <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}">Versi lama (impor)</a>
+  </div>
 @endsection
 
 @section('hero')

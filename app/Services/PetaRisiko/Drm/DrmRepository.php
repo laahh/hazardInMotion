@@ -28,6 +28,17 @@ class DrmRepository extends PetaRisikoRepository
         $this->bukaIzinBaca(Storage::disk('local')->path(static::DIR));
     }
 
+    /** Path absolut file Excel mapping (ditulis setelah simpan, karena simpan mengganti folder). */
+    public function pathEkspor(): string
+    {
+        return Storage::disk('local')->path(static::DIR.'/'.DrmMappingEkspor::NAMA_FILE);
+    }
+
+    public function adaEkspor(): bool
+    {
+        return is_file($this->pathEkspor());
+    }
+
     private function bukaIzinBaca(string $root): void
     {
         if (! is_dir($root)) {

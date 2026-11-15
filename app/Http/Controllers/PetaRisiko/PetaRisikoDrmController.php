@@ -7,6 +7,7 @@ use App\Services\PetaRisiko\Drm\DrmRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Peta Risiko PJA (DRM 2.1): identifikasi bahaya-risiko HIRA oleh SAP per Site / Group Lokasi / PJA.
@@ -20,7 +21,7 @@ class PetaRisikoDrmController extends Controller
 
     public function index(): View
     {
-        return view('peta-risiko-pja.drm.index', ['meta' => $this->repo->meta()]);
+        return view('peta-risiko-pja.drm.index', ['meta' => $this->repo->meta(), 'adaExcel' => $this->repo->adaEkspor()]);
     }
 
     public function pja(string $pja): View
@@ -40,6 +41,17 @@ class PetaRisikoDrmController extends Controller
         abort_if($data === null, 404);
 
         return response()->json($data);
+    }
+
+    /** Excel mapping bahaya-risiko (ditulis oleh peta-risiko:sync). */
+    public function unduhMapping(): BinaryFileResponse
+    {
+        abort_unless($this->repo->adaEkspor(), 404, 'Excel mapping belum dibuat. Jalankan php artisan peta-risiko:sync.');
+        $sampai = $this->repo->meta()['sampai'] ?? now()->toDateString();
+
+        return response()->download($this->repo->pathEkspor(), "mapping-bahaya-risiko-{$sampai}.xlsx", [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
 
     /** Ringkasan semua cakupan (Site / Group Lokasi / PJA) untuk halaman indeks. */

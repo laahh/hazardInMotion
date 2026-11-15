@@ -2,10 +2,12 @@
 
 namespace Tests\Unit\PetaRisiko;
 
+use App\Services\PetaRisiko\Drm\DrmMappingEkspor;
 use App\Services\PetaRisiko\Drm\DrmSnapshotBuilder;
 use App\Services\PetaRisiko\Drm\DrmSql;
 use App\Services\SportEvaluation\RfidClickHouseClient;
 use Carbon\CarbonImmutable;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class DrmSnapshotBuilderTest extends TestCase
@@ -30,12 +32,53 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(2, $snap['meta']['cakupan']['SITE|LMO']['mAwal'][0][4]);
     }
 
-    public function test_risiko_laten_hanya_bahaya_insiden_yang_tidak_teridentifikasi(): void
+    public function test_risiko_laten_diambil_dari_kolom_laten_matriks_minggu_terakhir(): void
     {
         $snap = $this->susun();
 
+        // Hanya baris laten=1 di minggu terakhir yang dihitung (minggu lama & baris G diabaikan).
         $this->assertSame(1, $snap['meta']['cakupan']['SITE|LMO']['kpi']['laten']);
-        $this->assertSame(1, $snap['meta']['cakupan']['PJA|10']['kpi']['laten']);
+        $this->assertSame(2, $snap['meta']['cakupan']['PJA|10']['kpi']['laten']);
+        $this->assertSame(0, $snap['meta']['cakupan']['PROSES|OB|ALL']['kpi']['laten']);
+        // Laten tidak boleh melebihi jumlah tidak teridentifikasi + tidak terpetakan.
+        foreach ($snap['meta']['cakupan'] as $c) {
+            $this->assertLessThanOrEqual($c['kpi']['T'] + $c['kpi']['X'], $c['kpi']['laten']);
+        }
+    }
+
+    public function test_baris_excel_status_gabungan_mapping_dan_insiden(): void
+    {
+        $baris = array_column($this->susun()['ekspor'], null, 'hid');
+
+        $this->assertCount(3, $baris);
+        // hid 1: tidak teridentifikasi di semua DL + insiden → laten.
+        $this->assertSame('T', $baris['1']['status']);
+        $this->assertTrue($baris['1']['laten']);
+        $this->assertSame(1, $baris['1']['inc_n']);
+        // hid 2: gap di salah satu DL menang atas terkontrol di DL lain (status terburuk).
+        $this->assertSame('G', $baris['2']['status']);
+        $this->assertSame(['dl_n' => 3, 'dl_g' => 1, 'dl_k' => 2], ['dl_n' => $baris['2']['dl_n'], 'dl_g' => $baris['2']['dl_g'], 'dl_k' => $baris['2']['dl_k']]);
+        $this->assertSame('Hazard › Jalan licin | Hazard › Jalan berlubang', $baris['2']['label_a']);
+        // hid 3: tidak punya DL baseline.
+        $this->assertSame('-', $baris['3']['status']);
+        $this->assertSame('OB Removal', $baris['3']['proses']);
+    }
+
+    public function test_file_excel_mapping_valid_dan_bisa_dibaca(): void
+    {
+        $snap = $this->susun();
+        $file = tempnam(sys_get_temp_dir(), 'drm').'.xlsx';
+        (new DrmMappingEkspor())->tulis($snap['ekspor'], CarbonImmutable::parse(self::SAMPAI), config('peta_risiko_drm'), $file);
+
+        $wb = IOFactory::load($file);
+        $this->assertSame(['Mapping bahaya-risiko', 'Ringkasan', 'Keterangan'], $wb->getSheetNames());
+        $ws = $wb->getSheet(0);
+        $this->assertSame('Bahaya / penyebab potensial', (string) $ws->getCell('D1')->getValue());
+        $this->assertSame(4, $ws->getHighestRow());
+        $this->assertSame(1, $ws->getCell('A2')->getValue());
+        $ringkas = $wb->getSheet(1)->toArray();
+        $this->assertEquals(['Masuk baseline (punya detail lokasi)', 2], array_slice($ringkas[2], 0, 2));
+        @unlink($file);
     }
 
     public function test_berkas_pja_hanya_berisi_detail_lokasi_miliknya_dan_personil_mitra(): void
@@ -67,8 +110,6 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame('X', end($kode));
         $this->assertSame(11, count(array_filter($snap['meta']['proses'], fn ($p) => $p['jenis'] === 'inti')));
         $this->assertSame(4, $snap['meta']['cakupan']['PROSES|OB|ALL']['kpi']['G']);
-        // Laten bahaya insiden (hid 1, proses OB) ikut tercatat di cakupan proses.
-        $this->assertSame(1, $snap['meta']['cakupan']['PROSES|OB|ALL']['kpi']['laten']);
         $kolom = array_flip($snap['meta']['kolomAkt']);
         $this->assertSame('OB', $snap['pja']['10']['akt'][0][$kolom['proses']]);
     }
@@ -97,20 +138,20 @@ class DrmSnapshotBuilderTest extends TestCase
     /** @return array{meta: array<string, mixed>, pja: array<string, array<string, mixed>>} */
     private function susun(): array
     {
-        $baris = fn (string $minggu, string $status, string $n1, string $nf, string $kf, string $cf, int $n) => [
+        $baris = fn (string $minggu, string $status, string $n1, string $nf, string $kf, string $cf, int $n, int $laten = 0) => [
             'jenis' => 'SITE', 'kunci' => 'LMO', 'minggu' => $minggu, 'status' => $status,
             'k1' => 'Hampir Pasti', 'c1' => $n1 === 'Significant' ? 'Bencana' : 'Minor', 'n1' => $n1,
-            'kf' => $kf, 'cf' => $cf, 'nf' => $nf, 'n' => (string) $n,
+            'kf' => $kf, 'cf' => $cf, 'nf' => $nf, 'laten' => (string) $laten, 'n' => (string) $n,
         ];
         $matriks = [
             $baris(self::SAMPAI, 'K', 'Significant', 'Medium', 'Mungkin', 'Sedang', 1),
             $baris(self::SAMPAI, 'G', 'Significant', 'Significant', 'Hampir Pasti', 'Bencana', 1),
-            $baris(self::SAMPAI, 'T', 'Low', 'Low', 'Hampir Pasti', 'Minor', 1),
-            $baris('2026-11-07', 'T', 'Low', 'Low', 'Hampir Pasti', 'Minor', 5),
+            $baris(self::SAMPAI, 'T', 'Low', 'Low', 'Hampir Pasti', 'Minor', 1, 1),
+            $baris('2026-11-07', 'T', 'Low', 'Low', 'Hampir Pasti', 'Minor', 5, 1),
             ['jenis' => 'PJA', 'kunci' => '10', 'minggu' => self::SAMPAI, 'status' => 'T', 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'Medium',
-                'kf' => 'Mungkin', 'cf' => 'Minor', 'nf' => 'Medium', 'n' => '2'],
+                'kf' => 'Mungkin', 'cf' => 'Minor', 'nf' => 'Medium', 'laten' => '1', 'n' => '2'],
             ['jenis' => 'PROSES', 'kunci' => 'OB|ALL', 'minggu' => self::SAMPAI, 'status' => 'G', 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'High',
-                'kf' => 'Mungkin', 'cf' => 'Minor', 'nf' => 'High', 'n' => '4'],
+                'kf' => 'Mungkin', 'cf' => 'Minor', 'nf' => 'High', 'laten' => '0', 'n' => '4'],
         ];
         $hira = fn (string $hid, string $a) => ['hid' => $hid, 'a' => $a, 'an' => ucfirst($a), 'sn' => 'Sub', 'bn' => 'Bahaya '.$hid, 'p' => 'Potensi',
             'sites' => ['LMO'], 'grp' => ['Loading Point'], 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'High', 'k2' => 'Langka', 'c2' => 'Minor',
@@ -146,6 +187,19 @@ class DrmSnapshotBuilderTest extends TestCase
                 ['dl' => '101', 'hid' => '2', 'status' => 'G', 'open_n' => '1', 'rep' => '1', 'stop' => '0', 'terakhir' => '2026-11-10', 'n_inc' => '0', 'tgl_inc' => ''],
             ],
             'temuan' => [['dl' => '101', 'tanggal' => '2026-11-10', 'aktivitas' => ['Loading ob']], ['dl' => '201', 'tanggal' => '2026-11-09', 'aktivitas' => []]],
+            'mapping' => [
+                ['hid' => '1', 'n_a' => '0', 'label_a' => [], 'n_b' => '1', 'teks_b' => ['loading ob']],
+                ['hid' => '2', 'n_a' => '2', 'label_a' => ['Hazard › Jalan licin', 'Hazard › Jalan berlubang'], 'n_b' => '0', 'teks_b' => []],
+            ],
+            // Per site; hid 2 muncul di dua "site" untuk menguji penjumlahan.
+            'statusBahaya' => [
+                ['hid' => '1', 'dl_n' => '2', 'g' => '0', 'k' => '0', 't' => '2', 'x' => '0', 'dl_open' => '0', 'dl_ulang' => '0', 'dl_stop' => '0',
+                    'temuan_open' => '0', 'temuan_jendela' => '0', 'terakhir' => '1970-01-01'],
+                ['hid' => '2', 'dl_n' => '2', 'g' => '0', 'k' => '2', 't' => '0', 'x' => '0', 'dl_open' => '0', 'dl_ulang' => '0', 'dl_stop' => '0',
+                    'temuan_open' => '0', 'temuan_jendela' => '3', 'terakhir' => '2026-11-01'],
+                ['hid' => '2', 'dl_n' => '1', 'g' => '1', 'k' => '0', 't' => '0', 'x' => '0', 'dl_open' => '1', 'dl_ulang' => '0', 'dl_stop' => '0',
+                    'temuan_open' => '1', 'temuan_jendela' => '1', 'terakhir' => '2026-11-10'],
+            ],
         ];
 
         return (new DrmSnapshotBuilder(new RfidClickHouseClient()))
