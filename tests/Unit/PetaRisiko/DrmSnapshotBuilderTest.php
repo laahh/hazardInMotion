@@ -86,10 +86,10 @@ class DrmSnapshotBuilderTest extends TestCase
         $sql = new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI));
         $site = $sql->untukSite("LMO'x")->aktivitasDetailLokasi();
 
-        $this->assertStringContainsString("AND site = 'LMO\\'x'", $site);
+        $this->assertStringContainsString("AND t.site = 'LMO\\'x'", $site);
         $this->assertStringNotContainsString('{ambang}', $site);
         $this->assertStringContainsString("toDate('2026-11-14') AS t_end", $site);
-        $this->assertStringNotContainsString('AND site =', $sql->aktivitasDetailLokasi());
+        $this->assertStringNotContainsString('AND t.site =', $sql->aktivitasDetailLokasi());
     }
 
     /** @return array{meta: array<string, mixed>, pja: array<string, array<string, mixed>>} */

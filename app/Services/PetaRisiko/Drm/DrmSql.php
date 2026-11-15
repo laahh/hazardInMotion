@@ -426,11 +426,12 @@ hira AS (
   FROM hraw GROUP BY a, s, b
 ),
 dl0 AS (
-  SELECT toInt64(id_detil_lokasi) AS dl, any(site) AS site, any(toInt64(id_lokasi)) AS id_lok,
-         any(lokasi) AS lokasi, any(Detil_Lokasi) AS detlok
-  FROM obds.bep_vw_site_lokasi_detil_lokasi
-  WHERE status_detil_lokasi = \'1\' AND status_lokasi = \'1\' AND status_site = \'1\''
-            .($this->site !== null ? ' AND site = '.$this->q($this->site) : '').'
+  SELECT toInt64(t.id_detil_lokasi) AS dl, any(t.site) AS site, any(toInt64(t.id_lokasi)) AS id_lok,
+         any(t.lokasi) AS lokasi, any(t.Detil_Lokasi) AS detlok
+  FROM obds.bep_vw_site_lokasi_detil_lokasi AS t
+  WHERE t.status_detil_lokasi = \'1\' AND t.status_lokasi = \'1\' AND t.status_site = \'1\''
+            // Kolom ditulis lengkap (t.site): tanpa itu ClickHouse membaca `site` di WHERE sebagai alias any(site).
+            .($this->site !== null ? ' AND t.site = '.$this->q($this->site) : '').'
   GROUP BY dl
 ),
 dl AS (
