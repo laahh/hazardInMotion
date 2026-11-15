@@ -287,10 +287,17 @@ incx AS (
          arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx)))) AS ts
   FROM inc
 ),
+it AS (SELECT no, t FROM incx ARRAY JOIN ts AS t WHERE dl IS NOT NULL AND dl != 0),
+ht AS (SELECT hid, t FROM hbx ARRAY JOIN tsb AS t),
+kandidat AS (
+  -- JOIN per kata kunci (paralel), bukan CROSS JOIN insiden × bahaya (satu thread, sangat lambat).
+  SELECT i.no AS no, h.hid AS hid, count() AS kuat FROM it i JOIN ht h ON h.t = i.t
+  GROUP BY no, hid HAVING kuat >= 2
+),
 cocok0 AS (
-  SELECT x.no AS no, x.dl AS dl, hb.hid AS hid, length(arrayIntersect(x.ts, hb.tsb)) AS kuat
-  FROM (SELECT no, dl, ta, ts FROM incx WHERE dl IS NOT NULL AND dl != 0) x CROSS JOIN hbx hb
-  WHERE hasAny(x.ta, hb.tb) AND length(arrayIntersect(x.ts, hb.tsb)) >= 2
+  SELECT k.no AS no, x.dl AS dl, k.hid AS hid, k.kuat AS kuat
+  FROM kandidat k JOIN incx x ON x.no = k.no JOIN hbx hb ON hb.hid = k.hid
+  WHERE hasAny(x.ta, hb.tb)
 ),
 cocok AS (
   -- Cocokkan teks dulu (insiden × bahaya HIRA), baru saring ke baseline detail lokasinya:
