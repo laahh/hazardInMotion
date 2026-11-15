@@ -723,6 +723,8 @@ sap AS (
          lower(if(jenis_data = \'OBSERVASI\', ifNull(`aktivitas  OBS`, \'\'),
                   concat(ifNull(`aktivitas pekerjaan OAK`, \'\'), \' \', ifNull(`sub aktivitas pekerjaan OAK`, \'\')))) AS tx,
          ifNull(`hasil OAK`, \'\') = \'Stop Pekerjaan\' AS stop,
+         multiSearchAny(lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'), \' \', ifNull(tindakan, \'\'))),
+                        ['.$this->daftar((array) $c['obs_tanpa_aktivitas']).']) AS na,
          ifNull(status, \'\') AS st,
          if(ifNull(status, \'\') IN ('.$selesai.'), ifNull(toDate(tanggal_aktual_penyelesaian), toDate(`date time`)), NULL) AS cd
   FROM obds.ch_rfid_sap_cuti_all_site
@@ -780,6 +782,7 @@ evo AS (
   SELECT s.dl AS dl, m.a AS a, m.s AS s, s.d AS d, max(s.stop) AS stop, 1 AS ok
   FROM sap s JOIN mb m ON m.tx = s.tx
   WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
+    AND NOT s.na
   GROUP BY s.dl, m.a, m.s, s.d
 ),
 -- Master C: aktivitas OAK ↔ aktivitas HIRA (≥1 kata tidak umum + (≥2 kata ATAU tema sama)).

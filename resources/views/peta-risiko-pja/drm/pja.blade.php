@@ -14,36 +14,131 @@
 
 @push('styles')
 <style>
-  .br-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .br-bar select { font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line, #dfe3e8); border-radius: 8px; background: #fff; }
-  .br-lv { display: inline-flex; gap: 5px; align-items: center; padding: 3px 9px; border: 1px solid var(--line, #dfe3e8); border-radius: 999px; font-size: 13px; cursor: pointer; }
-  .br-lv i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  .br-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 12px 0; }
-  .br-kpi { background: #fff; border: 1px solid var(--line, #e3e6ea); border-radius: 12px; padding: 12px 14px; }
-  .br-kpi small { display: block; color: #6b7480; font-size: 12px; }
-  .br-kpi b { display: block; font-size: 26px; line-height: 1.3; }
-  .br-kpi em { font-style: normal; font-size: 12px; color: #6b7480; }
-  .br-sb { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: #eef1f4; min-width: 110px; }
+  /* Beranda PJA: tata letak mengikuti prototipe, gaya memakai token halaman (--navy, --green, --line, --shadow, --ease). */
+  #br-isi { --acc: var(--navy); }
+  #br-isi [id] { scroll-margin-top: 92px; }
+  #br-isi > * + * { margin-top: 20px; }
+  #br-isi summary { list-style: none; }
+  #br-isi summary::-webkit-details-marker { display: none; }
+  #br-isi summary.pr-card-head::after { content: "▸"; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--sky-2); color: var(--navy); font-size: 15px; transition: transform .3s var(--ease); }
+  #br-perh { margin-top: 24px; }
+  #br-isi details[open] > summary.pr-card-head::after { transform: rotate(90deg); }
+
+  /* Bilah filter: menempel di atas saat menggulir */
+  .br-bar-wrap { position: sticky; top: 10px; z-index: 30; }
+  .br-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 18px; background: rgba(255, 255, 255, .92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 20px rgba(20, 30, 60, .08); }
+  .br-bar .lbl { font: 700 12px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--mute-2); }
+  .br-bar select { height: 36px; border: 1px solid var(--line-2); border-radius: 10px; padding: 0 10px; font: inherit; font-size: 14px; background: #fff; max-width: 330px; transition: border-color .2s; }
+  .br-bar select:hover { border-color: var(--navy); }
+  .br-nav { display: inline-flex; border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: #fff; }
+  .br-nav button { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; color: var(--navy); transition: background .2s; }
+  .br-nav button + button { border-left: 1px solid var(--line-2); }
+  .br-nav button:hover:not(:disabled) { background: var(--sky-2); }
+  .br-nav button:disabled { color: var(--mute-2); cursor: default; }
+  .br-sep { width: 1px; height: 26px; background: var(--line-2); }
+  .br-lv { display: inline-flex; gap: 6px; align-items: center; padding: 7px 12px; border: 1px solid var(--line-2); border-radius: 999px; font: 700 13px/1 "Plus Jakarta Sans", sans-serif; color: var(--mute); background: #fff; transition: background .25s var(--ease), color .25s, border-color .25s; }
+  .br-lv i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--c); }
+  .br-lv:hover { border-color: var(--c); }
+  .br-lv[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 12%, #fff); border-color: var(--c); color: var(--ink); }
+  .br-sum { margin-left: auto; display: inline-flex; gap: 12px; align-items: center; font-size: 13px; color: var(--mute); }
+  .br-sum b { font: 800 15px/1 "Plus Jakarta Sans", sans-serif; color: var(--c, var(--ink)); }
+
+  /* Judul bagian */
+  .br-h { display: flex; align-items: center; gap: 8px; margin: 22px 0 10px; font: 700 12px/1.2 "Plus Jakarta Sans", sans-serif; letter-spacing: .07em; text-transform: uppercase; color: var(--mute); }
+  .br-h::before { content: ""; flex: 0 0 auto; width: 3px; height: 14px; border-radius: 2px; background: var(--acc); }
+  .br-h:first-child { margin-top: 0; }
+
+  /* KPI */
+  .br-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .br-kpi { position: relative; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 14px 20px; box-shadow: var(--shadow); transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
+  .br-kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--ac, var(--mute-2)); }
+  .br-kpi:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(20, 26, 34, .05), 0 14px 32px rgba(20, 26, 34, .10); }
+  .br-kpi small { display: block; font: 700 12px/1.3 "Plus Jakarta Sans", sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--mute); }
+  .br-kpi b { display: block; margin: 6px 0 4px; font: 800 32px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: -.02em; color: var(--kc, var(--navy)); }
+  .br-kpi em { font-style: normal; font-size: 13px; line-height: 1.4; color: var(--mute); }
+
+  /* Kartu perlu aksi */
+  .br-act { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .br-ac { background: #fff; border: 1px solid var(--line); border-top: 4px solid var(--ac); border-radius: 14px; padding: 12px 16px 14px; box-shadow: var(--shadow); transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
+  .br-ac:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(20, 26, 34, .05), 0 14px 32px rgba(20, 26, 34, .10); }
+  .br-ac small { display: block; font: 700 13px/1.3 "Plus Jakarta Sans", sans-serif; color: var(--mute); }
+  .br-ac .big { display: block; margin: 4px 0 2px; font: 800 28px/1.15 "Plus Jakarta Sans", sans-serif; color: var(--ink); }
+  .br-ac .big span { font-size: 14px; font-weight: 600; color: var(--mute); }
+  .br-ac a { display: inline-flex; gap: 4px; margin-top: 8px; font: 700 13px/1 "Plus Jakarta Sans", sans-serif; color: var(--navy-2); cursor: pointer; }
+  .br-ac a:hover { text-decoration: underline; }
+
+  /* Bar komposisi */
+  .br-sb { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--track); min-width: 110px; }
   .br-sb i { display: block; height: 100%; }
+  .br-sb i + i { box-shadow: inset 1px 0 0 rgba(255, 255, 255, .7); }
+  .br-sb.big { height: 16px; border-radius: 8px; }
+
+  /* Ringkasan */
+  .br-rhead { padding: 16px 22px 14px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--sky), #fff); }
+  .br-rhead b.t { display: block; font: 800 17px/1.2 "Plus Jakarta Sans", sans-serif; color: var(--ink); }
+  .br-rhead small { display: block; margin-top: 3px; font-size: 14px; color: var(--mute); }
+  .br-rhead .br-sb { margin: 12px 0 10px; }
+  .br-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .br-chips > span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: #fff; border: 1px solid var(--line-2); font-size: 13px; }
+  .br-chips i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .br-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .br-tis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .br-ti { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.5; background: #fff; transition: box-shadow .25s var(--ease); }
+  .br-ti:hover { box-shadow: 0 6px 18px rgba(20, 26, 34, .08); }
+  .br-tn { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff; font: 800 12px/22px "Plus Jakarta Sans", sans-serif; text-align: center; margin-top: 1px; }
+
+  /* Peta panas */
+  .br-hm { border-collapse: separate; border-spacing: 3px; font-size: 13px; }
+  .br-hm th { font: 700 11px/1.2 "Plus Jakarta Sans", sans-serif; color: var(--mute); padding: 2px 4px; text-align: center; white-space: nowrap; }
+  .br-hm td.c { min-width: 42px; height: 28px; text-align: center; border-radius: 6px; cursor: pointer; font: 700 12px/1 "Plus Jakarta Sans", sans-serif; font-variant-numeric: tabular-nums; transition: transform .2s var(--ease), filter .2s; }
+  .br-hm td.c:hover { transform: scale(1.08); filter: brightness(.95); }
+  .br-hm td.c.sel { outline: 2px solid var(--navy); outline-offset: 1px; }
+  .br-hlg { display: inline-block; width: 120px; height: 8px; border-radius: 4px; vertical-align: middle; margin: 0 6px; background: linear-gradient(90deg, hsl(8, 55%, 86%), hsl(68, 55%, 73%), hsl(128, 55%, 60%)); }
+
+  /* Bar harian, tren, proyeksi */
   .br-mb { display: flex; align-items: flex-end; gap: 1px; height: 34px; min-width: 210px; }
   .br-mc { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; position: relative; }
   .br-mc i { display: block; width: 100%; }
-  .br-mc b { position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 2px; background: #ff1a2e; box-shadow: 0 0 5px 1px #ff1a2e; }
-  .br-wb { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 6px; }
+  .br-mc b { position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 2px; background: #E8112D; box-shadow: 0 0 6px 1px #E8112D; }
+  .br-wb { display: flex; align-items: flex-end; gap: 8px; height: 150px; padding-top: 6px; }
   .br-wc { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; height: 100%; }
-  .br-wc .stk { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 4px; overflow: hidden; background: #f1f3f5; }
-  .br-wc.sel .stk { outline: 2px solid #1b5fb5; outline-offset: 1px; }
-  .br-wc span { font-size: 11px; color: #6b7480; white-space: nowrap; }
-  .br-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 600; }
+  .br-wc .stk { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 6px; overflow: hidden; background: var(--track); transition: transform .25s var(--ease), box-shadow .25s; }
+  .br-wc:hover .stk { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(20, 26, 34, .12); }
+  .br-wc.sel .stk { outline: 2px solid var(--navy); outline-offset: 2px; }
+  .br-wc span { font: 600 11px/1 "Plus Jakarta Sans", sans-serif; color: var(--mute); white-space: nowrap; }
+  .br-wc.sel span { color: var(--navy); }
+  .br-pj { display: flex; align-items: flex-end; gap: 8px; cursor: help; }
+  .br-pj b { font: 800 13px/1 "Plus Jakarta Sans", sans-serif; color: var(--ink); }
   .br-pb { display: flex; align-items: flex-end; gap: 2px; height: 36px; }
   .br-pb div { width: 8px; height: 100%; display: flex; align-items: flex-end; }
   .br-pb i { display: block; width: 100%; border-radius: 2px 2px 0 0; }
-  .br-sub > td { background: #f7f8fa; }
-  .br-cr { border: 0; background: none; cursor: pointer; font-size: 13px; padding: 0 4px 0 0; color: inherit; }
+
+  /* Tabel hierarki */
+  .br-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; color: #fff; font: 700 12px/1.4 "Plus Jakarta Sans", sans-serif; }
+  .br-a > td, .br-g > td { transition: background .2s; }
+  .br-a:hover > td, .br-g:hover > td { background: var(--sky); }
+  .br-a.open > td, .br-g.open > td { background: var(--sky-2); }
+  .br-sub > td { background: #F8FAFC; }
+  .br-cr { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 6px; margin-right: 4px; font-size: 12px; color: var(--navy); transition: transform .25s var(--ease), background .2s; }
+  .br-cr:hover { background: var(--sky-2); }
+  .open .br-cr { transform: rotate(90deg); }
+  .br-red { color: var(--red); font-weight: 700; }
   .br-ol { margin: 6px 0 0 18px; padding: 0; } .br-ol li { margin: 6px 0; }
-  .br-h { display: block; margin: 14px 0 6px; font-size: 12px; letter-spacing: .02em; color: #6b7480; font-weight: 700; text-transform: uppercase; }
-  .br-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
-  .br-red { color: #c0392b; font-weight: 700; }
+
+  /* Gerak halus: muncul bertahap saat pertama dimuat, baris yang dibuka meluncur masuk */
+  @keyframes br-naik { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .br-awal > * { animation: br-naik .5s var(--ease) both; }
+  .br-awal > *:nth-child(2) { animation-delay: .04s; } .br-awal > *:nth-child(3) { animation-delay: .08s; }
+  .br-awal > *:nth-child(4) { animation-delay: .12s; } .br-awal > *:nth-child(n+5) { animation-delay: .16s; }
+  .br-buka > td > * { animation: br-naik .35s var(--ease) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .br-awal > *, .br-buka > td > * { animation: none; }
+    .br-kpi, .br-ac, .br-hm td.c, .br-wc .stk, .br-cr { transition: none; }
+  }
+
+  @media (max-width: 1100px) { .br-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 900px) { .br-act, .br-tis, .br-two { grid-template-columns: 1fr; } .br-sum { margin-left: 0; } }
+  @media (max-width: 560px) { .br-kpis { grid-template-columns: 1fr; } .br-bar-wrap { position: static; } }
 </style>
 @endpush
 
@@ -86,7 +181,7 @@
   const KEL = { X: 'Belum terpetakan', ...Object.fromEntries(META.proses.map((p) => [p.kode, p.nama])) };
   const LV = ['Significant', 'High', 'Medium', 'Low'];
   const LVC = { Significant: '#b3261e', High: '#d0640c', Medium: '#c28f12', Low: '#2f7d4f' };
-  const W = { ok: '#1d9e75', bm: '#d9822b', none: '#f2b99b' };
+  const W = { ok: '#1F9A3A', part: '#E3B341', bm: '#D0640C', none: '#F5C7A2' };
   const TIER = { t: ['Tinggi', '#b3261e'], s: ['Sedang', '#c28f12'], r: ['Rendah', '#6a8f3c'] };
   const BIT = { DET: 1, SPE: 2, CLOSED: 4, ULANG: 8, STOP: 16, TS: 32, INC: 64 };
   const HARI_INI = new Date().toISOString().slice(0, 10);
@@ -199,6 +294,36 @@
     return { T, A, AG };
   }
 
+  /**
+   * Satuan KETAT untuk kartu, ringkasan, dan peta panas: satu baris = kelompok aktivitas × bahaya-risiko,
+   * dihitung sekali walau ada di beberapa detail lokasi. Terkontrol penuh bila semua detail lokasi aktifnya
+   * terkontrol; sebagian bila sebagian; hanya bermasalah bila tak ada yang terkontrol tapi ada laporan
+   * bermasalah; sisanya tanpa laporan. Sama dengan DrmBeranda::ringkasMgmt() di PHP.
+   */
+  function ketat(w, pakaiFlag = true) {
+    const Rk = {}, X = {};
+    R.forEach((r) => {
+      if (r.umum || !S.kb[r.n1]) return;
+      const key = r.kel + '|' + r.hid;
+      if (pakaiFlag && nonaktif(r.dl, r.kel, w)) { X[key] = 1; return; }
+      const u = Rk[key] || (Rk[key] = { kel: r.kel, bn: r.bn, n1: r.n1, n: 0, ok: 0, bm: 0, m: 0 });
+      const [st, m] = statusBit(r.K.w[w] || 0, r.Sw[w] || 0);
+      u.n++;
+      if (st === 'ok') u.ok++; else if (st === 'bm') { u.bm++; u.m |= m; }
+    });
+    const T = { tot: 0, full: 0, part: 0, gaponly: 0, none: 0, g2: 0, g3: 0, g4: 0, g5: 0, excl: 0 }, A = {}, list = Object.values(Rk);
+    list.forEach((u) => {
+      u.cat = u.ok === u.n ? 'full' : u.ok > 0 ? 'part' : u.bm > 0 ? 'gaponly' : 'none';
+      T.tot++; T[u.cat]++;
+      if (u.m & BIT.CLOSED) T.g2++; if (u.m & BIT.ULANG) T.g3++; if (u.m & BIT.STOP) T.g4++; if (u.m & BIT.TS) T.g5++;
+      const a = A[u.kel] || (A[u.kel] = { tot: 0, full: 0, part: 0, gaponly: 0, none: 0 });
+      a.tot++; a[u.cat]++;
+    });
+    T.excl = Object.keys(X).filter((k) => !Rk[k]).length;
+    return { T, A, list };
+  }
+  const gapKetat = (t) => t.part + t.gaponly + t.none;
+
   /** Bar harian: per hari jumlah baris terkontrol / bermasalah / insiden (tanpa laporan = sisa). */
   function harian(rows, spesifik) {
     const d = Array.from({ length: NH }, () => ({ ok: 0, bm: 0, inc: 0 }));
@@ -233,6 +358,12 @@
     const w = (x) => (100 * x / t).toFixed(2) + '%';
     return `<div class="br-sb" title="${F(ok)} terkontrol; gap: ${F(bm)} laporan bermasalah + ${F(none)} tanpa laporan"><i style="width:${w(ok)};background:${W.ok}"></i><i style="width:${w(bm)};background:${W.bm}"></i><i style="width:${w(none)};background:${W.none}"></i></div>`;
   }
+  function sb4(ok, pt, pb, no) {
+    const t = ok + pt + pb + no;
+    if (!t) return '<div class="br-sb"></div>';
+    const w = (x) => (100 * x / t).toFixed(2) + '%';
+    return `<div class="br-sb" title="${F(ok)} terkontrol penuh; ${F(pt)} sebagian lokasi; ${F(pb)} hanya laporan bermasalah; ${F(no)} tanpa laporan"><i style="width:${w(ok)};background:${W.ok}"></i><i style="width:${w(pt)};background:${W.part}"></i><i style="width:${w(pb)};background:${W.bm}"></i><i style="width:${w(no)};background:${W.none}"></i></div>`;
+  }
   function batangHarian(days, tot) {
     const mx = Math.max(1, tot), H = (x) => (100 * x / mx).toFixed(1) + '%';
     return `<div class="br-mb">${days.map((e, i) => {
@@ -242,7 +373,7 @@
   }
   function selTekanan(days, c) {
     const f = ciri(days), t = TIER[tekanan(f, c)], tot = nrel(c), sh = tot ? Math.round(100 * c.u4 / tot) : 0;
-    return `<span class="br-pill" style="background:${t[1]}">${t[0]}</span><br><span class="dr-mute" style="font-size:12px">${sh}% 4 minggu tak terkontrol<br>${f.c7}/7 hari laporan bermasalah</span>`;
+    return `<span class="br-pill" style="background:${t[1]}" title="${sh}% tidak terkontrol 4 minggu berturut-turut; laporan bermasalah ${f.c7} dari 7 hari terakhir">${t[0]}</span>`;
   }
   function proyeksi(days, tot) {
     tot = Math.max(1, tot);
@@ -251,44 +382,87 @@
     g7 /= 7; p7 /= 7; g28 /= NH;
     const n = Math.round(100 * g7), pp = Math.round(100 * Math.min(p7, g7)), tr = g7 - g28 > 0.03 ? 'naik' : g28 - g7 > 0.03 ? 'turun' : 'stabil';
     const isi = Array.from({ length: 7 }, (_, i) => `<div title="${pendek(tambahHari(META.sampai, i + 1))}: perkiraan gap ${n}% (bermasalah ${pp}%, tanpa laporan ${n - pp}%)"><i style="height:${Math.max(2, n * 0.34).toFixed(0)}px;background:linear-gradient(to top,${W.bm} ${(n ? 100 * pp / n : 0).toFixed(0)}%,${W.none} 0)"></i></div>`).join('');
-    return `<div class="br-pb">${isi}</div><div style="font-size:12px"><b>gap ~${n}%</b> per hari<br><span class="dr-mute">${pp}% bermasalah + ${n - pp}% tanpa laporan<br>rata-rata ${NH} hari ${Math.round(100 * g28)}% (${tr})</span></div>`;
+    return `<div class="br-pj" title="${pp}% bermasalah + ${n - pp}% tanpa laporan; rata-rata ${NH} hari ${Math.round(100 * g28)}% (${tr})"><div class="br-pb">${isi}</div><b>~${n}%</b></div>`;
   }
-  const legenda = () => `<div class="dr-legend"><span><i style="--c:${W.ok}"></i>Terkontrol (ada laporan SAP, tanpa gap)</span><span><i style="--c:${W.bm}"></i>Gap: laporan bermasalah (belum closed, berulang, OAK Stop, butir tidak sesuai)</span><span><i style="--c:${W.none}"></i>Gap: tanpa laporan SAP</span><span><i style="--c:#ff1a2e"></i>Insiden (root cause terpetakan ke bahaya)</span></div>`;
+  const legenda = () => `<div class="dr-legend"><span><i style="--c:${W.ok}"></i>Terkontrol</span><span><i style="--c:${W.bm}"></i>Laporan bermasalah</span><span><i style="--c:${W.none}"></i>Tanpa laporan</span><span><i style="--c:#ff1a2e"></i>Insiden</span></div>`;
 
   // ------------------------------------------------------------ render
   function render() {
     const y = window.pageYOffset;
     idx.nonaktif = {};
-    const H = hitung(S.w);
-    const T = H.T, n = nrel(T), G = T.bm + T.none;
-    $('#br-isi').innerHTML = filterBar() + `<div class="br-kpis">
-        <div class="br-kpi"><small>Pembagi · ${E(wLabel(S.w))}</small><b>${F(n)}</b><em>baris baseline (kelompok aktivitas × detail lokasi × bahaya-risiko)${T.excl ? `; ${F(T.excl)} dikecualikan flag` : ''}</em></div>
-        <div class="br-kpi"><small>Terkontrol menurut SAP</small><b style="color:${W.ok}">${pct(T.ok, n)}</b><em>${F(T.ok)} baris</em></div>
-        <div class="br-kpi"><small>Gap (termasuk tanpa laporan)</small><b style="color:#d9622b">${pct(G, n)}</b><em>${F(G)} baris</em></div>
-        <div class="br-kpi"><small>Isi gap: tanpa laporan</small><b>${pct(T.none, G)}</b><em>${F(T.none)} tanpa laporan SAP; ${F(T.bm)} laporan bermasalah (belum closed ${T.g2}, berulang ${T.g3}, OAK stop ${T.g4}, butir tidak sesuai ${T.g5})</em></div>
+    const H = hitung(S.w), U = ketat(S.w), UT = U.T, U0 = ketat(S.w, false).T, GU = gapKetat(UT);
+    const kpi = (ac, kc, judul, angka, isi) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
+    const isi = $('#br-isi');
+    isi.classList.toggle('br-awal', !S.sudah);
+    S.sudah = true;
+    isi.innerHTML = filterBar(UT, GU)
+      + `<div class="br-kpis">
+        ${kpi('var(--navy)', 'var(--navy)', 'Baris baseline unik · ' + E(wKode(S.w)), F(UT.tot), `kelompok aktivitas × bahaya-risiko${UT.excl ? ` · ${F(UT.excl)} dikecualikan flag` : ''}`)}
+        ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh menurut SAP', pct(UT.full, UT.tot), `${F(UT.full)} baris${UT.excl ? ` · tanpa flag ${pct(U0.full, U0.tot)}` : ''}`)}
+        ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pct(UT.part, UT.tot), `${F(UT.part)} baris · gap total ${pct(GU, UT.tot)}`)}
+        ${kpi(W.none, W.bm, 'Tanpa laporan', pct(UT.none, UT.tot), `${F(UT.none)} baris${UT.gaponly ? ` · ${F(UT.gaponly)} hanya bermasalah` : ''}`)}
       </div>`
-      + ringkasan(H) + panelRc()
-      + `<details class="pr-card" id="br-mg" style="padding:0"${S.mg ? ' open' : ''}><summary class="pr-card-head" style="cursor:pointer"><div><b>Perbandingan antar PJA (untuk manajemen)</b><small>Diurutkan dari persen gap tertinggi · tanpa flag · angka antar PJA tidak boleh dijumlahkan</small></div></summary><div class="pr-card-body" id="br-mg-isi">${S.mg ? tabelMgmt() : ''}</div></details>`
-      + `<div class="pr-card"><div class="pr-card-head"><div><b>Tren mingguan</b><small>Setelah filter dan flag; klik batang untuk pindah minggu</small></div></div><div class="pr-card-body">${tren()}</div></div>`
+      + perluAksi(U) + petaPanas() + ringkasan(H, U) + panelRc()
+      + `<details class="pr-card" id="br-mg"${S.mg ? ' open' : ''}><summary class="pr-card-head" style="cursor:pointer"><div><b>Perbandingan antar PJA (untuk manajemen)</b><small>Tanpa flag · klik baris untuk membuka PJA</small></div></summary><div class="pr-card-body" id="br-mg-isi">${S.mg ? tabelMgmt() : ''}</div></details>`
+      + `<div class="pr-card"><div class="pr-card-head"><div><b>Tren mingguan</b><small>Klik batang untuk pindah minggu</small></div></div><div class="pr-card-body">${tren()}</div></div>`
       + hierarki(H) + caraMembaca();
+    S.baru = '';
     pasang();
     window.scrollTo(0, y);
   }
 
-  function filterBar() {
-    return `<div class="pr-card"><div class="pr-card-body br-bar">
-        <label class="dr-mute">Periode <select id="br-w">${BR.minggu.map((_, i) => `<option value="${i}"${i === S.w ? ' selected' : ''}>${E(wLabel(i))}</option>`).join('')}</select></label>
-        <button type="button" class="pr-back" id="br-prev" ${S.w >= NW - 1 ? 'disabled' : ''}>‹</button>
-        <button type="button" class="pr-back" id="br-next" ${S.w <= 0 ? 'disabled' : ''}>›</button>
-        <span class="dr-mute" style="margin-left:8px">Tingkat risiko awal:</span>
-        ${LV.map((l) => `<label class="br-lv"><input type="checkbox" class="br-kb" data-k="${l}"${S.kb[l] ? ' checked' : ''}><i style="background:${LVC[l]}"></i>${l}</label>`).join('')}
-        <span class="dr-mute">bawaan: Significant dan High</span>
+  function filterBar(UT, GU) {
+    return `<div class="br-bar-wrap"><div class="br-bar">
+        <span class="lbl">Periode</span>
+        <select id="br-w" aria-label="Pilih minggu">${BR.minggu.map((_, i) => `<option value="${i}"${i === S.w ? ' selected' : ''}>${E(wLabel(i))}</option>`).join('')}</select>
+        <span class="br-nav"><button type="button" id="br-prev" aria-label="Minggu sebelumnya" ${S.w >= NW - 1 ? 'disabled' : ''}>‹</button><button type="button" id="br-next" aria-label="Minggu berikutnya" ${S.w <= 0 ? 'disabled' : ''}>›</button></span>
+        <span class="br-sep"></span>
+        <span class="lbl">Risiko awal</span>
+        ${LV.map((l) => `<button type="button" class="br-lv br-kb" data-k="${l}" aria-pressed="${S.kb[l] ? 'true' : 'false'}" style="--c:${LVC[l]}"><i></i>${l}</button>`).join('')}
+        <span class="br-sum"><span>Terkontrol penuh <b style="--c:var(--green-d)">${pct(UT.full, UT.tot)}</b></span><span>Gap <b style="--c:${W.bm}">${pct(GU, UT.tot)}</b></span></span>
       </div></div>`;
   }
 
+  // ------------------------------------------------- perlu aksi & peta panas
+  const insiden28 = () => D.insiden.filter((i) => i.tanggal >= BR.hari0 && i.tanggal <= META.sampai).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  function kartuAksi(warna, judul, besar, isi, ke, teksKe) {
+    return `<div class="br-ac" style="--ac:${warna}"><small>${judul}</small><span class="big">${besar}</span><div class="dr-mute">${isi}</div>${ke ? `<a data-go="${ke}">${teksKe} ›</a>` : ''}</div>`;
+  }
+  function perluAksi(U) {
+    const best = Object.entries(U.A).filter(([, a]) => a.tot).sort((x, y) => y[1].none - x[1].none || y[1].tot - x[1].tot)[0];
+    const fl = U.list.filter((u) => u.m), flS = fl.filter((u) => u.n1 === 'Significant'), top = flS[0] || fl[0];
+    const inc = insiden28(), hijau = W.ok, kecil = (t) => ` <span>${t}</span>`;
+    const c1 = best && best[1].none
+      ? kartuAksi(W.bm, 'Kelompok dengan tanpa laporan terbanyak', F(best[1].none) + kecil('dari ' + F(best[1].tot) + ' baris'), E(KEL[best[0]] || best[0]), 'br-kel', 'Lihat kelompok aktivitas')
+      : kartuAksi(hijau, 'Kelompok dengan tanpa laporan terbanyak', '0', 'Semua kelompok aktivitas punya laporan.');
+    const c2 = kartuAksi(fl.length ? 'var(--red)' : hijau, 'Baris dengan laporan bermasalah', F(fl.length) + (flS.length ? kecil(flS.length + ' Significant') : ''),
+      top ? E(top.bn) + ' · ' + E(KEL[top.kel] || top.kel) : 'Tidak ada.', fl.length ? 'br-perh' : '', 'Lihat bahaya-risiko');
+    const c3 = kartuAksi(inc.length ? '#E8112D' : hijau, `Insiden ${NH} hari terakhir`, String(inc.length),
+      inc.length ? E(inc[0].detlok) + ' · ' + pendek(inc[0].tanggal) : 'Tidak ada insiden pada detail lokasi PJA ini.', inc.length ? 'br-rc' : '', 'Lihat root cause');
+    return `<div><span class="br-h">Perlu aksi</span><div class="br-act">${c1}${c2}${c3}</div></div>`;
+  }
+
+  function petaPanas() {
+    const A = {};
+    for (let i = NW - 1; i >= 0; i--) {
+      Object.entries(ketat(i).A).forEach(([k, a]) => { (A[k] ||= {})[i] = a; });
+    }
+    const v = (a) => (a && a.tot ? a.full / a.tot : null);
+    const L = Object.entries(A).sort((x, y) => (v(x[1][S.w]) ?? 2) - (v(y[1][S.w]) ?? 2) || ((y[1][S.w] || {}).tot || 0) - ((x[1][S.w] || {}).tot || 0));
+    const wk = Array.from({ length: NW }, (_, j) => NW - 1 - j);
+    const kepala = `<div class="pr-card-head"><div><b>Heatmap: % terkontrol penuh per kelompok aktivitas × minggu</b><small>0%<span class="br-hlg"></span>100%</small></div></div>`;
+    if (!L.length) return `<div class="pr-card">${kepala}<div class="pr-empty">Tidak ada baris baseline pada filter ini.</div></div>`;
+    return `<div class="pr-card">${kepala}<div class="pr-card-body dr-scroll"><table class="br-hm"><thead><tr><th style="text-align:left;min-width:220px">Kelompok aktivitas</th>${wk.map((i) => `<th${i === S.w ? ' style="color:#1d2b4f"' : ''}>${wKode(i)}${i === 0 ? '*' : ''}</th>`).join('')}</tr></thead><tbody>${
+      L.map(([k, per]) => `<tr><td><b>${E(KEL[k] || k)}</b> <span class="dr-mute">${F((per[S.w] || {}).tot || 0)} baris</span></td>${wk.map((i) => {
+        const a = per[i], x = v(a);
+        if (x === null) return `<td class="c${i === S.w ? ' sel' : ''}" data-w="${i}" style="background:#f1f3f5;color:#9aa3ad">–</td>`;
+        return `<td class="c${i === S.w ? ' sel' : ''}" data-w="${i}" style="background:hsl(${(8 + 120 * x).toFixed(0)},55%,${(86 - 26 * x).toFixed(0)}%);color:${x >= 0.75 ? '#fff' : '#222'}" title="${E(KEL[k] || k)} · ${E(wLabel(i))}: ${a.full} dari ${a.tot} baris terkontrol penuh">${Math.round(100 * x)}</td>`;
+      }).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+  }
+
   // ------------------------------------------------- ringkasan & tindak lanjut
-  function ringkasan(H) {
-    const T = H.T, n = nrel(T), G = T.bm + T.none;
+  function ringkasan(H, U) {
+    const UT = U.T;
     const groups = Object.values(H.AG);
     const hi = groups.filter((o) => nrel(o.c) && o.c.u4 / nrel(o.c) >= BR.tekanan.u4_tinggi).length;
     const dlAgg = {};
@@ -300,32 +474,34 @@
     const topDl = Object.entries(dlAgg).sort((a, b) => b[1].n - a[1].n).slice(0, 5);
     const batas = tambahHari(META.sampai, -(BR.lamaHari - 1));
     const lama = D.lokasi.map((l) => ({ l, t: D.beranda.dlast[l.dl] || '' })).filter((x) => !x.t || x.t < batas).sort((a, b) => a.t.localeCompare(b.t));
-    const inc = D.insiden.filter((i) => i.tanggal >= BR.hari0 && i.tanggal <= META.sampai);
+    const inc = insiden28();
     const sig = {};
-    groups.forEach((o) => o.rows.forEach((r) => {
-      if (r.n1 !== 'Significant' || statusBit(r.K.w[S.w] || 0, r.Sw[S.w] || 0)[0] !== 'none') return;
-      sig[r.bn] = (sig[r.bn] || 0) + 1;
-    }));
+    U.list.forEach((u) => { if (u.cat === 'none' && u.n1 === 'Significant') sig[u.bn] = (sig[u.bn] || 0) + 1; });
     const sigL = Object.entries(sig).sort((a, b) => b[1] - a[1]), nSig = sigL.reduce((s, e) => s + e[1], 0);
-    const akt = Object.entries(H.A).filter(([, a]) => nrel(a.c)).sort((x, y) => (y[1].c.bm + y[1].c.none) - (x[1].c.bm + x[1].c.none)).slice(0, 6);
-    const tl = [];
-    if (hi) tl.push(`<b>Konfirmasi aktivitas:</b> ${hi} dari ${groups.length} kombinasi kelompok aktivitas × grup lokasi punya ≥${Math.round(100 * BR.tekanan.u4_tinggi)}% baris tidak terkontrol 4 minggu berturut-turut. Pastikan aktivitasnya memang berjalan. Bila tidak ada, ajukan flag "nonaktif" di detail lokasinya; bila ada, catat pengawasannya lewat OAK atau OBS.`);
-    if (lama.length) tl.push(`<b>Lokasi tanpa laporan SAP ${BR.lamaHari} hari atau lebih:</b> ${lama.length} detail lokasi (terlama: ${lama.slice(0, 5).map((x) => E(x.l.detlok) + ' ' + (x.t ? sejak(x.t) : 'belum pernah dalam 3 bulan')).join('; ')}). Tentukan apakah lokasi masih aktif dan siapa pengawasnya.`);
-    if (T.g2) tl.push(`<b>Tutup temuan:</b> ${F(T.g2)} baris punya laporan Hazard/Inspeksi yang belum closed. Tindak lanjuti dan tutup di SAP.`);
-    if (T.g3) tl.push(`<b>Laporan berulang:</b> ${F(T.g3)} baris punya ${BR.ambangUlang} laporan serupa atau lebih di lokasi yang sama dalam seminggu. Tinjau akar masalah dan buat perbaikan permanen.`);
-    if (T.g4) tl.push(`<b>OAK Stop Pekerjaan:</b> ${F(T.g4)} baris. Verifikasi tindak lanjutnya sebelum pekerjaan dilanjutkan.`);
-    if (T.g5) tl.push(`<b>Butir checklist OAK tidak sesuai:</b> ${F(T.g5)} baris. Perbaiki kondisi yang dicatat tidak sesuai.`);
-    if (nSig) tl.push(`<b>Bahaya Significant tanpa laporan:</b> ${F(nSig)} baris. Terbanyak: ${sigL.slice(0, 5).map(([t, c]) => E(t) + ' (' + c + ')').join('; ')}. Pastikan pengawasan OAK mencakup bahaya ini.`);
-    if (inc.length) tl.push(`<b>Lokasi dengan insiden ${NH} hari terakhir:</b> ${inc.length} kejadian (${inc.slice(0, 5).map((i) => E(i.detlok) + ' ' + pendek(i.tanggal)).join('; ')}). Tinjau bahaya-risiko dan laporan di detail lokasi itu.`);
+    const akt = Object.entries(U.A).filter(([, a]) => a.tot).sort((x, y) => (y[1].tot - y[1].full) - (x[1].tot - x[1].full) || y[1].tot - x[1].tot).slice(0, 6);
+    const tl = [], C = { none: W.bm, part: W.part, lama: 'var(--mute-2)', bm: 'var(--red)', inc: '#E8112D' };
+    if (UT.none) tl.push([C.none, `<b>Tanpa laporan:</b> ${F(UT.none)} baris. Konfirmasi aktivitasnya; bila tidak berjalan, ajukan flag.`]);
+    if (UT.part) tl.push([C.part, `<b>Terkontrol sebagian:</b> ${F(UT.part)} baris. Lengkapi pengawasan di detail lokasi yang kosong.`]);
+    if (hi) tl.push([C.none, `<b>Konfirmasi aktivitas:</b> ${hi} dari ${groups.length} kelompok × grup tidak terkontrol 4 minggu berturut-turut.`]);
+    if (lama.length) tl.push([C.lama, `<b>Tanpa laporan SAP ≥${BR.lamaHari} hari:</b> ${lama.length} detail lokasi${lama.length ? ` (${lama.slice(0, 3).map((x) => E(x.l.detlok)).join(', ')}${lama.length > 3 ? ', …' : ''})` : ''}.`]);
+    if (UT.g2) tl.push([C.bm, `<b>Tutup temuan:</b> ${F(UT.g2)} baris belum closed.`]);
+    if (UT.g3) tl.push([C.bm, `<b>Laporan berulang:</b> ${F(UT.g3)} baris. Buat perbaikan permanen.`]);
+    if (UT.g4) tl.push([C.bm, `<b>OAK Stop Pekerjaan:</b> ${F(UT.g4)} baris. Verifikasi sebelum lanjut.`]);
+    if (UT.g5) tl.push([C.bm, `<b>Checklist OAK tidak sesuai:</b> ${F(UT.g5)} baris.`]);
+    if (nSig) tl.push([C.bm, `<b>Significant tanpa laporan:</b> ${F(nSig)} baris (${sigL.slice(0, 3).map(([t]) => E(t)).join(', ')}${sigL.length > 3 ? ', …' : ''}).`]);
+    if (inc.length) tl.push([C.inc, `<b>Insiden ${NH} hari:</b> ${inc.length} kejadian (${inc.slice(0, 3).map((i) => E(i.detlok) + ' ' + pendek(i.tanggal)).join(', ')}).`]);
 
-    return `<div class="pr-card"><div class="pr-card-head"><div><b>Ringkasan gap dan tindak lanjut · ${E(wKode(S.w))}</b><small>Disusun otomatis dari aturan dan data SAP, bukan temuan lapangan; angka mengikuti filter risiko, periode, dan flag</small></div></div><div class="pr-card-body">
-      <p style="margin:0 0 10px">Dari <b>${F(n)}</b> baris baseline, <b>${pct(T.ok, n)}</b> terkontrol menurut SAP dan <b>${pct(G, n)}</b> gap. Isi gap: <b>${F(T.none)}</b> baris tanpa laporan SAP dan <b>${F(T.bm)}</b> baris dengan laporan bermasalah.${G && T.none / G > 0.8 ? ' Hampir semua gap adalah tanpa laporan: masalah utamanya cakupan pelaporan, belum tentu kondisi lapangan.' : ''}</p>
-      <div class="br-two"><div><span class="br-h">Kelompok aktivitas dengan gap terbanyak</span><table class="pr-tbl dr-tbl"><thead><tr><th>Kelompok aktivitas</th><th class="r">Baris</th><th class="r">Terkontrol</th><th class="r">Tanpa laporan</th><th class="r">Bermasalah</th></tr></thead><tbody>${
-        akt.map(([k, a]) => `<tr><td>${E(KEL[k] || k)}</td><td class="r">${F(nrel(a.c))}</td><td class="r">${pct(a.c.ok, nrel(a.c))}</td><td class="r">${F(a.c.none)}</td><td class="r">${F(a.c.bm)}</td></tr>`).join('') || '<tr><td colspan="5" class="pr-empty">Tidak ada baris.</td></tr>'}</tbody></table></div>
+    return `<div class="pr-card"><div class="br-rhead"><b class="t">Ringkasan gap dan tindak lanjut · ${E(wKode(S.w))}</b>
+      ${sb4(UT.full, UT.part, UT.gaponly, UT.none).replace('class="br-sb"', 'class="br-sb big"')}
+      <div class="br-chips">${[[W.ok, 'terkontrol penuh', UT.full], [W.part, 'sebagian', UT.part], ...(UT.gaponly ? [[W.bm, 'hanya bermasalah', UT.gaponly]] : []), [W.none, 'tanpa laporan', UT.none]]
+        .map(([c, l, x]) => `<span><i style="background:${c}"></i><b>${pct(x, UT.tot)}</b> ${l} <span class="dr-mute">(${F(x)})</span></span>`).join('')}</div></div><div class="pr-card-body">
+      <div class="br-two"><div><span class="br-h">Kelompok aktivitas dengan gap terbanyak</span><table class="pr-tbl dr-tbl"><thead><tr><th>Kelompok aktivitas</th><th style="min-width:110px">Komposisi</th><th class="r">Baris</th><th class="r">Terkontrol penuh</th><th class="r">Sebagian</th><th class="r">Tanpa laporan</th></tr></thead><tbody>${
+        akt.map(([k, a]) => `<tr><td>${E(KEL[k] || k)}</td><td>${sb4(a.full, a.part, a.gaponly, a.none)}</td><td class="r">${F(a.tot)}</td><td class="r"><b>${pct(a.full, a.tot)}</b></td><td class="r">${F(a.part)}</td><td class="r">${F(a.none)}</td></tr>`).join('') || '<tr><td colspan="6" class="pr-empty">Tidak ada baris.</td></tr>'}</tbody></table></div>
         <div><span class="br-h">Detail lokasi dengan laporan bermasalah terbanyak</span>${topDl.length ? `<table class="pr-tbl dr-tbl"><thead><tr><th>Detail lokasi</th><th class="r">Baris bermasalah</th><th>Kelompok</th></tr></thead><tbody>${
           topDl.map(([dl, a]) => { const l = idx.dl[dl] || {}; return `<tr><td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td><td class="r">${a.n}</td><td class="dr-mute">${[...a.kel].slice(0, 3).map((k) => E(KEL[k] || k)).join(', ')}</td></tr>`; }).join('')}</tbody></table>` : '<div class="dr-mute">Tidak ada laporan bermasalah pada periode ini.</div>'}</div></div>
-      <span class="br-h">Tindak lanjut yang perlu dibuat PJA</span>${tl.length ? `<ol class="br-ol">${tl.map((t) => `<li>${t}</li>`).join('')}</ol>` : '<div class="dr-mute">Tidak ada tindak lanjut otomatis untuk periode ini.</div>'}
-      ${perhatian(H)}</div></div>`;
+      <span class="br-h">Tindak lanjut yang perlu dibuat PJA</span>${tl.length ? `<div class="br-tis">${tl.map(([c, t], i) => `<div class="br-ti" style="--c:${c}"><span class="br-tn">${i + 1}</span><div>${t}</div></div>`).join('')}</div>` : '<div class="dr-mute">Tidak ada tindak lanjut otomatis untuk periode ini.</div>'}
+      <div id="br-perh">${perhatian(H)}</div>
+      </div></div>`;
   }
 
   function perhatian(H) {
@@ -348,44 +524,51 @@
     const ZL = Object.values(Z).sort((a, b) => KO[a.kb] - KO[b.kb] || b.n - a.n);
     const baris = (b) => `<tr><td>${E(b.t)}</td><td>${lvTag(b.kb)}</td><td class="dr-mute">${kel3(b.f)}</td><td class="dr-mute">${b.g2 ? 'belum closed ' + b.g2 + '<br>' : ''}${b.g3 ? 'berulang ' + b.g3 + '<br>' : ''}${b.g5 ? 'butir tidak sesuai ' + b.g5 + '<br>' : ''}${b.inc ? '<span class="br-red">terkait insiden</span>' : ''}</td><td class="dr-mute">${aksi(b)}</td></tr>`;
     const kepala = '<thead><tr><th style="min-width:220px">Bahaya-risiko</th><th>Risiko awal</th><th style="min-width:200px">Kelompok aktivitas (jumlah baris)</th><th>Jenis gap</th><th>Tindak lanjut</th></tr></thead>';
-    return `<span class="br-h">Bahaya-risiko yang masih menjadi perhatian (laporan bermasalah atau terkait insiden; identifikasi spesifik)</span>${
+    return `<span class="br-h">Bahaya-risiko perlu perhatian</span>${
       BL.length ? `<div class="dr-scroll"><table class="pr-tbl dr-tbl">${kepala}<tbody>${BL.slice(0, 10).map(baris).join('')}</tbody></table></div>${BL.length > 10 ? `<details style="margin-top:6px"><summary class="dr-mute">Tampilkan ${BL.length - 10} lainnya</summary><div class="dr-scroll"><table class="pr-tbl dr-tbl">${kepala}<tbody>${BL.slice(10).map(baris).join('')}</tbody></table></div></details>` : ''}` : '<div class="dr-mute">Tidak ada bahaya-risiko dengan laporan bermasalah atau keterkaitan insiden pada periode ini.</div>'}
-      <span class="br-h">Bahaya-risiko Significant/High yang belum teridentifikasi spesifik (tanpa label Hazard/Inspeksi atau butir checklist OAK)</span>${
+      <span class="br-h">Significant/High belum teridentifikasi spesifik</span>${
       ZL.length ? `<div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th style="min-width:220px">Bahaya-risiko</th><th>Risiko awal</th><th class="r">Jumlah baris</th><th>Kelompok aktivitas terbanyak</th></tr></thead><tbody>${
-        ZL.slice(0, 10).map((z) => `<tr><td>${E(z.t)}</td><td>${lvTag(z.kb)}</td><td class="r">${F(z.n)}</td><td class="dr-mute">${kel3(z.f)}</td></tr>`).join('')}</tbody></table></div><div class="dr-mute" style="margin-top:4px">${ZL.length} bahaya-risiko; 10 teratas. Pastikan OAK/OBS memeriksa bahaya ini dan mencatat hasilnya di checklist.</div>` : '<div class="dr-mute">Semua bahaya-risiko Significant/High teridentifikasi spesifik pada periode ini.</div>'}`;
+        ZL.slice(0, 10).map((z) => `<tr><td>${E(z.t)}</td><td>${lvTag(z.kb)}</td><td class="r">${F(z.n)}</td><td class="dr-mute">${kel3(z.f)}</td></tr>`).join('')}</tbody></table></div><div class="dr-mute" style="margin-top:4px">10 teratas dari ${ZL.length}</div>` : '<div class="dr-mute">Semua bahaya-risiko Significant/High teridentifikasi spesifik pada periode ini.</div>'}`;
   }
 
   // ------------------------------------------------------------ panel insiden
   function panelRc() {
     const rc = D.beranda.rc || [];
-    const kepala = '<div class="pr-card-head"><div><b>Insiden dan laporan SAP terkait root cause</b><small>Root cause berstatus ROOT CAUSE (Hazard_Related_Incident), insiden tahun berjalan di detail lokasi PJA</small></div></div>';
-    if (!rc.length) return `<div class="pr-card">${kepala}<div class="pr-empty">Tidak ada insiden tahun ini dengan root cause terpetakan di detail lokasi PJA ini.</div></div>`;
+    const kepala = '<div class="pr-card-head"><div><b>Insiden dan laporan SAP terkait root cause</b><small>Insiden tahun berjalan di detail lokasi PJA</small></div></div>';
+    if (!rc.length) return `<div class="pr-card" id="br-rc">${kepala}<div class="pr-empty">Tidak ada insiden tahun ini dengan root cause terpetakan di detail lokasi PJA ini.</div></div>`;
     const per = {};
     rc.forEach((r) => (per[r.no] ||= []).push(r));
     const nIt = rc.length, nNo = rc.filter((r) => !r.sebelum && !r.bulan).length;
-    return `<div class="pr-card">${kepala}<div class="pr-card-body"><p style="margin:0 0 8px"><b>${Object.keys(per).length}</b> insiden punya <b>${nIt}</b> root cause berlabel SAP. Pada <b>${nNo}</b> di antaranya tidak ada laporan Hazard/Inspeksi berlabel sama di detail lokasi itu pada 3 bulan sebelum atau bulan kejadian (penyebab tidak terdeteksi SAP); <b>${nIt - nNo}</b> sudah pernah dilaporkan sebelumnya.</p>
+    return `<div class="pr-card" id="br-rc">${kepala}<div class="pr-card-body"><p style="margin:0 0 8px"><b>${Object.keys(per).length}</b> insiden · <b>${nIt}</b> root cause · <b class="br-red">${nNo}</b> tidak terdeteksi SAP sebelumnya</p>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Insiden</th><th>Root cause (label SAP)</th><th class="r">Label sama: 3 bln sebelum</th><th class="r">Bulan kejadian</th><th class="r">Sesudah</th><th class="r">Ketidaksesuaian sama: sebelum / sesudah</th><th>Laporan terakhir (label)</th><th class="r">Belum closed</th></tr></thead><tbody>${
         Object.entries(per).map(([no, l]) => l.map((r, i) => `<tr>${i ? '<td></td>' : `<td><b>#${E(no)}</b><br><span class="dr-mute">${E(r.tanggal)} · ${E(r.kategori)}<br>${E(r.detlok)}</span></td>`}
           <td>${E(r.label)}</td><td class="r">${r.sebelum ? '<b>' + r.sebelum + '</b>' : '<span class="br-red">0</span>'}</td><td class="r">${r.bulan}</td><td class="r">${r.sesudah}</td>
           <td class="r">${r.kSebelum} / ${r.kSesudah}</td><td>${r.terakhir ? E(r.terakhir) : '–'}</td><td class="r">${r.belum ? '<b class="br-red">' + r.belum + '</b>' : 0}</td></tr>`).join('')).join('')}</tbody></table></div>
-      <div class="dr-mute" style="margin-top:6px">Laporan dicocokkan lewat label ketidaksesuaian + sub yang sama di detail lokasi insiden (HAZARD/INSPEKSI, tanpa DELETED/BUKAN TEMUAN), dihitung per bulan kalender. "3 bln sebelum" = 0 berarti penyebab tidak terdeteksi SAP; "Belum closed" &gt; 0 berarti ada laporan sejenis yang masih terbuka.</div></div></div>`;
+      </div></div>`;
   }
 
   // ------------------------------------------------------------ manajemen
   function tabelMgmt() {
     const K = BR.kolomMgmt, ix = Object.fromEntries(K.map((k, i) => [k, i]));
+    const jumlah = (obj, f) => LV.forEach((lv) => { if (S.kb[lv]) Object.entries((obj || {})[lv] || {}).forEach(([k, v]) => f(k, v)); });
     const L = BR.mgmt.map((p) => {
-      const c = Array(K.length).fill(0);
-      Object.entries((p.w || [])[S.w] || {}).forEach(([lv, a]) => { if (S.kb[lv]) a.forEach((v, i) => { c[i] += v; }); });
-      const n = c[ix.ok] + c[ix.bm] + c[ix.none];
-      return { p, c, n, gap: n ? (c[ix.bm] + c[ix.none]) / n : 0 };
-    }).filter((e) => e.n).sort((a, b) => b.gap - a.gap);
-    return `<div class="dr-scroll" style="max-height:560px;overflow:auto"><table class="pr-tbl dr-tbl" style="min-width:1000px"><thead><tr><th>PJA</th><th class="r">Detail lokasi</th><th class="r">Baris baseline</th><th>Terkontrol</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th class="r">Bermasalah</th><th class="r">Belum closed</th><th class="r">Berulang</th><th class="r">OAK stop</th><th class="r">Butir tdk sesuai</th><th class="r">DL tanpa laporan ${BR.lamaHari} hr+</th><th class="r">Insiden ${NH} hr</th></tr></thead><tbody>${
-      L.map((e) => `<tr data-pja="${E(e.p.id)}" style="cursor:pointer${e.p.id === ID_PJA ? ';background:#eef4fb' : ''}"><td><b>${E(e.p.nama)}</b><br><span class="dr-mute">${E(e.p.site)}</span></td><td class="r">${e.p.ndl}</td><td class="r">${F(e.n)}</td>
-        <td>${sb(e.c[ix.ok], e.c[ix.bm], e.c[ix.none])}<span class="dr-mute">${pct(e.c[ix.ok], e.n)}</span></td><td class="r"><b>${pct(e.c[ix.bm] + e.c[ix.none], e.n)}</b></td>
-        <td class="r">${F(e.c[ix.none])}</td><td class="r">${F(e.c[ix.bm])}</td><td class="r">${F(e.c[ix.closed])}</td><td class="r">${F(e.c[ix.ulang])}</td><td class="r">${F(e.c[ix.stop])}</td><td class="r">${F(e.c[ix.tidak_sesuai])}</td>
-        <td class="r">${e.p.lama}</td><td class="r">${e.p.insiden || ''}</td></tr>`).join('')}</tbody></table></div>
-      <div class="dr-mute" style="margin-top:6px">Periode ${E(wKode(S.w))}, filter tingkat risiko sesuai pilihan di atas, tanpa flag. Klik baris untuk membuka Beranda PJA itu.</div>`;
+      const c = Array(K.length).fill(0), kel = {}, kg = {};
+      LV.forEach((lv) => { if (S.kb[lv]) (((p.w || [])[S.w] || {})[lv] || []).forEach((v, i) => { c[i] += v; }); });
+      jumlah(p.kelTot, (k, v) => { (kel[k] ||= { t: 0, g: 0 }).t += v; });
+      jumlah((p.kelGap || [])[S.w], (k, v) => { (kel[k] ||= { t: 0, g: 0 }).g += v; });
+      jumlah(p.kgTot, (k, v) => { (kg[k] ||= { t: 0, u: 0 }).t += v; });
+      jumlah((p.u4 || [])[S.w], (k, v) => { (kg[k] ||= { t: 0, u: 0 }).u += v; });
+      const kgL = Object.values(kg).filter((x) => x.t);
+      const top = Object.entries(kel).filter(([, x]) => x.t).sort((a, b) => b[1].g / b[1].t - a[1].g / a[1].t || b[1].t - a[1].t).slice(0, 2).map(([k]) => KEL[k] || k);
+      const tot = c[ix.tot];
+      return { p, c, tot, gap: tot ? (tot - c[ix.full]) / tot : 0, hi: kgL.filter((x) => x.u / x.t >= BR.tekanan.u4_tinggi).length, all: kgL.length, top };
+    }).filter((e) => e.tot).sort((a, b) => b.gap - a.gap);
+    const r = (x) => `<td class="r">${F(x)}</td>`;
+    return `      <div class="dr-scroll" style="max-height:560px;overflow:auto"><table class="pr-tbl dr-tbl" style="min-width:1250px"><thead><tr><th>PJA</th><th class="r">Detail lokasi</th><th class="r">Baris (kelompok × bahaya)</th><th style="min-width:150px">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th class="r">Sebagian</th><th class="r">Hanya bermasalah</th><th class="r">Belum closed</th><th class="r">Berulang</th><th class="r">OAK Stop</th><th class="r">Butir tdk sesuai</th><th class="r">Kelompok × grup tekanan tinggi</th><th class="r">DL tanpa laporan ${BR.lamaHari} hr+</th><th class="r">Insiden ${NH} hr</th><th style="min-width:200px">Kelompok gap tertinggi</th></tr></thead><tbody>${
+      L.map((e) => `<tr data-pja="${E(e.p.id)}" style="cursor:pointer${e.p.id === ID_PJA ? ';background:#eef4fb' : ''}"><td><b>${E(e.p.nama)}</b><br><span class="dr-mute">${E(e.p.site)}</span></td><td class="r">${e.p.ndl}</td>${r(e.tot)}
+        <td>${sb4(e.c[ix.full], e.c[ix.part], e.c[ix.gaponly], e.c[ix.none])}<span class="dr-mute">${pct(e.c[ix.full], e.tot)}</span></td><td class="r"><b>${pct(e.tot - e.c[ix.full], e.tot)}</b></td>
+        ${r(e.c[ix.none])}${r(e.c[ix.part])}${r(e.c[ix.gaponly])}${r(e.c[ix.closed])}${r(e.c[ix.ulang])}${r(e.c[ix.stop])}${r(e.c[ix.tidak_sesuai])}
+        <td class="r">${e.hi} dari ${e.all}</td><td class="r">${e.p.lama}</td><td class="r">${e.p.insiden || ''}</td><td class="dr-mute">${E(e.top.join(', '))}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   // ------------------------------------------------------------ tren
@@ -397,7 +580,7 @@
         <div class="stk"><i style="height:${(100 * T.none / n).toFixed(1)}%;background:${W.none}"></i><i style="height:${(100 * T.bm / n).toFixed(1)}%;background:${W.bm}"></i><i style="height:${(100 * T.ok / n).toFixed(1)}%;background:${W.ok}"></i></div>
         <span>${wKode(i)}</span><span>${pct(T.bm + T.none, nrel(T))}</span></div>`);
     }
-    return `<div class="br-wb">${col.join('')}</div><div class="dr-mute" style="margin-top:6px">Persen di bawah batang = gap. Kenaikan 2–3 minggu berturut-turut adalah sinyal yang perlu ditindaklanjuti. Minggu berjalan masih sebagian.</div>`;
+    return `<div class="br-wb">${col.join('')}</div>`;
   }
 
   // ------------------------------------------------------------ hierarki
@@ -408,15 +591,15 @@
       const n = nrel(a.c), gl = [...a.gl].map((g) => H.AG[g]);
       const hi = gl.filter((o) => tekanan(ciri(harian(o.rows)), o.c) === 't').length;
       const buka = !!S.aopen[k];
-      return `<tr class="br-a" data-a="${E(k)}" style="cursor:pointer"><td><button class="br-cr" type="button">${buka ? '▾' : '▸'}</button><b>${E(KEL[k] || k)}</b><br><span class="dr-mute" style="padding-left:18px">${gl.length} grup lokasi · ${F(n)} baris baseline</span></td>
+      return `<tr class="br-a${buka ? ' open' : ''}" data-a="${E(k)}" style="cursor:pointer"><td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Buka kelompok">▸</button><b>${E(KEL[k] || k)}</b><br><span class="dr-mute" style="padding-left:18px">${gl.length} grup lokasi · ${F(n)} baris baseline</span></td>
         <td>${sb(a.c.ok, a.c.bm, a.c.none)}</td><td class="r">${pct(a.c.ok, n)}<br><span class="dr-mute">${F(a.c.ok)}</span></td>
-        <td class="r"><b>${pct(a.c.bm + a.c.none, n)}</b><br><span class="dr-mute">${F(a.c.bm)} laporan + ${F(a.c.none)} tanpa laporan</span></td><td class="r">${a.c.excl || ''}</td>
+        <td class="r"><b>${pct(a.c.bm + a.c.none, n)}</b></td><td class="r">${a.c.excl || ''}</td>
         <td>${hi ? `<span class="br-pill" style="background:${TIER.t[1]}">${hi} dari ${gl.length} grup</span>` : '<span class="dr-mute">–</span>'}</td></tr>`
-        + (buka ? `<tr class="br-sub"><td colspan="6" style="padding:8px 10px 12px 22px">${tabelGrup(gl)}</td></tr>` : '');
+        + (buka ? `<tr class="br-sub${S.baru === 'a:' + k ? ' br-buka' : ''}"><td colspan="6" style="padding:8px 10px 12px 22px">${tabelGrup(gl)}</td></tr>` : '');
     }).join('');
     const sisa = ak.length - tampil.length;
-    return `<div class="pr-card"><div class="pr-card-head"><div><b>Kelompok aktivitas → grup lokasi → detail lokasi → bahaya-risiko · ${E(wKode(S.w))}</b>
-        <small>Kelompok aktivitas = proses bisnis HIRA. Bar harian ${NH} hari (${pendek(BR.hari0)} – ${pendek(META.sampai)}): tinggi = jumlah baris baseline. Proyeksi = rata-rata persen gap harian 7 hari terakhir.</small></div></div>
+    return `<div class="pr-card" id="br-kel"><div class="pr-card-head"><div><b>Kelompok aktivitas → grup lokasi → detail lokasi → bahaya-risiko · ${E(wKode(S.w))}</b>
+        <small>Bar harian ${pendek(BR.hari0)} – ${pendek(META.sampai)}</small></div></div>
       ${legenda()}<div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:1100px"><thead><tr><th style="min-width:260px">Kelompok aktivitas</th><th style="min-width:160px">Komposisi</th><th class="r">Terkontrol</th><th class="r">Gap</th><th class="r">Dikecualikan</th><th>Grup tekanan gap tinggi</th></tr></thead><tbody>${isi || '<tr><td colspan="6" class="pr-empty">Tidak ada baris untuk filter ini.</td></tr>'}</tbody></table></div>
       ${sisa || S.semua ? `<div class="pr-card-body"><button type="button" class="pr-back" id="br-semua">${S.semua ? 'Sembunyikan kelompok tanpa laporan SAP minggu ini' : `Tampilkan ${sisa} kelompok lain yang tidak ada laporan SAP minggu ini`}</button></div>` : ''}</div>`;
   }
@@ -427,10 +610,10 @@
         const key = o.kel + '|' + o.grp, buka = !!S.gopen[key], days = harian(o.rows), n = nrel(o.c);
         const last = [...o.live].map((d) => (o.rows.find((r) => r.dl === d) || { K: { last: '' } }).K.last).filter(Boolean).sort().pop() || '';
         const ninc = days.filter((x) => x.inc).length, off = o.dls.size - o.live.size;
-        return `<tr class="br-g" data-g="${E(key)}" style="cursor:pointer"><td><button class="br-cr" type="button">${buka ? '▾' : '▸'}</button><b>${E(o.grp)}</b><br><span class="dr-mute" style="padding-left:18px">${o.dls.size} detail lokasi${off ? ` (${off} nonaktif)` : ''} · ${F(n)} baris</span></td>
+        return `<tr class="br-g${buka ? ' open' : ''}" data-g="${E(key)}" style="cursor:pointer"><td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Buka grup lokasi">▸</button><b>${E(o.grp)}</b><br><span class="dr-mute" style="padding-left:18px">${o.dls.size} detail lokasi${off ? ` (${off} nonaktif)` : ''} · ${F(n)} baris</span></td>
           <td>${sb(o.c.ok, o.c.bm, o.c.none)}</td><td class="r">${F(o.c.ok)}</td><td class="r">${F(o.c.bm)}</td><td class="r">${F(o.c.none)}</td><td>${terakhir(last)}</td>
           <td>${batangHarian(days, n)}${ninc ? `<div class="br-red" style="font-size:12px">insiden di ${ninc} hari</div>` : ''}</td><td>${selTekanan(days, o.c)}</td><td>${proyeksi(days, n)}</td></tr>`
-          + (buka ? `<tr><td colspan="9" style="padding:6px 8px 12px 22px">${tabelDl(o)}${tabelBahaya(o)}${tabelUmum(o)}</td></tr>` : '');
+          + (buka ? `<tr class="br-sub${S.baru === 'g:' + key ? ' br-buka' : ''}"><td colspan="9" style="padding:6px 8px 12px 22px">${tabelDl(o)}${tabelBahaya(o)}${tabelUmum(o)}</td></tr>` : '');
       }).join('')}</tbody></table>`;
   }
 
@@ -442,13 +625,13 @@
       if (!off) rows.forEach((r) => { const [st, m] = statusBit(r.K.w[S.w] || 0, r.Sw[S.w] || 0); tambah(c, st, m); if (tidakTerkontrol4(r, S.w)) c.u4++; });
       return { dl, rows, off, c };
     }).sort((a, b) => (b.c.bm + b.c.none) - (a.c.bm + a.c.none) || String((idx.dl[a.dl] || {}).detlok).localeCompare(String((idx.dl[b.dl] || {}).detlok)));
-    return `<span class="br-h">Detail lokasi (flag: ada / tidak ada aktivitas kelompok ini — bawaan: ada aktivitas)</span><div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Detail lokasi</th><th style="min-width:110px">Komposisi</th><th>Laporan SAP kelompok ini</th><th>Terakhir (apa pun)</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi 7 hari</th><th>Flag PJA</th></tr></thead><tbody>${
+    return `<span class="br-h">Detail lokasi</span><div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Detail lokasi</th><th style="min-width:110px">Komposisi</th><th>Laporan SAP kelompok ini</th><th>Terakhir (apa pun)</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi 7 hari</th><th>Flag PJA</th></tr></thead><tbody>${
       daftar.map((z) => {
         const l = idx.dl[z.dl] || {}, n = nrel(z.c), days = z.off ? null : harian(z.rows), fl = flagKel(z.dl, o.kel);
         const pending = fl.some((f) => f.review === 'PENDING');
         return `<tr${z.off ? ' style="opacity:.55"' : ''}><td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td><td>${z.off ? '<span class="dr-mute">dikecualikan</span>' : sb(z.c.ok, z.c.bm, z.c.none)}</td>
           <td>${terakhir((z.rows[0] || { K: {} }).K.last)}</td><td>${terakhir(D.beranda.dlast[z.dl])}</td>
-          ${z.off ? '<td colspan="3" class="dr-mute">dikecualikan (flag nonaktif disetujui)</td>' : `<td>${batangHarian(days, n)}</td><td>${selTekanan(days, z.c)}</td><td>${proyeksi(days, n)}</td>`}
+          ${z.off ? '<td colspan="3" class="dr-mute">dikecualikan</td>' : `<td>${batangHarian(days, n)}</td><td>${selTekanan(days, z.c)}</td><td>${proyeksi(days, n)}</td>`}
           <td><button type="button" class="pr-back" data-flag="${E(z.dl)}" data-kel="${E(o.kel)}">${z.off ? 'Nonaktif' : 'Ada aktivitas'}</button>${pending ? '<br><span class="dr-tag st-X">Menunggu review</span>' : ''}</td></tr>`;
       }).join('')}</tbody></table></div>`;
   }
@@ -468,8 +651,7 @@
   function tabelBahaya(o) {
     const KO = { Significant: 0, High: 1, Medium: 2, Low: 3 };
     const L = perBahaya(o.rows).sort((a, b) => KO[a.r.n1] - KO[b.r.n1] || (b.c.bm + b.c.none) - (a.c.bm + a.c.none));
-    return `<span class="br-h">Bahaya-risiko di grup ini — identifikasi spesifik (${E(wKode(S.w))}; status di ${o.live.size} detail lokasi)</span>
-      <div class="dr-mute" style="margin-bottom:4px">Status tiap bahaya hanya dari bukti spesifik: label Hazard/Inspeksi dan butir checklist OAK. Deteksi kelompok (OAK/OBS) tidak dipakai di sini, jadi angkanya umumnya lebih rendah daripada baris grup.</div>
+    return `<span class="br-h">Bahaya-risiko · identifikasi spesifik</span>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th style="min-width:230px">Bahaya-risiko</th><th>Risiko awal</th><th style="min-width:110px">Komposisi detail lokasi</th><th class="r">Terkontrol</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi 7 hari</th></tr></thead><tbody>${
       L.slice(0, 200).map((p) => { const days = harian(p.rows, true), n = nrel(p.c);
         return `<tr><td>${E(p.r.bn)}</td><td>${lvTag(p.r.n1)}</td><td>${sb(p.c.ok, p.c.bm, p.c.none)}</td><td class="r">${p.c.ok}</td><td class="r">${p.c.bm}</td><td class="r">${p.c.none}</td>
@@ -479,13 +661,14 @@
   function tabelUmum(o) {
     const rows = R.filter((r) => r.umum && S.kb[r.n1] && r.kel === o.kel && r.grp === o.grp && o.live.has(r.dl));
     if (!rows.length) return '';
-    return `<span class="br-h">Bahaya umum (lintas ≥${BR.umumMin} kelompok aktivitas dalam grup lokasi ini; tidak masuk persen kelompok; identifikasi spesifik)</span><div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Bahaya-risiko</th><th>Risiko awal</th><th>Komposisi detail lokasi</th><th class="r">Terkontrol</th><th class="r">Gap</th><th class="r">Tanpa laporan</th></tr></thead><tbody>${
+    return `<span class="br-h">Bahaya umum</span><div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Bahaya-risiko</th><th>Risiko awal</th><th>Komposisi detail lokasi</th><th class="r">Terkontrol</th><th class="r">Gap</th><th class="r">Tanpa laporan</th></tr></thead><tbody>${
       perBahaya(rows).map((p) => `<tr><td>${E(p.r.bn)}</td><td>${lvTag(p.r.n1)}</td><td>${sb(p.c.ok, p.c.bm, p.c.none)}</td><td class="r">${p.c.ok}</td><td class="r">${p.c.bm}</td><td class="r">${p.c.none}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   function caraMembaca() {
     return `<details class="pr-card" style="padding:0"><summary class="pr-card-head" style="cursor:pointer"><div><b>Cara membaca, metode, dan batasan</b></div></summary><div class="pr-card-body"><ol class="br-ol">
-      <li><b>Baseline:</b> satu baris = kelompok aktivitas (proses bisnis HIRA) × detail lokasi × bahaya-risiko. Hanya bahaya yang bisa diidentifikasi lewat SAP. Detail lokasi yang dimiliki dua PJA dihitung di masing-masing, jadi angka antar PJA tidak boleh dijumlahkan.</li>
+      <li><b>Satuan kartu, ringkasan, peta panas, dan tabel antar PJA (versi ketat):</b> satu baris = kelompok aktivitas × bahaya-risiko, dihitung sekali walau muncul di beberapa detail lokasi. <b>Terkontrol penuh</b> bila semua detail lokasi aktifnya terkontrol; <b>sebagian</b> bila ada yang terkontrol dan ada yang belum; <b>hanya bermasalah</b> bila tidak ada yang terkontrol tetapi ada laporan bermasalah; <b>tanpa laporan</b> bila tidak ada laporan SAP di lokasi mana pun. Gap = semua selain terkontrol penuh.</li>
+      <li><b>Baseline rincian (tabel kelompok → grup → detail lokasi, tren mingguan):</b> satu baris = kelompok aktivitas (proses bisnis HIRA) × detail lokasi × bahaya-risiko. Hanya bahaya yang bisa diidentifikasi lewat SAP. Detail lokasi yang dimiliki dua PJA dihitung di masing-masing, jadi angka antar PJA tidak boleh dijumlahkan.</li>
       <li><b>Periode:</b> minggu kalender Minggu–Sabtu; minggu berjalan masih sebagian. Filter tingkat risiko awal mengubah pembagi.</li>
       <li><b>Sumber identifikasi (digabung):</b> (a) Observasi/OAK yang aktivitasnya terpetakan ke kelompok di detail lokasi itu menandai seluruh bahaya kelompok tersebut; (b) label Hazard/Inspeksi yang cocok ke bahaya — label spesifik (cocok ke ≤2 kelompok di lokasi itu) juga menandai kelompoknya; (c) butir checklist OAK yang cocok ke bahaya. Karena satu laporan OAK/OBS menutup semua baris kelompok, persen terkontrol di tingkat kelompok lebih tinggi daripada di tabel bahaya-risiko (yang hanya memakai bukti spesifik).</li>
       <li><b>Dua status:</b> terkontrol (ada laporan, tanpa masalah) dan gap. Gap = laporan bermasalah (belum closed pada akhir minggu — REJECT dihitung belum closed; berulang ≥${BR.ambangUlang} laporan bahaya sama di lokasi sama dalam seminggu; OAK Stop Pekerjaan; butir checklist tidak sesuai) + tanpa laporan. Terkontrol menurut SAP bukan bukti pengendalian di lapangan.</li>
@@ -502,10 +685,11 @@
     $('#br-w').addEventListener('change', (e) => { S.w = +e.target.value; render(); });
     $('#br-prev').addEventListener('click', () => { if (S.w < NW - 1) { S.w++; render(); } });
     $('#br-next').addEventListener('click', () => { if (S.w > 0) { S.w--; render(); } });
-    document.querySelectorAll('.br-kb').forEach((c) => c.addEventListener('change', () => { S.kb[c.dataset.k] = c.checked ? 1 : 0; render(); }));
-    document.querySelectorAll('.br-wc').forEach((c) => c.addEventListener('click', () => { S.w = +c.dataset.w; render(); }));
-    document.querySelectorAll('tr.br-a').forEach((t) => t.addEventListener('click', () => { S.aopen[t.dataset.a] = !S.aopen[t.dataset.a]; render(); }));
-    document.querySelectorAll('tr.br-g').forEach((t) => t.addEventListener('click', () => { S.gopen[t.dataset.g] = !S.gopen[t.dataset.g]; render(); }));
+    document.querySelectorAll('.br-kb').forEach((c) => c.addEventListener('click', () => { S.kb[c.dataset.k] = S.kb[c.dataset.k] ? 0 : 1; render(); }));
+    document.querySelectorAll('.br-wc, .br-hm td[data-w]').forEach((c) => c.addEventListener('click', () => { S.w = +c.dataset.w; render(); }));
+    document.querySelectorAll('[data-go]').forEach((a) => a.addEventListener('click', () => { const t = $('#' + a.dataset.go); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+    document.querySelectorAll('tr.br-a').forEach((t) => t.addEventListener('click', () => { S.aopen[t.dataset.a] = !S.aopen[t.dataset.a]; S.baru = 'a:' + t.dataset.a; render(); }));
+    document.querySelectorAll('tr.br-g').forEach((t) => t.addEventListener('click', () => { S.gopen[t.dataset.g] = !S.gopen[t.dataset.g]; S.baru = 'g:' + t.dataset.g; render(); }));
     document.querySelectorAll('[data-flag]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); bukaFlag(b.dataset.flag, b.dataset.kel); }));
     document.querySelectorAll('tr[data-pja]').forEach((t) => t.addEventListener('click', () => { if (t.dataset.pja !== ID_PJA) location.href = URL_PJA.replace('__ID__', t.dataset.pja); }));
     const semua = $('#br-semua');
@@ -526,7 +710,7 @@
     const status = nonaktif(dl, kel, S.w) ? '<span class="dr-tag st-T">Nonaktif pada minggu ini</span>' : '<span class="dr-mute">Ada aktivitas (bawaan)</span>';
     const isi = !FL.tersedia
       ? '<div class="pr-empty">Fitur flag belum aktif: tabel <code>peta_risiko_flag_aktivitas</code> belum dimigrasi.</div>'
-      : `<div class="pr-card-body"><p class="dr-mute" style="margin:0 0 10px">Status: ${status}. Flag nonaktif yang disetujui mengeluarkan semua baris kelompok ini di detail lokasi ini dari pembagi pada minggu yang beririsan.</p>
+      : `<div class="pr-card-body"><p class="dr-mute" style="margin:0 0 10px">Status: ${status}</p>
           <form id="dr-flag-form" class="dr-flag-form">
             <label>Status <select name="status"><option value="NONAKTIF">Tidak ada aktivitas (nonaktif)</option><option value="AKTIF">Ada aktivitas</option></select></label>
             <label>Mulai <input type="date" name="mulai" value="${HARI_INI}" required></label>

@@ -91,6 +91,9 @@ return [
     /* Status SAP yang tidak dihitung sama sekali. */
     'status_buang' => ['DELETED', 'BUKAN TEMUAN'],
 
+    /* Observasi yang deskripsi/umpan balik/tindakannya berisi frasa ini (huruf kecil) tidak dihitung sebagai deteksi. */
+    'obs_tanpa_aktivitas' => ['tidak ada aktivitas'],
+
     /* Insiden: hanya yang diinvestigasi, tanpa kategori pelanggaran. */
     'insiden' => [
         'ccr_status' => 'INVESTIGASI',

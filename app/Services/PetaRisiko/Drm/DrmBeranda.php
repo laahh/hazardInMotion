@@ -33,8 +33,8 @@ class DrmBeranda
 
     public const INSIDEN = 64;
 
-    /** Urutan angka per level di tabel perbandingan: terkontrol, bermasalah, tanpa laporan, rincian bermasalah. */
-    public const KOLOM_MGMT = ['ok', 'bm', 'none', 'closed', 'ulang', 'stop', 'tidak_sesuai'];
+    /** Urutan angka per level di tabel perbandingan (satuan ketat): total, 4 kategori, baris dengan tiap jenis masalah. */
+    public const KOLOM_MGMT = ['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop', 'tidak_sesuai'];
 
     /** @var array<string, string> detail lokasi → grup lokasi (diisi oleh denganGrup) */
     private array $grupDl = [];
@@ -189,8 +189,16 @@ class DrmBeranda
     }
 
     /**
-     * Ringkasan satu PJA untuk tabel "Perbandingan antar PJA" (tanpa flag): per minggu per level risiko
-     * angka [ok, bermasalah, tanpa laporan, belum closed, berulang, OAK stop, tidak sesuai].
+     * Ringkasan satu PJA untuk tabel "Perbandingan antar PJA" (tanpa flag), satuan KETAT:
+     * satu baris = kelompok aktivitas × bahaya-risiko, dihitung sekali walau ada di beberapa detail lokasi.
+     * Terkontrol penuh bila semua detail lokasinya terkontrol; sebagian bila sebagian; hanya bermasalah bila
+     * tidak ada yang terkontrol tetapi ada laporan bermasalah; selain itu tanpa laporan.
+     *
+     * Semua angka bisa dijumlahkan antar level risiko, sehingga filter level dihitung di browser:
+     *   w[minggu][level]      = angka sesuai KOLOM_MGMT
+     *   kelTot[level][kel]    = baris ketat per kelompok;  kelGap[minggu][level][kel] = baris ketat bukan terkontrol penuh
+     *   kgTot[level][i]       = baris rincian per kombinasi kelompok × grup lokasi ke-i
+     *   u4[minggu][level][i]  = baris rincian kombinasi ke-i yang tidak terkontrol 4 minggu berturut-turut
      *
      * @param  array<string, mixed>  $berkasBeranda  hasil berkas()
      * @param  list<array<string, mixed>>  $insiden  insiden di detail lokasi PJA (tanggal Y-m-d)
@@ -199,38 +207,24 @@ class DrmBeranda
     public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden): array
     {
         $nW = (int) $this->cfg['beranda']['minggu'];
-        $kd = (array) $berkasBeranda['kd'];
-        $sp = (array) $berkasBeranda['sp'];
-        $umum = array_map(fn ($l) => array_flip($l), (array) $berkasBeranda['umum']);
-        $kosong = array_fill(0, count(self::KOLOM_MGMT), 0);
-        $w = array_fill(0, $nW, []);
-        $kwCache = [];
+        [$unik, $kgTot, $u4] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
 
-        foreach ($dlIds as $d) {
-            foreach ($hidPerDl[$d] ?? [] as $hid) {
-                $h = $hira[$hid] ?? null;
-                if ($h === null) {
-                    continue;
-                }
-                $kel = (string) ($h['proses'] ?? 'X');
-                $grp = (string) ($this->grupDl[$d] ?? '');
-                if (isset($umum[$grp][$hid])) {
-                    continue;
-                }
-                $lv = (string) $h['n1'];
-                $kk = $d.'|'.$kel;
-                $kw = $kwCache[$kk] ??= self::urai((string) ($kd[$kk][0] ?? ''));
-                $sw = self::urai((string) ($sp[$d.'|'.$hid][0] ?? ''));
-                for ($i = 0; $i < $nW; $i++) {
-                    $w[$i][$lv] ??= $kosong;
-                    [$st, $m] = self::status($kw[$i] ?? 0, $sw[$i] ?? 0);
-                    $w[$i][$lv][$st === 'ok' ? 0 : ($st === 'bm' ? 1 : 2)]++;
-                    if ($st === 'bm') {
-                        $w[$i][$lv][3] += (int) (bool) ($m & self::BELUM_CLOSED);
-                        $w[$i][$lv][4] += (int) (bool) ($m & self::BERULANG);
-                        $w[$i][$lv][5] += (int) (bool) ($m & self::OAK_STOP);
-                        $w[$i][$lv][6] += (int) (bool) ($m & self::TIDAK_SESUAI);
-                    }
+        $w = $kelGap = array_fill(0, $nW, []);
+        $kelTot = [];
+        foreach ($unik as $x) {
+            [$lv, $kel] = [$x['lv'], $x['kel']];
+            $kelTot[$lv][$kel] = ($kelTot[$lv][$kel] ?? 0) + 1;
+            foreach ($x['w'] as $i => [$n, $ok, $bm, $m]) {
+                $kat = $ok === $n ? 1 : ($ok > 0 ? 2 : ($bm > 0 ? 3 : 4));
+                $w[$i][$lv] ??= array_fill(0, count(self::KOLOM_MGMT), 0);
+                $w[$i][$lv][0]++;
+                $w[$i][$lv][$kat]++;
+                $w[$i][$lv][5] += (int) (bool) ($m & self::BELUM_CLOSED);
+                $w[$i][$lv][6] += (int) (bool) ($m & self::BERULANG);
+                $w[$i][$lv][7] += (int) (bool) ($m & self::OAK_STOP);
+                $w[$i][$lv][8] += (int) (bool) ($m & self::TIDAK_SESUAI);
+                if ($kat !== 1) {
+                    $kelGap[$i][$lv][$kel] = ($kelGap[$i][$lv][$kel] ?? 0) + 1;
                 }
             }
         }
@@ -241,9 +235,61 @@ class DrmBeranda
 
         return [
             'w' => $w,
+            'kelTot' => $kelTot,
+            'kelGap' => $kelGap,
+            'kgTot' => $kgTot,
+            'u4' => $u4,
             'lama' => count(array_filter($dlIds, fn ($d) => ($dlast[$d] ?? '') === '' || $dlast[$d] < $batasLama)),
             'insiden' => count(array_filter($insiden, fn ($i) => (string) $i['tanggal'] >= $hari0 && (string) $i['tanggal'] <= $this->sampai->toDateString())),
         ];
+    }
+
+    /**
+     * Status per minggu tiap baris rincian (detail lokasi × bahaya, tanpa bahaya umum), digabung ke baris ketat.
+     *
+     * @return array{0: array<string, array{lv: string, kel: string, w: list<array{0: int, 1: int, 2: int, 3: int}>}>, 1: array<string, array<int, int>>, 2: list<array<string, array<int, int>>>}
+     *   [baris ketat (n, ok, bermasalah, bit masalah per minggu), kgTot, u4]
+     */
+    private function statusBaris(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, int $nW): array
+    {
+        $kd = (array) $berkasBeranda['kd'];
+        $sp = (array) $berkasBeranda['sp'];
+        $umum = array_map(fn ($l) => array_flip($l), (array) $berkasBeranda['umum']);
+        $unik = $kgIdx = $kgTot = [];
+        $u4 = array_fill(0, $nW, []);
+        $kwCache = [];
+
+        foreach ($dlIds as $d) {
+            $grp = (string) ($this->grupDl[$d] ?? '');
+            foreach ($hidPerDl[$d] ?? [] as $hid) {
+                $h = $hira[$hid] ?? null;
+                if ($h === null || isset($umum[$grp][$hid])) {
+                    continue;
+                }
+                $kel = (string) ($h['proses'] ?? 'X');
+                $lv = (string) $h['n1'];
+                $kw = $kwCache[$d.'|'.$kel] ??= self::urai((string) ($kd[$d.'|'.$kel][0] ?? ''));
+                $sw = self::urai((string) ($sp[$d.'|'.$hid][0] ?? ''));
+                $ku = $kel.'|'.$hid;
+                $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $ok = [];
+                for ($i = 0; $i < $nW; $i++) {
+                    [$st, $m] = self::status($kw[$i] ?? 0, $sw[$i] ?? 0);
+                    $ok[$i] = $st === 'ok';
+                    $c = $unik[$ku]['w'][$i];
+                    $unik[$ku]['w'][$i] = [$c[0] + 1, $c[1] + (int) $ok[$i], $c[2] + (int) ($st === 'bm'), $c[3] | $m];
+                }
+                $kg = $kgIdx[$kel.'|'.$grp] ??= count($kgIdx);
+                $kgTot[$lv][$kg] = ($kgTot[$lv][$kg] ?? 0) + 1;
+                for ($i = 0; $i + 3 < $nW; $i++) {
+                    if (! $ok[$i] && ! $ok[$i + 1] && ! $ok[$i + 2] && ! $ok[$i + 3]) {
+                        $u4[$i][$lv][$kg] = ($u4[$i][$lv][$kg] ?? 0) + 1;
+                    }
+                }
+            }
+        }
+
+        return [$unik, $kgTot, $u4];
     }
 
 }

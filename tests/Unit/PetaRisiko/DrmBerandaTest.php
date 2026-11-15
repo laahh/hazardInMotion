@@ -80,12 +80,18 @@ class DrmBerandaTest extends TestCase
         $this->assertSame(0, $berkas['rc'][0]['sebelum']);
 
         $m = $b->ringkasMgmt(['1'], ['1' => ['h1', 'h2', 'h3']], $hira, $berkas, [['tanggal' => '2026-11-01'], ['tanggal' => '2026-01-01']]);
-        // Minggu 0: CH terdeteksi → h1 (Significant) & h2 (High) terkontrol; h3 belum closed → bermasalah.
-        $this->assertSame([1, 0, 0, 0, 0, 0, 0], $m['w'][0]['Significant']);
-        $this->assertSame([1, 1, 0, 1, 0, 0, 0], $m['w'][0]['High']);
-        // Minggu 1: OAK stop di CH → h1 & h2 bermasalah; h3 tanpa laporan.
-        $this->assertSame([0, 1, 0, 0, 0, 1, 0], $m['w'][1]['Significant']);
-        $this->assertSame([0, 1, 1, 0, 0, 1, 0], $m['w'][1]['High']);
+        // Satuan ketat [tot, penuh, sebagian, hanya bermasalah, tanpa laporan, closed, ulang, stop, tidak sesuai].
+        // Minggu 0: CH terdeteksi → h1 (Significant) & h2 (High) terkontrol penuh; h3 belum closed → hanya bermasalah.
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['w'][0]['Significant']);
+        $this->assertSame([2, 1, 0, 1, 0, 1, 0, 0, 0], $m['w'][0]['High']);
+        // Minggu 1: OAK stop di CH → h1 & h2 hanya bermasalah; h3 tanpa laporan.
+        $this->assertSame([1, 0, 0, 1, 0, 0, 0, 1, 0], $m['w'][1]['Significant']);
+        $this->assertSame([2, 0, 0, 1, 1, 0, 0, 1, 0], $m['w'][1]['High']);
+        $this->assertSame(['CH' => 1, 'OB' => 1], $m['kelTot']['High']);
+        $this->assertSame(['OB' => 1], $m['kelGap'][0]['High']);
+        $this->assertSame([0 => 1, 1 => 1], $m['kgTot']['High']);
+        $this->assertSame([1 => 1], $m['u4'][0]['High']); // h3 (OB|Pit) tak terkontrol minggu 0-3
+        $this->assertSame([0 => 1], $m['u4'][1]['Significant']); // h1 terkontrol di minggu 0, tidak di 1-4
         $this->assertSame(0, $m['lama']);
         $this->assertSame(1, $m['insiden']);
     }
