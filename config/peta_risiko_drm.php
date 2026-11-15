@@ -32,10 +32,23 @@ return [
     'ambang_berulang' => 3,
 
     /*
-    | Master B (teks aktivitas Observasi/OAK → aktivitas-sub HIRA). Kartu 343 asli terlalu
-    | longgar (±20 aktivitas HIRA per teks, baseline meledak). Diperketat: minimal 2 kata
-    | kunci bersama dan hanya 3 aktivitas HIRA terkuat per teks.
+    | Aturan pemetaan teks (Master A: label SAP ↔ bahaya, Master B: teks Obs/OAK ↔ aktivitas,
+    | insiden ↔ bahaya). Prinsip: JANGAN DIPAKSAKAN — lebih baik "tidak terpetakan" daripada salah.
+    | - Kata dibandingkan UTUH (bukan 5 huruf awal: "penga" dulu menyatukan pengawas/pengaman/pengangkutan).
+    | - kata_min: jumlah kata sama minimal.
+    | - Kata yang muncul di > kata_umum_persen dari teks HIRA dianggap "kata umum" (jalan, kendaraan,
+    |   terjatuh, …): boleh ikut dihitung tetapi minimal 1 kata sama harus BUKAN kata umum.
+    | - tema_umum tidak dihitung sebagai tema bersama (terlalu umum, cocok ke hampir semua bahaya).
+    | Uji 15 Nov 2026: Master A lama 159 ribu pasangan (rata-rata 173 bahaya per label, 93% hanya
+    | 1 kata sama) → aturan ini ±7 ribu pasangan (rata-rata 18 per label).
     */
+    'pemetaan' => [
+        'kata_min' => 2,
+        'kata_umum_persen' => 0.02,
+        'tema_umum' => ['sop', 'kompetensi', 'komunikasi'],
+    ],
+
+    /* Master B: selain aturan pemetaan di atas, maksimal 3 aktivitas HIRA terkuat per teks. */
     'master_b' => ['kata_min' => 2, 'maks_per_teks' => 3],
 
     /* Status SAP yang tidak dihitung sama sekali. */
@@ -89,6 +102,10 @@ return [
         'yang', 'dengan', 'dari', 'pada', 'untuk', 'tidak', 'atau', 'dalam', 'oleh', 'area', 'kerja', 'ada', 'dan',
         'terdapat', 'belum', 'sudah', 'sesuai', 'memadai', 'kurang', 'sebagai', 'antara', 'saat', 'karena', 'akibat',
         'dapat', 'potensi', 'pekerja', 'lokasi', 'unit', 'kondisi', 'lainnya', 'umum',
+        // Ditambahkan 15 Nov 2026 (kata sambung/umum yang memicu pasangan paksa):
+        'melakukan', 'menggunakan', 'dilakukan', 'tanpa', 'terhadap', 'adanya', 'serta', 'akan', 'bisa', 'harus',
+        'masih', 'lebih', 'telah', 'setelah', 'sebelum', 'selama', 'para', 'hingga', 'sampai', 'yaitu', 'juga',
+        'pekerjaan', 'aktivitas', 'standar', 'layak', 'secara',
     ],
 
     /*

@@ -139,9 +139,10 @@ class DrmMappingEkspor
             ['Risiko final', 'Terkontrol → risiko residual HIRA; selain itu tetap risiko awal.'],
             ['DL …', 'Jumlah detail lokasi baseline per status (satu bahaya bisa berstatus berbeda di detail lokasi yang berbeda).'],
             ['Temuan berulang', '≥ '.$cfg['ambang_berulang'].' temuan Hazard/Inspeksi terpetakan dalam jendela di detail lokasi yang sama.'],
-            ['Master A', 'Label SAP Hazard/Inspeksi (ketidaksesuaian › sub) ↔ bahaya HIRA: tema bersama (kamus 29 tema) DAN ≥1 kata kunci bersama. Kartu Metabase 342.'],
-            ['Master B', 'Teks aktivitas Observasi / aktivitas–sub OAK ↔ aktivitas–sub HIRA: ≥'.$cfg['master_b']['kata_min'].' kata kunci bersama, maks '.$cfg['master_b']['maks_per_teks'].' aktivitas HIRA terkuat per teks.'],
-            ['Insiden terkait', 'Insiden BeInvestigasi berstatus investigasi (tanpa Golden Rules/PSPP) di detail lokasi baseline, teks kronologi + root cause cocok dengan bahaya (≥2 kata kunci + tema bersama).'],
+            ['Prinsip pemetaan', 'Tidak dipaksakan: bila kaitan teks SAP dengan bahaya tidak cukup kuat, bahaya dibiarkan "Belum terpetakan ke SAP" daripada dipasangkan keliru. Kata dibandingkan utuh; kata yang muncul di > '.($cfg['pemetaan']['kata_umum_persen'] * 100).'% teks HIRA dianggap kata umum; tema '.implode(', ', $cfg['pemetaan']['tema_umum']).' dianggap terlalu umum.'],
+            ['Master A', 'Label SAP Hazard/Inspeksi (ketidaksesuaian › sub) ↔ bahaya HIRA (bahaya + potensi insiden): tema spesifik bersama (kamus 29 tema) DAN ≥'.$cfg['pemetaan']['kata_min'].' kata sama, minimal 1 di antaranya bukan kata umum.'],
+            ['Master B', 'Teks aktivitas Observasi / aktivitas–sub OAK ↔ aktivitas–sub HIRA: ≥'.$cfg['master_b']['kata_min'].' kata sama (minimal 1 bukan kata umum), maks '.$cfg['master_b']['maks_per_teks'].' aktivitas HIRA terkuat per teks.'],
+            ['Insiden terkait', 'Insiden BeInvestigasi berstatus investigasi (tanpa Golden Rules/PSPP) di detail lokasi baseline, teks kronologi + root cause cocok dengan bahaya (tema spesifik bersama + ≥'.$cfg['pemetaan']['kata_min'].' kata sama, minimal 1 bukan kata umum).'],
             ['Catatan', 'Pemetaan berbasis kata kunci dan belum diuji silang pakar. "Terkontrol" = menurut SAP, bukan bukti efektivitas lapangan. "Tidak teridentifikasi" bukan berarti aman.'],
         ];
     }

@@ -318,8 +318,8 @@ inc AS (
     AND ifNull(i.Kategori_Kecelakaan, \'\') NOT IN ('.$buang.')
 ),
 incx AS (
-  SELECT *, arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr)) AS ta,
-         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx)))) AS ts
+  SELECT *, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS ta,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS ts
   FROM inc
 ),
 -- Lokasi dulu, baru kata: kata insiden hanya dipasangkan dengan kata bahaya yang ada di
@@ -333,9 +333,10 @@ bt AS (
   JOIN ht h ON h.hid = b.hid
 ),
 kandidat AS (
-  SELECT i.no AS no, bt.dl AS dl, bt.hid AS hid, count() AS kuat
+  SELECT i.no AS no, bt.dl AS dl, bt.hid AS hid, count() AS kuat, groupArray(i.t) AS kata
   FROM bt JOIN it i ON i.dl = bt.dl AND i.t = bt.t
-  GROUP BY no, dl, hid HAVING kuat >= 2
+  GROUP BY no, dl, hid
+  HAVING kuat >= '.(int) $this->cfg['pemetaan']['kata_min'].' AND length(arrayFilter(x -> NOT has((SELECT kata FROM umum_a), x), kata)) >= 1
 ),
 cocok AS (
   SELECT k.no AS no, k.hid AS hid, k.kuat AS kuat
@@ -451,6 +452,7 @@ WITH
   '.$this->larik(array_keys($c['tema'])).' AS thn,
   '.$this->larik(array_values($c['tema'])).' AS thr,
   '.$this->larik($c['stopword']).' AS sw,
+  '.$this->larik($c['pemetaan']['tema_umum']).' AS tema_umum,
   '.$this->pasangan($c['grup_detail_lokasi']).' AS gd,
   '.$this->pasangan($c['grup_aktivitas']).' AS ga,
   '.$this->pasangan(array_map(fn (array $p) => $p[2], $c['proses_bisnis'])).' AS pb,
@@ -512,29 +514,40 @@ sap AS (
     AND ifNull(status, \'\') NOT IN ('.$this->daftar($c['status_buang']).')
 ),
 labx AS (
-  SELECT k, sk, arrayMap(i -> thn[i], multiMatchAllIndices(concat(k, \' \', sk), thr)) AS ta,
-         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(sk)))) AS ts
+  SELECT k, sk, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(k, \' \', sk), thr))) AS ta,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(sk))) AS ts
   FROM (SELECT DISTINCT k, sk FROM sap WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\')
 ),
 hbx AS (
   SELECT hid, a, s,
-         arrayMap(i -> thn[i], multiMatchAllIndices(concat(b, \' \', lower(p)), thr)) AS tb,
-         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p)))))) AS tsb
+         arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(b, \' \', lower(p)), thr))) AS tb,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p))))) AS tsb
   FROM hira
+),
+umum_a AS (
+  -- Kata yang muncul di banyak bahaya HIRA: tidak boleh menjadi satu-satunya alasan pasangan.
+  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM hbx ARRAY JOIN tsb AS t GROUP BY t)
+  WHERE n > (SELECT count() FROM hbx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
 ),
 ma AS (
   SELECT l.k AS k, l.sk AS sk, h.hid AS hid FROM labx l CROSS JOIN hbx h
-  WHERE hasAny(l.ta, h.tb) AND length(arrayIntersect(l.ts, h.tsb)) >= 1
+  WHERE hasAny(l.ta, h.tb)
+    AND length(arrayIntersect(l.ts, h.tsb)) >= '.(int) $c['pemetaan']['kata_min'].'
+    AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_a), t), arrayIntersect(l.ts, h.tsb))) >= 1
 ),
 otx AS (
-  SELECT tx, arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr)) AS ta,
-         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx)))) AS ts
+  SELECT tx, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS ta,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS ts
   FROM (SELECT DISTINCT tx FROM sap WHERE j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND trim(tx) != \'\')
 ),
 asx AS (
-  SELECT a, s, arrayMap(i -> thn[i], multiMatchAllIndices(concat(a, \' \', s), thr)) AS tb,
-         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(a, \' \', s))))) AS tsb
+  SELECT a, s, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(a, \' \', s), thr))) AS tb,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(a, \' \', s)))) AS tsb
   FROM (SELECT DISTINCT a, s FROM hira)
+),
+umum_b AS (
+  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM asx ARRAY JOIN tsb AS t GROUP BY t)
+  WHERE n > (SELECT count() FROM asx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
 ),
 mb AS (
   SELECT tx, a, s FROM (
@@ -542,6 +555,7 @@ mb AS (
            length(arrayIntersect(o.ts, x.tsb)) + length(arrayIntersect(o.ta, x.tb)) AS kuat
     FROM otx o CROSS JOIN asx x
     WHERE length(arrayIntersect(o.ts, x.tsb)) >= '.(int) $c['master_b']['kata_min'].'
+      AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_b), t), arrayIntersect(o.ts, x.tsb))) >= 1
   ) ORDER BY kuat DESC LIMIT '.(int) $c['master_b']['maks_per_teks'].' BY tx
 ),
 evo AS (
