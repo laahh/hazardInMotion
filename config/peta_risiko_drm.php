@@ -51,6 +51,24 @@ return [
     /* Master B: selain aturan pemetaan di atas, maksimal 3 aktivitas HIRA terkuat per teks. */
     'master_b' => ['kata_min' => 2, 'maks_per_teks' => 3],
 
+    /*
+    | Master C/D: butir checklist OAK → bahaya. Master C memasangkan aktivitas OAK (m_oak_activity)
+    | dengan aktivitas HIRA; Master D memasangkan teks objek + detail objek pengamatan dengan
+    | bahaya + potensi + pengendalian HIRA di aktivitas pasangan itu (aturan pemetaan yang sama,
+    | plus ≥1 kata sama harus ada di teks bahayanya sendiri). Aktivitas butir diambil dari register
+    | OAK yang diisi, karena checklist versi baru tidak mengikat objek ke aktivitas di master.
+    | Kode id_suitability di oak_detail_object: sesuai → terkontrol, tidak sesuai → gap,
+    | tidak relevan/N/A (10188) diabaikan. Kode "tidak sesuai" = 10187 masih perlu dipastikan user.
+    */
+    'oak_checklist' => ['sesuai' => 10186, 'tidak_sesuai' => 10187],
+
+    /*
+    | Label Hazard/Inspeksi disebut SPESIFIK bila di satu detail lokasi hanya cocok ke bahaya dari
+    | ≤ N aktivitas HIRA: aktivitas itu ikut ditandai terdeteksi (seperti Observasi). Label UMUM
+    | (APD, sampah, berdebu …) cocok ke banyak aktivitas, jadi hanya mengonfirmasi bahaya yang cocok.
+    */
+    'hazard_spesifik_maks_aktivitas' => 2,
+
     /* Status SAP yang tidak dihitung sama sekali. */
     'status_buang' => ['DELETED', 'BUKAN TEMUAN'],
 

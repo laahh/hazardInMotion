@@ -66,6 +66,27 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame('X', $baris['4']['status']);
         $this->assertSame('', $baris['4']['final']);
         $this->assertFalse($baris['4']['laten']);
+        // hid 5: hanya punya pasangan butir checklist OAK (Master D) → tetap terpetakan, bukan X.
+        $this->assertSame('-', $baris['5']['status']);
+        $this->assertSame(2, $baris['5']['n_d']);
+        $this->assertSame('APD › Helm | APD › Rompi', $baris['5']['butir_d']);
+    }
+
+    public function test_sql_memuat_checklist_oak_dan_label_hazard_spesifik(): void
+    {
+        $sql = new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI));
+        $status = $sql->pasanganBaseline();
+        $mingguan = $sql->matriksCakupan();
+
+        // Butir tidak sesuai = gap, aktivitas butir dari register, dan syarat kata di teks bahaya.
+        $this->assertStringContainsString('toUInt8(j.sid = 10187)', $status);
+        $this->assertStringContainsString('toInt64(id_oak_activity) AS aid', $status);
+        $this->assertStringContainsString('length(arrayIntersect(i.ts, h.tbb)) >= 1', $status);
+        $this->assertStringContainsString('OR ifNull(gd.ts_d, 0) > 0', $status);
+        // Label spesifik (≤ 2 aktivitas) ikut menandai aktivitas; dipakai juga di tren mingguan.
+        $this->assertStringContainsString('HAVING uniqExact(h.a) <= 2', $status);
+        $this->assertStringContainsString('FROM eva', $mingguan);
+        $this->assertStringContainsString('SELECT dl, hid, minggu, toUInt8(if(ts = 1, 4, 3)) FROM ed', $mingguan);
     }
 
     public function test_file_excel_mapping_valid_dan_bisa_dibaca(): void
@@ -168,7 +189,7 @@ class DrmSnapshotBuilderTest extends TestCase
 
         $data = [
             'sites' => ['LMO'],
-            'hira' => [$hira('1', 'loading ob'), $hira('2', 'loading ob'), $hira('3', 'dumping'), [...$hira('4', 'pumping'), 'di_a' => 0, 'di_b' => 0], $hira('5', 'loading ob')],
+            'hira' => [$hira('1', 'loading ob'), $hira('2', 'loading ob'), $hira('3', 'dumping'), [...$hira('4', 'pumping'), 'di_a' => 0, 'di_b' => 0], [...$hira('5', 'loading ob'), 'di_a' => 0, 'di_b' => 0, 'di_d' => 1]],
             'dl' => [
                 ['dl' => '101', 'site' => 'LMO', 'id_lok' => '1', 'lokasi' => 'Pit A', 'detlok' => 'Front Loading', 'grp' => 'Loading Point', 'pja' => ['10']],
                 ['dl' => '102', 'site' => 'LMO', 'id_lok' => '1', 'lokasi' => 'Pit A', 'detlok' => 'Disposal', 'grp' => 'Disposal', 'pja' => ['10']],
@@ -197,6 +218,7 @@ class DrmSnapshotBuilderTest extends TestCase
             'mapping' => [
                 ['hid' => '1', 'n_a' => '0', 'label_a' => [], 'n_b' => '1', 'teks_b' => ['loading ob']],
                 ['hid' => '2', 'n_a' => '2', 'label_a' => ['Hazard › Jalan licin', 'Hazard › Jalan berlubang'], 'n_b' => '0', 'teks_b' => []],
+                ['hid' => '5', 'n_a' => '0', 'label_a' => [], 'n_b' => '0', 'teks_b' => [], 'n_d' => '2', 'butir_d' => ['APD › Helm', 'APD › Rompi']],
             ],
             // Per site; hid 2 muncul di dua "site" untuk menguji penjumlahan.
             // Pasangan baseline per detail lokasi: hid 5 (aktivitas sama) TIDAK ada di lokasi PJA 10.

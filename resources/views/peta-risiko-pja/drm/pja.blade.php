@@ -40,9 +40,9 @@
       <div class="pr-filters"><label class="dr-mute"><input type="checkbox" id="dr-hanya-gap" checked> Hanya baris yang ada gap / laporan</label></div>
     </div>
     <div class="dr-legend">
-      <span><i style="--c:#12457A"></i>Terkontrol (Observasi/OAK sesuai)</span>
+      <span><i style="--c:#12457A"></i>Terkontrol (Observasi/OAK / butir checklist sesuai)</span>
       <span><i style="--c:#8FC1E8"></i>Ada temuan, sudah closed</span>
-      <span><i style="--c:var(--g)"></i>Gap: temuan masih open / OAK stop pekerjaan</span>
+      <span><i style="--c:var(--g)"></i>Gap: temuan masih open / OAK stop pekerjaan / butir checklist tidak sesuai</span>
       <span><i style="--c:#DCE2E9"></i>Tidak ada laporan</span>
       <span><i style="--c:var(--inc)"></i>Insiden (tanda di atas kotak)</span>
     </div>
@@ -366,7 +366,7 @@
       [jumlah(C.t), '○ Tidak teridentifikasi (tanpa laporan sama sekali)', 'st-T'],
       [jumlah(C.gOpen), '! Belum closed (temuan open)', 'st-G'],
       [jumlah(C.gUlang), `! Berulang / sistemik (≥ ${@json($meta['ambangUlang'])} temuan dalam ${META.jendela} hari)`, 'st-G'],
-      [jumlah(C.gStop), '! OAK stop pekerjaan', 'st-L'],
+      [jumlah(C.gStop), '! OAK stop / butir tidak sesuai', 'st-L'],
       [jumlah(C.x), '? Belum terpetakan ke SAP', 'st-X'],
     ].map(([n, l, c]) => `<div class="dr-kpi ${c}"><b>${F(n)}</b><span>${l}</span></div>`).join('')
       + (off ? `<div class="dr-kpi"><b>${F(off)}</b><span>Aktivitas × detail lokasi dinonaktifkan (flag disetujui, tanpa gap) — tidak dihitung</span></div>` : '');
@@ -391,7 +391,7 @@
         const inc = insidenBaris(r);
         const h = hariSejakTerkontrol(r[C.strip] || '');
         const jenis = [r[C.gOpen] && `belum closed ${r[C.gOpen]}`, r[C.gUlang] && `berulang ${r[C.gUlang]}`, r[C.gStop] && `OAK stop ${r[C.gStop]}`].filter(Boolean).join(' · ');
-        return `<tr data-i="${i}" style="cursor:pointer"><td><span class="pr-name" style="font-size:14px">${E(D.namaAkt[r[C.a]] || r[C.a])}</span><span class="pr-meta">${E(NAMA_PROSES[r[C.proses]] || 'Belum terpetakan')}${r[C.viaBukti] ? ' · dari laporan Observasi/OAK' : ''}</span></td>
+        return `<tr data-i="${i}" style="cursor:pointer"><td><span class="pr-name" style="font-size:14px">${E(D.namaAkt[r[C.a]] || r[C.a])}</span><span class="pr-meta">${E(NAMA_PROSES[r[C.proses]] || 'Belum terpetakan')}${r[C.viaBukti] ? ' · dari laporan Observasi/OAK/checklist' : ''}</span></td>
           <td>${E(l.detlok)}<span class="pr-meta">${E(l.lokasi)} · ${E(l.grp)}</span></td>
           <td>${DR.tag(r[C.g] ? 'G' : 'T')}</td><td class="r">${F(r[C.g])}</td><td class="r">${F(r[C.t])}</td>
           <td class="dr-mute">${jenis || '–'}</td><td>${r[C.terakhir] || '<span class="dr-mute">belum pernah</span>'}</td>

@@ -253,8 +253,8 @@ class DrmSnapshotBuilder
         foreach ($hira as $hid => $h) {
             $s = $st[$hid] ?? [];
             // Baseline hanya bahaya yang terpetakan ke SAP. Di luar baseline: X = tidak punya pasangan
-            // SAP (Master A/B), '-' = terpetakan tetapi tidak masuk detail lokasi mana pun.
-            $terpetakan = (int) ($h['di_a'] ?? 0) === 1 || (int) ($h['di_b'] ?? 0) === 1;
+            // SAP (Master A/B/D), '-' = terpetakan tetapi tidak masuk detail lokasi mana pun.
+            $terpetakan = (int) ($h['di_a'] ?? 0) === 1 || (int) ($h['di_b'] ?? 0) === 1 || (int) ($h['di_d'] ?? 0) === 1;
             $status = match (true) {
                 ! $terpetakan => DrmSql::STATUS_TIDAK_TERPETAKAN,
                 ($s['g'] ?? 0) > 0 => DrmSql::STATUS_GAP,
@@ -276,6 +276,7 @@ class DrmSnapshotBuilder
                 'temuan_open' => $s['temuan_open'] ?? 0, 'temuan_jendela' => $s['temuan_jendela'] ?? 0, 'terakhir' => $s['terakhir'] ?? '',
                 'n_a' => (int) ($m['n_a'] ?? 0), 'label_a' => implode(' | ', (array) ($m['label_a'] ?? [])),
                 'n_b' => (int) ($m['n_b'] ?? 0), 'teks_b' => implode(' | ', (array) ($m['teks_b'] ?? [])),
+                'n_d' => (int) ($m['n_d'] ?? 0), 'butir_d' => implode(' | ', (array) ($m['butir_d'] ?? [])),
                 'inc_dl' => $i['dl'] ?? 0, 'inc_n' => $i['n'] ?? 0, 'inc_tgl' => $i['tgl'] ?? '',
                 'laten' => ($i['dl'] ?? 0) > 0 && $status === DrmSql::STATUS_TIDAK,
             ];

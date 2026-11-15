@@ -6,7 +6,7 @@ use Carbon\CarbonImmutable;
 
 /**
  * Excel "mapping bahaya-risiko": satu baris per bahaya-risiko HIRA (aktivitas – sub – bahaya) beserta
- * status identifikasi SAP, pemetaan ke label SAP (Master A) & teks Observasi/OAK (Master B), dan insiden.
+ * status identifikasi SAP, pemetaan ke label SAP (Master A) & teks Observasi/OAK (Master B), butir checklist OAK (Master D), dan insiden.
  * Ditulis setiap sync ke storage/app/peta-risiko-drm/mapping-bahaya-risiko.xlsx.
  */
 class DrmMappingEkspor
@@ -56,6 +56,8 @@ class DrmMappingEkspor
         ['Contoh label SAP (ketidaksesuaian › sub)', 55, true, 'label_a'],
         ['Jml teks Obs/OAK terpetakan (Master B)', 13, false, 'n_b'],
         ['Contoh teks aktivitas Obs/OAK', 45, true, 'teks_b'],
+        ['Jml butir checklist OAK terpetakan (Master D)', 13, false, 'n_d'],
+        ['Contoh butir checklist OAK (objek › detail)', 55, true, 'butir_d'],
         ['DL dgn insiden 12 bln', 12, false, 'inc_dl'],
         ['Jumlah insiden terkait', 11, false, 'inc_n'],
         ['Insiden terakhir', 13, false, 'inc_tgl'],
@@ -114,9 +116,9 @@ class DrmMappingEkspor
             ['Total bahaya-risiko HIRA aktif', count($baris), 'Unik per aktivitas – sub aktivitas – bahaya.'],
             ['BASELINE (terpetakan ke SAP + punya detail lokasi)', $baseline, 'Angka "Total bahaya-risiko unik (baseline)" di dashboard (Semua site). Hanya bahaya yang bisa diidentifikasi lewat SAP.'],
             [self::STATUS['K'], $n['K'] ?? 0, 'Ada sinyal SAP dalam jendela pada butir yang cocok dan tidak ada gap.'],
-            [self::STATUS['G'], $n['G'] ?? 0, 'Temuan Hazard/Inspeksi masih open, berulang, atau OAK stop pekerjaan — di salah satu detail lokasi.'],
+            [self::STATUS['G'], $n['G'] ?? 0, 'Temuan Hazard/Inspeksi masih open, berulang, OAK stop pekerjaan, atau butir checklist OAK tidak sesuai — di salah satu detail lokasi.'],
             [self::STATUS['T'], $n['T'] ?? 0, 'Terpetakan ke SAP tapi tidak ada laporan dalam jendela.'],
-            [self::STATUS['X'], $n['X'] ?? 0, 'Tidak punya pasangan label SAP (Master A) maupun Observasi/OAK (Master B). Tidak dipaksakan, tidak dihitung di baseline.'],
+            [self::STATUS['X'], $n['X'] ?? 0, 'Tidak punya pasangan label SAP (Master A), Observasi/OAK (Master B), maupun butir checklist OAK (Master D). Tidak dipaksakan, tidak dihitung di baseline.'],
             [self::STATUS['-'], $n['-'] ?? 0, 'Terpetakan ke SAP, tetapi aktivitasnya tidak cocok Group Lokasi di site-nya dan tidak ada laporan Obs/OAK-nya di lokasi mana pun.'],
             ['Risiko laten', $laten, 'Terkait insiden 12 bulan terakhir tapi tidak teridentifikasi SAP dalam jendela.'],
         ];
@@ -134,7 +136,7 @@ class DrmMappingEkspor
             ['Data sampai', $sampai->toDateString().' (data SAP dibaca mulai '.$mulai.', '.$cfg['rentang_hari'].' hari)'],
             ['Jendela sinyal', $cfg['jendela_hari'].' hari terakhir untuk status terkontrol / ada gap.'],
             ['Satu baris', 'Satu bahaya-risiko HIRA aktif (mv_hira_master, JSON causes) per aktivitas – sub aktivitas – bahaya. Risiko awal/residual memakai baris terburuk bila ada duplikat.'],
-            ['Baseline', 'Hanya bahaya yang BISA diidentifikasi lewat SAP (punya pasangan Master A atau Master B). Bahaya tersebut masuk detail lokasi bila site HIRA cocok DAN Group Lokasi aktivitas = Group Lokasi detail lokasi, ATAU aktivitasnya pernah dilaporkan lewat Observasi/OAK di detail lokasi itu.'],
+            ['Baseline', 'Hanya bahaya yang BISA diidentifikasi lewat SAP (punya pasangan Master A, B, atau D). Bahaya tersebut masuk detail lokasi bila site HIRA cocok DAN Group Lokasi aktivitas = Group Lokasi detail lokasi, ATAU aktivitasnya pernah dilaporkan lewat Observasi/OAK, ATAU butir checklist OAK-nya pernah diisi di detail lokasi itu.'],
             ['Status gabungan', 'Terburuk antar detail lokasi baseline: Ada gap > Terkontrol > Tidak teridentifikasi > Tidak terpetakan. Sama dengan angka "Semua site" di dashboard.'],
             ['Risiko final', 'Terkontrol → risiko residual HIRA; selain itu tetap risiko awal.'],
             ['DL …', 'Jumlah detail lokasi baseline per status (satu bahaya bisa berstatus berbeda di detail lokasi yang berbeda).'],
@@ -142,6 +144,8 @@ class DrmMappingEkspor
             ['Prinsip pemetaan', 'Tidak dipaksakan: bila kaitan teks SAP dengan bahaya tidak cukup kuat, bahaya dibiarkan "Belum terpetakan ke SAP" daripada dipasangkan keliru. Kata dibandingkan utuh; kata yang muncul di > '.($cfg['pemetaan']['kata_umum_persen'] * 100).'% teks HIRA dianggap kata umum; tema '.implode(', ', $cfg['pemetaan']['tema_umum']).' dianggap terlalu umum.'],
             ['Master A', 'Label SAP Hazard/Inspeksi (ketidaksesuaian › sub) ↔ bahaya HIRA (bahaya + potensi insiden): tema spesifik bersama (kamus 29 tema) DAN ≥'.$cfg['pemetaan']['kata_min'].' kata sama, minimal 1 di antaranya bukan kata umum.'],
             ['Master B', 'Teks aktivitas Observasi / aktivitas–sub OAK ↔ aktivitas–sub HIRA: ≥'.$cfg['master_b']['kata_min'].' kata sama (minimal 1 bukan kata umum), maks '.$cfg['master_b']['maks_per_teks'].' aktivitas HIRA terkuat per teks.'],
+            ['Master C / D', 'C: aktivitas OAK ↔ aktivitas HIRA. D: butir checklist OAK (objek › detail objek pengamatan) ↔ bahaya + potensi + pengendalian HIRA di aktivitas pasangan C (aktivitas dari register OAK yang diisi), aturan sama dengan Master A plus ≥1 kata sama ada di teks bahayanya sendiri. Butir sesuai = terkontrol, tidak sesuai (kode '.$cfg['oak_checklist']['tidak_sesuai'].') = gap, tidak relevan diabaikan.'],
+            ['Hazard spesifik vs umum', 'Label Hazard/Inspeksi yang di satu detail lokasi hanya cocok ke bahaya dari ≤ '.$cfg['hazard_spesifik_maks_aktivitas'].' aktivitas HIRA = spesifik: aktivitas itu ikut ditandai terdeteksi (semua bahayanya terkontrol, seperti Observasi). Label umum hanya mengonfirmasi bahaya yang cocok.'],
             ['Insiden terkait', 'Insiden BeInvestigasi berstatus investigasi (tanpa Golden Rules/PSPP) di detail lokasi baseline, teks kronologi + root cause cocok dengan bahaya (tema spesifik bersama + ≥'.$cfg['pemetaan']['kata_min'].' kata sama, minimal 1 bukan kata umum).'],
             ['Catatan', 'Pemetaan berbasis kata kunci dan belum diuji silang pakar. "Terkontrol" = menurut SAP, bukan bukti efektivitas lapangan. "Tidak teridentifikasi" bukan berarti aman.'],
         ];

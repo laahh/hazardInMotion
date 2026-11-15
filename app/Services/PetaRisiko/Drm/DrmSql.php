@@ -70,7 +70,8 @@ SELECT toString(h.hid) AS hid, h.a AS a, h.an AS an, h.sn AS sn, h.bn AS bn, h.p
        h.k1 AS k1, h.c1 AS c1, h.n1 AS n1, h.k2 AS k2, h.c2 AS c2, h.n2 AS n2,
        substring(h.kt, 1, 700) AS kt, h.faktor AS faktor, h.aspek AS aspek, h.proses AS proses,
        h.hid IN (SELECT hid FROM ma) AS di_a,
-       (h.a, h.s) IN (SELECT a, s FROM mb) AS di_b
+       (h.a, h.s) IN (SELECT a, s FROM mb) AS di_b,
+       h.hid IN (SELECT hid FROM md) AS di_d
 FROM hira h';
     }
 
@@ -114,6 +115,10 @@ hari AS (
   FROM evh_a WHERE d >= t_strip GROUP BY dl, a, d
   UNION ALL
   SELECT dl, a, d, 0, 0, max(ok), max(stop) FROM evo_a WHERE d >= t_strip GROUP BY dl, a, d
+  UNION ALL
+  -- Butir checklist OAK: tidak sesuai = gap (slot stop), sesuai = terkontrol.
+  SELECT e.dl, h.a, e.d, 0, 0, 1, max(e.ts) FROM evd e JOIN hira h ON h.hid = e.hid
+  WHERE e.d >= t_strip AND (e.dl, e.hid) IN (SELECT dl, hid FROM basek) GROUP BY e.dl, h.a, e.d
 ),
 hari2 AS (
   SELECT dl, a, d,
@@ -241,9 +246,17 @@ mapa AS (SELECT hid, count() AS n, arraySlice(groupArray(concat(k, \' › \', sk
 mapb AS (
   SELECT h.hid AS hid, count() AS n, arraySlice(groupUniqArray(m.tx), 1, 10) AS contoh
   FROM mb m JOIN hira h ON h.a = m.a AND h.s = m.s GROUP BY hid
+),
+mapd AS (
+  SELECT m.hid AS hid, count() AS n, arraySlice(groupUniqArray(substring(concat(o.name, \' › \', d.name), 1, 160)), 1, 10) AS contoh
+  FROM md m
+  JOIN obds.m_oak_detail_objek AS d FINAL ON toInt64(d.id) = m.did
+  JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = d.id_objek_pengamatan_observe
+  GROUP BY m.hid
 )
-SELECT toString(h.hid) AS hid, ifNull(a.n, 0) AS n_a, a.contoh AS label_a, ifNull(b.n, 0) AS n_b, b.contoh AS teks_b
-FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid';
+SELECT toString(h.hid) AS hid, ifNull(a.n, 0) AS n_a, a.contoh AS label_a, ifNull(b.n, 0) AS n_b, b.contoh AS teks_b,
+       ifNull(dd.n, 0) AS n_d, dd.contoh AS butir_d
+FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid LEFT JOIN mapd dd ON dd.hid = h.hid';
     }
 
     /** Temuan Hazard/Inspeksi yang masih open per tanggal akhir, di detail lokasi yang punya baseline. */
@@ -481,6 +494,7 @@ hraw AS (
          JSONExtractString(c, \'faktor_4m1e\') AS faktor, JSONExtractString(c, \'aspek\') AS aspek,
          arrayStringConcat(arrayMap(x -> concat(JSONExtractString(x, \'tipe_pengendalian\'), \': \', JSONExtractString(x, \'pengendalian_dilakukan\')),
                                     JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' | \') AS kt,
+         arrayStringConcat(arrayMap(x -> JSONExtractString(x, \'pengendalian_dilakukan\'), JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' \') AS kd,
          multiIf(n1 = \'Significant\', 4, n1 = \'High\', 3, n1 = \'Medium\', 2, n1 = \'Low\', 1, 0) * 100
            + indexOf([\'Langka\', \'Kemungkinan Kecil\', \'Mungkin\', \'Sangat Mungkin\', \'Hampir Pasti\'], k1)
            * indexOf([\'Tidak Signifikan\', \'Minor\', \'Sedang\', \'Major\', \'Bencana\'], c1) AS sc
@@ -492,7 +506,7 @@ hira AS (
          groupUniqArrayArray(st) AS sites,
          argMax(k1, sc) AS k1, argMax(c1, sc) AS c1, argMax(n1, sc) AS n1,
          argMax(k2, sc) AS k2, argMax(c2, sc) AS c2, argMax(n2, sc) AS n2,
-         argMax(kt, sc) AS kt, argMax(faktor, sc) AS faktor, argMax(aspek, sc) AS aspek,
+         argMax(kt, sc) AS kt, argMax(kd, sc) AS kd, argMax(faktor, sc) AS faktor, argMax(aspek, sc) AS aspek,
          arrayMap(r -> r.1, arrayFilter(r -> match(concat(a, \' \', s), r.2), ga)) AS grp,
          ifNull(nullIf(arrayFirst(r -> match(concat(a, \' \', s), r.2), pb).1, \'\'), \'X\') AS proses
   FROM hraw GROUP BY a, s, b
@@ -576,10 +590,87 @@ evo AS (
   WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
   GROUP BY s.dl, m.a, m.s, s.d
 ),
--- Bahaya yang BISA diidentifikasi lewat SAP: punya pasangan Master A (label Hazard/Inspeksi)
--- atau aktivitasnya punya pasangan Master B (Observasi/OAK). Hanya ini yang masuk baseline;
--- bahaya tanpa pasangan SAP tidak dihitung sama sekali (keputusan user 15 Nov 2026).
-petakan AS (SELECT hid FROM hira WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb)),
+-- Master C: aktivitas OAK ↔ aktivitas HIRA (≥1 kata tidak umum + (≥2 kata ATAU tema sama)).
+acx AS (
+  SELECT a, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(a, thr))) AS tb,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(a))) AS tsb
+  FROM (SELECT DISTINCT a FROM hira)
+),
+umum_c AS (
+  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM acx ARRAY JOIN tsb AS t GROUP BY t)
+  WHERE n > (SELECT count() FROM acx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
+),
+oka AS (
+  SELECT toInt64(id) AS aid, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(lower(name), thr))) AS ta,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(lower(name)))) AS ts
+  FROM obds.m_oak_activity FINAL
+),
+mc AS (
+  SELECT o.aid AS aid, x.a AS a FROM oka o CROSS JOIN acx x
+  WHERE length(arrayFilter(t -> NOT has((SELECT kata FROM umum_c), t), arrayIntersect(o.ts, x.tsb))) >= 1
+    AND (length(arrayIntersect(o.ts, x.tsb)) >= 2 OR hasAny(o.ta, x.tb))
+),
+-- Butir checklist OAK yang diisi dalam rentang data. Checklist versi baru tidak mengikat objek ke
+-- aktivitas di master (id_act_observe kosong), jadi aktivitasnya diambil dari register (id_oak_activity).
+oakr AS (
+  SELECT toInt64(id) AS rid, toInt64(id_location) AS dl, toDate(submit_date) AS d, toInt64(id_oak_activity) AS aid
+  FROM obds.oak_register
+  WHERE submit_date >= t_open AND submit_date < t_end + 1 AND toInt64(id_location) IN (SELECT dl FROM dl0)
+),
+oj AS (
+  SELECT r.dl AS dl, r.d AS d, r.aid AS aid, o.did AS did, o.sid AS sid
+  FROM (
+    SELECT toInt64(id_oak_register) AS rid, toInt64(id_detail_object) AS did, toInt64(id_suitability) AS sid
+    FROM obds.oak_detail_object
+    WHERE id_suitability IN ('.(int) $c['oak_checklist']['sesuai'].', '.(int) $c['oak_checklist']['tidak_sesuai'].')
+      AND toInt64(id_oak_register) IN (SELECT rid FROM oakr)
+  ) AS o
+  JOIN oakr r ON r.rid = o.rid
+),
+-- Master D: butir (objek + detail objek pengamatan) ↔ bahaya + potensi + pengendalian di aktivitas HIRA
+-- pasangan Master C. Tema sama + ≥2 kata sama (≥1 tidak umum) DAN ≥1 kata itu ada di teks bahayanya
+-- sendiri — supaya butir tidak menempel ke bahaya hanya karena kata di teks pengendalian.
+itx AS (
+  SELECT aid, did, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS ta,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS ts
+  FROM (
+    SELECT p.aid AS aid, p.did AS did, lower(concat(o.name, \' \', d.name)) AS tx
+    FROM (SELECT DISTINCT aid, did FROM oj) AS p
+    JOIN obds.m_oak_detail_objek AS d FINAL ON d.id = p.did
+    JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = d.id_objek_pengamatan_observe
+  )
+),
+hdx AS (
+  SELECT hid, a, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS tb,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS tsb,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(b))) AS tbb
+  FROM (SELECT hid, a, b, concat(b, \' \', lower(p), \' \', lower(kd)) AS tx FROM hira)
+),
+umum_d AS (
+  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM hdx ARRAY JOIN tsb AS t GROUP BY t)
+  WHERE n > (SELECT count() FROM hdx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
+),
+md AS (
+  SELECT DISTINCT i.aid AS aid, i.did AS did, h.hid AS hid
+  FROM itx i JOIN mc ON mc.aid = i.aid JOIN hdx h ON h.a = mc.a
+  WHERE hasAny(i.ta, h.tb)
+    AND length(arrayIntersect(i.ts, h.tsb)) >= '.(int) $c['pemetaan']['kata_min'].'
+    AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_d), t), arrayIntersect(i.ts, h.tsb))) >= 1
+    AND length(arrayIntersect(i.ts, h.tbb)) >= 1
+),
+-- Bukti butir checklist per (detail lokasi, bahaya, hari); ts = ada butir tidak sesuai.
+evd AS (
+  SELECT j.dl AS dl, m.hid AS hid, j.d AS d, max(toUInt8(j.sid = '.(int) $c['oak_checklist']['tidak_sesuai'].')) AS ts
+  FROM oj j JOIN md m ON m.aid = j.aid AND m.did = j.did
+  GROUP BY j.dl, m.hid, j.d
+),
+-- Bahaya yang BISA diidentifikasi lewat SAP: punya pasangan Master A (label Hazard/Inspeksi),
+-- aktivitasnya punya pasangan Master B (Observasi/OAK), atau punya butir checklist OAK (Master D).
+-- Hanya ini yang masuk baseline; bahaya tanpa pasangan SAP tidak dihitung (keputusan user 15 Nov 2026).
+petakan AS (
+  SELECT hid FROM hira
+  WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb) OR hid IN (SELECT hid FROM md)
+),
 base AS (
   SELECT d.dl AS dl, h.hid AS hid, 0 AS via_bukti
   FROM dl d JOIN (SELECT hid, st, g FROM hira ARRAY JOIN sites AS st ARRAY JOIN grp AS g) h ON h.st = d.site AND h.g = d.grp
@@ -587,6 +678,8 @@ base AS (
   UNION DISTINCT
   SELECT e.dl, h.hid, 1 FROM (SELECT DISTINCT dl, a, s FROM evo) e JOIN hira h ON h.a = e.a AND h.s = e.s
   WHERE h.hid IN (SELECT hid FROM petakan)
+  UNION DISTINCT
+  SELECT dl, hid, 1 FROM (SELECT DISTINCT dl, hid FROM evd)
 )';
     }
 
@@ -605,15 +698,15 @@ sh AS (
   SELECT dl, k, sk, d, cd, count() AS n FROM sap
   WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\' GROUP BY dl, k, sk, d, cd
 ),
-evh AS (
-  SELECT sh.dl AS dl, m.hid AS hid, sh.d AS d, sh.cd AS cd, sh.n AS n
-  FROM sh JOIN ma m ON m.k = sh.k AND m.sk = sh.sk
-  WHERE (sh.dl, m.hid) IN (SELECT dl, hid FROM basek)
-),
+'.$this->hazardCte().',
 evh_a AS (
   SELECT e.dl AS dl, h.a AS a, e.d AS d, toUInt8(e.cd IS NULL) AS open_now FROM evh e JOIN hira h ON h.hid = e.hid
 ),
 evo_a AS (SELECT dl, a, d, max(ok) AS ok, max(stop) AS stop FROM evo GROUP BY dl, a, d),
+agd AS (
+  SELECT dl, hid, countIf(d >= t_win) AS sig_d, countIf(d >= t_win AND ts = 1) AS ts_d, max(d) AS last_d
+  FROM evd WHERE (dl, hid) IN (SELECT dl, hid FROM basek) GROUP BY dl, hid
+),
 agh AS (
   SELECT dl, hid,
          sumIf(n, d >= t_win) AS rep,
@@ -622,20 +715,21 @@ agh AS (
   FROM evh GROUP BY dl, hid
 ),
 ago AS (
-  SELECT dl, a, s, countIf(d >= t_win) AS sig_o, countIf(d >= t_win AND stop) AS stop, max(d) AS last_o FROM evo GROUP BY dl, a, s
+  SELECT dl, a, s, countIf(d >= t_win) AS sig_o, countIf(d >= t_win AND stop = 1) AS stop, max(d) AS last_o FROM eva GROUP BY dl, a, s
 ),
 st AS (
   SELECT b.dl AS dl, h.hid AS hid, h.a AS a, h.n1 AS n1, h.proses AS proses, b.via_bukti AS via_bukti,
-         ifNull(gh.rep, 0) AS rep, ifNull(gh.open_n, 0) AS open_n, ifNull(go.stop, 0) AS stop,
-         greatest(ifNull(gh.last_h, toDate(0)), ifNull(go.last_o, toDate(0))) AS last,
-         multiIf(ifNull(gh.open_n, 0) > 0 OR ifNull(gh.rep, 0) >= {ambang} OR ifNull(go.stop, 0) > 0, \'G\',
-                 ifNull(gh.rep, 0) > 0 OR ifNull(go.sig_o, 0) > 0, \'K\',
-                 h.hid NOT IN (SELECT hid FROM ma) AND (h.a, h.s) NOT IN (SELECT a, s FROM mb), \'X\',
+         ifNull(gh.rep, 0) AS rep, ifNull(gh.open_n, 0) AS open_n, ifNull(go.stop, 0) + ifNull(gd.ts_d, 0) AS stop,
+         greatest(ifNull(gh.last_h, toDate(0)), ifNull(go.last_o, toDate(0)), ifNull(gd.last_d, toDate(0))) AS last,
+         multiIf(ifNull(gh.open_n, 0) > 0 OR ifNull(gh.rep, 0) >= {ambang} OR ifNull(go.stop, 0) > 0 OR ifNull(gd.ts_d, 0) > 0, \'G\',
+                 ifNull(gh.rep, 0) > 0 OR ifNull(go.sig_o, 0) > 0 OR ifNull(gd.sig_d, 0) > 0, \'K\',
+                 h.hid NOT IN (SELECT hid FROM petakan), \'X\',
                  \'T\') AS status
   FROM basek b
   JOIN hira h ON h.hid = b.hid
   LEFT JOIN agh gh ON gh.dl = b.dl AND gh.hid = b.hid
   LEFT JOIN ago go ON go.dl = b.dl AND go.a = h.a AND go.s = h.s
+  LEFT JOIN agd gd ON gd.dl = b.dl AND gd.hid = b.hid
 )');
     }
 
@@ -657,11 +751,7 @@ sh AS (
   SELECT dl, k, sk, d, cd, count() AS n FROM sap
   WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\' GROUP BY dl, k, sk, d, cd
 ),
-evh AS (
-  SELECT sh.dl AS dl, m.hid AS hid, sh.d AS d, sh.cd AS cd, sh.n AS n
-  FROM sh JOIN ma m ON m.k = sh.k AND m.sk = sh.sk
-  WHERE (sh.dl, m.hid) IN (SELECT dl, hid FROM basek)
-),
+'.$this->hazardCte().',
 eh AS (
   SELECT dl, hid, w AS minggu,
          sumIf(n, d > w - '.$win.') AS rep,
@@ -672,19 +762,57 @@ eh AS (
 ),
 eo AS (
   SELECT dl, a, s, w AS minggu, max(stop) AS stop
-  FROM evo
+  FROM eva
   ARRAY JOIN arrayFilter(w -> d <= w AND d > w - '.$win.', ws) AS w
   GROUP BY dl, a, s, minggu
+),
+ed AS (
+  SELECT dl, hid, w AS minggu, max(ts) AS ts
+  FROM evd
+  ARRAY JOIN arrayFilter(w -> d <= w AND d > w - '.$win.', ws) AS w
+  WHERE (dl, hid) IN (SELECT dl, hid FROM basek)
+  GROUP BY dl, hid, minggu
 ),
 sb AS (
   SELECT dl, hid, minggu, max(rr) AS r FROM (
     SELECT dl, hid, minggu, toUInt8(if(open_n > 0 OR rep >= '.$ambang.', 4, if(rep > 0, 3, 0))) AS rr FROM eh
     UNION ALL
-    SELECT e.dl, h.hid, e.minggu, toUInt8(if(e.stop, 4, 3))
+    SELECT e.dl, h.hid, e.minggu, toUInt8(if(e.stop = 1, 4, 3))
     FROM eo e JOIN hira h ON h.a = e.a AND h.s = e.s
     WHERE (e.dl, h.hid) IN (SELECT dl, hid FROM basek)
+    UNION ALL
+    SELECT dl, hid, minggu, toUInt8(if(ts = 1, 4, 3)) FROM ed
   ) WHERE rr > 0
   GROUP BY dl, hid, minggu
+)';
+    }
+
+    /**
+     * Bukti Hazard/Inspeksi (butuh CTE sh & basek):
+     * evh  : temuan → bahaya baseline yang labelnya cocok, di detail lokasi temuan (konfirmasi bahaya).
+     * spes : label SPESIFIK di detail lokasi itu = cocok ke bahaya dari ≤ N aktivitas HIRA.
+     * evs  : label spesifik ikut menandai aktivitas (a, s) bahaya yang cocok sebagai terdeteksi.
+     * eva  : bukti tingkat aktivitas = Observasi/OAK (evo) + Hazard/Inspeksi spesifik (evs).
+     */
+    private function hazardCte(): string
+    {
+        return 'evh AS (
+  SELECT sh.dl AS dl, sh.k AS k, sh.sk AS sk, m.hid AS hid, sh.d AS d, sh.cd AS cd, sh.n AS n
+  FROM sh JOIN ma m ON m.k = sh.k AND m.sk = sh.sk
+  WHERE (sh.dl, m.hid) IN (SELECT dl, hid FROM basek)
+),
+spes AS (
+  SELECT e.dl AS dl, e.k AS k, e.sk AS sk FROM evh e JOIN hira h ON h.hid = e.hid
+  GROUP BY e.dl, e.k, e.sk HAVING uniqExact(h.a) <= '.(int) $this->cfg['hazard_spesifik_maks_aktivitas'].'
+),
+evs AS (
+  SELECT DISTINCT e.dl AS dl, h.a AS a, h.s AS s, e.d AS d FROM evh e JOIN hira h ON h.hid = e.hid
+  WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)
+),
+eva AS (
+  SELECT dl, a, s, d, toUInt8(stop) AS stop FROM evo
+  UNION ALL
+  SELECT dl, a, s, d, toUInt8(0) FROM evs
 )';
     }
 

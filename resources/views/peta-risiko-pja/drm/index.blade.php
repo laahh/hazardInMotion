@@ -82,7 +82,7 @@
   </div>
 
   <div class="pr-foot">
-    <p>Pemetaan HIRA ↔ SAP berbasis kata kunci (kamus 29 tema, Master A/B DRM 2.1) dan belum diuji silang pakar. "Terkontrol" = terkontrol menurut SAP, bukan bukti efektivitas lapangan.</p>
+    <p>Pemetaan HIRA ↔ SAP berbasis kata kunci (kamus 29 tema, Master A/B/C/D DRM 2.1: label Hazard/Inspeksi → bahaya, Observasi/OAK → aktivitas, butir checklist OAK → bahaya) dan belum diuji silang pakar. "Terkontrol" = terkontrol menurut SAP, bukan bukti efektivitas lapangan.</p>
     <p>"Tidak teridentifikasi" bukan berarti aman. Satu detail lokasi bisa dimiliki beberapa PJA: jangan menjumlahkan angka antar PJA.</p>
   </div>
 @endif
