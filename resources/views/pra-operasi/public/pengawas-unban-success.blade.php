@@ -55,7 +55,7 @@
             <div><span>SID</span><strong>{{ $sid }}</strong></div>
             @endif
             @if($tanggal !== '')
-            <div><span>Tanggal banned</span><strong>{{ $tanggal }}</strong></div>
+            <div><span>Periode banned</span><strong>{{ $tanggal }}</strong></div>
             @endif
             @if($submittedAt !== '')
             <div><span>Waktu kirim</span><strong>{{ $submittedAt }} WITA</strong></div>

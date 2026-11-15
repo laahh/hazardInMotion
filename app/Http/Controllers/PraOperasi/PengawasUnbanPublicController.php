@@ -57,9 +57,13 @@ class PengawasUnbanPublicController extends Controller
             $request->file('evidence_file'),
         );
 
+        $mingguan = ($pengajuan->sumber ?? PengawasUnbanService::SUMBER_HARIAN) === PengawasUnbanService::SUMBER_MINGGUAN;
+
         return redirect()->route('roster-treatment.public.success', [
             'sid' => $pengajuan->sid,
-            'tanggal' => $pengajuan->tanggal_kerja->format('d M Y'),
+            'tanggal' => $mingguan
+                ? 'minggu '.$pengajuan->tanggal_kerja->format('\WW o').' ('.$pengajuan->tanggal_kerja->format('d M').' – '.$pengajuan->tanggal_kerja->addDays(6)->format('d M Y').')'
+                : $pengajuan->tanggal_kerja->format('d M Y'),
             'at' => now()->timezone(config('auto_banned.hsct.timezone', 'Asia/Makassar'))->format('d M Y, H:i'),
         ]);
     }

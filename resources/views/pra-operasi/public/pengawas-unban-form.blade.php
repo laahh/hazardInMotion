@@ -208,7 +208,7 @@
             <select class="input" id="tanggal_kerja" name="tanggal_kerja">
                <option value="">— Pilih setelah cari SID —</option>
             </select>
-            <p class="hint">Pilih tanggal banned yang ingin diajukan unbanned.</p>
+            <p class="hint">Pilih tanggal (banned harian) atau minggu (banned mingguan) yang ingin diajukan unbanned.</p>
          </div>
       </section>
 

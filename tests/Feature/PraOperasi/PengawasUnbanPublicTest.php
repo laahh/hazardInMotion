@@ -6,6 +6,7 @@ namespace Tests\Feature\PraOperasi;
 
 use App\Enums\AutoBannedUnbanStatus;
 use App\Models\PengawasUnbanRequest;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,92 @@ class PengawasUnbanPublicTest extends TestCase
             $baris('2026-11-06', '04DC0', 'BANNED SAP'),
             $baris('2026-11-06', 'AMAN1', 'TIDAK BANNED'),
         ]);
+        $this->buatTabelMingguan();
+    }
+
+    // ------------------------------------------------------------ mingguan
+
+    public function test_cari_sid_menggabungkan_riwayat_harian_dan_mingguan(): void
+    {
+        $this->getJson(self::URL.'/lookup-sid?sid=04DC0')
+            ->assertJsonCount(3, 'banned_log_options')
+            ->assertJsonPath('banned_log_options.0.value', '2026-11-06')
+            ->assertJsonPath('banned_log_options.1.value', '2026-11-05')
+            ->assertJsonPath('banned_log_options.2.value', 'mingguan|2026-11-02')
+            ->assertJsonPath('banned_log_options.2.label', 'W45 2026 (02 Nov – 08 Nov 2026) — Mingguan — PERIODE MINGGUAN, OBS 1/3 (BMO 1)');
+    }
+
+    public function test_sid_hanya_ada_di_mingguan_tetap_ditemukan(): void
+    {
+        $this->getJson(self::URL.'/lookup-sid?sid=MGG01')
+            ->assertJsonPath('found', true)
+            ->assertJsonPath('data.karyawan', 'Pengawas Mingguan')
+            ->assertJsonCount(1, 'banned_log_options')
+            ->assertJsonPath('banned_log_options.0.value', 'mingguan|2026-11-09');
+    }
+
+    public function test_kirim_mingguan_disimpan_dengan_sumber_dan_senin_awal_minggu(): void
+    {
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => 'mingguan|2026-11-02']))->assertRedirectContains('/sukses');
+
+        $p = PengawasUnbanRequest::query()->sole();
+        $this->assertSame('mingguan', $p->sumber);
+        $this->assertSame('2026-11-02', $p->tanggal_kerja->toDateString());
+        $this->assertSame('PERIODE MINGGUAN, OBS 1/3', $p->banned_reason);
+        $this->assertSame('W45', $p->week);
+
+        // Minggu itu hilang dari pilihan, tanggal harian tetap ada.
+        $this->getJson(self::URL.'/lookup-sid?sid=04DC0')
+            ->assertJsonCount(2, 'banned_log_options')
+            ->assertJsonPath('banned_log_options.1.value', '2026-11-05');
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => 'mingguan|2026-11-02']))->assertSessionHasErrors('tanggal_kerja');
+    }
+
+    public function test_harian_dan_mingguan_pada_tanggal_sama_tidak_saling_mengunci(): void
+    {
+        DB::table('validasi_status_banned_pengawas')->insert([
+            'tanggal_kerja' => '2026-11-02', 'sid' => '04DC0', 'nama' => 'Pengawas 04DC0', 'status_banned' => 'BANNED SAP', 'alasan_banned' => 'X',
+        ]);
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => '2026-11-02']))->assertSessionHasNoErrors();
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => 'mingguan|2026-11-02']))->assertSessionHasNoErrors();
+
+        $this->assertEqualsCanonicalizing(['harian', 'mingguan'], PengawasUnbanRequest::query()->pluck('sumber')->all());
+    }
+
+    public function test_tabel_mingguan_dengan_nomor_minggu_dan_tahun(): void
+    {
+        Schema::drop('validasi_status_banned_pengawas_weekly');
+        Schema::create('validasi_status_banned_pengawas_weekly', function (Blueprint $t) {
+            $t->string('sid', 20);
+            $t->string('minggu_ke', 5);
+            $t->integer('tahun');
+            $t->text('nama')->nullable();
+            $t->string('status_banned', 60)->nullable();
+            $t->text('alasan_banned')->nullable();
+        });
+        DB::table('validasi_status_banned_pengawas_weekly')->insert(['sid' => '04DC0', 'minggu_ke' => 'W44', 'tahun' => 2026, 'nama' => 'X', 'status_banned' => 'BANNED SAP']);
+
+        $this->getJson(self::URL.'/lookup-sid?sid=04DC0')->assertJsonPath('banned_log_options.2.value', 'mingguan|2026-10-26');
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => 'mingguan|2026-10-26']))->assertSessionHasNoErrors();
+        $this->assertSame('2026-10-26', PengawasUnbanRequest::query()->sole()->tanggal_kerja->toDateString());
+    }
+
+    public function test_tanpa_kolom_sumber_mingguan_disembunyikan_dan_ditolak(): void
+    {
+        Schema::drop('pengawas_unban_requests');
+        $this->buatTabelPengajuan(false);
+
+        $this->getJson(self::URL.'/lookup-sid?sid=04DC0')->assertJsonCount(2, 'banned_log_options');
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => 'mingguan|2026-11-02']))->assertSessionHasErrors('tanggal_kerja');
+        $this->post(self::URL, $this->isian())->assertSessionHasNoErrors();
+    }
+
+    public function test_tabel_mingguan_tidak_ada_form_tetap_jalan_harian_saja(): void
+    {
+        Schema::drop('validasi_status_banned_pengawas_weekly');
+
+        $this->getJson(self::URL.'/lookup-sid?sid=04DC0')->assertJsonCount(2, 'banned_log_options');
+        $this->getJson(self::URL.'/lookup-sid?sid=MGG01')->assertJsonPath('found', false);
     }
 
     public function test_form_tampil_dengan_judul_pengawas(): void
@@ -111,7 +198,7 @@ class PengawasUnbanPublicTest extends TestCase
         $this->assertCount(1, Storage::disk('local')->allFiles('pengawas-unban'));
 
         $this->getJson(self::URL.'/lookup-sid?sid=04DC0')
-            ->assertJsonCount(1, 'banned_log_options')
+            ->assertJsonCount(2, 'banned_log_options')
             ->assertJsonPath('banned_log_options.0.value', '2026-11-05');
     }
 
@@ -119,6 +206,7 @@ class PengawasUnbanPublicTest extends TestCase
     {
         $this->post(self::URL, $this->isian());
         $this->post(self::URL, $this->isian(['tanggal_kerja' => '2026-11-05']));
+        $this->post(self::URL, $this->isian(['tanggal_kerja' => 'mingguan|2026-11-02']));
 
         $this->getJson(self::URL.'/lookup-sid?sid=04DC0')
             ->assertJsonPath('found', true)
@@ -187,8 +275,37 @@ class PengawasUnbanPublicTest extends TestCase
     }
 
     /** Memakai migration sungguhan supaya skemanya ikut teruji. */
-    private function buatTabelPengajuan(): void
+    private function buatTabelPengajuan(bool $denganSumber = true): void
     {
         (require database_path('migrations/2026_11_07_100000_create_pengawas_unban_requests_table.php'))->up();
+        if ($denganSumber) {
+            (require database_path('migrations/2026_11_15_110000_add_sumber_to_pengawas_unban_requests_table.php'))->up();
+        }
+    }
+
+    /** Struktur tabel mingguan contoh (asumsi): tanggal awal & akhir minggu. */
+    private function buatTabelMingguan(): void
+    {
+        Schema::create('validasi_status_banned_pengawas_weekly', function (Blueprint $t) {
+            $t->date('minggu_mulai');
+            $t->date('minggu_selesai');
+            $t->string('sid', 20);
+            $t->string('nik', 50)->nullable();
+            $t->text('nama')->nullable();
+            $t->string('site', 30)->nullable();
+            $t->text('perusahaan')->nullable();
+            $t->string('status_banned', 60)->nullable();
+            $t->text('alasan_banned')->nullable();
+        });
+        $baris = static fn (string $mulai, string $sid, string $nama, string $status): array => [
+            'minggu_mulai' => $mulai, 'minggu_selesai' => CarbonImmutable::parse($mulai)->addDays(6)->toDateString(), 'sid' => $sid,
+            'nik' => 'NIK-'.$sid, 'nama' => $nama, 'site' => 'BMO 1', 'perusahaan' => 'PT Contoh', 'status_banned' => $status,
+            'alasan_banned' => 'PERIODE MINGGUAN, OBS 1/3',
+        ];
+        DB::table('validasi_status_banned_pengawas_weekly')->insert([
+            $baris('2026-11-02', '04DC0', 'Pengawas 04DC0', 'BANNED SAP'),
+            $baris('2026-11-09', 'MGG01', 'Pengawas Mingguan', 'BANNED SAP'),
+            $baris('2026-11-02', 'AMAN1', 'Aman', 'NOT BANNED'),
+        ]);
     }
 }

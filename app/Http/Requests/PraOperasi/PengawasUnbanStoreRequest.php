@@ -28,7 +28,8 @@ class PengawasUnbanStoreRequest extends FormRequest
     {
         return [
             'sid' => ['required', 'string', 'max:64'],
-            'tanggal_kerja' => ['required', 'date_format:Y-m-d'],
+            // Harian: "Y-m-d"; mingguan: "mingguan|Y-m-d" (Senin awal minggu). Lihat PengawasUnbanService::pecahPilihan().
+            'tanggal_kerja' => ['required', 'string', 'regex:/^(mingguan\|)?\d{4}-\d{2}-\d{2}$/'],
             'alasan_pengajuan' => ['required', 'string', 'max:2000'],
             'no_hp' => ['required', 'string', 'max:32'],
             'evidence_file' => [
@@ -49,7 +50,7 @@ class PengawasUnbanStoreRequest extends FormRequest
         return array_merge($this->treatmentEvidenceFileMessages(), [
             'sid.required' => 'Masukkan SID Anda terlebih dahulu.',
             'tanggal_kerja.required' => 'Pilih riwayat banned terlebih dahulu.',
-            'tanggal_kerja.date_format' => 'Riwayat banned tidak valid. Cari ulang SID Anda.',
+            'tanggal_kerja.regex' => 'Riwayat banned tidak valid. Cari ulang SID Anda.',
             'alasan_pengajuan.required' => 'Ceritakan singkat tindakan perbaikan yang sudah dilakukan.',
             'no_hp.required' => 'Masukkan nomor HP / WhatsApp Anda.',
             'evidence_file.mimes' => 'Format file tidak didukung. Gunakan PDF, foto (JPG/PNG), Word, atau Excel.',

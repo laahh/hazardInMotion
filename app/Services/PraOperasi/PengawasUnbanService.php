@@ -17,13 +17,21 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * Pengajuan unbanned pengawas: master dari validasi_status_banned_pengawas
- * (satu baris per tanggal_kerja + sid), hasil ke pengawas_unban_requests.
- * Tanggal yang pengajuannya masih pending/approved tidak bisa diajukan lagi;
- * yang ditolak boleh diajukan ulang.
+ * Pengajuan unbanned pengawas dari DUA sumber:
+ * - harian   : validasi_status_banned_pengawas (satu baris per tanggal_kerja + sid)
+ * - mingguan : validasi_status_banned_pengawas_weekly (satu baris per minggu + sid), lihat PengawasBannedMingguanSource
+ * Hasil ke pengawas_unban_requests (kolom `sumber` membedakan keduanya).
+ *
+ * Nilai pilihan di form: harian = "Y-m-d" (tanggal kerja), mingguan = "mingguan|Y-m-d" (Senin awal minggu).
+ * Tanggal/minggu yang pengajuannya masih pending/approved tidak bisa diajukan lagi; yang ditolak boleh ulang.
+ * Pilihan mingguan baru muncul setelah kolom `sumber` dimigrasi (tanpa itu harian & mingguan bisa tertukar).
  */
 final class PengawasUnbanService
 {
+    public const SUMBER_HARIAN = 'harian';
+
+    public const SUMBER_MINGGUAN = 'mingguan';
+
     private const TABEL_MASTER = 'validasi_status_banned_pengawas';
 
     private const TABEL_PENGAJUAN = 'pengawas_unban_requests';
@@ -33,9 +41,24 @@ final class PengawasUnbanService
 
     private const MAKS_RIWAYAT = 50;
 
+    private ?bool $adaSumber = null;
+
     public function __construct(
         private readonly FonnteService $fonnte,
+        private readonly PengawasBannedMingguanSource $mingguan,
     ) {}
+
+    /**
+     * Pecah nilai pilihan form menjadi [sumber, tanggal]. "2026-11-06" → harian; "mingguan|2026-11-02" → mingguan.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function pecahPilihan(string $nilai): array
+    {
+        return str_starts_with($nilai, self::SUMBER_MINGGUAN.'|')
+            ? [self::SUMBER_MINGGUAN, substr($nilai, strlen(self::SUMBER_MINGGUAN) + 1)]
+            : [self::SUMBER_HARIAN, $nilai];
+    }
 
     /**
      * @return array{found: bool, can_submit: bool, message: string, data?: array<string, string>, banned_log_options?: list<array{value: string, label: string}>}
@@ -47,44 +70,38 @@ final class PengawasUnbanService
             return ['found' => false, 'can_submit' => false, 'message' => 'Ketik SID Anda lalu tekan Cari.'];
         }
 
-        $baris = $this->dasarMaster($sid)
-            ->orderByDesc('tanggal_kerja')
-            ->limit(self::MAKS_RIWAYAT)
-            ->get();
-
-        if ($baris->isEmpty()) {
+        $riwayat = $this->riwayatGabungan($sid);
+        if ($riwayat === []) {
             return [
                 'found' => false,
                 'can_submit' => false,
-                'message' => 'SID tidak ditemukan di data banned pengawas. Periksa ejaan SID atau hubungi admin.',
+                'message' => 'SID tidak ditemukan di data banned pengawas (harian maupun mingguan). Periksa ejaan SID atau hubungi admin.',
             ];
         }
 
-        $terpakai = $this->tanggalTerpakai($sid);
+        $terpakai = [
+            self::SUMBER_HARIAN => $this->tanggalTerpakai($sid, self::SUMBER_HARIAN),
+            self::SUMBER_MINGGUAN => $this->tanggalTerpakai($sid, self::SUMBER_MINGGUAN),
+        ];
         $pilihan = [];
-        foreach ($baris as $r) {
-            $tanggal = CarbonImmutable::parse((string) $r->tanggal_kerja);
-            if (! isset($terpakai[$tanggal->toDateString()])) {
-                $pilihan[] = [
-                    'value' => $tanggal->toDateString(),
-                    'label' => sprintf('%s — %s (%s)', $tanggal->format('d M Y'), self::teks($r->alasan_banned) ?: '—', self::teks($r->site) ?: '—'),
-                ];
+        foreach ($riwayat as $r) {
+            if (! isset($terpakai[$r['sumber']][$r['tanggal']->toDateString()])) {
+                $pilihan[] = ['value' => $r['nilai'], 'label' => $r['label']];
             }
         }
-
-        $terbaru = $baris->first();
+        $terbaru = $riwayat[0];
 
         return [
             'found' => true,
             'can_submit' => $pilihan !== [],
             'message' => $pilihan !== []
                 ? 'Data ditemukan. Lanjut isi formulir di bawah.'
-                : 'Semua tanggal banned untuk SID ini sudah pernah diajukan.',
+                : 'Semua riwayat banned untuk SID ini sudah pernah diajukan.',
             'data' => [
-                'karyawan' => self::teks($terbaru->nama),
-                'perusahaan' => self::teks($terbaru->perusahaan),
-                'site_dedicated' => self::teks($terbaru->site),
-                'banned_reason' => self::teks($terbaru->alasan_banned),
+                'karyawan' => $terbaru['nama'],
+                'perusahaan' => $terbaru['perusahaan'],
+                'site_dedicated' => $terbaru['site'],
+                'banned_reason' => $terbaru['alasan'],
             ],
             'banned_log_options' => $pilihan,
         ];
@@ -93,7 +110,7 @@ final class PengawasUnbanService
     /**
      * @throws ValidationException
      */
-    public function ajukan(string $sid, string $tanggalKerja, string $noHp, string $alasan, UploadedFile $file): PengawasUnbanRequest
+    public function ajukan(string $sid, string $pilihan, string $noHp, string $alasan, UploadedFile $file): PengawasUnbanRequest
     {
         if (! Schema::hasTable(self::TABEL_PENGAJUAN)) {
             throw ValidationException::withMessages([
@@ -101,52 +118,66 @@ final class PengawasUnbanService
             ]);
         }
 
+        [$sumber, $tanggalTeks] = self::pecahPilihan($pilihan);
+        if ($sumber === self::SUMBER_MINGGUAN && ! $this->mingguanAktif()) {
+            throw ValidationException::withMessages([
+                'tanggal_kerja' => ['Pengajuan banned mingguan belum bisa diterima. Silakan hubungi admin.'],
+            ]);
+        }
+
         $sid = self::rapikanSid($sid);
-        $tanggal = CarbonImmutable::parse($tanggalKerja)->startOfDay();
+        try {
+            $tanggal = CarbonImmutable::parse($tanggalTeks)->startOfDay();
+        } catch (Throwable) {
+            throw ValidationException::withMessages(['tanggal_kerja' => ['Riwayat banned tidak valid. Cari ulang SID Anda.']]);
+        }
         $path = null;
 
         try {
-            return DB::transaction(function () use ($sid, $tanggal, $noHp, $alasan, $file, &$path): PengawasUnbanRequest {
-                // Kunci baris master: dua kiriman bersamaan untuk tanggal yang sama antre di sini.
-                $master = $this->dasarMaster($sid)
-                    ->whereDate('tanggal_kerja', $tanggal->toDateString())
-                    ->lockForUpdate()
-                    ->first();
+            return DB::transaction(function () use ($sid, $sumber, $tanggal, $noHp, $alasan, $file, &$path): PengawasUnbanRequest {
+                // Kunci baris master: dua kiriman bersamaan untuk tanggal/minggu yang sama antre di sini.
+                $master = $sumber === self::SUMBER_MINGGUAN
+                    ? $this->mingguan->satuDikunci($sid, $tanggal)
+                    : $this->masterHarianDikunci($sid, $tanggal);
 
                 if ($master === null) {
                     throw ValidationException::withMessages([
                         'tanggal_kerja' => ['Riwayat banned tidak ditemukan untuk SID ini. Cari ulang SID Anda.'],
                     ]);
                 }
-                if (isset($this->tanggalTerpakai($sid)[$tanggal->toDateString()])) {
+                $kunci = $sumber === self::SUMBER_MINGGUAN ? $master['mulai'] : $tanggal;
+                if (isset($this->tanggalTerpakai($sid, $sumber)[$kunci->toDateString()])) {
                     throw ValidationException::withMessages([
-                        'tanggal_kerja' => ['Tanggal banned ini sudah pernah diajukan.'],
+                        'tanggal_kerja' => [$sumber === self::SUMBER_MINGGUAN ? 'Minggu banned ini sudah pernah diajukan.' : 'Tanggal banned ini sudah pernah diajukan.'],
                     ]);
                 }
 
-                $path = $this->simpanBukti($file, $sid, $tanggal);
-                $nama = self::teks($master->nama);
-
-                return PengawasUnbanRequest::query()->create([
-                    'tanggal_kerja' => $tanggal->toDateString(),
+                $path = $this->simpanBukti($file, $sid, $kunci);
+                $data = [
+                    'tanggal_kerja' => $kunci->toDateString(),
                     'sid' => $sid,
-                    'nik' => self::teks($master->nik) ?: null,
-                    'karyawan' => $nama ?: null,
-                    'perusahaan' => self::teks($master->perusahaan) ?: null,
-                    'site_dedicated' => self::teks($master->site) ?: null,
-                    'banned_reason' => self::teks($master->alasan_banned) ?: null,
-                    'status_banned_ref' => self::teks($master->status_banned) ?: null,
+                    'nik' => $master['nik'] ?: null,
+                    'karyawan' => $master['nama'] ?: null,
+                    'perusahaan' => $master['perusahaan'] ?: null,
+                    'site_dedicated' => $master['site'] ?: null,
+                    'banned_reason' => $master['alasan'] ?: null,
+                    'status_banned_ref' => $master['status'] ?: null,
                     'alasan_pengajuan' => trim($alasan),
                     'evidence_file_path' => $path,
                     'evidence_original_name' => $file->getClientOriginalName(),
                     'evidence_mime' => $file->getMimeType(),
                     'evidence_uploaded_at' => now(),
                     'status' => AutoBannedUnbanStatus::Pending,
-                    'week' => $tanggal->format('\WW'),
-                    'iso_year' => $tanggal->format('o'),
-                    'submitted_by_name' => $nama ?: 'Form Publik',
+                    'week' => $kunci->format('\WW'),
+                    'iso_year' => $kunci->format('o'),
+                    'submitted_by_name' => $master['nama'] ?: 'Form Publik',
                     'no_hp' => $this->fonnte->normalizePhoneNumber($noHp) ?: null,
-                ]);
+                ];
+                if ($this->adaKolomSumber()) {
+                    $data['sumber'] = $sumber;
+                }
+
+                return PengawasUnbanRequest::query()->create($data);
             });
         } catch (Throwable $e) {
             // Transaksi gagal setelah file tersimpan: jangan tinggalkan file yatim.
@@ -158,6 +189,50 @@ final class PengawasUnbanService
         }
     }
 
+    /**
+     * Riwayat banned harian + mingguan, terbaru dulu, dalam satu bentuk.
+     *
+     * @return list<array{sumber: string, tanggal: CarbonImmutable, nilai: string, label: string, nama: string, perusahaan: string, site: string, alasan: string}>
+     */
+    private function riwayatGabungan(string $sid): array
+    {
+        $hasil = [];
+        foreach ($this->dasarMaster($sid)->orderByDesc('tanggal_kerja')->limit(self::MAKS_RIWAYAT)->get() as $r) {
+            $tanggal = CarbonImmutable::parse((string) $r->tanggal_kerja)->startOfDay();
+            $hasil[] = [
+                'sumber' => self::SUMBER_HARIAN, 'tanggal' => $tanggal, 'nilai' => $tanggal->toDateString(),
+                'label' => sprintf('%s — Harian — %s (%s)', $tanggal->format('d M Y'), self::teks($r->alasan_banned) ?: '—', self::teks($r->site) ?: '—'),
+                'nama' => self::teks($r->nama), 'perusahaan' => self::teks($r->perusahaan), 'site' => self::teks($r->site), 'alasan' => self::teks($r->alasan_banned),
+            ];
+        }
+        if ($this->mingguanAktif()) {
+            foreach ($this->mingguan->riwayat($sid, self::MAKS_RIWAYAT) as $m) {
+                $hasil[] = [
+                    'sumber' => self::SUMBER_MINGGUAN, 'tanggal' => $m['mulai'], 'nilai' => self::SUMBER_MINGGUAN.'|'.$m['mulai']->toDateString(),
+                    'label' => sprintf('%s %s (%s – %s) — Mingguan — %s (%s)', $m['mulai']->format('\WW'), $m['mulai']->format('o'),
+                        $m['mulai']->format('d M'), $m['selesai']->format('d M Y'), $m['alasan'] ?: '—', $m['site'] ?: '—'),
+                    'nama' => $m['nama'], 'perusahaan' => $m['perusahaan'], 'site' => $m['site'], 'alasan' => $m['alasan'],
+                ];
+            }
+        }
+        usort($hasil, fn ($a, $b) => $b['tanggal'] <=> $a['tanggal'] ?: strcmp($a['sumber'], $b['sumber']));
+
+        return array_slice($hasil, 0, self::MAKS_RIWAYAT);
+    }
+
+    /**
+     * @return array{nama: string, nik: string, perusahaan: string, site: string, alasan: string, status: string}|null
+     */
+    private function masterHarianDikunci(string $sid, CarbonImmutable $tanggal): ?array
+    {
+        $r = $this->dasarMaster($sid)->whereDate('tanggal_kerja', $tanggal->toDateString())->lockForUpdate()->first();
+
+        return $r === null ? null : [
+            'nama' => self::teks($r->nama), 'nik' => self::teks($r->nik), 'perusahaan' => self::teks($r->perusahaan),
+            'site' => self::teks($r->site), 'alasan' => self::teks($r->alasan_banned), 'status' => self::teks($r->status_banned),
+        ];
+    }
+
     private function dasarMaster(string $sid): Builder
     {
         return DB::table(self::TABEL_MASTER)
@@ -165,20 +240,37 @@ final class PengawasUnbanService
             ->where('status_banned', 'like', self::AWALAN_STATUS_BANNED.'%');
     }
 
+    /** Mingguan hanya aktif bila tabelnya terbaca DAN kolom `sumber` sudah ada di tabel pengajuan. */
+    private function mingguanAktif(): bool
+    {
+        return $this->adaKolomSumber() && $this->mingguan->tersedia();
+    }
+
+    private function adaKolomSumber(): bool
+    {
+        return $this->adaSumber ??= Schema::hasTable(self::TABEL_PENGAJUAN) && Schema::hasColumn(self::TABEL_PENGAJUAN, 'sumber');
+    }
+
     /**
-     * @return array<string, true> tanggal Y-m-d yang pengajuannya masih pending/approved
+     * @return array<string, true> tanggal Y-m-d (harian) / Senin awal minggu (mingguan) yang masih pending/approved
      */
-    private function tanggalTerpakai(string $sid): array
+    private function tanggalTerpakai(string $sid, string $sumber): array
     {
         if (! Schema::hasTable(self::TABEL_PENGAJUAN)) {
             return [];
         }
 
-        $out = [];
-        foreach (PengawasUnbanRequest::query()
+        $q = PengawasUnbanRequest::query()
             ->where('sid', $sid)
-            ->whereIn('status', [AutoBannedUnbanStatus::Pending, AutoBannedUnbanStatus::Approved])
-            ->pluck('tanggal_kerja') as $tanggal) {
+            ->whereIn('status', [AutoBannedUnbanStatus::Pending, AutoBannedUnbanStatus::Approved]);
+        if ($this->adaKolomSumber()) {
+            $q->where('sumber', $sumber);
+        } elseif ($sumber === self::SUMBER_MINGGUAN) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($q->pluck('tanggal_kerja') as $tanggal) {
             $out[$tanggal->toDateString()] = true;
         }
 

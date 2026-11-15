@@ -18,6 +18,8 @@ class PengawasUnbanRequest extends Model
 
     protected $fillable = [
         'tanggal_kerja',
+        // 'harian' (validasi_status_banned_pengawas) atau 'mingguan' (…_weekly; tanggal_kerja = Senin awal minggu).
+        'sumber',
         'sid',
         'nik',
         'karyawan',
