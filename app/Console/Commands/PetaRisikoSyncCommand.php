@@ -11,7 +11,8 @@ use Throwable;
 class PetaRisikoSyncCommand extends Command
 {
     protected $signature = 'peta-risiko:sync
-        {--sampai= : Tanggal akhir (YYYY-MM-DD), bawaan kemarin WITA}';
+        {--sampai= : Tanggal akhir (YYYY-MM-DD), bawaan kemarin WITA}
+        {--cek : Hanya periksa semua query (EXPLAIN) tanpa menghitung/menyimpan}';
 
     protected $description = 'Hitung ulang Peta Risiko PJA (DRM 2.1) dari ClickHouse OBDS: HIRA → SAP → status per PJA/site/Group Lokasi';
 
@@ -28,6 +29,10 @@ class PetaRisikoSyncCommand extends Command
             $this->error('Format --sampai harus YYYY-MM-DD.');
 
             return self::INVALID;
+        }
+
+        if ($this->option('cek')) {
+            return $this->cek($builder, $sampai);
         }
 
         $this->info('Peta Risiko PJA: hitung sampai '.$sampai->toDateString());
@@ -53,5 +58,27 @@ class PetaRisikoSyncCommand extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    private function cek(DrmSnapshotBuilder $builder, CarbonImmutable $sampai): int
+    {
+        $this->info('Periksa query Peta Risiko (EXPLAIN, tanpa membaca data)…');
+        try {
+            $hasil = $builder->cek($sampai);
+        } catch (Throwable $e) {
+            $this->error('Tidak bisa terhubung ke ClickHouse: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        foreach ($hasil as $label => $error) {
+            $error === null
+                ? $this->line("  <info>OK</info>    {$label}")
+                : $this->line("  <error>GAGAL</error> {$label}\n        ".mb_substr($error, 0, 600));
+        }
+        $gagal = count(array_filter($hasil));
+        $gagal === 0 ? $this->info('Semua query lolos.') : $this->error("{$gagal} query gagal.");
+
+        return $gagal === 0 ? self::SUCCESS : self::FAILURE;
     }
 }

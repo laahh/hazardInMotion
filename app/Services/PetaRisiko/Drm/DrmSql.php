@@ -299,13 +299,14 @@ LEFT JOIN (
 
         return '
 SELECT `sid pelapor all karyawan` AS sid, toString(`minggu mulai`) AS mulai, toString(`minggu selesai`) AS selesai,
-       `layer pengawasan` AS layer, `bc mk` AS bcmk, `status banned` AS status_banned, toUInt8(ifNull(is_banned, 0)) AS banned,
-       toFloat64(ifNull(`%sap`, 0)) AS persen,
+       `layer pengawasan` AS layer, `bc mk` AS bcmk, `status banned` AS status_banned, toUInt8(is_banned) AS banned,
+       toUInt8(position(`status banned`, \'BANNED SAP\') > 0) AS banned_sap,
+       toFloat64OrNull(trim(replaceAll(`%sap`, \'%\', \'\'))) AS persen,
        toUInt32(ifNull(`target coach`, 0)) AS t_coach, toUInt32(ifNull(`n coach`, 0)) AS n_coach,
        toUInt32(ifNull(`target obs oak`, 0)) AS t_obs, toUInt32(ifNull(`n obs oak`, 0)) AS n_obs,
        toUInt32(ifNull(`target ins`, 0)) AS t_ins, toUInt32(ifNull(`n ins`, 0)) AS n_ins,
        toUInt32(ifNull(`target hzr`, 0)) AS t_hzr, toUInt32(ifNull(`n hzr`, 0)) AS n_hzr,
-       ifNull(`dihitung performa`, \'\') AS dihitung
+       toUInt8(`dihitung performa`) AS dihitung
 FROM obds.ch_banned_layer_weekly
 WHERE `minggu selesai` <= toDate('.$this->q($this->sampai->toDateString()).')
   AND `minggu selesai` > toDate('.$this->q($this->sampai->toDateString()).') - '.(7 * $minggu).'
@@ -423,7 +424,7 @@ labx AS (
 hbx AS (
   SELECT hid, a, s,
          arrayMap(x -> x.1, arrayFilter(x -> match(concat(b, \' \', lower(p)), x.2), th)) AS tb,
-         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p))))))) AS tsb
+         arrayDistinct(arrayMap(t -> substring(t, 1, 5), arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p)))))) AS tsb
   FROM hira
 ),
 ma AS (

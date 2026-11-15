@@ -74,6 +74,38 @@ class DrmSnapshotBuilder
     }
 
     /**
+     * Periksa semua query dengan EXPLAIN (sintaks, nama kolom, tipe) tanpa membaca data.
+     * Query per site diperiksa memakai site pertama.
+     *
+     * @return array<string, string|null>  label => pesan error (null = lolos)
+     */
+    public function cek(CarbonImmutable $sampai): array
+    {
+        $sql = new DrmSql((array) config('peta_risiko_drm'), $sampai);
+        $site = $this->ch->select($sql->daftarSite())[0]['site'] ?? null;
+        $s = $sql->untukSite($site);
+        $daftar = [
+            'baseline HIRA' => $sql->hira(), 'detail lokasi' => $sql->detailLokasi(), 'master PJA' => $sql->pja(),
+            'matriks per cakupan' => $sql->matriksCakupan(), 'insiden' => $sql->insiden(), 'personil PJA' => $sql->personil(),
+            'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(),
+            "aktivitas × detail lokasi ({$site})" => $s->aktivitasDetailLokasi(), "bahaya sorot ({$site})" => $s->bahayaSorot(),
+            "temuan open ({$site})" => $s->temuanOpen(),
+        ];
+
+        $hasil = [];
+        foreach ($daftar as $label => $q) {
+            try {
+                $this->ch->select('EXPLAIN '.trim($q), 120);
+                $hasil[$label] = null;
+            } catch (\Throwable $e) {
+                $hasil[$label] = $e->getMessage();
+            }
+        }
+
+        return $hasil;
+    }
+
+    /**
      * Rakit snapshot dari baris mentah hasil query (terpisah dari pengambilan agar bisa diuji).
      *
      * @param  array<string, list<mixed>>  $d

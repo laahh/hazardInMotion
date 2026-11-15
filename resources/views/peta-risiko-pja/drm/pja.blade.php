@@ -236,8 +236,9 @@
         return `<tr><td><span class="pr-name" style="font-size:14px">${E(p.nama)}</span><span class="pr-meta">${E(p.sid)} · ${E(p.perusahaan)}${p.pja !== D.info.nama ? ' · ' + E(p.pja) : ''}</span></td>
           <td><span class="dr-spark" title="${p.harian.join(', ')}">${p.harian.map((n) => Number(n) ? `<i style="height:${(100 * n / mx).toFixed(0)}%"></i>` : '<i class="z"></i>').join('')}</span></td>
           <td class="r dr-num">${F(tot)}</td>
-          <td class="r">${b ? (Number(b.persen) * (Number(b.persen) <= 1 ? 100 : 1)).toFixed(0) + '%' : '–'}</td>
-          <td>${b ? (Number(b.banned) ? '<span class="dr-tag st-L">Banned SAP</span>' : '<span class="dr-tag st-K">Achieve dihitung</span>') : '<span class="dr-mute">tidak ada data</span>'}</td></tr>`;
+          <td class="r">${!b ? '–' : b.persen === null ? 'N/A' : Number(b.persen).toFixed(0) + '%'}</td>
+          <td>${!b ? '<span class="dr-mute">tidak ada data</span>' : Number(b.banned_sap) ? `<span class="dr-tag st-L" title="${E(b.status_banned)}">Banned SAP</span>`
+            : `<span class="dr-tag st-K" title="${E(b.status_banned)}">Achieve dihitung</span>`}</td></tr>`;
       }).join('')}</tbody></table>` : '<div class="pr-empty">Tidak ada personil terdaftar.</div>';
 
     const cov = D.coverage.map((c) => ({ ...c, l: idx.dl[c.dl] })).filter((c) => c.l).sort((a, b) => Number(a.semua) - Number(b.semua));
