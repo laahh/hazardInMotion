@@ -72,6 +72,14 @@
   .dr-spark { display: inline-flex; gap: 2px; align-items: flex-end; height: 18px; }
   .dr-spark i { width: 5px; background: var(--navy); border-radius: 1px; }
   .dr-spark i.z { background: #DCE2E9; height: 2px !important; }
+  .dr-lok td, .dr-lok th { padding: 8px 8px; }
+  .dr-lok th { white-space: nowrap; }
+  .dr-lok td.r { white-space: nowrap; }
+  .dr-lok-head { cursor: pointer; background: #FAFCFE; }
+  .dr-lok-head:hover td { background: #F1F6FC; }
+  .dr-lok-head:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+  .dr-lok-child td { font-size: 13px; background: #fff; }
+  .dr-caret { display: inline-block; width: 12px; color: var(--mute); }
   .dr-flag-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .dr-flag-form label { display: flex; flex-direction: column; gap: 4px; font: 700 12px/1.2 "Plus Jakarta Sans", sans-serif; color: var(--mute); }
   .dr-flag-form select, .dr-flag-form input, .dr-flag-form textarea { font: inherit; font-size: 14px; color: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 9px; background: #fff; }

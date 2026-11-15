@@ -127,7 +127,64 @@
     if (D.info.mitra.length) $('#dr-sub').textContent += ' · Mitra: ' + D.info.mitra.map((m) => m.nama).join(', ');
   }
 
-  function render() { profil(); personil(); prosesBisnis(); strip(); openRisk(); temuan(); }
+  function render() { profil(); pasangLokasi(); personil(); prosesBisnis(); strip(); openRisk(); temuan(); }
+
+  // --------------------------------------------- tabel lokasi (bagian 1)
+  /** Lokasi → detail lokasi sebagai tabel; baris lokasi bisa dibuka/tutup. */
+  function tabelLokasi(perLok) {
+    const agg = {};
+    D.akt.forEach((r) => {
+      const a = (agg[r[C.dl]] ||= { akt: 0, b: 0, g: 0, t: 0 });
+      a.akt++; a.b += r[C.bahaya]; a.g += r[C.g]; a.t += r[C.t];
+    });
+    const lapor = Object.fromEntries(D.coverage.map((c) => [c.dl, Number(c.semua) || 0]));
+    const angka = (ds) => ds.reduce((s, d) => {
+      const a = agg[d.dl] || {};
+      s.akt += a.akt || 0; s.b += a.b || 0; s.g += a.g || 0; s.t += a.t || 0; s.lap += lapor[d.dl] || 0;
+      return s;
+    }, { akt: 0, b: 0, g: 0, t: 0, lap: 0 });
+    const sel = (s) => `<td class="r">${F(s.akt)}</td><td class="r">${F(s.b)}</td>
+      <td class="r">${s.g ? `<b style="color:var(--g)">${F(s.g)}</b>` : 0}</td><td class="r">${F(s.t)}</td>
+      <td class="r">${s.lap ? F(s.lap) : '<span class="dr-tag st-T">0</span>'}</td>`;
+    const grup = Object.entries(perLok).map(([l, ds]) => ({ l, ds, s: angka(ds) }))
+      .sort((a, b) => b.s.g - a.s.g || a.l.localeCompare(b.l));
+
+    return `<div style="display:flex;gap:8px;margin:8px 0">
+        <button type="button" class="pr-back" data-lok-semua="1">Buka semua</button>
+        <button type="button" class="pr-back" data-lok-semua="0">Tutup semua</button></div>
+      <div class="dr-scroll"><table class="pr-tbl dr-tbl dr-lok">
+        <thead><tr><th>Lokasi / detail lokasi</th><th>Grup</th><th class="r" title="Jumlah aktivitas HIRA">Akt.</th>
+          <th class="r" title="Pasangan detail lokasi × bahaya-risiko">Bahaya</th><th class="r" title="Teridentifikasi – ada gap">Gap</th>
+          <th class="r" title="Tidak teridentifikasi (open risk)">Tdk ident.</th>
+          <th class="r" title="Jumlah laporan SAP ${META.jendela} hari terakhir (semua pelapor)">SAP ${META.jendela}h</th></tr></thead>
+        ${grup.map(({ l, ds, s }, i) => {
+          const grp = [...new Set(ds.map((d) => d.grp))];
+          return `<tbody>
+            <tr class="dr-lok-head" data-lok="${i}" tabindex="0" role="button" aria-expanded="false">
+              <td><span class="dr-caret" aria-hidden="true">▸</span> <b>${E(l)}</b> <span class="dr-mute">${ds.length} detail</span></td>
+              <td class="dr-mute">${grp.length > 2 ? grp.length + ' grup' : grp.map(E).join(', ')}</td>${sel(s)}</tr>
+            ${ds.slice().sort((a, b) => ((agg[b.dl] || {}).g || 0) - ((agg[a.dl] || {}).g || 0) || a.detlok.localeCompare(b.detlok)).map((d) =>
+              `<tr class="dr-lok-child" data-lok="${i}" hidden><td style="padding-left:34px">${E(d.detlok)}</td>
+                <td><span class="dr-tag" style="--bg:#EEF2F6;--c:#333">${E(d.grp)}</span></td>${sel(angka([d]))}</tr>`).join('')}
+          </tbody>`;
+        }).join('')}
+      </table></div>`;
+  }
+
+  function pasangLokasi() {
+    const atur = (head, buka) => {
+      head.setAttribute('aria-expanded', String(buka));
+      head.querySelector('.dr-caret').textContent = buka ? '▾' : '▸';
+      document.querySelectorAll(`.dr-lok-child[data-lok="${head.dataset.lok}"]`).forEach((tr) => { tr.hidden = !buka; });
+    };
+    document.querySelectorAll('.dr-lok-head').forEach((head) => {
+      const toggle = () => atur(head, head.getAttribute('aria-expanded') !== 'true');
+      head.addEventListener('click', toggle);
+      head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    });
+    document.querySelectorAll('[data-lok-semua]').forEach((b) => b.addEventListener('click', () =>
+      document.querySelectorAll('.dr-lok-head').forEach((h) => atur(h, b.dataset.lokSemua === '1'))));
+  }
 
   // ------------------------------------------------------------------ flag
   function indeksFlag() {
@@ -199,8 +256,7 @@
 
     $('#dr-profil').innerHTML = `<ul class="dr-list">
       <li><b><span class="dr-sec-num">1</span>Lokasi – detail lokasi terkait</b> <span class="dr-mute">${Object.keys(perLok).length} lokasi · ${D.lokasi.length} detail lokasi</span>
-        <details style="margin-top:6px"><summary class="dr-mute">Lihat daftar</summary>${Object.entries(perLok).map(([l, ds]) =>
-          `<div style="margin:6px 0"><b>${E(l)}</b><br>${ds.map((d) => `<span class="dr-tag" style="--bg:#EEF2F6;--c:#333;margin:2px">${E(d.detlok)} <small class="dr-mute">${E(d.grp)}</small></span>`).join(' ')}</div>`).join('')}</details></li>
+        ${tabelLokasi(perLok)}</li>
       <li><b><span class="dr-sec-num">2</span>Aktivitas terkait (HIRA)</b> <span class="dr-mute">${aktList.length} aktivitas</span>
         <details style="margin-top:6px"><summary class="dr-mute">Lihat daftar</summary><div style="margin-top:6px">${aktList.map((a) =>
           `<span class="dr-tag" style="--bg:#EEF2F6;--c:#333;margin:2px">${E(D.namaAkt[a] || a)} · ${aktCount[a]} detlok</span>`).join(' ')}</div></details></li>
