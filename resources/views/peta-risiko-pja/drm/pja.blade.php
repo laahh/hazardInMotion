@@ -117,6 +117,12 @@
     idx.bahaya = Object.fromEntries(D.bahaya.map((b) => [b[B.hid], b]));
     idx.bahayaPerA = {};
     D.bahaya.forEach((b) => (idx.bahayaPerA[b[B.a]] ||= []).push(b));
+    // Status setiap pasangan baseline (detail lokasi × bahaya) di area PJA: "dl|hid" → K/G/T.
+    idx.status = {};
+    Object.entries(D.pasangan || {}).forEach(([dl, isi]) => isi.split(',').forEach((x) => {
+      const [hid, st] = x.split(':'); idx.status[dl + '|' + hid] = st;
+    }));
+    idx.adaPasangan = Object.keys(idx.status).length > 0;
     idx.sorot = {};
     D.sorot.forEach((s) => { idx.sorot[s.dl + '|' + s.hid] = s; });
     idx.incDl = {};
@@ -260,7 +266,7 @@
       <li><b><span class="dr-sec-num">2</span>Aktivitas terkait (HIRA)</b> <span class="dr-mute">${aktList.length} aktivitas</span>
         <details style="margin-top:6px"><summary class="dr-mute">Lihat daftar</summary><div style="margin-top:6px">${aktList.map((a) =>
           `<span class="dr-tag" style="--bg:#EEF2F6;--c:#333;margin:2px">${E(D.namaAkt[a] || a)} · ${aktCount[a]} detlok</span>`).join(' ')}</div></details></li>
-      <li><b><span class="dr-sec-num">3</span>Bahaya-risiko terkait (HIRA)</b> <span class="dr-mute">${F(D.bahaya.length)} bahaya-risiko unik dari aktivitas di atas</span></li>
+      <li><b><span class="dr-sec-num">3</span>Bahaya-risiko terkait (HIRA)</b> <span class="dr-mute">${F(D.bahaya.length)} bahaya-risiko unik di detail lokasi PJA ini (baseline: bisa diidentifikasi SAP)</span></li>
       <li><b><span class="dr-sec-num">4</span>Level risiko</b>
         <table class="pr-tbl dr-tbl" style="margin-top:6px"><thead><tr><th></th>${META.level.map((l) => `<th class="r">${l}</th>`).join('')}</tr></thead><tbody>
           <tr><td>Risiko awal (HIRA)</td>${awal.map((n) => `<td class="r">${F(n)}</td>`).join('')}</tr>
@@ -409,7 +415,14 @@
   function buka(r) {
     const l = idx.dl[r[C.dl]] || {};
     const nama = D.namaAkt[r[C.a]] || r[C.a];
-    const bahaya = (idx.bahayaPerA[r[C.a]] || []).map((b) => ({ b, s: idx.sorot[r[C.dl] + '|' + b[B.hid]] }))
+    // Hanya bahaya yang ada di baseline detail lokasi ini (bila data pasangan tersedia).
+    const bahaya = (idx.bahayaPerA[r[C.a]] || [])
+      .filter((b) => !idx.adaPasangan || idx.status[r[C.dl] + '|' + b[B.hid]])
+      .map((b) => {
+        const k = r[C.dl] + '|' + b[B.hid];
+        const sr = idx.sorot[k];
+        return { b, s: sr || (idx.status[k] ? { status: idx.status[k] } : null) };
+      })
       .sort((x, y) => (y.s?.status === 'G') - (x.s?.status === 'G') || META.level.indexOf(y.b[B.n1]) - META.level.indexOf(x.b[B.n1]));
     const tm = (idx.temuanDl[r[C.dl]] || []).filter((t) => (t.aktivitas || []).includes(nama));
     const inc = insidenBaris(r);
@@ -421,9 +434,9 @@
       ${inc.length ? `<div class="pr-card"><div class="pr-card-head"><div><b>Insiden terkait (${inc.length})</b></div></div>${inc.map((i) =>
         `<div class="pr-entry"><div class="pr-entry-top"><strong>${E(i.tanggal)} · ${E(i.kategori)}</strong><span class="dr-mute">No ${E(i.no)}</span></div>
          <p>${E(i.kronologi)}</p>${i.akar.length ? `<p><b>Root cause:</b> ${i.akar.map(E).join(' · ')}</p>` : ''}</div>`).join('')}</div>` : ''}
-      <div class="pr-card"><div class="pr-card-head"><div><b>Bahaya-risiko (${bahaya.length})</b><small>Status per bahaya hanya tersedia untuk yang ada gap / terkait insiden; sisanya lihat komposisi di atas.</small></div></div>${
+      <div class="pr-card"><div class="pr-card-head"><div><b>Bahaya-risiko (${bahaya.length})</b><small>Hanya bahaya-risiko yang masuk baseline di detail lokasi ini, beserta statusnya.</small></div></div>${
         bahaya.map(({ b, s }) => `<div class="pr-entry"><div class="pr-entry-top"><strong>${E(b[B.bahaya])}</strong>
-          <span>${s ? DR.tag(s.status === 'G' ? 'G' : s.status) : ''}</span></div>
+          <span>${s && DR.ST[s.status] ? DR.tag(s.status) : ''}</span></div>
           <p>${E(b[B.sub])} · potensi: ${E(b[B.potensi])}</p>
           <p><span class="dr-tag lv-${E(b[B.n1])}">Awal ${E(b[B.n1])}</span> → <span class="dr-tag lv-${E(b[B.n2])}">Residual ${E(b[B.n2])}</span>
             ${s && s.status === 'G' ? `<span class="dr-mute"> · open ${s.open_n}, ${s.rep} temuan ${META.jendela} hr${Number(s.stop) ? ', OAK stop' : ''}</span>` : ''}

@@ -208,6 +208,18 @@ FROM us JOIN hira h ON h.hid = us.hid
 GROUP BY us.jenis, us.kunci, us.minggu, us.status, h.k1, h.c1, h.n1, kf, cf, nf, laten';
     }
 
+    /**
+     * Semua pasangan baseline (detail lokasi, bahaya) + status pada tanggal akhir, ringkas per detail lokasi
+     * (string "hid:status" dipisah koma) — supaya halaman PJA hanya memakai bahaya di area PJA itu.
+     * Dijalankan per site.
+     */
+    public function pasanganBaseline(): string
+    {
+        return $this->prelude().$this->statusCte().'
+SELECT toString(st.dl) AS dl, arrayStringConcat(groupArray(concat(toString(st.hid), \':\', st.status)), \',\') AS pasangan
+FROM st GROUP BY st.dl';
+    }
+
     /** Untuk Excel mapping: per bahaya, jumlah detail lokasi baseline per status + sinyal SAP (dijalankan per site). */
     public function statusPerBahaya(): string
     {

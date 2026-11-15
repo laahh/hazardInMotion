@@ -62,7 +62,7 @@ class DrmSnapshotBuilder
             'bearc' => $this->ambil('BeARC mingguan', $sql->bearc()),
             'coverage' => $this->ambil('coverage', $sql->coverage()),
             'mapping' => $this->ambil('mapping SAP per bahaya (Excel)', $sql->mappingBahaya()),
-            'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [],
+            'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [], 'pasangan' => [],
         ];
         foreach ($d['sites'] as $site) {
             $s = $sql->untukSite($site);
@@ -70,6 +70,7 @@ class DrmSnapshotBuilder
             array_push($d['sorot'], ...$this->ambil("bahaya sorot {$site}", $s->bahayaSorot()));
             array_push($d['temuan'], ...$this->ambil("temuan open {$site}", $s->temuanOpen()));
             array_push($d['statusBahaya'], ...$this->ambil("status per bahaya {$site} (Excel)", $s->statusPerBahaya()));
+            array_push($d['pasangan'], ...$this->ambil("pasangan baseline {$site}", $s->pasanganBaseline()));
         }
 
         return $this->susun($d, $sampai, $cfg);
@@ -91,7 +92,7 @@ class DrmSnapshotBuilder
             'matriks per cakupan' => $sql->matriksCakupan(), 'insiden' => $sql->insiden(), 'personil PJA' => $sql->personil(),
             'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(), 'mapping SAP per bahaya' => $sql->mappingBahaya(),
             "aktivitas × detail lokasi ({$site})" => $s->aktivitasDetailLokasi(), "bahaya sorot ({$site})" => $s->bahayaSorot(),
-            "temuan open ({$site})" => $s->temuanOpen(), "status per bahaya ({$site})" => $s->statusPerBahaya(),
+            "temuan open ({$site})" => $s->temuanOpen(), "status per bahaya ({$site})" => $s->statusPerBahaya(), "pasangan baseline ({$site})" => $s->pasanganBaseline(),
         ];
 
         $hasil = [];
@@ -133,12 +134,13 @@ class DrmSnapshotBuilder
             'insiden' => $this->kelompok($insiden, 'dl'),
         ];
         $hiraPerA = $this->kelompok(array_values($hira), 'a');
+        $pasanganPerDl = array_column($d['pasangan'] ?? [], 'pasangan', 'dl');
         $coveragePerPja = $this->kelompok($coverage, 'pja');
         $bearcPerSid = $this->kelompok($bearc, 'sid');
 
         $berkas = [];
         foreach ($pjaBc as $id => $info) {
-            $berkas[$id] = $this->berkasPja($info, $dl, $hiraPerA, $perDl, $personil, $bearcPerSid, $coveragePerPja[$id] ?? []);
+            $berkas[$id] = $this->berkasPja($info, $dl, $hira, $hiraPerA, $pasanganPerDl, $perDl, $personil, $bearcPerSid, $coveragePerPja[$id] ?? []);
         }
 
         return [
@@ -391,26 +393,37 @@ class DrmSnapshotBuilder
     /**
      * @param  array<string, mixed>  $info
      * @param  array<string, array<string, mixed>>  $dl
+     * @param  array<string, array<string, mixed>>  $hira
      * @param  array<string, list<array<string, mixed>>>  $hiraPerA
+     * @param  array<string, string>  $pasanganPerDl  dl => "hid:status,hid:status,…"
      * @param  array<string, array<string, list<array<string, mixed>>>>  $perDl
      * @param  list<array<string, mixed>>  $personil
      * @param  array<string, list<array<string, mixed>>>  $bearcPerSid
      * @param  list<array<string, mixed>>  $coverage
      * @return array<string, mixed>
      */
-    private function berkasPja(array $info, array $dl, array $hiraPerA, array $perDl, array $personil, array $bearcPerSid, array $coverage): array
+    private function berkasPja(array $info, array $dl, array $hira, array $hiraPerA, array $pasanganPerDl, array $perDl, array $personil, array $bearcPerSid, array $coverage): array
     {
         $ambilDl = fn (string $jenis): array => array_merge(...array_map(fn ($id) => $perDl[$jenis][$id] ?? [], $info['dl']));
         $baris = $ambilDl('akt');
         $temuan = $ambilDl('temuan');
         usort($temuan, fn ($a, $b) => strcmp($b['tanggal'], $a['tanggal']));
 
-        $bahaya = [];
-        foreach (array_unique(array_map(fn ($r) => $r['a'], $baris)) as $a) {
-            foreach ($hiraPerA[$a] ?? [] as $h) {
-                $bahaya[] = [$h['hid'], $h['a'], $h['an'], $h['sn'], $h['bn'], $h['p'], $h['n1'], $h['k1'], $h['c1'], $h['n2'], $h['k2'], $h['c2'], $h['kt'], $h['faktor'], $h['proses'] ?? 'X'];
+        // Bahaya = HANYA pasangan baseline di detail lokasi PJA ini (bukan semua bahaya HIRA dengan nama
+        // aktivitas yang sama di seluruh perusahaan). Snapshot lama tanpa data pasangan → cara lama.
+        $pasangan = array_filter(array_intersect_key($pasanganPerDl, array_flip($info['dl'])), fn ($v) => $v !== '');
+        if ($pasanganPerDl !== []) {
+            $hids = [];
+            foreach ($pasangan as $isi) {
+                foreach (explode(',', $isi) as $p) {
+                    $hids[strstr($p, ':', true)] = true;
+                }
             }
+            $sumber = array_values(array_intersect_key($hira, $hids));
+        } else {
+            $sumber = array_merge(...array_map(fn ($a) => $hiraPerA[$a] ?? [], array_unique(array_map(fn ($r) => $r['a'], $baris))));
         }
+        $bahaya = array_map(fn ($h) => [$h['hid'], $h['a'], $h['an'], $h['sn'], $h['bn'], $h['p'], $h['n1'], $h['k1'], $h['c1'], $h['n2'], $h['k2'], $h['c2'], $h['kt'], $h['faktor'], $h['proses'] ?? 'X'], $sumber);
 
         // Personil = penugasan m_pja_emp pada PJA BC ini + PJA Mitra anaknya (dicocokkan lewat ID, bukan nama).
         $idPja = array_flip([(string) $info['id'], ...array_map('strval', array_column($info['mitra'], 'id'))]);
@@ -436,6 +449,7 @@ class DrmSnapshotBuilder
             ], $baris),
             'namaAkt' => $this->namaAktivitas($baris),
             'bahaya' => $bahaya,
+            'pasangan' => (object) $pasangan,
             'sorot' => $ambilDl('sorot'),
             'temuan' => array_slice($temuan, 0, self::TEMUAN_MAKS_PER_PJA),
             'temuanTotal' => count($temuan),

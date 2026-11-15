@@ -50,7 +50,7 @@ class DrmSnapshotBuilderTest extends TestCase
     {
         $baris = array_column($this->susun()['ekspor'], null, 'hid');
 
-        $this->assertCount(4, $baris);
+        $this->assertCount(5, $baris);
         // hid 1: tidak teridentifikasi di semua DL + insiden → laten.
         $this->assertSame('T', $baris['1']['status']);
         $this->assertTrue($baris['1']['laten']);
@@ -78,7 +78,7 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(['Mapping bahaya-risiko', 'Ringkasan', 'Keterangan'], $wb->getSheetNames());
         $ws = $wb->getSheet(0);
         $this->assertSame('Bahaya / penyebab potensial', (string) $ws->getCell('D1')->getValue());
-        $this->assertSame(5, $ws->getHighestRow());
+        $this->assertSame(6, $ws->getHighestRow());
         $this->assertSame(1, $ws->getCell('A2')->getValue());
         $ringkas = $wb->getSheet(1)->toArray();
         $this->assertEquals(['BASELINE (terpetakan ke SAP + punya detail lokasi)', 2], array_slice($ringkas[2], 0, 2));
@@ -98,6 +98,9 @@ class DrmSnapshotBuilderTest extends TestCase
         // Personil dicocokkan lewat ID PJA: S1 milik PJA BC, S2 milik PJA Mitra anaknya.
         $this->assertSame(['S1' => true, 'S2' => false], array_column($p['personil'], 'bc', 'sid'));
         $this->assertCount(1, $p['bearc']);
+        // Bahaya hanya dari pasangan baseline di detail lokasi PJA (hid 5 berada di DL 201 milik PJA lain).
+        $this->assertEqualsCanonicalizing(['1', '2', '3'], array_map(fn ($b) => (string) $b[0], $p['bahaya']));
+        $this->assertSame(['101' => '1:T,2:G', '102' => '3:K'], (array) $p['pasangan']);
         $this->assertSame('PJA Pit BC', $p['info']['nama']);
         $this->assertSame([['id' => '11', 'nama' => 'PJA Pit Mitra']], $p['info']['mitra']);
         // PJA tanpa detail lokasi (Mitra) tidak dibuatkan berkas sendiri.
@@ -165,7 +168,7 @@ class DrmSnapshotBuilderTest extends TestCase
 
         $data = [
             'sites' => ['LMO'],
-            'hira' => [$hira('1', 'loading ob'), $hira('2', 'loading ob'), $hira('3', 'dumping'), [...$hira('4', 'pumping'), 'di_a' => 0, 'di_b' => 0]],
+            'hira' => [$hira('1', 'loading ob'), $hira('2', 'loading ob'), $hira('3', 'dumping'), [...$hira('4', 'pumping'), 'di_a' => 0, 'di_b' => 0], $hira('5', 'loading ob')],
             'dl' => [
                 ['dl' => '101', 'site' => 'LMO', 'id_lok' => '1', 'lokasi' => 'Pit A', 'detlok' => 'Front Loading', 'grp' => 'Loading Point', 'pja' => ['10']],
                 ['dl' => '102', 'site' => 'LMO', 'id_lok' => '1', 'lokasi' => 'Pit A', 'detlok' => 'Disposal', 'grp' => 'Disposal', 'pja' => ['10']],
@@ -196,6 +199,8 @@ class DrmSnapshotBuilderTest extends TestCase
                 ['hid' => '2', 'n_a' => '2', 'label_a' => ['Hazard › Jalan licin', 'Hazard › Jalan berlubang'], 'n_b' => '0', 'teks_b' => []],
             ],
             // Per site; hid 2 muncul di dua "site" untuk menguji penjumlahan.
+            // Pasangan baseline per detail lokasi: hid 5 (aktivitas sama) TIDAK ada di lokasi PJA 10.
+            'pasangan' => [['dl' => '101', 'pasangan' => '1:T,2:G'], ['dl' => '102', 'pasangan' => '3:K'], ['dl' => '201', 'pasangan' => '5:K']],
             'statusBahaya' => [
                 ['hid' => '1', 'dl_n' => '2', 'g' => '0', 'k' => '0', 't' => '2', 'x' => '0', 'dl_open' => '0', 'dl_ulang' => '0', 'dl_stop' => '0',
                     'temuan_open' => '0', 'temuan_jendela' => '0', 'terakhir' => '1970-01-01'],
