@@ -452,8 +452,22 @@
       <th class="r">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Sebagian</th><th class="r">Tanpa laporan</th></tr></thead><tbody>${baris}</tbody></table></div></div>`;
   }
 
+  /** Baris judul site di tabel Semua PJA: subtotal satuan ketat + temuan open dari PJA site itu. */
+  function judulSite(site, L) {
+    const v = jumlah(L), op = L.reduce((s, o) => s + o.op, 0), lewat = L.reduce((s, o) => s + o.lewat, 0);
+    const lama30 = L.reduce((s, o) => s + o.lama30, 0), ins = L.reduce((s, o) => s + o.insiden, 0), tinggi = L.filter((o) => o.pri === 'T').length;
+    return `<tr style="background:#EEF3FA;font-weight:700"><td>${DR.esc(site)}<br><span class="dr-mute" style="font-weight:400">${L.length} PJA${tinggi ? ` · ${tinggi} prioritas tinggi` : ''}</span></td>
+      <td>${v.t ? DR.sb4(v.full, v.part, v.gapo, v.none) + `<span class="dr-mute" style="font-weight:400">${DR.fmt(v.t)} baris</span>` : ''}</td>
+      <td class="r">${pctI(v.full, v.t)}</td><td class="r">${pctI(v.t - v.full, v.t)}</td><td class="r">${DR.fmt(v.part)}</td><td class="r">${DR.fmt(v.none)}</td>
+      <td class="r">${DR.fmt(op)}</td><td class="r">${DR.fmt(lewat)}<br><span class="dr-mute" style="font-weight:400">${pctI(lewat, op)}</span></td>
+      <td class="r">${DR.fmt(lama30)}<br><span class="dr-mute" style="font-weight:400">${pctI(lama30, op)}</span></td><td class="r">${ins || ''}</td><td></td></tr>`;
+  }
+
   function tabelDaftar(L, total, wk) {
-    const rows = L.map((o) => {
+    // Dikelompokkan per site (urutan daftar site); di dalam site tetap mengikuti pilihan "Urutkan".
+    const perSite = new Map([...M.sites, ...L.map((o) => o.site)].map((s) => [s, []]));
+    L.forEach((o) => perSite.get(o.site).push(o));
+    const rows = [...perSite].filter(([, d]) => d.length).map(([site, d]) => judulSite(site, d) + d.map((o) => {
       const buka = !!state.buka[o.id];
       const utama = `<tr class="br-a${buka ? ' open' : ''}" data-id="${o.id}" style="cursor:pointer">
         <td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Buka rincian PJA">▸</button><b>${DR.esc(o.nama)}</b><br><span class="dr-mute" style="padding-left:24px">${DR.esc(o.site)} · ${o.ndl} detail lokasi · ${DR.fmt(o.personil)} personil</span></td>
@@ -464,8 +478,8 @@
         <td class="r">${o.insiden ? `<b class="br-red">${o.insiden}</b>` : ''}</td>
         <td><span class="br-pill" style="background:${PRI[o.pri][1]}">${PRI[o.pri][0]}</span><br><span class="dr-mute">skor ${o.skor}</span></td></tr>`;
       return utama + (buka ? rincian(o) : '');
-    }).join('');
-    return `<div class="pr-card"><div class="pr-card-head"><div><b>Semua PJA · ${wk}</b><small>${L.length} dari ${total} PJA · klik baris untuk rincian</small></div></div>
+    }).join('')).join('');
+    return `<div class="pr-card"><div class="pr-card-head"><div><b>Semua PJA per site · ${wk}</b><small>${L.length} dari ${total} PJA · dikelompokkan per site · subtotal site = jumlah baris tingkat PJA · klik baris untuk rincian</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:1200px"><thead><tr><th style="min-width:260px">PJA</th><th style="min-width:200px">Komposisi</th>
       <th class="r">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Sebagian</th><th class="r">Tanpa laporan</th>
       <th class="r">Open</th><th class="r">Lewat janji</th><th class="r">Open &gt; 30 hari</th><th class="r">Insiden ${M.beranda.hari} hr</th><th>Prioritas</th></tr></thead>
