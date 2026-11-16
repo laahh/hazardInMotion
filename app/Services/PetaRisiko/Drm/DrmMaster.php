@@ -75,8 +75,23 @@ final class DrmMaster
         return Storage::disk('local')->exists(self::dir().'/'.self::NAMA_JSON);
     }
 
-    /** @throws RuntimeException bila master belum diimpor */
+    /**
+     * Master yang dipakai sync: tabel database drm_master_* bila sudah dimigrasi dan terisi (bisa dikoreksi di
+     * /peta-risiko-pja/master), selain itu master.json hasil impor workbook.
+     *
+     * @throws RuntimeException bila keduanya belum ada
+     */
     public static function muat(): self
+    {
+        if (Master\DrmMasterDb::terisi()) {
+            return new self(app(Master\DrmMasterDb::class)->data());
+        }
+
+        return self::muatJson();
+    }
+
+    /** Master dari master.json (hasil impor workbook), tanpa koreksi database. */
+    public static function muatJson(): self
     {
         if (! self::ada()) {
             throw new RuntimeException('Master mapping DRM belum diimpor. Jalankan: php artisan peta-risiko:impor-master <file.xlsx>');
@@ -160,6 +175,37 @@ final class DrmMaster
         return crc32(self::norm($s));
     }
 
+    /** Kunci lokasi: CRC32("site|lokasi" ternormalisasi), sama dengan dl.lk di DrmSql. */
+    public static function crcLokasi(string $site, string $lokasi): int
+    {
+        return crc32(self::norm($site).'|'.self::norm($lokasi));
+    }
+
+    /** Sumber master: database (bisa dikoreksi) atau master.json. */
+    public function dariDatabase(): bool
+    {
+        return isset($this->data['kelompokAkt']);
+    }
+
+    /**
+     * Config efektif: daftar kelompok aktivitas + regex dan tema checklist + regex dari database bila ada
+     * (koreksi di halaman master), selain itu dari config/peta_risiko_drm.php.
+     *
+     * @param  array<string, mixed>  $cfg
+     * @return array<string, mixed>
+     */
+    public function cfgEfektif(array $cfg): array
+    {
+        if (! empty($this->data['kelompokDaftar'])) {
+            $cfg['proses_bisnis'] = $this->data['kelompokDaftar'];
+        }
+        if (! empty($this->data['tema'])) {
+            $cfg['tema_checklist'] = $this->data['tema'];
+        }
+
+        return $cfg;
+    }
+
     /** Kunci detail lokasi: CRC32("site|lokasi|detail" ternormalisasi), sama dengan DrmSql. */
     public static function crcDl(string $site, string $lokasi, string $detail): int
     {
@@ -176,6 +222,10 @@ final class DrmMaster
      */
     public function kelompokBaris(array $kelompok): array
     {
+        if (isset($this->data['kelompokAkt'])) {
+            // Koreksi manual di database (tab Aktivitas → kelompok): kelompok mengikuti aktivitas baris.
+            return array_column(array_map(fn ($b) => [$b['ri'], (string) ($this->data['kelompokAkt'][$b['aid']] ?? 'K0')], $this->data['baris']), 1, 0);
+        }
         $hasil = [];
         foreach ($this->data['baris'] as $b) {
             $hasil[$b['ri']] = self::kelompokTeks($b['aktivitas'], $kelompok);
@@ -206,6 +256,9 @@ final class DrmMaster
      */
     public function temaBaris(array $tema): array
     {
+        if (isset($this->data['temaBarisDb'])) {
+            return $this->data['temaBarisDb'];
+        }
         $hasil = [];
         foreach ($tema as $id => [, , $pola]) {
             foreach ($this->data['baris'] as $b) {
@@ -278,7 +331,7 @@ final class DrmMaster
         $maks = $gn === [] ? 0 : max(array_keys($gn));
         $namaGrup = array_map(fn ($i) => $gn[$i] ?? '', range(1, max(1, $maks)));
 
-        return [
+        $lit = [
             'mh' => self::json('['.implode(',', $mh).']', 'Array(Tuple(UInt32, Array(Int64), UInt32, UInt32, UInt8, UInt8, UInt8))'),
             'mg' => self::json('['.implode(',', $mg).']', self::TIPE_PETA),
             'm6' => self::json('['.implode(',', $m6).']', 'Array(Tuple(UInt32, UInt32))'),
@@ -287,6 +340,16 @@ final class DrmMaster
             'mt' => self::json(self::petaLarik($this->temaBaris($cfg['tema_checklist'])), self::TIPE_PETA),
             'gn' => '['.implode(',', array_map(fn ($n) => "'".str_replace(['\\', "'"], ['\\\\', "\\'"], $n)."'", $namaGrup)).']',
         ];
+        // Lokasi → PJA dari database (koreksi manual): [(crc site|lokasi, crc nama PJA)]. Tanpa ini DrmSql membaca aaj_lokasi_dan_pja.
+        if (isset($this->data['lokasiPja'])) {
+            $lp = [];
+            foreach ($this->data['lokasiPja'] as [$site, $lokasi, $pja]) {
+                $lp[self::crcLokasi($site, $lokasi).'|'.self::crc($pja)] = sprintf('[%d,%d]', self::crcLokasi($site, $lokasi), self::crc($pja));
+            }
+            $lit['lp'] = self::json('['.implode(',', $lp).']', 'Array(Tuple(UInt32, UInt32))');
+        }
+
+        return $lit;
     }
 
     // ------------------------------------------------------------ util

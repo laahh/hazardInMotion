@@ -757,17 +757,14 @@ dl AS (
          g.gid AS gid, gn[g.gid] AS grp
   FROM dl0 d JOIN (SELECT toUInt32(x.1) AS kd, toUInt32(x.2) AS gid FROM (SELECT arrayJoin(m6) AS x)) g ON g.kd = d.kd
 ),
-aj AS (
-  SELECT DISTINCT CRC32(concat('.$this->norm('site').', \'|\', '.$this->norm('lokasi').')) AS lk, lowerUTF8(trim(nama_pja)) AS nm
-  FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\'
-),
+'.$this->ajCte().',
 mpn AS (
-  SELECT nm, min(id) AS pja_id
-  FROM (SELECT toInt64(id) AS id, lowerUTF8(trim(any(name))) AS nm FROM obds.m_pja GROUP BY id HAVING max(is_active) = 1)
-  GROUP BY nm
+  SELECT nk, min(id) AS pja_id
+  FROM (SELECT toInt64(id) AS id, CRC32('.$this->norm('any(name)').') AS nk FROM obds.m_pja GROUP BY id HAVING max(is_active) = 1)
+  GROUP BY nk
 ),
 pjadl AS (
-  SELECT DISTINCT d.dl AS dl, p.pja_id AS pja_id FROM dl d JOIN aj ON aj.lk = d.lk JOIN mpn p ON p.nm = aj.nm
+  SELECT DISTINCT d.dl AS dl, p.pja_id AS pja_id FROM dl d JOIN aj ON aj.lk = d.lk JOIN mpn p ON p.nk = aj.nk
 ),
 sap AS (
   SELECT jenis_data AS j, toDate(`date time`) AS d, toInt64(`id detail lokasi`) AS dl, kode_sid_pelapor AS sid,
@@ -888,6 +885,22 @@ umum_a AS (
   -- Kata yang muncul di banyak bahaya HIRA: tidak boleh menjadi satu-satunya alasan pasangan.
   SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM hbx ARRAY JOIN tsb AS t GROUP BY t)
   WHERE n > (SELECT count() FROM hbx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
+)';
+    }
+
+    /**
+     * Lokasi → PJA (lk = CRC32 site|lokasi, nk = CRC32 nama PJA ternormalisasi): dari tabel master database
+     * (literal lp, bisa dikoreksi) bila ada, selain itu langsung dari obds.aaj_lokasi_dan_pja.
+     */
+    private function ajCte(): string
+    {
+        if (isset($this->lit['lp'])) {
+            return 'aj AS (SELECT toUInt32(x.1) AS lk, toUInt32(x.2) AS nk FROM (SELECT arrayJoin('.$this->lit['lp'].') AS x))';
+        }
+
+        return 'aj AS (
+  SELECT DISTINCT CRC32(concat('.$this->norm('site').', \'|\', '.$this->norm('lokasi').')) AS lk, CRC32('.$this->norm('nama_pja').') AS nk
+  FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\'
 )';
     }
 

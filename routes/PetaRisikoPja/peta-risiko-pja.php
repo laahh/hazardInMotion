@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\PetaRisiko\PetaRisikoDrmController;
 use App\Http\Controllers\PetaRisiko\PetaRisikoFlagController;
+use App\Http\Controllers\PetaRisiko\PetaRisikoMasterController;
 use App\Http\Controllers\PetaRisiko\PetaRisikoPjaController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,14 @@ Route::prefix('peta-risiko-pja')
             Route::get('/pja/{pja}', 'pja')->where('pja', '[0-9]+')->name('pja');
             Route::get('/pja/{pja}/data', 'pjaData')->where('pja', '[0-9]+')->name('pja.data');
             Route::get('/dl/{dl}/sap', 'sapDetailLokasi')->where('dl', '[0-9]+')->middleware('throttle:60,1')->name('dl.sap');
+        });
+
+        // Master mapping DRM 2.1 (koreksi baseline → PJA), berlaku pada sync berikutnya.
+        Route::prefix('master')->name('master.')->controller(PetaRisikoMasterController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/log', 'log')->name('log');
+            Route::post('/{tabel}', 'simpan')->where('tabel', '[a-z_]+')->middleware('throttle:60,1')->name('simpan');
+            Route::post('/{tabel}/{id}/hapus', 'hapus')->where(['tabel' => '[a-z_]+', 'id' => '[A-Za-z0-9]+'])->middleware('throttle:60,1')->name('hapus');
         });
 
         Route::controller(PetaRisikoFlagController::class)->group(function () {

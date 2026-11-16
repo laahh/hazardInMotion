@@ -54,8 +54,9 @@ class DrmSnapshotBuilder
     /** @return array{meta: array<string, mixed>, pja: array<string, array<string, mixed>>} */
     public function bangun(CarbonImmutable $sampai): array
     {
-        $cfg = (array) config('peta_risiko_drm');
         $master = DrmMaster::muat();
+        // Kelompok aktivitas + regex dan tema + regex dari tabel master database bila sudah dikoreksi.
+        $cfg = $master->cfgEfektif((array) config('peta_risiko_drm'));
         $sql = new DrmSql($cfg, $sampai, $master->literal($cfg));
 
         $d = [
@@ -95,8 +96,9 @@ class DrmSnapshotBuilder
      */
     public function cek(CarbonImmutable $sampai): array
     {
-        $cfg = (array) config('peta_risiko_drm');
-        $sql = new DrmSql($cfg, $sampai, DrmMaster::muat()->literal($cfg));
+        $master = DrmMaster::muat();
+        $cfg = $master->cfgEfektif((array) config('peta_risiko_drm'));
+        $sql = new DrmSql($cfg, $sampai, $master->literal($cfg));
         $site = $this->ch->select($sql->daftarSite())[0]['site'] ?? null;
         $s = $sql->untukSite($site);
         $daftar = [

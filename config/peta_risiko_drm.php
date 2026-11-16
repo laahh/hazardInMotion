@@ -156,6 +156,12 @@ return [
     */
     'master' => [
         'dir' => 'peta-risiko-drm-master',
+        /*
+        | Pengguna yang boleh mengubah tabel master di /peta-risiko-pja/master: daftar email atau id user,
+        | dipisah koma (env PETA_RISIKO_MASTER_EDITOR). Kosong = semua pengguna yang login boleh mengubah.
+        | Semua perubahan tetap dicatat di drm_master_log.
+        */
+        'editor' => array_values(array_filter(array_map('trim', explode(',', (string) env('PETA_RISIKO_MASTER_EDITOR', ''))))),
     ],
 
     /*

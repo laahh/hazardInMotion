@@ -51,7 +51,8 @@ class PetaRisikoSyncCommand extends Command
         // Excel mapping ditulis setelah snapshot tersimpan; gagal di sini tidak membatalkan snapshot.
         try {
             $mulaiExcel = microtime(true);
-            $ekspor->tulis($snapshot['ekspor'], DrmMaster::muat(), $sampai, (array) config('peta_risiko_drm'), $repo->pathEkspor());
+            $master = DrmMaster::muat();
+            $ekspor->tulis($snapshot['ekspor'], $master, $sampai, $master->cfgEfektif((array) config('peta_risiko_drm')), $repo->pathEkspor());
             @chmod($repo->pathEkspor(), 0644);
             $this->line(sprintf('  %-45s %7s baris  %5.1f dtk', 'Excel mapping master (M01–M16)', number_format(count($snapshot['ekspor']['baris']), 0, ',', '.'), microtime(true) - $mulaiExcel));
         } catch (Throwable $e) {
