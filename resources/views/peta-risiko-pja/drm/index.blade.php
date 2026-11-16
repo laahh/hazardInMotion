@@ -92,7 +92,7 @@
       <div class="pr-card-body"><div id="dr-tren"></div><div id="dr-legenda"></div></div>
     </div>
 
-    <div class="pr-card">
+    <div class="pr-card" id="dr-card-grup">
       <div class="pr-card-head"><div><b id="dr-grup-judul">Per Group Lokasi</b><small id="dr-grup-sub">Satu baris = grup × kelompok aktivitas × bahaya unik; status dari detail lokasi grup itu saja. Satu bahaya bisa berlaku di beberapa grup, jadi jumlah antar grup bisa melebihi baseline. Klik baris untuk melihat grup itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-grup"></table></div>
     </div>
@@ -235,6 +235,8 @@
 
     $('#dr-card-mx').hidden = state.tab !== 'site';
     $('#dr-card-tm').hidden = state.tab !== 'site';
+    // Tab Kelompok Aktivitas tidak menampilkan tabel per grup lokasi.
+    $('#dr-card-grup').hidden = state.tab === 'proses';
     if (state.tab === 'site') {
       renderTreemap(P, w);
       renderMatriks(P, w, wk);
