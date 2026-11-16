@@ -3,8 +3,9 @@
 /*
 | Peta Risiko PJA (DRM 2.1) — aturan yang dipakai `peta-risiko:sync`.
 |
-| Semua pemetaan berbasis kata kunci, dihitung ulang di ClickHouse OBDS setiap sync.
-| Ubah aturan di sini, lalu jalankan ulang sync; tidak ada data yang diedit manual.
+| Baseline = master mapping DRM 2.1 (lihat 'master' di bawah): baris HIRA v31, grup lokasi, detail
+| lokasi, label SAP, dan teks OBS/OAK dari workbook; kelompok aktivitas, tema, dan PJA dihitung ulang.
+| Ubah aturan di sini atau impor ulang workbook, lalu jalankan ulang sync.
 */
 
 return [
@@ -47,9 +48,6 @@ return [
         'kata_umum_persen' => 0.02,
         'tema_umum' => ['sop', 'kompetensi', 'komunikasi'],
     ],
-
-    /* Master B: selain aturan pemetaan di atas, maksimal 3 aktivitas HIRA terkuat per teks. */
-    'master_b' => ['kata_min' => 2, 'maks_per_teks' => 3],
 
     /*
     | Master C/D: butir checklist OAK → bahaya. Master C memasangkan aktivitas OAK (m_oak_activity)
@@ -149,80 +147,82 @@ return [
     ],
 
     /*
-    | Proses bisnis: 11 proses inti + 6 pendukung (daftar & deskripsi dari Peta HIRA Risiko Dinamis).
-    | Dicocokkan ke "aktivitas sub aktivitas" HIRA; aturan PERTAMA yang cocok menang (satu bahaya = satu
-    | proses). Urutan sengaja: proses spesifik dulu, proses umum (OB, transportasi, kantor) belakangan.
-    | Tidak cocok = kode X "Belum terpetakan".
+    | Master mapping DRM 2.1 (workbook "DRM21_Mapping_Master_Overall.xlsx", diimpor lewat
+    | `php artisan peta-risiko:impor-master`). Dari workbook diambil bagian yang hasil kurasi dan
+    | tidak punya aturan tertulis: M01 baris HIRA v31, M04/M05 grup lokasi → baris, M06 detail
+    | lokasi → grup, M09 label SAP → baris, M11/M12 teks aktivitas OBS/OAK → baris.
+    | Dihitung ulang dari ClickHouse setiap sync: kelompok aktivitas (M02, di bawah), PJA per lokasi
+    | (M07/M08 dari obds.aaj_lokasi_dan_pja), tema checklist → baris (M15/M16, di bawah).
+    */
+    'master' => [
+        'dir' => 'peta-risiko-drm-master',
+    ],
+
+    /*
+    | Kelompok aktivitas (M02, fam.py): dicocokkan ke teks AKTIVITAS HIRA (bukan sub), ke teks aktivitas
+    | OBS, dan ke "aktivitas / sub" OAK (tanpa membedakan huruf besar-kecil). Regex PERTAMA yang cocok
+    | menang, urut K1 → K25; tidak cocok = K0. Kunci tetap bernama proses_bisnis supaya tampilan,
+    | cakupan PROSES|kode|site, dan flag yang sudah ada tetap jalan. Format: [nama, jenis, regex].
     */
     'proses_bisnis' => [
-        'DNB' => ['Drilling & Blasting', 'inti', 'blast|peledak|handak|\ban ke\b|mmu|detonator|lubang ledak|mesin bor|mata bor|blast hole|pengisian lubang'],
-        'MNT' => ['Maintenance, Workshop & Pekerjaan Khusus', 'pendukung', 'workshop|maintenance|perawatan alat|perawatan unit|perbaikan unit|repair|servis|service|pengelasan|\blas\b|tyre|tire|pit service|fixed plant|ketinggian|ruang terbatas|confined|lifting|pengangkatan|gerinda|forklift|tools|crane|gouging|fabrikasi|backlog|greasing'],
-        'CG' => ['Coal Getting', 'inti', 'coal getting|underland|loading batubara|coal loading|penggalian batubara|cleaning coal'],
-        'CH' => ['Coal Hauling', 'inti', 'coal hauling|hauling coal|hauling batubara|angkut batubara|pengangkutan batubara'],
-        'CR' => ['Crushing', 'inti', 'crush|hopper|feeding|fine coal|pembersihan belt|rehandling ke crusher'],
-        'SP' => ['Stockpiling', 'inti', 'stockpile|stocking|\brom\b|penimbangan|timbangan|spontaneous|rehandling|coal dumping'],
-        'BL' => ['Barge Loading', 'inti', 'pre loading|barge loading|loading barge|belt conveyor|coal barging|beaching|to loader|at loader'],
-        'TS' => ['Transshipment', 'inti', 'transhipment|transshipment|\bogv\b|mother vessel|floating crane'],
-        'BG' => ['Barging', 'inti', 'tongkang|sandar|towing|shifting|draught|speedboat|speed boat|barge|jetty|tug ?boat|marine'],
-        'EXP' => ['Exploration & Land Clearing', 'inti', 'land clearing|pembersihan lahan|seismik|geolistrik|georadar|geofisika|geologi|eksplorasi|coring'],
-        'PLN' => ['Planning & Design', 'inti', 'perencanaan|planning|desain|design|geoteknik|lereng|slope|survey|survei|hidrologi|amdal|topografi'],
-        'OB' => ['OB Removal', 'inti', 'overburden|\bob\b|soil|material lunak|lumpur|dumping|sloping|trimming|disposal|front loading|\bloading (ob|soil|material)|pemberaian|earth work|pekerjaan tanah|dozing'],
-        'ENV' => ['Air, Lingkungan, Reklamasi & Laboratorium', 'pendukung', 'pompa|pumping|dewatering|hdpe|pipa|kolam|limbah|sampah|reklamasi|revegetasi|nursery|pembibitan|penanaman|lingkungan|sampling|sampel|laboratorium|analisa|air buangan|kompos|acid mine|netralisasi'],
-        'INF' => ['Infrastruktur, Sipil & Kelistrikan', 'pendukung', 'jalan|road|gorong|drainase|beton|baja|struktur|konstruksi|kelistrikan|listrik|elektrikal|power house|jaringan|chipseal|\bctb\b|bangunan|pembangunan|tiang|bekisting|pengecoran|arsitektural|plumbing|mekanikal|tower'],
-        'TRN' => ['Transportasi, Mobilisasi & Operasi Unit', 'pendukung', 'mobilisasi|demobilisasi|transportasi|angkutan|kendaraan|unit|hauling|shift change|mengemudi|dinas luar kota|\bbus\b|manhaul|parkir|fuel|water truck|pengoperasian|loading|unloading'],
-        'HSE' => ['HSE, Emergency & Pengawasan', 'pendukung', 'emergency|darurat|pengawasan|patroli|inspeksi|audit|klinik|pasien|\bdms\b|cctv|covid|safety|investigasi|apar|pemadam|evakuasi|penjagaan|pengawalan'],
-        'ADM' => ['Kantor, Administrasi & Aktivitas Umum', 'pendukung', 'kantor|perkantoran|office|administrasi|administratif|training|pelatihan|meeting|pertemuan|catering|konsumsi|makan|housing|mess|toilet|dokumen|umum|hotel|benefit'],
+        'K1' => ['Layanan Kesehatan & Respon Tumpahan', 'inti', 'tanda-tanda vital|jalan nafas|sphygmo|stehoscope|oxygen cylind|spill|tumpahan|p3k|medis|klinik|ambulan|pasien'],
+        'K2' => ['Peledakan & Bahan Peledak', 'inti', 'handak|peledak|blasting|charging|priming|\bmmu\b|emulsi|watergel|\bAN\b|ammonium|detonator|stemming|misfire|rangkaian akhir|rangkaian|perangkaian|demarkasi'],
+        'K3' => ['Pemboran', 'inti', 'pemboran|pengeboran|\bbor\b|drilling|drill |mata bor|unit bor|\bdm\b|logging geofisika'],
+        'K4' => ['Jetty, Barging & Marine', 'inti', 'jetty|barg|tongkang|\bogv\b|mooring|dermaga|beaching|transhipment|pelabuhan|\blct\b|vessel|kapal|draught|draft|bongkar.?muat|towing|sandar|alat transportasi air|transportasi air|dolphin|loader/ogv|shipper|stevedore|bolard|tali tambat|conveyor di jetty|marine'],
+        'K5' => ['CPP, Fixed Plant & Stockpile', 'inti', 'crusher|hopper|hoper|belt|conveyor|stockpile|stocking|\brom\b|rehandling|coal processing|\bcpp\b|reclaimer|tunnel|wingwall|fixed plant|plant|timbang|sampling|fine coal|dilusi|kontaminan|bone coal|ddh|\bblc\b|coal crushing|coal feeding|crushed coal|screening|washing|hand picking|dust spray|bunker|silo|transfer'],
+        'K6' => ['Geoteknik, Lereng & Pit Monitoring', 'inti', 'lereng|slope|geoteknik|tebing|radar|sloping|trimming|pit monitoring|stabilty|stability|underland|tambang bawah|terowongan|aspek geoteknik|overlayer|bench|highwall'],
+        'K7' => ['Eksplorasi, Survei & Geologi', 'inti', 'eksplorasi|survey|survei|geologi|geolistrik|georadar|seismik|hidrologi|mapping|pemetaan|penandaan|titik|sampel|contoh uji|biota'],
+        'K8' => ['Pengisian BBM & Fuel', 'inti', 'fuel|bahan bakar|\bbbc\b|solar|refuel|dispenser|p2h & pengisian|pengisian tangki|bahan bakar cair|oil trap'],
+        'K9' => ['Pengelasan & Kerja Panas', 'inti', '\blas\b|pengelasan|gerinda|gouging|oxt|acetylene|acyteline|oksigen|panas|pemotongan|memotong|miller|welding|membengkokkan'],
+        'K10' => ['Perawatan Unit, Workshop & Tyre', 'inti', 'workshop|maintenance|perawatan|perbaikan|pemeliharaan|servis|service|tyre|tire|ban |fabrikasi|machining|assembling|repair|pit service|mesin tempel|pencucian unit|hose|fitting|forklift|\bpap\b|inflator|pompa tambang'],
+        'K11' => ['Konstruksi, Sipil & Bangunan', 'inti', 'beton|baja|kayu|pondasi|arsitektur|pengecoran|pengecatan|landscape|erection|struktur|earth work|tanah/|bangunan|gedung|gorong|perkerasan|chipseal|rambu|pekerjaan batu|drop structure|plumbing|perpipaan|jembatan|road construction|pembuatan.*jalan|akses jalan|pembangunan'],
+        'K12' => ['Listrik & Elektrikal', 'inti', 'listrik|elektrikal|electrical|genset|panel|power|kelistrikan|transformator|\bsdp\b|cctv|instalasi'],
+        'K13' => ['Jalan Tambang & Road Maintenance', 'inti', 'jalan|road|hrm|persimpangan|penyiraman|hauling road'],
+        'K14' => ['Hauling & Pengoperasian Unit', 'inti', 'hauling|pengoperasian|operasi kendaraan|operasional|driving|kendaraan|unit|truck|\bdt\b|parkir|mobil|towing loader|transportasi|\bwt\b|\bft\b|\bicc\b|lv\b|angkutan|rental|a2b|pengangkutan|mobilisasi'],
+        'K15' => ['Loading (Material, OB, Batubara)', 'inti', 'loading|pemuatan|muat|feeding|excavator|loader'],
+        'K16' => ['Dumping & Penimbunan', 'inti', 'dumping|penimbunan|disposal|bund wall|soil|removal|pemberaian|spoil|counter weight|material lunak|lumpur|channel dump|dump'],
+        'K17' => ['Dewatering, Air & Kolam', 'inti', 'dewatering|pengeringan|\bair\b|pump|pompa|wmp|ipal|settling|kolam|\bwtp\b|water|pit void|penyiraman|bekerja di dekat air|slurry|galon|sungai'],
+        'K18' => ['Lingkungan, Limbah & Bahan Kimia', 'inti', 'limbah|b3|3r|sampah|kimia|reklamasi|revegetasi|reclamation|pencemaran|debu|keanekaragaman|biodiversity|lingkungan|spontaneous|tps|lahan'],
+        'K19' => ['Ketinggian, Ruang Terbatas & Pengangkatan', 'inti', 'ketinggian|ruang terbatas|pengangkatan|lifting|crane|angkat|rigging|support'],
+        'K20' => ['Pekerjaan Tanah, Grading & Lahan', 'inti', 'grading|galian|urugan|ripping|patok|pemangkasan|penanaman|pemupukan|rumput|shaping|superelevasi|pembobokan|grader|land clearing|hutan|semen|pasir'],
+        'K21' => ['Tools & Peralatan Kerja', 'inti', 'tool|inflator|peralatan|perawatan alat|penambahan peralatan'],
+        'K22' => ['Pengawasan, Inspeksi & Observasi', 'inti', 'pengawasan|inspeksi|inspektion|patroli|observasi|mining eyes|drone|\bsbs\b|alat bantu|pemantauan|monitoring|kontrol sequence|final check|pengecekan|check'],
+        'K23' => ['Keadaan Darurat', 'inti', 'emergency|darurat|evakuasi|kecelakaan|tanggap|kebakaran|p3k'],
+        'K24' => ['Shift Change & Operasional Umum', 'inti', 'shift change|kegiatan di malam|malam hari|hujan|house keeping|aktivitas lapangan|aktivitas prod|produksi|persiapan|pengaturan|aktifitas|kegiatan'],
+        'K25' => ['Kantor, Administrasi, Gudang & Training', 'inti', 'kantor|office|gudang|warehous|storage|makanan|toilet|fasilitas|pos pengawas|camp|pelatihan|training|sosialisasi|komputer|administrasi|dokumen|ruang|penyimpanan|penumpukan|penataan|penjagaan|absensi|manual handling|handling|tangga|pembersihan|p2h e-logging|baterai|batteray|alat ukur|pengukuran'],
+        'K0' => ['Lainnya (perlu dipetakan manual)', 'inti', ''],
     ],
 
     /*
-    | Group Lokasi untuk DETAIL LOKASI: aturan pertama yang cocok menang.
-    | Dicocokkan ke "detail lokasi || lokasi" (huruf kecil, regex RE2).
-    | Detail lokasi tanpa kecocokan = "Belum terpetakan".
+    | Tema checklist (M15): teks butir checklist OAK dan teks OBS dicocokkan ke tema (regex kolom 1),
+    | tema → baris HIRA lewat teks "bahaya sub " (regex kolom 2) = M16. Baris diidentifikasi bila kelompok
+    | aktivitas checklist/OBS sama dengan kelompok baris, atau baris itu bahaya umum (M01 kolom H).
+    | Format: id => [nama, regex teks checklist/OBS, regex teks bahaya HIRA].
     */
-    'grup_detail_lokasi' => [
-        'Drill & Blast' => 'drill|blast|handak|peledak|magazine',
-        'Eksplorasi' => 'eksplorasi|pengeboran|\\brig\\b|survey|geolog|coring|geofisika',
-        'Transhipment' => 'transhipment|\\bkapal|tug ?boat|\\bmv\\b|floating|main deck|engine room|ogv|barge|\\bbg\\b|\\btb\\b|cts bulk|\\blct\\b',
-        'Jetty/Port/Beaching Point' => 'jetty|\\bport\\b|beaching|dermaga|dolphin|barging|tongkang|pelabuhan|speedboat',
-        'Sungai' => 'sungai|\\balur\\b',
-        'CPP / ROM' => '\\brom\\b|cpp|crusher|stockpile|coal processing|inloading|conveyor|cr/hp/cv|hopper|\\bblc\\b|fixed plant',
-        'WMP/Sump/Void' => 'wmp|sump|void|kolam|settling|dewatering|pompa|pumping|check pond|sedimen|\\bpond|drainase|drainage|tailing|waterfill|\\btps\\b|lb3|ipal|\\bwtp\\b|limbah',
-        'Disposal' => 'disposal|dumping|\\bopd|\\bipd|stocksoil|low ?wall|timbunan',
-        'Loading Point' => 'front|loading|handling soil|coal getting',
-        'Workshop/Pit Stop' => 'workshop|\\bbays?\\b|tyre|tire|fabrikasi|washing|washpad|oil trap|tools? room|perbaikan|maintenance|maintenace|service|warehouse|gudang|power house|compres|spare ?part|pit ?stop|\\byard|\\bws\\b|plant|genset|laboratorium|\\blab\\b|reaktivasi|heavy equipment|storage|maintank',
-        'Parking Area/Fuel Station' => 'parkir|parking|fuel|refuel|hssc|pengisian|\\bdsl\\b|\\bfs\\b',
-        'Public Road' => 'jalan negara|jalan umum|public|jalan poros|jalan kabupaten|jalan provinsi',
-        'Area Transportasi' => 'transportasi|halte|sarana lv|\\bbus\\b|manhaul|rest area',
-        'Office / Mess' => 'office|mess|kantin|dapur|accommodation|kantor|camp|\\bpos\\b|control room|bandara|view ?point|look ?out|change shift|assembly|klinik|masjid|mesjid|musholla|toilet|kost|perumahan|hotel|ruang|gerdas|training|station er|fasilitas umum|sport|tower|risk intervention|\\bric\\b|catering|security|patroli',
-        'Project' => 'project|proyek|pembangunan|underpass|diversion|konstruksi|revegetasi|reklamasi|land clearing|nursery|pembibitan',
-        'Hauling Road' => 'hauling|crossing|simpang|barokah',
-        'Mine Road' => 'mine road|akses|jalan|\\bjln|\\bjl\\b|road|ramp',
-        'Area Pit' => '\\bpit\\b|dinding tambang|\\bblok\\b|bench|highwall|lereng',
-    ],
-
-    /*
-    | Group Lokasi untuk AKTIVITAS HIRA: SEMUA aturan yang cocok dipakai (satu aktivitas
-    | bisa di beberapa grup). Dicocokkan ke "aktivitas sub aktivitas".
-    | Aktivitas tanpa grup (mis. "Umum") hanya masuk baseline detail lokasi yang
-    | punya laporan Observasi/OAK untuk aktivitas itu.
-    */
-    'grup_aktivitas' => [
-        'Drill & Blast' => 'blast|peledak|handak|\\ban ke\\b|mmu|detonator|lubang ledak|mesin bor|blast hole',
-        'Eksplorasi' => 'eksplorasi|survey|survei|geofisika|georadar|geolistrik|seismik|logging|coring|pemboran|pengeboran|sampling|sampel|hidrologi|geolog|topografi',
-        'Transhipment' => 'transhipment|ogv|mooring|floating crane|kapal|tug ?boat|barge|tongkang|speedboat|ketinting',
-        'Jetty/Port/Beaching Point' => 'jetty|sandar|pelabuhan|beaching|dermaga|cast off|shifting tongkang|bongkar.muat',
-        'Sungai' => 'sungai',
-        'CPP / ROM' => 'crush|cpp|hopper|fixed plant|\\brom\\b|stockpile|conveyor|coal processing|timbangan|counter weight',
-        'WMP/Sump/Void' => 'pompa|pumping|dewatering|hdpe|pipa|kolam|air buangan|drainase|gorong|sump|lumpur|settling|netralisasi|koagulasi|acid mine|wmp|paritan',
-        'Disposal' => 'dumping|penimbunan|disposal|timbun',
-        'Loading Point' => 'loading|ob removal|soil removal|coal getting|excavat|front|pemberaian|overburden|\\bob\\b|dragflow',
-        'Hauling Road' => 'hauling|pengangkutan material|transit hauler',
-        'Mine Road' => 'jalan|road|chipseal|\\bctb\\b|rambu|traffic|penyiraman|tanggul|bund wall|pit service|sloping|lereng|geoteknik|grading|perawatan badan|overlayer|cement treated',
-        'Workshop/Pit Stop' => 'workshop|maintenance|perawatan alat|repair|perbaikan unit|servis|service|tyre|tire|las|pengelasan|gerinda|forklift|tools|ragum|fabrikasi|gouging|acetylene|oksigen|p2h|backlog|midlife|mekanikal|greasing|inflator|cuci|mencuci|washing|power house|genset|laboratorium|analisa sampel|\\bqc\\b',
-        'Parking Area/Fuel Station' => 'fuel|pengisian|parkir|refuel',
-        'Area Transportasi' => 'transportasi|angkutan|\\bbus\\b|manhaul|mengemudi|kendaraan|dinas luar kota|mobilisasi',
-        'Office / Mess' => 'kantor|perkantoran|office|meeting|pertemuan|toilet|catering|konsumsi|makan|mess|housing|dokumen|kantin|dapur|istirahat|penjagaan|patroli|pasien|klinik|training|pelatihan',
-        'Project' => 'land clearing|pembersihan lahan|reklamasi|revegetasi|nursery|pembibitan|penanaman|kompos|beton|konstruksi|pembangunan|project|projek|bekisting|pengecoran|struktur|tiang pancang|arsitektural|komposit|batu|kayu|landscape|pengecatan|preparation|farming|sapi|ternak|golf|atsiri|instalasi|installasi|tower',
-        'Area Pit' => 'pit monitoring|area tambang|tambang',
+    'tema_checklist' => [
+        1 => ['APD', 'apd|safety shoes|safety helmet|helm |rompi|kacamata|sarung tangan|seragam|masker|reflektif|pelindung', 'apd|alat pelindung|pelampung|kacamata'],
+        2 => ['Fatigue', 'fatigue|sobriety|mess|jam kritis|roster|ftw|kantuk|tidur', 'fatigue|kelelahan|mengantuk|kantuk'],
+        3 => ['Rambu/lalu lintas', 'rambu|traffic|lalu lintas|klakson|jarak aman|antri|waiting line|marka|speed|kecepatan', 'rambu|lalu lintas|overspeed|kecepatan|jarak aman|tabrak|antri'],
+        4 => ['Pencahayaan', 'penerangan|pencahayaan|lux|tower lamp|senter|lampu', 'penerangan|gelap|pencahayaan|lampu'],
+        5 => ['Jalan/berm', 'jalan|geometri|berm|tanjakan|turunan|penyiraman|road|grade|licin|amblas', 'jalan|berm|licin|tanjakan|turunan|amblas|debu jalan|berlumpur|curam'],
+        6 => ['Longsor/retakan/dumping', 'retakan|patahan|disposal|dumping|longsor|tanggul|lereng|slope|highwall|crest|toe|bench', 'longsor|retak|amblas|dumping|disposal|runtuh|lereng|ambles|slope|material jatuh'],
+        7 => ['Kelayakan unit', 'p2h|tyre|ban |wheelnut|rem |kelayakan|unit layak|alarm|inspeksi unit|komponen|hydraulic|hidrolik|oli ', 'tidak layak|kelayakan|ban |rem |p2h|peralatan tidak|unit rusak|kerusakan'],
+        8 => ['Komunikasi', 'radio|komunikasi|channel', 'komunikasi|radio'],
+        9 => ['Muatan', 'muatan|overload|vessel|payload', 'muatan|overload|beban berlebih'],
+        10 => ['Prosedur/izin', 'jsa|izin|sop|prosedur|instruksi kerja|p5m|briefing|tbm|ik |loto|permit', 'prosedur|sop|izin|jsa|briefing|tidak sesuai standar|tidak mengikuti'],
+        11 => ['Kompetensi', 'id card|sim |kompeten|pelatihan|lisensi|sertifikat|mine permit|izin operator', 'kompeten|sim |tidak berwenang|pelatihan|lisensi|izin operator|tidak memiliki'],
+        12 => ['Tumpahan/B3/sampah', 'tumpahan|ceceran|b3|limbah|sampah|housekeeping|kebersihan|spill|oli|lingkungan', 'tumpah|ceceran|b3|limbah|sampah|oli|pencemar|housekeeping'],
+        13 => ['Kebakaran/darurat', 'apar|kebakaran|tanggap darurat|p3k|eyewash|emergency|evakuasi|assembly', 'kebakaran|darurat|p3k|eyewash|apar|api'],
+        14 => ['Listrik', 'listrik|kabel|isolasi|panel|grounding|stop kontak|genset', 'listrik|kabel|sengat|korsleting|genset'],
+        15 => ['Ketinggian/lifting', 'ketinggian|harness|lifting|crane|sling|rigging|scaffolding|perancah|tangga|pijakan', 'ketinggian|jatuh|lifting|crane|sling|perancah|tangga|pijakan|tergelincir'],
+        16 => ['Pekerjaan panas', 'las |welding|gerinda|panas|cutting|api |percikan', 'las |panas|gerinda|percikan|cutting|welding'],
+        17 => ['Perkakas/guard', 'tools|perkakas|guard|hand tool|pelindung mesin', 'tools|perkakas|guard|hand tool|alat tidak'],
+        18 => ['Air/jetty', 'pelampung|lifebuoy|sungai|jetty|dermaga|barge|tongkang|air ', 'tenggelam|air|pelampung|jetty|dermaga|sungai|tongkang|kapal'],
+        19 => ['Pengawasan', 'pengawas|supervisi|pengawasan', 'pengawas|supervisi'],
+        20 => ['Cuaca/satwa', 'petir|hujan|cuaca|ular|satwa|angin', 'petir|cuaca|hujan|ular|satwa|angin|biologi'],
+        21 => ['Interaksi unit/orang', 'pejalan|interaksi|lv |manuver|spotter|blind|blindspot|pedestrian|kaki', 'interaksi|pejalan|manuver|blind|tertabrak|tabrak|pedestrian|kontak dengan unit'],
+        22 => ['Ergonomi', 'ergonomi|postur|angkat manual|manual handling', 'ergonomi|postur|manual|beban terlalu berat|angkat'],
+        23 => ['Peledakan/bor', 'blast|peledak|handak|drill|bor ', 'ledak|handak|bor|flying rock|batu terbang'],
+        24 => ['Debu/bising/panas', 'debu|bising|kebisingan|heat|hidrasi|suhu', 'debu|bising|panas|dehidrasi|suhu|kebisingan'],
     ],
 ];

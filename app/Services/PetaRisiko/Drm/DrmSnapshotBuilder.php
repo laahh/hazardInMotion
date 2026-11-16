@@ -52,11 +52,13 @@ class DrmSnapshotBuilder
     public function bangun(CarbonImmutable $sampai): array
     {
         $cfg = (array) config('peta_risiko_drm');
-        $sql = new DrmSql($cfg, $sampai);
+        $master = DrmMaster::muat();
+        $sql = new DrmSql($cfg, $sampai, $master->literal($cfg));
 
         $d = [
+            'master' => $master,
             'sites' => array_column($this->ambil('daftar site', $sql->daftarSite()), 'site'),
-            'hira' => $this->ambil('baseline HIRA', $sql->hira()),
+            'hira' => $this->teksMaster($this->ambil('baseline HIRA (master M01)', $sql->hira()), $master),
             'dl' => $this->ambil('detail lokasi', $sql->detailLokasi()),
             'pja' => $this->ambil('master PJA', $sql->pja()),
             'matriks' => $this->ambil('matriks per cakupan (tren mingguan)', $sql->matriksCakupan()),
@@ -90,7 +92,8 @@ class DrmSnapshotBuilder
      */
     public function cek(CarbonImmutable $sampai): array
     {
-        $sql = new DrmSql((array) config('peta_risiko_drm'), $sampai);
+        $cfg = (array) config('peta_risiko_drm');
+        $sql = new DrmSql($cfg, $sampai, DrmMaster::muat()->literal($cfg));
         $site = $this->ch->select($sql->daftarSite())[0]['site'] ?? null;
         $s = $sql->untukSite($site);
         $daftar = [
@@ -165,7 +168,7 @@ class DrmSnapshotBuilder
                 'konsekuensi' => self::KONSEKUENSI,
                 'level' => self::LEVEL,
                 'sites' => $sites,
-                'grup' => array_values(array_unique([...array_keys($cfg['grup_detail_lokasi']), 'Belum terpetakan'])),
+                'grup' => array_values(isset($d['master']) ? $d['master']->data['grup'] : array_unique(array_column($d['dl'], 'grp'))),
                 'grupDl' => $this->jumlahDlPerGrup($dl),
                 'proses' => $this->daftarProses($cfg),
                 'cakupan' => $cakupan,
@@ -175,7 +178,11 @@ class DrmSnapshotBuilder
                 'beranda' => $beranda,
             ],
             'pja' => $berkas,
-            'ekspor' => $this->barisEkspor($hira, $d['mapping'] ?? [], $d['statusBahaya'] ?? [], $sorot, $cfg),
+            'ekspor' => [
+                'baris' => $this->barisEkspor($hira, $d['mapping'] ?? [], $d['statusBahaya'] ?? [], $sorot, $cfg),
+                'dl' => array_values($dl),
+                'pja' => array_map(fn ($p) => ['nama' => (string) $p['nama'], 'site' => (string) ($pjaBc[$p['id']]['site'] ?? '')], $pja),
+            ],
         ];
     }
 
@@ -594,6 +601,27 @@ class DrmSnapshotBuilder
     }
 
     // ------------------------------------------------------------- utilitas
+
+    /**
+     * Nama aktivitas / sub / bahaya baris HIRA diambil dari master M01 (query hanya membawa id dan
+     * atribut risiko dari mv_hira_master), supaya teks sama persis dengan workbook.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function teksMaster(array $rows, DrmMaster $master): array
+    {
+        $baris = $master->barisPerRi();
+
+        return array_map(function (array $r) use ($baris): array {
+            $b = $baris[(int) $r['hid']] ?? null;
+            if ($b === null) {
+                return $r;
+            }
+
+            return [...$r, 'an' => $b['aktivitas'], 'sn' => $b['sub'], 'bn' => $b['bahaya'], 'n1' => $b['kb'] !== '' ? $b['kb'] : $r['n1']];
+        }, $rows);
+    }
 
     /** @return list<array<string, mixed>> */
     private function ambil(string $label, string $sql): array

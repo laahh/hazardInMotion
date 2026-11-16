@@ -19,6 +19,8 @@ class DrmXlsxWriter
 
     private const GAYA_ANGKA = 3;
 
+    private const GAYA_POLOS = 4;
+
     /** @var list<array{nama: string, file: string}> */
     private array $sheet = [];
 
@@ -37,8 +39,9 @@ class DrmXlsxWriter
      * @param  iterable<list<string|int|float|bool|null>>  $baris
      * @param  list<int>  $lebar  lebar kolom (karakter)
      * @param  list<int>  $bungkus  indeks kolom (0-based) yang teksnya dibungkus
+     * @param  list<int>  $polos  indeks kolom angka tanpa pemisah ribuan (ID)
      */
-    public function tambahSheet(string $nama, array $judul, iterable $baris, array $lebar = [], array $bungkus = []): void
+    public function tambahSheet(string $nama, array $judul, iterable $baris, array $lebar = [], array $bungkus = [], array $polos = []): void
     {
         $file = $this->folder.DIRECTORY_SEPARATOR.'sheet'.(count($this->sheet) + 1).'.xml';
         $h = fopen($file, 'wb');
@@ -56,12 +59,13 @@ class DrmXlsxWriter
         fwrite($h, '<sheetData>');
         fwrite($h, $this->baris(1, $judul, array_fill(0, count($judul), self::GAYA_JUDUL)));
         $bungkus = array_flip($bungkus);
+        $polos = array_flip($polos);
         $n = 1;
         foreach ($baris as $isi) {
             $n++;
             $gaya = [];
             foreach (array_keys($isi) as $i) {
-                $gaya[$i] = isset($bungkus[$i]) ? self::GAYA_BUNGKUS : 0;
+                $gaya[$i] = isset($bungkus[$i]) ? self::GAYA_BUNGKUS : (isset($polos[$i]) ? self::GAYA_POLOS : 0);
             }
             fwrite($h, $this->baris($n, $isi, $gaya));
         }
@@ -163,11 +167,12 @@ class DrmXlsxWriter
             .'<fill><patternFill patternType="solid"><fgColor rgb="FF16294F"/><bgColor indexed="64"/></patternFill></fill></fills>'
             .'<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
             .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            .'<cellXfs count="4">'
+            .'<cellXfs count="5">'
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="top"/></xf>'
             .'<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>'
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
             .'<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment vertical="top"/></xf>'
+            .'<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"><alignment vertical="top"/></xf>'
             .'</cellXfs></styleSheet>';
     }
 

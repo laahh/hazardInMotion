@@ -37,14 +37,14 @@
       <nav class="dr-tabs" role="tablist" aria-label="Sudut pandang">
         <button type="button" role="tab" data-tab="site" aria-selected="true">Per Site</button>
         <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
-        <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Proses Bisnis</button>
+        <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Kelompok Aktivitas</button>
         <button type="button" role="tab" data-tab="periode" aria-selected="false">Identifikasi per periode</button>
         <button type="button" role="tab" data-tab="pja" aria-selected="false">Semua PJA</button>
       </nav>
     </div>
     <div class="dr-bar">
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
-      <label data-ctl="proses" hidden>Proses bisnis <select id="dr-proses"></select></label>
+      <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label>Site / scope <select id="dr-site"><option value="ALL">Semua site</option></select></label>
       <label data-ctl="w" hidden>Periode <select id="dr-w"></select></label>
       <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
@@ -75,7 +75,7 @@
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b>Evaluasi per Proses Bisnis</b><small>11 proses inti + 6 pendukung. Klik baris untuk melihat proses itu.</small></div></div>
+      <div class="pr-card-head"><div><b>Evaluasi per Kelompok Aktivitas</b><small>25 kelompok aktivitas master DRM 2.1 (M02). Klik baris untuk melihat kelompok itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-proses"></table></div>
     </div>
   </div>
@@ -111,7 +111,7 @@
     $('#dr-site').innerHTML += M.sites.map((s) => `<option value="${DR.esc(s)}">${DR.esc(s)}</option>`).join('');
     $('#dr-grup').innerHTML = M.grup.map((g) => `<option value="${DR.esc(g)}">${DR.esc(g)}</option>`).join('');
     if (!state.grup) state.grup = M.grup[0];
-    $('#dr-proses').innerHTML = M.proses.map((p) => `<option value="${DR.esc(p.kode)}">${DR.esc(p.nama)}${p.jenis === 'inti' ? '' : ' (pendukung)'}</option>`).join('');
+    $('#dr-proses').innerHTML = M.proses.map((p) => `<option value="${DR.esc(p.kode)}">${DR.esc(p.nama)}</option>`).join('');
     if (!state.proses) state.proses = M.proses[0].kode;
     $('#dr-proses').value = state.proses;
     $('#dr-proses').addEventListener('change', (e) => { state.proses = e.target.value; render(); });
@@ -187,13 +187,13 @@
 
   function renderProses() {
     const rows = M.proses.map((p) => ({ p, c: (M.cakupan[`PROSES|${p.kode}|${state.site}`] || {}).kpi })).filter((r) => r.c && r.c.total);
-    $('#dr-tbl-proses').innerHTML = `<thead><tr><th>Proses bisnis</th><th>Jenis</th><th class="r">Baseline</th><th>Komposisi</th>
+    $('#dr-tbl-proses').innerHTML = `<thead><tr><th>Kelompok aktivitas</th><th class="r">Baseline</th><th>Komposisi</th>
       <th class="r">✓ Terkontrol</th><th class="r">! Ada gap</th><th class="r">○ Tidak teridentifikasi</th><th class="r">% teridentifikasi</th>
       <th class="r hide-sm">Laten</th><th class="r hide-sm">Significant (final)</th></tr></thead><tbody>`
       + rows.map(({ p, c }) => {
         const aktif = state.tab === 'proses' && p.kode === state.proses;
         return `<tr data-proses="${DR.esc(p.kode)}" style="cursor:pointer${aktif ? ';background:#F5F8FD' : ''}">
-          <td><span class="pr-name">${DR.esc(p.nama)}</span></td><td class="dr-mute">${p.jenis === 'inti' ? 'Inti' : 'Pendukung'}</td>
+          <td><span class="pr-name">${DR.esc(p.nama)}</span></td>
           <td class="r dr-num">${DR.fmt(c.total)}</td><td>${DR.comp(c)}</td><td class="r">${DR.fmt(c.K)}</td>
           <td class="r">${c.G ? DR.tag('G', ' ' + DR.fmt(c.G)) : 0}</td><td class="r">${c.T ? DR.tag('T', ' ' + DR.fmt(c.T)) : 0}</td>
           <td class="r">${DR.pct(c.K + c.G, c.total)}</td><td class="r hide-sm">${DR.fmt(c.laten)}</td>

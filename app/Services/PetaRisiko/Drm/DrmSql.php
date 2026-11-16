@@ -7,15 +7,12 @@ use Carbon\CarbonImmutable;
 /**
  * Query ClickHouse OBDS untuk Peta Risiko PJA (DRM 2.1).
  *
- * Semua query berbagi satu prelude CTE:
- *   hira  : baseline bahaya-risiko unik (aktivitas, sub aktivitas, bahaya) dari mv_hira_master
- *   dl    : detail lokasi aktif + Group Lokasi (aturan kata kunci)
+ * Semua query berbagi satu prelude CTE (lihat prelude()): baseline dari master DRM 2.1 (DrmMaster):
+ *   hira  : 1.726 baris HIRA v31 (hid = id_baris), kelompok aktivitas (proses = K0..K25)
+ *   dl    : detail lokasi master + grup lokasi;  pjadl : PJA per detail lokasi (aaj_lokasi_dan_pja)
  *   sap   : laporan Hazard/Inspeksi/Observasi/OAK dari ch_rfid_sap_cuti_all_site
- *   ma    : Master A — label ketidaksesuaian/sub → bahaya (tema bersama + ≥1 kata kunci)
- *   mb    : Master B — teks aktivitas Observasi/OAK → aktivitas-sub HIRA
- *   base  : pasangan baseline (detail lokasi, bahaya) = grup cocok ∪ bukti Observasi/OAK
- *
- * Aturan teks disalin dari kartu Metabase 341-343 (DRM2.1); lihat config/peta_risiko_drm.php.
+ *   ma    : label ketidaksesuaian/sub → baris (M09);  mb : teks aktivitas OBS/OAK → baris (M11/M12)
+ *   base  : pasangan baseline (detail lokasi, baris) = baris grup lokasi detail lokasi itu (M05)
  */
 class DrmSql
 {
@@ -33,10 +30,14 @@ class DrmSql
     /** Batasi detail lokasi ke satu site (untuk memecah query berat); null = semua. */
     private ?string $site = null;
 
-    /** @param array<string, mixed> $cfg */
+    /**
+     * @param  array<string, mixed>  $cfg
+     * @param  array<string, string>  $lit  literal master dari DrmMaster::literal()
+     */
     public function __construct(
         private readonly array $cfg,
         private readonly CarbonImmutable $sampai,
+        private readonly array $lit,
     ) {
     }
 
@@ -71,7 +72,7 @@ SELECT toString(h.hid) AS hid, h.a AS a, h.an AS an, h.sn AS sn, h.bn AS bn, h.p
        substring(h.kt, 1, 700) AS kt, h.faktor AS faktor, h.aspek AS aspek, h.proses AS proses,
        h.hid IN (SELECT hid FROM ma) AS di_a,
        (h.a, h.s) IN (SELECT a, s FROM mb) AS di_b,
-       h.hid IN (SELECT hid FROM md) AS di_d
+       h.hid IN (SELECT hid FROM mtx) AS di_d
 FROM hira h';
     }
 
@@ -82,8 +83,7 @@ FROM hira h';
 SELECT toString(d.dl) AS dl, d.site AS site, d.id_lok AS id_lok, d.lokasi AS lokasi, d.detlok AS detlok, d.grp AS grp,
        arrayMap(x -> toString(x), groupUniqArrayIf(pl.pja_id, pl.pja_id != 0)) AS pja
 FROM dl d
-LEFT JOIN (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations) pl
-       ON pl.location_id = d.id_lok
+LEFT JOIN pjadl pl ON pl.dl = d.dl
 GROUP BY d.dl, d.site, d.id_lok, d.lokasi, d.detlok, d.grp';
     }
 
@@ -116,8 +116,8 @@ hari AS (
   UNION ALL
   SELECT dl, a, d, 0, 0, max(ok), max(stop) FROM evo_a WHERE d >= t_strip GROUP BY dl, a, d
   UNION ALL
-  -- Butir checklist OAK: tidak sesuai = gap (slot stop), sesuai = terkontrol.
-  SELECT e.dl, h.a, e.d, 0, 0, 1, max(e.ts) FROM evd e JOIN hira h ON h.hid = e.hid
+  -- Bukti checklist OAK / teks OBS = terkontrol (butir tidak sesuai bukan gap, spec DRM 2.1).
+  SELECT e.dl, h.a, e.d, 0, 0, 1, 0 FROM evd e JOIN hira h ON h.hid = e.hid
   WHERE e.d >= t_strip AND (e.dl, e.hid) IN (SELECT dl, hid FROM basek) GROUP BY e.dl, h.a, e.d
 ),
 hari2 AS (
@@ -157,11 +157,7 @@ GROUP BY st.dl, st.a', ['{ambang}' => (string) (int) $this->cfg['ambang_berulang
     public function matriksCakupan(): string
     {
         return $this->prelude().$this->statusMingguanCte().$this->insidenCte().',
-pjalok AS (
-  SELECT location_id, groupUniqArray(pja_id) AS pjas
-  FROM (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations)
-  GROUP BY location_id
-),
+pjalok AS (SELECT dl, groupUniqArray(pja_id) AS pjas FROM pjadl GROUP BY dl),
 anggota AS (
   SELECT b.dl AS dl, b.hid AS hid,
          arrayConcat([(\'SITE\', d.site), (\'SITE\', \'ALL\'),
@@ -171,7 +167,7 @@ anggota AS (
   FROM basek b
   JOIN dl d ON d.dl = b.dl
   JOIN hira h ON h.hid = b.hid
-  LEFT JOIN pjalok pl ON pl.location_id = d.id_lok
+  LEFT JOIN pjalok pl ON pl.dl = d.dl
 ),
 ak AS (
   SELECT dl, hid, kk.1 AS jenis, kk.2 AS kunci FROM anggota ARRAY JOIN ks AS kk
@@ -272,15 +268,14 @@ FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid 
     public function berandaKelompok(): string
     {
         return $this->prelude().$this->berandaDasarCte().',
-ap AS (SELECT DISTINCT a, s, proses FROM hira),
 bk AS (SELECT DISTINCT b.dl AS dl, h.proses AS kel FROM basek b JOIN hira h ON h.hid = b.hid),
+-- Deteksi keluarga (spec dlEntB): kelompok aktivitas (M02) dari teks aktivitas OBS / "aktivitas / sub"
+-- OAK yang dilaporkan di detail lokasi itu (tanpa "tidak ada aktivitas"); OAK Stop ikut ditandai.
 kev AS (
-  SELECT dl, kel, d, stop FROM (
-    SELECT e.dl AS dl, p.proses AS kel, e.d AS d, toUInt8(e.stop) AS stop FROM evo e JOIN ap p ON p.a = e.a AND p.s = e.s
-    UNION ALL
-    SELECT x.dl, h.proses, x.d, toUInt8(0) FROM evh x JOIN hira h ON h.hid = x.hid
-    WHERE (x.dl, x.k, x.sk) IN (SELECT dl, k, sk FROM spes)
-  ) WHERE (dl, kel) IN (SELECT dl, kel FROM bk)
+  SELECT s.dl AS dl, k.kel AS kel, s.d AS d, toUInt8(s.stop) AS stop
+  FROM sap s JOIN okx k ON k.tx = s.tx
+  WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND NOT s.na
+    AND (s.dl, k.kel) IN (SELECT dl, kel FROM bk)
 ),
 kw AS (
   SELECT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, groupBitOr(toUInt8(1 + 16 * stop)) AS bit
@@ -633,7 +628,6 @@ WHERE `minggu selesai` <= toDate('.$this->q($this->sampai->toDateString()).')
     public function coverage(): string
     {
         return $this->prelude().',
-pl AS (SELECT DISTINCT toInt64(pja_id) AS pja_id, toInt64(location_id) AS location_id FROM obds.m_pja_locations),
 '.$this->personilCte().',
 orang AS (
   -- Personil PJA itu sendiri + personil PJA Mitra anaknya (dihitung juga untuk PJA BC induk).
@@ -646,20 +640,35 @@ lap AS (
 )
 SELECT toString(pl.pja_id) AS pja, toString(d.dl) AS dl, sum(l.n) AS semua,
        sumIf(l.n, (pl.pja_id, l.sid) IN (SELECT pja_id, sid FROM orang)) AS dedicated
-FROM pl JOIN dl d ON d.id_lok = pl.location_id
+FROM pjadl pl JOIN dl d ON d.dl = pl.dl
 LEFT JOIN lap l ON l.dl = d.dl
 GROUP BY pl.pja_id, d.dl';
     }
 
     // ------------------------------------------------------------------ CTE
 
+    /**
+     * Prelude bersama. Fondasi baseline dari master DRM 2.1 (DrmMaster::literal, teks = CRC32):
+     *   mh0   : baris HIRA v31 (M01) + kelompok aktivitas (M02) + kategori bahaya
+     *   hira  : mh0 + atribut risiko dari mv_hira_master (cocok id_hira_master + teks bahaya)
+     *   dl    : detail lokasi master (M06) dicocokkan ke bep_vw_site_lokasi_detil_lokasi lewat nama
+     *   pjadl : PJA per detail lokasi = PJA lokasinya di obds.aaj_lokasi_dan_pja (M07/M08), id = m_pja
+     *   ma    : label Hazard/Inspeksi → baris (M09);  mb : teks aktivitas OBS/OAK → baris (M11/M12)
+     *   md    : butir checklist OAK → baris lewat tema (M15/M16) + kelompok aktivitas sama / bahaya umum
+     *   evt   : teks OBS → baris lewat tema yang sama
+     *   base  : baseline = tiap detail lokasi × baris grupnya (M05). Bukti di luar grup tidak dihitung
+     *           (gerbang irisan: kandidat dari isi laporan ∩ baris grup lokasi laporan).
+     */
     private function prelude(): string
     {
         $c = $this->cfg;
+        $m = $this->lit;
         $akhir = $this->sampai->toDateString();
         // Semua data SAP dibatasi ke rentang_hari ke belakang (3 bulan) agar query ringan.
         $mulaiData = $this->sampai->subDays((int) $c['rentang_hari'] - 1)->toDateString();
         $selesai = $this->daftar(self::STATUS_SELESAI);
+        $obsOak = '\'OBSERVASI\', \'OBSERVASI AREA KRITIS\'';
+        $kelompok = array_filter(array_map(fn (array $p) => $p[2] === '' ? '' : '(?i)'.$p[2], $c['proses_bisnis']));
 
         return '
 WITH
@@ -671,12 +680,28 @@ WITH
   '.$this->larik(array_values($c['tema'])).' AS thr,
   '.$this->larik($c['stopword']).' AS sw,
   '.$this->larik($c['pemetaan']['tema_umum']).' AS tema_umum,
-  '.$this->pasangan($c['grup_detail_lokasi']).' AS gd,
-  '.$this->pasangan($c['grup_aktivitas']).' AS ga,
-  '.$this->pasangan(array_map(fn (array $p) => $p[2], $c['proses_bisnis'])).' AS pb,
+  '.$this->pasangan($kelompok).' AS pb,
+  '.$this->larik(array_values(array_map(fn (array $t) => $t[1], $c['tema_checklist']))).' AS tc,
+  '.$this->larik(DrmMaster::KB).' AS kbn,
+  '.$m['gn'].' AS gn,
+  '.$m['mh'].' AS mh,
+  '.$m['mg'].' AS mg,
+  '.$m['m6'].' AS m6,
+  '.$m['m9'].' AS m9,
+  '.$m['mo'].' AS mo,
+  '.$m['mt'].' AS mt,
+mh0 AS (
+  SELECT toUInt32(x.1) AS hid, arrayMap(i -> toInt64(i), x.2) AS idh, toUInt32(x.3) AS bc, toUInt32(x.4) AS aid,
+         concat(\'K\', toString(x.5)) AS kel, kbn[x.6 + 1] AS kb, toUInt8(x.7) AS umum
+  FROM (SELECT arrayJoin(mh) AS x)
+),
+mgx AS (SELECT toUInt32(x.1) AS gid, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mg) AS x)),
+m9x AS (SELECT toUInt32(x.1) AS kc, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(m9) AS x)),
+mox AS (SELECT toUInt32(x.1) AS kc, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mo) AS x)),
+mtx AS (SELECT toUInt64(x.1) AS tema, arrayJoin(arrayMap(r -> toUInt32(r), x.2)) AS hid FROM (SELECT arrayJoin(mt) AS x)),
 hraw AS (
-  SELECT lower(trim(h.nama_aktivitas)) AS a, lower(trim(h.nama_sub_aktivitas)) AS s,
-         lower(trim(JSONExtractString(c, \'bahaya_penyebab_potensial\'))) AS b,
+  SELECT h.id_hira_master AS idh,
+         CRC32('.$this->norm('JSONExtractString(c, \'bahaya_penyebab_potensial\')').') AS bc,
          trim(h.nama_aktivitas) AS an, trim(h.nama_sub_aktivitas) AS sn, trim(JSONExtractString(c, \'bahaya_penyebab_potensial\')) AS bn,
          JSONExtractString(c, \'potensi_insiden\') AS p,
          JSONExtract(ifNull(h.site, \'[]\'), \'Array(String)\') AS st,
@@ -688,123 +713,108 @@ hraw AS (
          arrayStringConcat(arrayMap(x -> concat(JSONExtractString(x, \'tipe_pengendalian\'), \': \', JSONExtractString(x, \'pengendalian_dilakukan\')),
                                     JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' | \') AS kt,
          arrayStringConcat(arrayMap(x -> JSONExtractString(x, \'pengendalian_dilakukan\'), JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' \') AS kd,
-         multiIf(n1 = \'Significant\', 4, n1 = \'High\', 3, n1 = \'Medium\', 2, n1 = \'Low\', 1, 0) * 100
+         toUInt8(ifNull(h.status_aktif, \'\') = \'1\') * 10000
+           + multiIf(n1 = \'Significant\', 4, n1 = \'High\', 3, n1 = \'Medium\', 2, n1 = \'Low\', 1, 0) * 100
            + indexOf([\'Langka\', \'Kemungkinan Kecil\', \'Mungkin\', \'Sangat Mungkin\', \'Hampir Pasti\'], k1)
            * indexOf([\'Tidak Signifikan\', \'Minor\', \'Sedang\', \'Major\', \'Bencana\'], c1) AS sc
   FROM obds.mv_hira_master h ARRAY JOIN JSONExtractArrayRaw(assumeNotNull(h.causes)) AS c
-  WHERE h.status_aktif = \'1\' AND trim(JSONExtractString(c, \'bahaya_penyebab_potensial\')) != \'\'
+  WHERE h.id_hira_master IN (SELECT arrayJoin(idh) FROM mh0)
 ),
+hm AS (
+  -- Atribut risiko baris master: cause HIRA dengan id_hira_master master DAN teks bahaya sama (aktif & terburuk dulu).
+  SELECT m.hid AS hid, argMax(r.an, r.sc) AS an, argMax(r.sn, r.sc) AS sn, argMax(r.bn, r.sc) AS bn, argMax(r.p, r.sc) AS p,
+         groupUniqArrayArray(r.st) AS sites,
+         argMax(r.k1, r.sc) AS k1, argMax(r.c1, r.sc) AS c1, argMax(r.n1, r.sc) AS n1,
+         argMax(r.k2, r.sc) AS k2, argMax(r.c2, r.sc) AS c2, argMax(r.n2, r.sc) AS n2,
+         argMax(r.kt, r.sc) AS kt, argMax(r.kd, r.sc) AS kd, argMax(r.faktor, r.sc) AS faktor, argMax(r.aspek, r.sc) AS aspek
+  FROM (SELECT hid, bc, arrayJoin(idh) AS i FROM mh0) m
+  JOIN hraw r ON r.idh = m.i AND r.bc = m.bc
+  GROUP BY m.hid
+),
+hg AS (SELECT r AS hid, groupUniqArray(gn[g]) AS grp FROM (SELECT gid AS g, arrayJoin(rs) AS r FROM mgx) GROUP BY hid),
 hira AS (
-  SELECT cityHash64(a, s, b) AS hid, a, s, b, any(an) AS an, any(sn) AS sn, any(bn) AS bn, argMax(p, sc) AS p,
-         groupUniqArrayArray(st) AS sites,
-         argMax(k1, sc) AS k1, argMax(c1, sc) AS c1, argMax(n1, sc) AS n1,
-         argMax(k2, sc) AS k2, argMax(c2, sc) AS c2, argMax(n2, sc) AS n2,
-         argMax(kt, sc) AS kt, argMax(kd, sc) AS kd, argMax(faktor, sc) AS faktor, argMax(aspek, sc) AS aspek,
-         arrayMap(r -> r.1, arrayFilter(r -> match(concat(a, \' \', s), r.2), ga)) AS grp,
-         ifNull(nullIf(arrayFirst(r -> match(concat(a, \' \', s), r.2), pb).1, \'\'), \'X\') AS proses
-  FROM hraw GROUP BY a, s, b
+  SELECT m.hid AS hid, toString(m.aid) AS a, toString(m.hid) AS s, lowerUTF8(x.bn) AS b,
+         x.an AS an, x.sn AS sn, x.bn AS bn, x.p AS p, x.sites AS sites,
+         x.k1 AS k1, x.c1 AS c1, if(m.kb = \'\', x.n1, m.kb) AS n1, x.k2 AS k2, x.c2 AS c2, x.n2 AS n2,
+         x.kt AS kt, x.kd AS kd, x.faktor AS faktor, x.aspek AS aspek,
+         g.grp AS grp, m.kel AS proses, m.umum AS umum
+  FROM mh0 m LEFT JOIN hm x ON x.hid = m.hid LEFT JOIN hg g ON g.hid = m.hid
 ),
 dl0 AS (
   SELECT toInt64(t.id_detil_lokasi) AS dl, any(t.site) AS site, any(toInt64(t.id_lokasi)) AS id_lok,
-         any(t.lokasi) AS lokasi, any(t.Detil_Lokasi) AS detlok
+         any(t.lokasi) AS lokasi, any(t.Detil_Lokasi) AS detlok,
+         any(CRC32(concat('.$this->norm('t.site').', \'|\', '.$this->norm('t.lokasi').', \'|\', '.$this->norm('t.Detil_Lokasi').'))) AS kd,
+         any(CRC32(concat('.$this->norm('t.site').', \'|\', '.$this->norm('t.lokasi').'))) AS lk
   FROM obds.bep_vw_site_lokasi_detil_lokasi AS t
-  WHERE t.status_detil_lokasi = \'1\' AND t.status_lokasi = \'1\' AND t.status_site = \'1\''
+  WHERE ifNull(t.site, \'\') != \'\''
             // Kolom ditulis lengkap (t.site): tanpa itu ClickHouse membaca `site` di WHERE sebagai alias any(site).
             .($this->site !== null ? ' AND t.site = '.$this->q($this->site) : '').'
   GROUP BY dl
+  HAVING kd IN (SELECT toUInt32(x.1) FROM (SELECT arrayJoin(m6) AS x))
 ),
 dl AS (
-  SELECT dl, site, id_lok, lokasi, detlok,
-         ifNull(nullIf(arrayFirst(r -> match(lower(concat(detlok, \' || \', lokasi)), r.2), gd).1, \'\'), \'Belum terpetakan\') AS grp
-  FROM dl0
+  SELECT d.dl AS dl, d.site AS site, d.id_lok AS id_lok, d.lokasi AS lokasi, d.detlok AS detlok, d.lk AS lk,
+         g.gid AS gid, gn[g.gid] AS grp
+  FROM dl0 d JOIN (SELECT toUInt32(x.1) AS kd, toUInt32(x.2) AS gid FROM (SELECT arrayJoin(m6) AS x)) g ON g.kd = d.kd
+),
+aj AS (
+  SELECT DISTINCT CRC32(concat('.$this->norm('site').', \'|\', '.$this->norm('lokasi').')) AS lk, lowerUTF8(trim(nama_pja)) AS nm
+  FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\'
+),
+mpn AS (
+  SELECT nm, min(id) AS pja_id
+  FROM (SELECT toInt64(id) AS id, lowerUTF8(trim(any(name))) AS nm FROM obds.m_pja GROUP BY id HAVING max(is_active) = 1)
+  GROUP BY nm
+),
+pjadl AS (
+  SELECT DISTINCT d.dl AS dl, p.pja_id AS pja_id FROM dl d JOIN aj ON aj.lk = d.lk JOIN mpn p ON p.nm = aj.nm
 ),
 sap AS (
   SELECT jenis_data AS j, toDate(`date time`) AS d, toInt64(`id detail lokasi`) AS dl, kode_sid_pelapor AS sid,
          lower(ifNull(ketidaksesuaian, \'\')) AS k, lower(ifNull(subketidaksesuaian, \'\')) AS sk,
          lower(if(jenis_data = \'OBSERVASI\', ifNull(`aktivitas  OBS`, \'\'),
-                  concat(ifNull(`aktivitas pekerjaan OAK`, \'\'), \' \', ifNull(`sub aktivitas pekerjaan OAK`, \'\')))) AS tx,
+                  if(jenis_data = \'OBSERVASI AREA KRITIS\',
+                     concat(ifNull(`aktivitas pekerjaan OAK`, \'\'), \' / \', ifNull(`sub aktivitas pekerjaan OAK`, \'\')), \'\'))) AS tx,
          positionCaseInsensitive(ifNull(`hasil OAK`, \'\'), \'stop\') > 0 AS stop,
          multiSearchAny(lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'), \' \', ifNull(tindakan, \'\'))),
                         ['.$this->daftar((array) $c['obs_tanpa_aktivitas']).']) AS na,
+         if(jenis_data = \'OBSERVASI\',
+            multiMatchAllIndices(concat(\' \', lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'))), \' \'), tc),
+            CAST([], \'Array(UInt64)\')) AS tm,
          ifNull(status, \'\') AS st,
          if(ifNull(status, \'\') IN ('.$selesai.'), ifNull(toDate(tanggal_aktual_penyelesaian), toDate(`date time`)), NULL) AS cd
   FROM obds.ch_rfid_sap_cuti_all_site
-  WHERE jenis_data IN (\'HAZARD\', \'INSPEKSI\', \'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
+  WHERE jenis_data IN (\'HAZARD\', \'INSPEKSI\', '.$obsOak.')
     AND `date time` >= toDate('.$this->q($mulaiData).') AND `date time` < t_end + 1
     AND `id detail lokasi` IN (SELECT dl FROM dl0)
     AND ifNull(status, \'\') NOT IN ('.$this->daftar($c['status_buang']).')
 ),
 labx AS (
-  SELECT k, sk, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(k, \' \', sk), thr))) AS ta,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(sk))) AS ts
+  SELECT k, sk, CRC32(concat('.$this->norm('k').', \' / \', '.$this->norm('sk').')) AS kc
   FROM (SELECT DISTINCT k, sk FROM sap WHERE j IN (\'HAZARD\', \'INSPEKSI\') AND sk != \'\')
 ),
-hbx AS (
-  SELECT hid, a, s,
-         arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(b, \' \', lower(p)), thr))) AS tb,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p))))) AS tsb
-  FROM hira
-),
-umum_a AS (
-  -- Kata yang muncul di banyak bahaya HIRA: tidak boleh menjadi satu-satunya alasan pasangan.
-  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM hbx ARRAY JOIN tsb AS t GROUP BY t)
-  WHERE n > (SELECT count() FROM hbx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
-),
 ma AS (
-  SELECT l.k AS k, l.sk AS sk, h.hid AS hid FROM labx l CROSS JOIN hbx h
-  WHERE hasAny(l.ta, h.tb)
-    AND length(arrayIntersect(l.ts, h.tsb)) >= '.(int) $c['pemetaan']['kata_min'].'
-    AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_a), t), arrayIntersect(l.ts, h.tsb))) >= 1
+  SELECT k, sk, arrayJoin(rs) AS hid FROM (SELECT l.k AS k, l.sk AS sk, m.rs AS rs FROM labx l JOIN m9x m ON m.kc = l.kc)
 ),
-otx AS (
-  SELECT tx, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS ta,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS ts
-  FROM (SELECT DISTINCT tx FROM sap WHERE j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND trim(tx) != \'\')
-),
-asx AS (
-  SELECT a, s, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(a, \' \', s), thr))) AS tb,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(a, \' \', s)))) AS tsb
-  FROM (SELECT DISTINCT a, s FROM hira)
-),
-umum_b AS (
-  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM asx ARRAY JOIN tsb AS t GROUP BY t)
-  WHERE n > (SELECT count() FROM asx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
+-- Teks aktivitas OBS / "aktivitas / sub" OAK: kelompok aktivitas (M02) dan pasangan baris persis (M11/M12).
+okx AS (
+  SELECT tx, CRC32('.$this->norm('tx').') AS kc, ifNull(nullIf(arrayFirst(r -> match(tx, r.2), pb).1, \'\'), \'K0\') AS kel
+  FROM (SELECT DISTINCT tx FROM sap WHERE j IN ('.$obsOak.') AND trim(tx) NOT IN (\'\', \'/\'))
 ),
 mb AS (
-  SELECT tx, a, s FROM (
-    SELECT o.tx AS tx, x.a AS a, x.s AS s,
-           length(arrayIntersect(o.ts, x.tsb)) + length(arrayIntersect(o.ta, x.tb)) AS kuat
-    FROM otx o CROSS JOIN asx x
-    WHERE length(arrayIntersect(o.ts, x.tsb)) >= '.(int) $c['master_b']['kata_min'].'
-      AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_b), t), arrayIntersect(o.ts, x.tsb))) >= 1
-  ) ORDER BY kuat DESC LIMIT '.(int) $c['master_b']['maks_per_teks'].' BY tx
+  SELECT o.tx AS tx, toString(h.aid) AS a, toString(h.hid) AS s, h.hid AS hid
+  FROM (SELECT tx, arrayJoin(rs) AS hid FROM (SELECT k.tx AS tx, m.rs AS rs FROM okx k JOIN mox m ON m.kc = k.kc)) o
+  JOIN mh0 h ON h.hid = o.hid
 ),
 evo AS (
   SELECT s.dl AS dl, m.a AS a, m.s AS s, s.d AS d, max(s.stop) AS stop, 1 AS ok
   FROM sap s JOIN mb m ON m.tx = s.tx
-  WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
+  WHERE s.j IN ('.$obsOak.')
     AND NOT s.na
   GROUP BY s.dl, m.a, m.s, s.d
 ),
--- Master C: aktivitas OAK ↔ aktivitas HIRA (≥1 kata tidak umum + (≥2 kata ATAU tema sama)).
-acx AS (
-  SELECT a, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(a, thr))) AS tb,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(a))) AS tsb
-  FROM (SELECT DISTINCT a FROM hira)
-),
-umum_c AS (
-  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM acx ARRAY JOIN tsb AS t GROUP BY t)
-  WHERE n > (SELECT count() FROM acx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
-),
-oka AS (
-  SELECT toInt64(id) AS aid, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(lower(name), thr))) AS ta,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(lower(name)))) AS ts
-  FROM obds.m_oak_activity FINAL
-),
-mc AS (
-  SELECT o.aid AS aid, x.a AS a FROM oka o CROSS JOIN acx x
-  WHERE length(arrayFilter(t -> NOT has((SELECT kata FROM umum_c), t), arrayIntersect(o.ts, x.tsb))) >= 1
-    AND (length(arrayIntersect(o.ts, x.tsb)) >= 2 OR hasAny(o.ta, x.tb))
+base AS (
+  SELECT dl, arrayJoin(rs) AS hid, toUInt8(0) AS via_bukti FROM (SELECT d.dl AS dl, g.rs AS rs FROM dl d JOIN mgx g ON g.gid = d.gid)
 ),
 -- Butir checklist OAK yang diisi dalam rentang data. Checklist versi baru tidak mengikat objek ke
 -- aktivitas di master (id_act_observe kosong), jadi aktivitasnya diambil dari register (id_oak_activity).
@@ -823,60 +833,68 @@ oj AS (
   ) AS o
   JOIN oakr r ON r.rid = o.rid
 ),
--- Master D: butir (objek + detail objek pengamatan) ↔ bahaya + potensi + pengendalian di aktivitas HIRA
--- pasangan Master C. Tema sama + ≥2 kata sama (≥1 tidak umum) DAN ≥1 kata itu ada di teks bahayanya
--- sendiri — supaya butir tidak menempel ke bahaya hanya karena kata di teks pengendalian.
+okk AS (
+  SELECT toInt64(id) AS aid, ifNull(nullIf(arrayFirst(r -> match(lower(name), r.2), pb).1, \'\'), \'K0\') AS kel
+  FROM obds.m_oak_activity FINAL
+),
 itx AS (
-  SELECT aid, did, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS ta,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS ts
-  FROM (
-    SELECT p.aid AS aid, p.did AS did, lower(concat(o.name, \' \', d.name)) AS tx
-    FROM (SELECT DISTINCT aid, did FROM oj) AS p
-    JOIN obds.m_oak_detail_objek AS d FINAL ON d.id = p.did
-    JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = d.id_objek_pengamatan_observe
-  )
+  SELECT p.aid AS aid, p.did AS did, multiMatchAllIndices(concat(\' \', lower(concat(o.name, \' \', d.name)), \' \'), tc) AS tm
+  FROM (SELECT DISTINCT aid, did FROM oj) AS p
+  JOIN obds.m_oak_detail_objek AS d FINAL ON d.id = p.did
+  JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = d.id_objek_pengamatan_observe
 ),
-hdx AS (
-  SELECT hid, a, arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(tx, thr))) AS tb,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(tx))) AS tsb,
-         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(b))) AS tbb
-  FROM (SELECT hid, a, b, concat(b, \' \', lower(p), \' \', lower(kd)) AS tx FROM hira)
-),
-umum_d AS (
-  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM hdx ARRAY JOIN tsb AS t GROUP BY t)
-  WHERE n > (SELECT count() FROM hdx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
-),
+-- M16: butir → baris lewat tema; baris diidentifikasi bila kelompok aktivitas OAK = kelompok baris, atau bahaya umum.
 md AS (
-  SELECT DISTINCT i.aid AS aid, i.did AS did, h.hid AS hid
-  FROM itx i JOIN mc ON mc.aid = i.aid JOIN hdx h ON h.a = mc.a
-  WHERE hasAny(i.ta, h.tb)
-    AND length(arrayIntersect(i.ts, h.tsb)) >= '.(int) $c['pemetaan']['kata_min'].'
-    AND length(arrayFilter(t -> NOT has((SELECT kata FROM umum_d), t), arrayIntersect(i.ts, h.tsb))) >= 1
-    AND length(arrayIntersect(i.ts, h.tbb)) >= 1
+  SELECT DISTINCT i.aid AS aid, i.did AS did, r.hid AS hid
+  FROM (SELECT aid, did, arrayJoin(tm) AS tema FROM itx) i
+  JOIN mtx r ON r.tema = i.tema
+  JOIN okk k ON k.aid = i.aid
+  JOIN mh0 h ON h.hid = r.hid
+  WHERE h.kel = k.kel OR h.umum = 1
 ),
--- Bukti butir checklist per (detail lokasi, bahaya, hari); ts = ada butir tidak sesuai.
+-- Teks OBS → baris lewat tema yang sama (kelompok = kelompok teks aktivitas OBS), hanya baris baseline.
+evt AS (
+  SELECT s.dl AS dl, r.hid AS hid, s.d AS d
+  FROM (SELECT dl, d, tx, arrayJoin(tm) AS tema FROM sap WHERE j = \'OBSERVASI\' AND NOT na AND notEmpty(tm)) s
+  JOIN okx k ON k.tx = s.tx
+  JOIN mtx r ON r.tema = s.tema
+  JOIN mh0 h ON h.hid = r.hid
+  WHERE (h.kel = k.kel OR h.umum = 1) AND (s.dl, r.hid) IN (SELECT dl, hid FROM base)
+  GROUP BY s.dl, r.hid, s.d
+),
+-- Bukti spesifik per (detail lokasi, baris, hari) dari checklist OAK + teks OBS; ts = butir tidak sesuai (informasi).
 evd AS (
-  SELECT j.dl AS dl, m.hid AS hid, j.d AS d, max(toUInt8(j.sid = '.(int) $c['oak_checklist']['tidak_sesuai'].')) AS ts
-  FROM oj j JOIN md m ON m.aid = j.aid AND m.did = j.did
-  GROUP BY j.dl, m.hid, j.d
+  SELECT dl, hid, d, max(ts) AS ts FROM (
+    SELECT j.dl AS dl, m.hid AS hid, j.d AS d, toUInt8(j.sid = '.(int) $c['oak_checklist']['tidak_sesuai'].') AS ts
+    FROM oj j JOIN md m ON m.aid = j.aid AND m.did = j.did
+    UNION ALL
+    SELECT dl, hid, d, toUInt8(0) FROM evt
+  ) GROUP BY dl, hid, d
 ),
--- Bahaya yang BISA diidentifikasi lewat SAP: punya pasangan Master A (label Hazard/Inspeksi),
--- aktivitasnya punya pasangan Master B (Observasi/OAK), atau punya butir checklist OAK (Master D).
--- Hanya penanda status X; baseline TIDAK difilter (baseline HIRA, keputusan user 16 Nov 2026).
+-- Baris yang punya jalur identifikasi SAP di master (label M09, teks OBS/OAK M11/M12, atau tema M16).
+-- Hanya penanda status X (tanpa jalur identifikasi); baseline tidak difilter.
 petakan AS (
-  SELECT hid FROM hira
-  WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb) OR hid IN (SELECT hid FROM md)
+  SELECT hid FROM mh0
+  WHERE hid IN (SELECT arrayJoin(rs) FROM m9x) OR hid IN (SELECT arrayJoin(rs) FROM mox) OR hid IN (SELECT hid FROM mtx)
 ),
--- Baseline HIRA: tiap detail lokasi mewarisi semua bahaya HIRA grup lokasinya (site cocok),
--- termasuk yang tidak punya pasangan SAP (tanpa laporan = gap).
-base AS (
-  SELECT d.dl AS dl, h.hid AS hid, 0 AS via_bukti
-  FROM dl d JOIN (SELECT hid, st, g FROM hira ARRAY JOIN sites AS st ARRAY JOIN grp AS g) h ON h.st = d.site AND h.g = d.grp
-  UNION DISTINCT
-  SELECT e.dl, h.hid, 1 FROM (SELECT DISTINCT dl, a, s FROM evo) e JOIN hira h ON h.a = e.a AND h.s = e.s
-  UNION DISTINCT
-  SELECT dl, hid, 1 FROM (SELECT DISTINCT dl, hid FROM evd)
+-- Teks bahaya HIRA untuk pencocokan insiden / root cause (tema + kata kunci).
+hbx AS (
+  SELECT hid, a, s,
+         arrayFilter(t -> NOT has(tema_umum, t), arrayMap(i -> thn[i], multiMatchAllIndices(concat(b, \' \', lower(p)), thr))) AS tb,
+         arrayDistinct(arrayFilter(t -> length(t) >= 4 AND NOT has(sw, t), splitByNonAlpha(concat(b, \' \', lower(p))))) AS tsb
+  FROM hira
+),
+umum_a AS (
+  -- Kata yang muncul di banyak bahaya HIRA: tidak boleh menjadi satu-satunya alasan pasangan.
+  SELECT groupArray(t) AS kata FROM (SELECT t, count() AS n FROM hbx ARRAY JOIN tsb AS t GROUP BY t)
+  WHERE n > (SELECT count() FROM hbx) * '.(float) $c['pemetaan']['kata_umum_persen'].'
 )';
+    }
+
+    /** Ekspresi SQL teks ternormalisasi (huruf kecil, spasi rapat) — pasangan DrmMaster::norm(). */
+    private function norm(string $expr): string
+    {
+        return 'trimBoth(replaceRegexpAll(lowerUTF8(ifNull('.$expr.', \'\')), \'\\\\s+\', \' \'))';
     }
 
     /**
@@ -915,9 +933,10 @@ ago AS (
 ),
 st AS (
   SELECT b.dl AS dl, h.hid AS hid, h.a AS a, h.n1 AS n1, h.proses AS proses, b.via_bukti AS via_bukti,
-         ifNull(gh.rep, 0) AS rep, ifNull(gh.open_n, 0) AS open_n, ifNull(go.stop, 0) + ifNull(gd.ts_d, 0) AS stop,
+         ifNull(gh.rep, 0) AS rep, ifNull(gh.open_n, 0) AS open_n, ifNull(go.stop, 0) AS stop,
          greatest(ifNull(gh.last_h, toDate(0)), ifNull(go.last_o, toDate(0)), ifNull(gd.last_d, toDate(0))) AS last,
-         multiIf(ifNull(gh.open_n, 0) > 0 OR ifNull(gh.rep, 0) >= {ambang} OR ifNull(go.stop, 0) > 0 OR ifNull(gd.ts_d, 0) > 0, \'G\',
+         -- Gap (spec DRM 2.1) = belum closed | berulang | OAK Stop. Butir checklist tidak sesuai bukan gap.
+         multiIf(ifNull(gh.open_n, 0) > 0 OR ifNull(gh.rep, 0) >= {ambang} OR ifNull(go.stop, 0) > 0, \'G\',
                  ifNull(gh.rep, 0) > 0 OR ifNull(go.sig_o, 0) > 0 OR ifNull(gd.sig_d, 0) > 0, \'K\',
                  h.hid NOT IN (SELECT hid FROM petakan), \'X\',
                  \'T\') AS status
@@ -977,7 +996,7 @@ sb AS (
     FROM eo e JOIN hira h ON h.a = e.a AND h.s = e.s
     WHERE (e.dl, h.hid) IN (SELECT dl, hid FROM basek)
     UNION ALL
-    SELECT dl, hid, minggu, toUInt8(if(ts = 1, 4, 3)) FROM ed
+    SELECT dl, hid, minggu, toUInt8(3) FROM ed
   ) WHERE rr > 0
   GROUP BY dl, hid, minggu
 )';

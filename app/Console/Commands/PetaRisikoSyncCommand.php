@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\PetaRisiko\Drm\DrmMappingEkspor;
+use App\Services\PetaRisiko\Drm\DrmMaster;
 use App\Services\PetaRisiko\Drm\DrmRepository;
 use App\Services\PetaRisiko\Drm\DrmSnapshotBuilder;
 use Carbon\CarbonImmutable;
@@ -15,7 +16,7 @@ class PetaRisikoSyncCommand extends Command
         {--sampai= : Tanggal akhir (YYYY-MM-DD), bawaan kemarin WITA}
         {--cek : Hanya periksa semua query (EXPLAIN) tanpa menghitung/menyimpan}';
 
-    protected $description = 'Hitung ulang Peta Risiko PJA (DRM 2.1) dari ClickHouse OBDS: HIRA → SAP → status per PJA/site/Group Lokasi';
+    protected $description = 'Hitung ulang Peta Risiko PJA (DRM 2.1) dari ClickHouse OBDS dengan baseline master mapping (peta-risiko:impor-master)';
 
     public function handle(DrmSnapshotBuilder $builder, DrmRepository $repo, DrmMappingEkspor $ekspor): int
     {
@@ -50,9 +51,9 @@ class PetaRisikoSyncCommand extends Command
         // Excel mapping ditulis setelah snapshot tersimpan; gagal di sini tidak membatalkan snapshot.
         try {
             $mulaiExcel = microtime(true);
-            $ekspor->tulis($snapshot['ekspor'], $sampai, (array) config('peta_risiko_drm'), $repo->pathEkspor());
+            $ekspor->tulis($snapshot['ekspor'], DrmMaster::muat(), $sampai, (array) config('peta_risiko_drm'), $repo->pathEkspor());
             @chmod($repo->pathEkspor(), 0644);
-            $this->line(sprintf('  %-45s %7s baris  %5.1f dtk', 'Excel mapping bahaya-risiko', number_format(count($snapshot['ekspor']), 0, ',', '.'), microtime(true) - $mulaiExcel));
+            $this->line(sprintf('  %-45s %7s baris  %5.1f dtk', 'Excel mapping master (M01–M16)', number_format(count($snapshot['ekspor']['baris']), 0, ',', '.'), microtime(true) - $mulaiExcel));
         } catch (Throwable $e) {
             report($e);
             $this->warn('Snapshot tersimpan, tetapi Excel mapping gagal ditulis: '.$e->getMessage());

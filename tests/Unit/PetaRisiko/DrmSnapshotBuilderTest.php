@@ -3,6 +3,7 @@
 namespace Tests\Unit\PetaRisiko;
 
 use App\Services\PetaRisiko\Drm\DrmMappingEkspor;
+use App\Services\PetaRisiko\Drm\DrmMaster;
 use App\Services\PetaRisiko\Drm\DrmSnapshotBuilder;
 use App\Services\PetaRisiko\Drm\DrmSql;
 use App\Services\SportEvaluation\RfidClickHouseClient;
@@ -39,7 +40,7 @@ class DrmSnapshotBuilderTest extends TestCase
         // Hanya baris laten=1 di minggu terakhir yang dihitung (minggu lama & baris G diabaikan).
         $this->assertSame(1, $snap['meta']['cakupan']['SITE|LMO']['kpi']['laten']);
         $this->assertSame(2, $snap['meta']['cakupan']['PJA|10']['kpi']['laten']);
-        $this->assertSame(0, $snap['meta']['cakupan']['PROSES|OB|ALL']['kpi']['laten']);
+        $this->assertSame(0, $snap['meta']['cakupan']['PROSES|K16|ALL']['kpi']['laten']);
         // Laten tidak boleh melebihi jumlah tidak teridentifikasi + tidak terpetakan.
         foreach ($snap['meta']['cakupan'] as $c) {
             $this->assertLessThanOrEqual($c['kpi']['T'] + $c['kpi']['X'], $c['kpi']['laten']);
@@ -48,7 +49,7 @@ class DrmSnapshotBuilderTest extends TestCase
 
     public function test_baris_excel_status_gabungan_mapping_dan_insiden(): void
     {
-        $baris = array_column($this->susun()['ekspor'], null, 'hid');
+        $baris = array_column($this->susun()['ekspor']['baris'], null, 'hid');
 
         $this->assertCount(5, $baris);
         // hid 1: tidak teridentifikasi di semua DL + insiden → laten.
@@ -61,7 +62,7 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame('Hazard › Jalan licin | Hazard › Jalan berlubang', $baris['2']['label_a']);
         // hid 3: tidak punya DL baseline.
         $this->assertSame('-', $baris['3']['status']);
-        $this->assertSame('OB Removal', $baris['3']['proses']);
+        $this->assertSame('Dumping & Penimbunan', $baris['3']['proses']);
         // hid 4: tidak punya pasangan SAP tapi punya DL → tetap baseline HIRA (X = tanpa laporan), final = risiko awal.
         $this->assertSame('X', $baris['4']['status']);
         $this->assertSame(1, $baris['4']['dl_x']);
@@ -73,37 +74,56 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame('APD › Helm | APD › Rompi', $baris['5']['butir_d']);
     }
 
-    public function test_sql_memuat_checklist_oak_dan_label_hazard_spesifik(): void
+    public function test_sql_baseline_dari_master_dengan_gerbang_grup_dan_gap_spec(): void
     {
-        $sql = new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI));
+        $sql = $this->sql();
         $status = $sql->pasanganBaseline();
         $mingguan = $sql->matriksCakupan();
 
-        // Butir tidak sesuai = gap, aktivitas butir dari register, dan syarat kata di teks bahaya.
-        $this->assertStringContainsString('toUInt8(j.sid = 10187)', $status);
-        $this->assertStringContainsString('toInt64(id_oak_activity) AS aid', $status);
-        $this->assertStringContainsString('length(arrayIntersect(i.ts, h.tbb)) >= 1', $status);
-        $this->assertStringContainsString('OR ifNull(gd.ts_d, 0) > 0', $status);
-        // Label spesifik (≤ 2 kelompok aktivitas) ikut menandai aktivitas; dipakai juga di tren mingguan.
-        $this->assertStringContainsString('HAVING uniqExact(h.proses) <= 2', $status);
-        $this->assertStringContainsString('FROM eva', $mingguan);
-        $this->assertStringContainsString('SELECT dl, hid, minggu, toUInt8(if(ts = 1, 4, 3)) FROM ed', $mingguan);
+        // Literal master (angka + CRC32), bukan teks; baseline = detail lokasi × baris grupnya (M05).
+        $this->assertStringContainsString('(11,[7],'.DrmMaster::crc('Jalan licin').',3,13,4,0)', $status);
+        $this->assertStringContainsString('JOIN mgx g ON g.gid = d.gid', $status);
+        // Gerbang: bukti label hanya dihitung bila (detail lokasi, baris) ada di baseline.
+        $this->assertStringContainsString('WHERE (sh.dl, m.hid) IN (SELECT dl, hid FROM basek)', $status);
+        // PJA per detail lokasi dari aaj_lokasi_dan_pja (level lokasi), id = m_pja.
+        $this->assertStringContainsString('FROM obds.aaj_lokasi_dan_pja', $status);
+        $this->assertStringNotContainsString('m_pja_locations', $mingguan);
+        // Gap = belum closed | berulang | OAK stop; checklist tidak sesuai bukan gap.
+        $this->assertStringNotContainsString('gd.ts_d, 0) > 0', $status);
+        $this->assertStringContainsString('SELECT dl, hid, minggu, toUInt8(3) FROM ed', $mingguan);
+        // OAK dicocokkan sebagai "aktivitas / sub" (format M12).
+        $this->assertStringContainsString("concat(ifNull(`aktivitas pekerjaan OAK`, ''), ' / ', ifNull(`sub aktivitas pekerjaan OAK`, ''))", $status);
+    }
+
+    public function test_normalisasi_master_sama_dengan_sisi_clickhouse(): void
+    {
+        $this->assertSame('workshop tyre mtn 056', DrmMaster::norm("  Workshop\tTyre   MTN 056 "));
+        $this->assertSame(crc32('smo|workshop|workshop tyre mtn 056'), DrmMaster::crcDl('SMO', 'Workshop', 'Workshop  Tyre MTN 056'));
+        $m = $this->master();
+        $this->assertSame([11 => 'K13', 12 => 'K16'], $m->kelompokBaris(config('peta_risiko_drm.proses_bisnis')));
+        // Tema dicocokkan ke "bahaya sub " (spasi penutup untuk pola seperti "ban ").
+        $this->assertSame([11], $m->temaBaris(config('peta_risiko_drm.tema_checklist'))[5] ?? []);
     }
 
     public function test_file_excel_mapping_valid_dan_bisa_dibaca(): void
     {
         $snap = $this->susun();
         $file = tempnam(sys_get_temp_dir(), 'drm').'.xlsx';
-        (new DrmMappingEkspor())->tulis($snap['ekspor'], CarbonImmutable::parse(self::SAMPAI), config('peta_risiko_drm'), $file);
+        (new DrmMappingEkspor())->tulis($snap['ekspor'], $this->master(), CarbonImmutable::parse(self::SAMPAI), config('peta_risiko_drm'), $file);
 
         $wb = IOFactory::load($file);
-        $this->assertSame(['Mapping bahaya-risiko', 'Ringkasan', 'Keterangan'], $wb->getSheetNames());
-        $ws = $wb->getSheet(0);
-        $this->assertSame('Bahaya / penyebab potensial', (string) $ws->getCell('D1')->getValue());
-        $this->assertSame(6, $ws->getHighestRow());
-        $this->assertSame(1, $ws->getCell('A2')->getValue());
-        $ringkas = $wb->getSheet(1)->toArray();
-        $this->assertEquals(['BASELINE HIRA (punya detail lokasi)', 3], array_slice($ringkas[2], 0, 2));
+        $this->assertSame(['README_Peta_Join', 'M01_Baris_HIRA', 'M02_Kelompok_Aktivitas', 'M03_Aktivitas_Kelompok', 'M04_Grup_Lokasi',
+            'M05_Bridge_Grup_Baris', 'M06_DetailLokasi', 'M07_Bridge_DL_PJA', 'M08_PJA', 'M09_Label_SAP_Baris', 'M11_OBS_Aktivitas_Baris',
+            'M12_OAK_Aktivitas_Baris', 'M15_Tema_Checklist', 'M16_Bridge_Tema_Baris'], $wb->getSheetNames());
+        $m01 = $wb->getSheetByName('M01_Baris_HIRA')->toArray(null, true, false);
+        $this->assertSame('id_baris (ri)', $m01[0][0]);
+        $this->assertSame([11, 'Jalan Tambang', 'Jalan licin', 'Jalan Tambang & Road Maintenance', 1], [$m01[1][0], $m01[1][2], $m01[1][4], $m01[1][6], $m01[1][10]]);
+        $m06 = $wb->getSheetByName('M06_DetailLokasi')->toArray(null, true, false);
+        // DL master cocok ke DL OBDS 101 lewat nama; PJA dari snapshot.
+        $this->assertSame(['101', 1, 'PJA Pit BC'], [(string) $m06[1][6], $m06[1][7], $m06[1][8]]);
+        $this->assertSame([[1, '10']], array_map(fn ($r) => [$r[0], (string) $r[1]], array_slice($wb->getSheetByName('M07_Bridge_DL_PJA')->toArray(null, true, false), 1)));
+        $m16 = $wb->getSheetByName('M16_Bridge_Tema_Baris')->toArray(null, true, false);
+        $this->assertContains([5, 'Jalan/berm', 11, 'Jalan licin', 'Jalan Tambang & Road Maintenance', 'N'], $m16);
         @unlink($file);
     }
 
@@ -135,27 +155,27 @@ class DrmSnapshotBuilderTest extends TestCase
         $snap = $this->susun();
         $kode = array_column($snap['meta']['proses'], 'kode');
 
-        $this->assertCount(18, $kode);
-        $this->assertSame('X', end($kode));
-        $this->assertSame(11, count(array_filter($snap['meta']['proses'], fn ($p) => $p['jenis'] === 'inti')));
-        $this->assertSame(4, $snap['meta']['cakupan']['PROSES|OB|ALL']['kpi']['G']);
+        // 26 kelompok aktivitas M02 (K1..K25 + K0 Lainnya) + X cadangan.
+        $this->assertCount(27, $kode);
+        $this->assertSame(['K1', 'K0', 'X'], [$kode[0], $kode[25], end($kode)]);
+        $this->assertSame(4, $snap['meta']['cakupan']['PROSES|K16|ALL']['kpi']['G']);
         $kolom = array_flip($snap['meta']['kolomAkt']);
-        $this->assertSame('OB', $snap['pja']['10']['akt'][0][$kolom['proses']]);
+        $this->assertSame('K16', $snap['pja']['10']['akt'][0][$kolom['proses']]);
     }
 
     public function test_sql_berisi_cakupan_proses_dan_aturan_proses(): void
     {
-        $sql = (new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))->matriksCakupan();
+        $sql = $this->sql()->matriksCakupan();
 
         $this->assertStringContainsString("('PROSES', concat(h.proses, '|ALL'))", $sql);
         $this->assertStringContainsString("toDate('2026-08-16') AS t_open", $sql);
-        $this->assertStringContainsString("('DNB', 'blast|", $sql);
+        $this->assertStringContainsString("('K2', '(?i)handak|", $sql);
         $this->assertStringContainsString(' AS pb,', $sql);
     }
 
     public function test_sql_site_membatasi_detail_lokasi_dan_ambang_terisi(): void
     {
-        $sql = new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI));
+        $sql = $this->sql();
         $site = $sql->untukSite("LMO'x")->aktivitasDetailLokasi();
 
         $this->assertStringContainsString("AND t.site = 'LMO\\'x'", $site);
@@ -164,8 +184,32 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertStringNotContainsString('AND t.site =', $sql->aktivitasDetailLokasi());
     }
 
+    private function master(): DrmMaster
+    {
+        return DrmMaster::dariArray([
+            'baris' => [
+                ['ri' => 11, 'aid' => 3, 'aktivitas' => 'Jalan Tambang', 'sub' => 'Grading', 'bahaya' => 'Jalan licin', 'kb' => 'Significant', 'kelompokM01' => '', 'umum' => false, 'idh' => [7]],
+                ['ri' => 12, 'aid' => 4, 'aktivitas' => 'Dumping OB', 'sub' => 'Disposal', 'bahaya' => 'Unit terguling', 'kb' => 'High', 'kelompokM01' => '', 'umum' => true, 'idh' => [8]],
+            ],
+            'grup' => [1 => 'Loading Point', 2 => 'Disposal'],
+            'grupBaris' => [1 => [11], 2 => [12]],
+            'dl' => [['id' => 1, 'site' => 'LMO', 'lokasi' => 'Pit A', 'detail' => 'Front Loading', 'gid' => 1]],
+            'label' => [['k' => 'Jalan', 'sk' => 'Licin', 'ri' => [11], 'sumber' => 'uji']],
+            'obs' => [['teks' => 'Grading jalan', 'ri' => [11]]],
+            'oak' => [],
+        ]);
+    }
+
+    private function sql(): DrmSql
+    {
+        $cfg = config('peta_risiko_drm');
+
+        return new DrmSql($cfg, CarbonImmutable::parse(self::SAMPAI), $this->master()->literal($cfg));
+    }
+
     /** @return array{meta: array<string, mixed>, pja: array<string, array<string, mixed>>} */
     private function susun(): array
+
     {
         $baris = fn (string $minggu, string $status, string $n1, string $nf, string $kf, string $cf, int $n, int $laten = 0) => [
             'jenis' => 'SITE', 'kunci' => 'LMO', 'minggu' => $minggu, 'status' => $status,
@@ -179,14 +223,14 @@ class DrmSnapshotBuilderTest extends TestCase
             $baris('2026-11-07', 'T', 'Low', 'Low', 'Hampir Pasti', 'Minor', 5, 1),
             ['jenis' => 'PJA', 'kunci' => '10', 'minggu' => self::SAMPAI, 'status' => 'T', 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'Medium',
                 'kf' => 'Mungkin', 'cf' => 'Minor', 'nf' => 'Medium', 'laten' => '1', 'n' => '2'],
-            ['jenis' => 'PROSES', 'kunci' => 'OB|ALL', 'minggu' => self::SAMPAI, 'status' => 'G', 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'High',
+            ['jenis' => 'PROSES', 'kunci' => 'K16|ALL', 'minggu' => self::SAMPAI, 'status' => 'G', 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'High',
                 'kf' => 'Mungkin', 'cf' => 'Minor', 'nf' => 'High', 'laten' => '0', 'n' => '4'],
         ];
         $hira = fn (string $hid, string $a) => ['hid' => $hid, 'a' => $a, 'an' => ucfirst($a), 'sn' => 'Sub', 'bn' => 'Bahaya '.$hid, 'p' => 'Potensi',
             'sites' => ['LMO'], 'grp' => ['Loading Point'], 'k1' => 'Mungkin', 'c1' => 'Minor', 'n1' => 'High', 'k2' => 'Langka', 'c2' => 'Minor',
-            'n2' => 'Low', 'kt' => 'Administrasi: SOP', 'faktor' => 'Man', 'aspek' => 'Safety', 'di_a' => 1, 'di_b' => 0, 'proses' => 'OB'];
+            'n2' => 'Low', 'kt' => 'Administrasi: SOP', 'faktor' => 'Man', 'aspek' => 'Safety', 'di_a' => 1, 'di_b' => 0, 'proses' => 'K16'];
         $akt = fn (string $dl, string $a) => ['dl' => $dl, 'aktivitas' => ucfirst($a), 'a' => $a, 'bahaya' => '2', 'k' => '1', 'g' => '1', 't' => '0', 'x' => '0',
-            'gap_open' => '1', 'gap_ulang' => '0', 'gap_stop' => '0', 'sig' => '0', 'high' => '2', 'terakhir' => '2026-11-10', 'strip' => '--KG', 'via_bukti' => '0', 'proses' => 'OB'];
+            'gap_open' => '1', 'gap_ulang' => '0', 'gap_stop' => '0', 'sig' => '0', 'high' => '2', 'terakhir' => '2026-11-10', 'strip' => '--KG', 'via_bukti' => '0', 'proses' => 'K16'];
 
         $data = [
             'sites' => ['LMO'],

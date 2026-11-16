@@ -3,6 +3,7 @@
 namespace Tests\Unit\PetaRisiko;
 
 use App\Services\PetaRisiko\Drm\DrmBeranda;
+use App\Services\PetaRisiko\Drm\DrmMaster;
 use App\Services\PetaRisiko\Drm\DrmSql;
 use Carbon\CarbonImmutable;
 use Tests\TestCase;
@@ -98,12 +99,13 @@ class DrmBerandaTest extends TestCase
 
     public function test_sql_beranda_memakai_minggu_kalender_dan_root_cause(): void
     {
-        $sql = (new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))->untukSite('LMO');
+        $sql = (new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI), DrmMaster::dariArray([])->literal(config('peta_risiko_drm'))))->untukSite('LMO');
 
         $kel = $sql->berandaKelompok();
         $this->assertStringContainsString('toStartOfWeek(t_end, 0) AS wk0', $kel);
         $this->assertStringContainsString("AND t.site = 'LMO'", $kel);
-        $this->assertStringContainsString('HAVING uniqExact(h.proses) <= 2', $kel);
+        // Deteksi keluarga dari kelompok aktivitas teks OBS/OAK (spec dlEntB).
+        $this->assertStringContainsString('FROM sap s JOIN okx k ON k.tx = s.tx', $kel);
 
         $spe = $sql->berandaSpesifik();
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
