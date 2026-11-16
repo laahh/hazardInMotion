@@ -63,6 +63,7 @@ class PetaRisikoMasterController extends Controller
             'jumlah' => collect(DrmMasterSkema::semua())->map(fn ($s) => DB::table($s['tabel'])->count())->all(),
             'teksRi' => $riTampil ? DB::table('drm_master_baris')->whereIn('ri', $riTampil)->get()->keyBy('ri') : collect(),
             'pilihan' => $this->pilihan(),
+            'saran' => $this->saran($skema),
             'log' => DB::table('drm_master_log')->orderByDesc('id')->limit(15)->get(),
             'syncTerakhir' => $meta['dibuat'] ?? null,
             'adaPerubahanBaru' => $ubahTerakhir && (! isset($meta['dibuat']) || strtotime((string) $ubahTerakhir) > strtotime((string) $meta['dibuat'])),
@@ -175,6 +176,34 @@ class PetaRisikoMasterController extends Controller
             'grup' => DB::table('drm_master_grup')->orderBy('gid')->get()->mapWithKeys(fn ($g) => [(string) $g->gid => $g->gid.' · '.$g->nama])->all(),
             'tema' => DB::table('drm_master_tema')->orderBy('id')->get()->mapWithKeys(fn ($t) => [(string) $t->id => $t->id.' · '.$t->nama])->all(),
         ];
+    }
+
+    /**
+     * Daftar saran dropdown untuk form tab aktif:
+     *   kolom => [nilai unik] (opsi 'saran' tabel.kolom), 'ri' => [[ri, teks]] bila ada kolom baris HIRA,
+     *   'aid' => [aktivitas => aid] bila ada kolom isiAid.
+     *
+     * @param  array<string, mixed>  $skema
+     * @return array<string, mixed>
+     */
+    private function saran(array $skema): array
+    {
+        $hasil = [];
+        foreach ($skema['kolom'] as $kolom => [, , , $opsi]) {
+            if (isset($opsi['saran'])) {
+                [$tabel, $k] = explode('.', $opsi['saran']);
+                $hasil[$kolom] = DB::table($tabel)->where($k, '!=', '')->distinct()->orderBy($k)->limit(5000)->pluck($k)->all();
+            }
+            if (! empty($opsi['ri'])) {
+                $hasil['ri'] = DB::table('drm_master_baris')->orderBy('ri')->get(['ri', 'aktivitas', 'bahaya', 'aktif'])
+                    ->map(fn ($b) => [(int) $b->ri, mb_strimwidth($b->aktivitas, 0, 60, '…').' · '.mb_strimwidth($b->bahaya, 0, 90, '…').($b->aktif ? '' : ' (nonaktif)')])->all();
+            }
+            if (! empty($opsi['isiAid'])) {
+                $hasil['aid'] = DB::table('drm_master_aktivitas')->pluck('aid', 'aktivitas')->map(fn ($v) => (int) $v)->all();
+            }
+        }
+
+        return $hasil;
     }
 
     private function bolehUbah(Request $request): bool

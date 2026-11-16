@@ -7,7 +7,9 @@ namespace App\Services\PetaRisiko\Drm\Master;
  *
  * Tiap tabel: [judul, kode sheet, tabel DB, kunci, kolom, kolom cari, urut, catatan].
  * Kolom: nama => [label, tipe, aturan validasi Laravel, opsi]. Tipe: int, teks, teks_panjang, bool, pilih.
- * opsi: 'kunci' (kunci utama yang diisi manual, tidak bisa diubah setelah dibuat), 'ri' (tampilkan teks baris HIRA),
+ * opsi: 'kunci' (kunci utama yang diisi manual, tidak bisa diubah setelah dibuat), 'ri' (dropdown cari baris HIRA),
+ *       'saran' => 'tabel.kolom' (dropdown saran dari nilai yang sudah ada, tetap boleh diketik baru),
+ *       'isiAid' (memilih aktivitas mengisi ID aktivitas otomatis),
  *       'pilihan' => sumber pilihan ('kelompok' | 'grup' | 'tema' | daftar statis).
  */
 final class DrmMasterSkema
@@ -22,8 +24,8 @@ final class DrmMasterSkema
                 'kolom' => [
                     'ri' => ['ID baris', 'int', ['required', 'integer', 'min:0'], ['kunci' => true]],
                     'aid' => ['ID aktivitas', 'int', ['required', 'integer', 'min:0'], []],
-                    'aktivitas' => ['Aktivitas', 'teks', ['required', 'string', 'max:500'], []],
-                    'sub' => ['Sub aktivitas', 'teks', ['nullable', 'string', 'max:500'], []],
+                    'aktivitas' => ['Aktivitas', 'teks', ['required', 'string', 'max:500'], ['saran' => 'drm_master_aktivitas.aktivitas', 'isiAid' => true]],
+                    'sub' => ['Sub aktivitas', 'teks', ['nullable', 'string', 'max:500'], ['saran' => 'drm_master_baris.sub']],
                     'bahaya' => ['Bahaya-risiko', 'teks_panjang', ['required', 'string', 'max:1000'], []],
                     'kb' => ['Kategori bahaya', 'pilih', ['nullable', 'in:Significant,High,Medium,Low'], ['pilihan' => ['Significant', 'High', 'Medium', 'Low']]],
                     'umum' => ['Bahaya umum', 'bool', ['boolean'], []],
@@ -49,7 +51,7 @@ final class DrmMasterSkema
                 'catatan' => 'Kelompok aktivitas setiap baris HIRA mengikuti aktivitasnya di sini.',
                 'kolom' => [
                     'aid' => ['ID aktivitas', 'int', ['required', 'integer', 'min:0'], ['kunci' => true]],
-                    'aktivitas' => ['Aktivitas HIRA', 'teks', ['required', 'string', 'max:500'], []],
+                    'aktivitas' => ['Aktivitas HIRA', 'teks', ['required', 'string', 'max:500'], ['saran' => 'drm_master_baris.aktivitas']],
                     'kelompok' => ['Kelompok aktivitas', 'pilih', ['required', 'string', 'max:10'], ['pilihan' => 'kelompok']],
                 ],
                 'cari' => ['aktivitas', 'kelompok', 'aid'], 'urut' => 'aktivitas',
@@ -77,8 +79,8 @@ final class DrmMasterSkema
                 'judul' => 'Detail lokasi → grup', 'sheet' => 'M06', 'tabel' => 'drm_master_dl', 'kunci' => 'id', 'kunciManual' => false,
                 'catatan' => 'Nama site / lokasi / detail lokasi harus sama dengan di SAP (huruf besar-kecil dan spasi ganda diabaikan).',
                 'kolom' => [
-                    'site' => ['Site', 'teks', ['required', 'string', 'max:60'], []],
-                    'lokasi' => ['Lokasi', 'teks', ['required', 'string', 'max:200'], []],
+                    'site' => ['Site', 'teks', ['required', 'string', 'max:60'], ['saran' => 'drm_master_dl.site']],
+                    'lokasi' => ['Lokasi', 'teks', ['required', 'string', 'max:200'], ['saran' => 'drm_master_dl.lokasi']],
                     'detail' => ['Detail lokasi', 'teks', ['required', 'string', 'max:300'], []],
                     'gid' => ['Grup lokasi', 'pilih', ['required', 'integer'], ['pilihan' => 'grup']],
                     'aktif' => ['Aktif', 'bool', ['boolean'], []],
@@ -89,9 +91,9 @@ final class DrmMasterSkema
                 'judul' => 'Lokasi → PJA', 'sheet' => 'M07/M08', 'tabel' => 'drm_master_lokasi_pja', 'kunci' => 'id', 'kunciManual' => false,
                 'catatan' => 'PJA melekat di level lokasi; semua detail lokasinya ikut. Nama PJA harus sama dengan nama di master PJA (m_pja).',
                 'kolom' => [
-                    'site' => ['Site', 'teks', ['required', 'string', 'max:60'], []],
-                    'lokasi' => ['Lokasi', 'teks', ['required', 'string', 'max:200'], []],
-                    'nama_pja' => ['Nama PJA', 'teks', ['required', 'string', 'max:200'], []],
+                    'site' => ['Site', 'teks', ['required', 'string', 'max:60'], ['saran' => 'drm_master_dl.site']],
+                    'lokasi' => ['Lokasi', 'teks', ['required', 'string', 'max:200'], ['saran' => 'drm_master_dl.lokasi']],
+                    'nama_pja' => ['Nama PJA', 'teks', ['required', 'string', 'max:200'], ['saran' => 'drm_master_lokasi_pja.nama_pja']],
                     'aktif' => ['Aktif', 'bool', ['boolean'], []],
                 ],
                 'cari' => ['site', 'lokasi', 'nama_pja'], 'urut' => 'site',
@@ -100,10 +102,10 @@ final class DrmMasterSkema
                 'judul' => 'Label SAP → baris', 'sheet' => 'M09', 'tabel' => 'drm_master_label', 'kunci' => 'id', 'kunciManual' => false,
                 'catatan' => 'Laporan Hazard/Inspeksi berlabel ini mengidentifikasi baris HIRA terpilih (hanya bila baris itu milik grup detail lokasi laporan).',
                 'kolom' => [
-                    'ketidaksesuaian' => ['Ketidaksesuaian', 'teks', ['required', 'string', 'max:300'], []],
-                    'subketidaksesuaian' => ['Subketidaksesuaian', 'teks', ['required', 'string', 'max:300'], []],
+                    'ketidaksesuaian' => ['Ketidaksesuaian', 'teks', ['required', 'string', 'max:300'], ['saran' => 'drm_master_label.ketidaksesuaian']],
+                    'subketidaksesuaian' => ['Subketidaksesuaian', 'teks', ['required', 'string', 'max:300'], ['saran' => 'drm_master_label.subketidaksesuaian']],
                     'ri' => ['ID baris HIRA', 'int', ['required', 'integer', 'exists:drm_master_baris,ri'], ['ri' => true]],
-                    'sumber' => ['Sumber', 'teks', ['nullable', 'string', 'max:100'], []],
+                    'sumber' => ['Sumber', 'teks', ['nullable', 'string', 'max:100'], ['saran' => 'drm_master_label.sumber']],
                     'aktif' => ['Aktif', 'bool', ['boolean'], []],
                 ],
                 'cari' => ['ketidaksesuaian', 'subketidaksesuaian', 'ri'], 'urut' => 'ketidaksesuaian',
@@ -113,7 +115,7 @@ final class DrmMasterSkema
                 'catatan' => 'OBS: teks aktivitas observasi persis. OAK: "aktivitas / sub aktivitas" persis. Hasil OAK "Stop" = gap OAK Stop.',
                 'kolom' => [
                     'jenis' => ['Jenis', 'pilih', ['required', 'in:OBS,OAK'], ['pilihan' => ['OBS', 'OAK']]],
-                    'teks' => ['Teks aktivitas', 'teks', ['required', 'string', 'max:500'], []],
+                    'teks' => ['Teks aktivitas', 'teks', ['required', 'string', 'max:500'], ['saran' => 'drm_master_teks.teks']],
                     'ri' => ['ID baris HIRA', 'int', ['required', 'integer', 'exists:drm_master_baris,ri'], ['ri' => true]],
                     'aktif' => ['Aktif', 'bool', ['boolean'], []],
                 ],

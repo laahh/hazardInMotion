@@ -38,14 +38,29 @@
   .mm-btn:hover { background: #2b45af; }
   .mm-btn.sek { background: #fff; color: #2c2f31; border: 1px solid rgba(171, 173, 175, .45); }
   .mm-btn.bahaya { background: #fff; color: #b41340; border: 1px solid rgba(180, 19, 64, .35); padding: 6px 12px; }
-  .mm-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 18px; padding: 20px 24px; background: #fbfcff; border-bottom: 1px solid rgba(171, 173, 175, .2); }
-  .mm-form label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #595c5e; }
+  /* Modal form tambah / ubah */
+  .mm-modal { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 0; border-radius: 20px; box-shadow: 0 30px 60px -12px rgba(0, 0, 0, .35); overflow: hidden; }
+  .mm-modal::backdrop { background: rgba(15, 23, 42, .45); backdrop-filter: blur(3px); }
+  .mm-modal form { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+  .mm-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px 16px; border-bottom: 1px solid rgba(171, 173, 175, .25); background: linear-gradient(135deg, rgba(57, 82, 188, .07), rgba(114, 71, 158, .05)); }
+  .mm-modal-head small { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #3952bc; }
+  .mm-modal-head h2 { margin: 4px 0 0; font-size: 19px; font-weight: 800; color: #2c2f31; letter-spacing: -.01em; }
+  .mm-x { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: #595c5e; text-decoration: none; }
+  .mm-x:hover { background: rgba(0, 0, 0, .06); color: #2c2f31; }
+  .mm-modal-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid rgba(171, 173, 175, .25); background: #fafbfc; }
+  .mm-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 18px; padding: 20px 24px; overflow-y: auto; }
+  .mm-form label { grid-column: span 2; display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #595c5e; }
   .mm-form label.lebar { grid-column: 1 / -1; }
-  .mm-form input, .mm-form select, .mm-form textarea { padding: 9px 12px; border-radius: 10px; border: 1px solid rgba(171, 173, 175, .5); background: #fff; font-size: 13.5px; font-weight: 500; color: #2c2f31; text-transform: none; letter-spacing: 0; }
+  .mm-form label.lebar-2 { grid-column: span 2; }
+  .mm-form input, .mm-form select, .mm-form textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(171, 173, 175, .55); background: #fff; font-size: 13.5px; font-weight: 500; color: #2c2f31; text-transform: none; letter-spacing: 0; }
   .mm-form input:focus, .mm-form select:focus, .mm-form textarea:focus { outline: 2px solid rgba(57, 82, 188, .35); border-color: #3952bc; }
-  .mm-form .cek { flex-direction: row; align-items: center; gap: 10px; text-transform: none; font-size: 13.5px; letter-spacing: 0; color: #2c2f31; }
-  .mm-form .cek input { width: 18px; height: 18px; }
-  .mm-form .aksi { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+  .mm-form input:disabled, .mm-form select:disabled { background: #f1f5f9; color: #64748b; }
+  .mm-form .cek { grid-column: span 2; flex-direction: row; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(171, 173, 175, .35); background: #fafbfc; text-transform: none; font-size: 13.5px; letter-spacing: 0; color: #2c2f31; cursor: pointer; align-self: end; }
+  .mm-form .cek input { width: 18px; height: 18px; flex: none; }
+  .mm-cari-in { position: relative; display: block; }
+  .mm-cari-in .material-symbols-outlined { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 20px; color: #94a3b8; pointer-events: none; }
+  .mm-cari-in input { padding-right: 38px; }
+  @media (max-width: 640px) { .mm-form { grid-template-columns: 1fr; } .mm-form label, .mm-form .cek, .mm-form label.lebar-2 { grid-column: 1 / -1; } }
   .mm-ri { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: #595c5e; text-transform: none; letter-spacing: 0; }
   .mm-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
   .mm-badge.y { background: #dcfce7; color: #166534; }
@@ -107,44 +122,102 @@
     </div>
 
     @if ($bolehUbah && ($tambah || $ubah))
-      @php $kunci = $skema['kunci']; @endphp
-      <form class="mm-form" method="post" action="{{ route('peta-risiko-pja.master.simpan', ['tabel' => $kode]) }}">
-        @csrf
-        <input type="hidden" name="_q" value="{{ $q }}">
-        @if ($ubah) <input type="hidden" name="_id" value="{{ $ubah->{$kunci} }}"> @endif
-        @foreach ($skema['kolom'] as $kolom => [$label, $tipe, $aturan, $opsi])
-          @php
-            $nilai = old($kolom, $ubah->{$kolom} ?? ($tipe === 'bool' ? 1 : ''));
-            $kunciTerkunci = ! empty($opsi['kunci']) && $ubah;
-          @endphp
-          @if ($tipe === 'bool')
-            <label class="cek"><input type="checkbox" name="{{ $kolom }}" value="1" @checked((bool) $nilai)> {{ $label }}</label>
-          @elseif ($tipe === 'pilih')
-            @php $daftar = is_array($opsi['pilihan']) ? array_combine($opsi['pilihan'], $opsi['pilihan']) : ($pilihan[$opsi['pilihan']] ?? []); @endphp
-            <label>{{ $label }}
-              <select name="{{ $kolom }}" @disabled($kunciTerkunci) required>
-                <option value="">— pilih —</option>
-                @foreach ($daftar as $v => $teks)
-                  <option value="{{ $v }}" @selected((string) $nilai === (string) $v)>{{ $teks }}</option>
-                @endforeach
-              </select>
-            </label>
-          @elseif ($tipe === 'teks_panjang')
-            <label class="lebar">{{ $label }}<textarea name="{{ $kolom }}" rows="2" @disabled($kunciTerkunci)>{{ $nilai }}</textarea></label>
-          @else
-            <label>{{ $label }}
-              <input type="{{ $tipe === 'int' ? 'number' : 'text' }}" name="{{ $kolom }}" value="{{ $nilai }}" @disabled($kunciTerkunci)>
-              @if (! empty($opsi['ri']) && $nilai !== '' && isset($teksRi[$nilai]))
-                <span class="mm-ri">{{ $teksRi[$nilai]->aktivitas }} · {{ $teksRi[$nilai]->bahaya }}</span>
+      @php
+        $kunci = $skema['kunci'];
+        $urlTutup = route('peta-risiko-pja.master.index', array_filter(['t' => $kode, 'q' => $q, 'page' => request('page')]));
+        $teksRiPeta = collect($saran['ri'] ?? [])->mapWithKeys(fn ($r) => [$r[0] => $r[1]])->all();
+      @endphp
+      <dialog class="mm-modal" id="mm-modal" data-tutup="{{ $urlTutup }}" aria-labelledby="mm-modal-judul">
+        <form method="post" action="{{ route('peta-risiko-pja.master.simpan', ['tabel' => $kode]) }}">
+          @csrf
+          <input type="hidden" name="_q" value="{{ $q }}">
+          @if ($ubah) <input type="hidden" name="_id" value="{{ $ubah->{$kunci} }}"> @endif
+          <header class="mm-modal-head">
+            <div>
+              <small>{{ $skema['sheet'] }} · {{ $skema['judul'] }}</small>
+              <h2 id="mm-modal-judul">{{ $ubah ? 'Ubah data · '.$ubah->{$kunci} : 'Tambah data' }}</h2>
+            </div>
+            <a class="mm-x" href="{{ $urlTutup }}" aria-label="Tutup"><span class="material-symbols-outlined">close</span></a>
+          </header>
+          <div class="mm-form">
+            @foreach ($skema['kolom'] as $kolom => [$label, $tipe, $aturan, $opsi])
+              @php
+                $nilai = old($kolom, $ubah->{$kolom} ?? ($tipe === 'bool' ? 1 : ''));
+                $kunciTerkunci = ! empty($opsi['kunci']) && $ubah;
+                $daftarSaran = $saran[$kolom] ?? null;
+              @endphp
+              @if ($tipe === 'bool')
+                <label class="cek"><input type="checkbox" name="{{ $kolom }}" value="1" @checked((bool) $nilai)> {{ $label }}</label>
+              @elseif ($tipe === 'pilih')
+                @php $daftar = is_array($opsi['pilihan']) ? array_combine($opsi['pilihan'], $opsi['pilihan']) : ($pilihan[$opsi['pilihan']] ?? []); @endphp
+                <label>{{ $label }}
+                  <select name="{{ $kolom }}" @disabled($kunciTerkunci) required>
+                    <option value="">— pilih —</option>
+                    @foreach ($daftar as $v => $teks)
+                      <option value="{{ $v }}" @selected((string) $nilai === (string) $v)>{{ $teks }}</option>
+                    @endforeach
+                  </select>
+                </label>
+              @elseif (! empty($opsi['ri']))
+                <label class="lebar">{{ $label }}
+                  <span class="mm-cari-in"><span class="material-symbols-outlined">search</span>
+                    <input type="text" inputmode="numeric" name="{{ $kolom }}" value="{{ $nilai }}" list="mm-dl-ri" data-ri autocomplete="off" placeholder="Ketik ID atau kata dari aktivitas/bahaya lalu pilih">
+                  </span>
+                  <span class="mm-ri" data-ri-teks>{{ $teksRiPeta[(int) $nilai] ?? ($nilai !== '' ? 'ID baris tidak ditemukan di M01' : '') }}</span>
+                </label>
+              @elseif ($tipe === 'teks_panjang')
+                <label class="lebar">{{ $label }}<textarea name="{{ $kolom }}" rows="3" @disabled($kunciTerkunci)>{{ $nilai }}</textarea></label>
+              @else
+                <label class="{{ in_array($kolom, ['aktivitas', 'detail', 'teks', 'nama_pja', 'ketidaksesuaian', 'subketidaksesuaian'], true) ? 'lebar-2' : '' }}">{{ $label }}
+                  @if ($daftarSaran !== null)
+                    <span class="mm-cari-in"><span class="material-symbols-outlined">expand_more</span>
+                      <input type="text" name="{{ $kolom }}" value="{{ $nilai }}" list="mm-dl-{{ $kolom }}" autocomplete="off" @disabled($kunciTerkunci)
+                        @if (! empty($opsi['isiAid'])) data-isi-aid @endif placeholder="Pilih dari daftar atau ketik baru">
+                    </span>
+                    <datalist id="mm-dl-{{ $kolom }}">@foreach ($daftarSaran as $v)<option value="{{ $v }}"></option>@endforeach</datalist>
+                  @else
+                    <input type="{{ $tipe === 'int' ? 'number' : 'text' }}" name="{{ $kolom }}" value="{{ $nilai }}" @disabled($kunciTerkunci)>
+                  @endif
+                </label>
               @endif
-            </label>
+            @endforeach
+          </div>
+          @if (isset($saran['ri']))
+            <datalist id="mm-dl-ri">@foreach ($saran['ri'] as [$ri, $teks])<option value="{{ $ri }}" label="{{ $ri }} · {{ $teks }}">{{ $ri }} · {{ $teks }}</option>@endforeach</datalist>
           @endif
-        @endforeach
-        <div class="aksi">
-          <button class="mm-btn" type="submit"><span class="material-symbols-outlined" style="font-size:18px">save</span> {{ $ubah ? 'Simpan perubahan' : 'Tambah' }}</button>
-          <a class="mm-btn sek" href="{{ route('peta-risiko-pja.master.index', ['t' => $kode, 'q' => $q]) }}">Batal</a>
-        </div>
-      </form>
+          <footer class="mm-modal-foot">
+            <span class="dr-mute" style="font-size:12px">Berlaku setelah <code>peta-risiko:sync</code> berikutnya · tercatat di riwayat</span>
+            <span style="display:flex;gap:10px">
+              <a class="mm-btn sek" href="{{ $urlTutup }}">Batal</a>
+              <button class="mm-btn" type="submit"><span class="material-symbols-outlined" style="font-size:18px">save</span> {{ $ubah ? 'Simpan perubahan' : 'Tambah' }}</button>
+            </span>
+          </footer>
+        </form>
+      </dialog>
+      <script>
+        (() => {
+          const d = document.getElementById('mm-modal');
+          if (!d) return;
+          const tutup = () => { location.href = d.dataset.tutup; };
+          d.addEventListener('cancel', (e) => { e.preventDefault(); tutup(); });
+          d.addEventListener('click', (e) => { if (e.target === d) tutup(); });
+          d.showModal();
+          // Dropdown baris HIRA: tampilkan teks baris terpilih di bawah isian.
+          const peta = {{ \Illuminate\Support\Js::from($teksRiPeta) }};
+          d.querySelectorAll('[data-ri]').forEach((inp) => inp.addEventListener('input', () => {
+            const t = inp.closest('label').querySelector('[data-ri-teks]');
+            const ri = parseInt(inp.value, 10);
+            t.textContent = inp.value === '' ? '' : (peta[ri] || 'ID baris tidak ditemukan di M01');
+            t.style.color = peta[ri] ? '' : '#b41340';
+          }));
+          // Memilih aktivitas yang sudah ada mengisi ID aktivitas otomatis.
+          const aid = {{ \Illuminate\Support\Js::from($saran['aid'] ?? []) }};
+          d.querySelectorAll('[data-isi-aid]').forEach((inp) => inp.addEventListener('change', () => {
+            const f = d.querySelector('input[name="aid"]');
+            if (f && aid[inp.value] !== undefined) f.value = aid[inp.value];
+          }));
+        })();
+      </script>
     @endif
 
     <div class="dr-scroll">
