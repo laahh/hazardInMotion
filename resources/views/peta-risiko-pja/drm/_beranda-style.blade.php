@@ -94,6 +94,9 @@
   .br-wc.sel .stk { outline: 2px solid var(--navy); outline-offset: 2px; }
   .br-wc span { font: 600 11px/1 "Plus Jakarta Sans", sans-serif; color: var(--mute); white-space: nowrap; }
   .br-wc.sel span { color: var(--navy); }
+  .br-wc .stk i { display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; }
+  .br-wc .stk em { font: 700 10.5px/1 "Plus Jakarta Sans", sans-serif; font-style: normal; }
+  .br-wc span.br-wv { font-weight: 700; color: var(--ink, #2c2f31); }
   .br-pj { display: flex; align-items: flex-end; gap: 8px; cursor: help; }
   .br-pj b { font: 800 13px/1 "Plus Jakarta Sans", sans-serif; color: var(--ink); }
   .br-pb { display: flex; align-items: flex-end; gap: 2px; height: 36px; }

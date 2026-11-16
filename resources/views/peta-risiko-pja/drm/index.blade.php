@@ -340,7 +340,7 @@
     const V = jumlahF(P, (p) => vekTab(p, w)), V0 = w + 1 < NW ? jumlahF(P, (p) => vekTab(p, w + 1)) : null;
     const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
     const catatan = R
-      ? '' // keterangan satuan baseline dihapus atas permintaan user
+      ? (pitaAktif() ? '' : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot belum memakai pita cakupan, sehingga hampir semua bahaya terbaca "sebagian". Jalankan ulang <code>php artisan peta-risiko:sync</code>.</p>')
       : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot lama: angka masih jumlah baris tingkat PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code> untuk baseline unik.</p>';
     $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`) + catatan;
 
@@ -693,15 +693,28 @@
     panel.querySelectorAll('[data-buka]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
   }
 
+  /**
+   * Batang komposisi per minggu. Tiap segmen diberi label persen bila cukup tinggi; angka di bawah batang:
+   * mode pita = rata-rata cakupan detail lokasi (lebih bergerak daripada porsi pita teratas), mode spec = porsi terkontrol penuh.
+   */
   function trenPeriode(P, f = vekPja, L = LBL_SPEC) {
-    const W = DR.BW, NW = M.beranda.minggu.length, col = [];
+    const W = DR.BW, NW = M.beranda.minggu.length, col = [], pita = L !== LBL_SPEC;
+    const seg = (x, n, warna, gelap) => {
+      const p = 100 * x / n;
+      const teks = p >= 14 ? `<em style="color:${gelap ? '#fff' : '#3d2f00'}">${Math.round(p)}%</em>` : '';
+      return `<i style="height:${p.toFixed(1)}%;background:${warna}">${teks}</i>`;
+    };
     for (let i = NW - 1; i >= 0; i--) {
-      const v = P.reduce((a, p) => tambahVek(a, f(p, i)), KOSONG), n = Math.max(1, v.t), H = (x) => (100 * x / n).toFixed(1) + '%';
-      col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label)}: ${L.kFull} ${DR.fmt(v.full)}, ${L.kPart} ${DR.fmt(v.part)}, ${L.kGapo} ${DR.fmt(v.gapo)}, ${L.kNone} ${DR.fmt(v.none)}">
-        <div class="stk"><i style="height:${H(v.none)};background:${W.none}"></i><i style="height:${H(v.gapo)};background:${W.bm}"></i><i style="height:${H(v.part)};background:${W.part}"></i><i style="height:${H(v.full)};background:${W.ok}"></i></div>
-        <span>${wKode(i)}${wBerjalan(i) ? '*' : ''}</span><span>${pctI(v.full, v.t)}</span></div>`);
+      const v = P.reduce((a, p) => tambahVek(a, f(p, i)), KOSONG), n = Math.max(1, v.t);
+      const bawah = pita ? `cakupan ${DR.pct(v.cak / 1000, v.t)}` : `penuh ${pctI(v.full, v.t)}`;
+      col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label)}: ${L.kFull} ${DR.fmt(v.full)}, ${L.kPart} ${DR.fmt(v.part)}, ${L.kGapo} ${DR.fmt(v.gapo)}, ${L.kNone} ${DR.fmt(v.none)}${pita ? ` · rata-rata cakupan ${DR.pct(v.cak / 1000, v.t)} DL` : ''}">
+        <div class="stk">${seg(v.none, n, W.none, false)}${seg(v.gapo, n, W.bm, true)}${seg(v.part, n, W.part, false)}${seg(v.full, n, W.ok, true)}</div>
+        <span>${wKode(i)}${wBerjalan(i) ? '*' : ''}</span><span class="br-wv">${bawah}</span></div>`);
     }
-    return `<div class="br-wb">${col.join('')}</div>${wBerjalan(0) ? '<div class="dr-mute" style="font-size:12px">* minggu berjalan, belum penuh</div>' : ''}`;
+    const ket = pita
+      ? 'Angka di dalam batang = porsi bahaya-risiko per pita cakupan. Angka di bawah = rata-rata porsi detail lokasi yang terkontrol.'
+      : 'Angka di bawah batang = porsi baris terkontrol penuh.';
+    return `<div class="br-wb">${col.join('')}</div><div class="dr-mute" style="font-size:12px;margin-top:6px">${ket}${wBerjalan(0) ? ' · * minggu berjalan, belum penuh' : ''}</div>`;
   }
 
   function barisVek(v, v0) {
