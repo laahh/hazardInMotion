@@ -123,7 +123,7 @@
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, kelMx: q.get('kel') || '' };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, dlbuka: {}, kelMx: q.get('kel') || '' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -257,15 +257,68 @@
     const kosongan = [...peta.values()].length - L.length;
     $('#dr-tbl-grup').innerHTML = `<thead><tr><th style="min-width:240px">Detail lokasi</th><th style="min-width:200px">PJA</th><th style="min-width:180px">Komposisi</th>
         <th class="r">Baris</th><th class="r">Terkontrol</th><th class="r">Hanya bermasalah</th><th class="r">Tanpa laporan</th><th>Laporan bermasalah</th></tr></thead><tbody>`
-      + (L.map(({ info, pja, v, v0 }) => `<tr>
-          <td><span class="pr-name">${DR.esc(info[2])}</span><br><span class="dr-mute">${DR.esc(info[1])} · ${DR.esc(info[0])}</span></td>
-          <td>${pja.map((p) => `<a href="${URL_PJA.replace('__ID__', p.id)}?w=${w}" style="display:block">${DR.esc(p.nama)}</a>`).join('')}</td>
+      + (L.map(({ d, info, pja, v, v0 }) => {
+        const buka = !!state.dlbuka[d];
+        return `<tr class="br-a${buka ? ' open' : ''}" data-dl="${DR.esc(d)}" style="cursor:pointer">
+          <td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} laporan SAP ${DR.esc(info[2])}">▸</button><span class="pr-name">${DR.esc(info[2])}</span><br><span class="dr-mute" style="padding-left:24px">${DR.esc(info[1])} · ${DR.esc(info[0])}</span></td>
+          <td>${pja.map((p) => `<a data-pja href="${URL_PJA.replace('__ID__', p.id)}?w=${w}" style="display:block">${DR.esc(p.nama)}</a>`).join('')}</td>
           <td>${DR.sb4(v.full, 0, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td>
           <td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
-          <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
+          <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`
+          + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:12px 16px 16px 40px" data-sap="${DR.esc(d)}"><span class="dr-mute">Memuat laporan SAP…</span></td></tr>` : '');
+      }).join('')
         || `<tr><td colspan="8" class="pr-empty">Tidak ada detail lokasi ${DR.esc(state.grup)}${state.site === 'ALL' ? '' : ' di ' + DR.esc(state.site)} yang punya baris baseline${M.beranda.dl ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`)
       + (kosongan ? `<tr><td colspan="8" class="dr-mute" style="font-size:12px">${kosongan} detail lokasi lain di grup ini tidak punya baris pada level risiko terpilih.</td></tr>` : '')
       + '</tbody>';
+    document.querySelectorAll('#dr-tbl-grup tr[data-dl]').forEach((tr) => tr.addEventListener('click', () => {
+      state.dlbuka[tr.dataset.dl] = !state.dlbuka[tr.dataset.dl]; tabelDetailLokasi(state.w);
+    }));
+    document.querySelectorAll('#dr-tbl-grup a[data-pja]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
+    document.querySelectorAll('#dr-tbl-grup [data-sap]').forEach((td) => muatSap(td.dataset.sap, w, td));
+  }
+
+  // ------------------------------------------------------------ Laporan SAP satu detail lokasi (dimuat saat baris dibuka)
+  const URL_SAP = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.dl.sap', ['dl' => '__DL__'])) }};
+  const sapCache = {};
+  const PEMETAAN = {
+    lolos: ['var(--green-d)', 'Mengidentifikasi baris HIRA'],
+    luar_grup: ['#9A7300', 'Terpetakan, tapi barisnya bukan milik grup ini'],
+    tak_terpetakan: ['#8A939C', 'Tidak terpetakan di master'],
+  };
+
+  function muatSap(d, w, td) {
+    const kunci = `${d}|${w}`;
+    const tulis = (data) => { if (td.isConnected) td.innerHTML = isiSap(data); };
+    if (sapCache[kunci]) { tulis(sapCache[kunci]); return; }
+    fetch(URL_SAP.replace('__DL__', encodeURIComponent(d)) + '?w=' + w, { headers: { Accept: 'application/json' } })
+      .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j))))
+      .then((data) => { sapCache[kunci] = data; tulis(data); })
+      .catch((e) => { if (td.isConnected) td.innerHTML = `<span class="br-red">${DR.esc((e && e.pesan) || 'Gagal memuat laporan SAP.')}</span>`; });
+  }
+
+  function isiSap(data) {
+    const R = data.ringkas || {}, L = data.laporan || [];
+    const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
+    if (!L.length) return `<span class="dr-mute">Tidak ada laporan SAP (Hazard, Inspeksi, Observasi, OAK) di detail lokasi ini pada ${periode}.</span>`;
+    const ringkas = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:10px;font-size:13px">
+        <b>${DR.fmt(R.total)} laporan · ${periode}</b>
+        <span style="color:${PEMETAAN.lolos[0]}">● ${DR.fmt(R.lolos)} mengidentifikasi baris HIRA</span>
+        <span style="color:${PEMETAAN.luar_grup[0]}">● ${DR.fmt(R.luar_grup)} terpetakan di luar grup</span>
+        <span style="color:${PEMETAAN.tak_terpetakan[0]}">● ${DR.fmt(R.tak_terpetakan)} tidak terpetakan</span>
+        <span>belum closed ${DR.fmt(R.belum_closed)} · OAK Stop ${DR.fmt(R.oak_stop)}</span></div>`;
+    const baris = L.map((x) => {
+      const [warna, ket] = PEMETAAN[x.pemetaan] || ['#8A939C', x.pemetaan];
+      const bendera = [x.belum_closed ? '<span class="br-pill" style="background:var(--red)">Belum closed</span>' : '',
+        x.oak_stop ? '<span class="br-pill" style="background:var(--red)">OAK Stop</span>' : ''].join(' ');
+      return `<tr><td style="white-space:nowrap">${DR.esc(x.waktu)}<br><span class="dr-mute">${DR.esc(x.jenis)}</span></td>
+        <td><b>${DR.esc(x.isi || '-')}</b>${x.deskripsi ? `<br><span class="dr-mute">${DR.esc(x.deskripsi)}</span>` : ''}</td>
+        <td>${DR.esc(x.status || x.hasil_oak || '-')}${x.janji ? `<br><span class="dr-mute">janji ${DR.esc(x.janji)}</span>` : ''}<br>${bendera}</td>
+        <td><span style="color:${warna};font-weight:600">● ${ket}</span>${x.n_lolos ? `<br><span class="dr-mute">${x.bahaya.map(DR.esc).join('<br>')}${x.n_lolos > x.bahaya.length ? `<br>+${x.n_lolos - x.bahaya.length} baris lain` : ''}</span>` : x.n_kandidat ? `<br><span class="dr-mute">${x.n_kandidat} kandidat baris di grup lain</span>` : ''}</td>
+        <td class="dr-mute">${DR.esc(x.pelapor)}</td></tr>`;
+    }).join('');
+    return ringkas + `<div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:900px"><thead><tr><th>Waktu</th><th>Isi laporan</th><th>Status</th><th style="min-width:240px">Pemetaan master</th><th>Pelapor</th></tr></thead><tbody>${baris}</tbody></table></div>`
+      + (data.terpotong ? '<div class="dr-mute" style="font-size:12px;margin-top:6px">Ditampilkan 500 laporan terbaru.</div>' : '')
+      + '<div class="dr-mute" style="font-size:12px;margin-top:6px">Pemetaan: label ketidaksesuaian / subketidaksesuaian (M09) atau teks aktivitas OBS/OAK (M11/M12) → baris HIRA; dihitung hanya bila baris itu milik grup lokasi detail lokasi ini. Bukti tema checklist/teks OBS (M16) tidak ditampilkan di sini.</div>';
   }
 
   /** Matriks 5x5 Baseline HIRA (risiko awal) dan Final; bila satu kelompok dipilih di treemap, hanya kelompok itu. */

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\PetaRisiko;
 
 use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmRepository;
+use App\Services\PetaRisiko\Drm\DrmSapDetailLokasi;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -52,6 +54,33 @@ class PetaRisikoDrmController extends Controller
         return response()->download($this->repo->pathEkspor(), "mapping-bahaya-risiko-{$sampai}.xlsx", [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * Laporan SAP satu detail lokasi untuk minggu ke-w snapshot (0 = minggu terbaru), dengan keterangan
+     * pemetaan master DRM 2.1. Dipanggil saat baris detail lokasi di tab Group Lokasi dibuka.
+     */
+    public function sapDetailLokasi(Request $request, string $dl, DrmSapDetailLokasi $sap): JsonResponse
+    {
+        $meta = $this->repo->meta();
+        abort_if($meta === null, 404, 'Snapshot Peta Risiko belum dibuat.');
+        $info = ((array) ($meta['beranda']['dl'] ?? []))[$dl] ?? null;
+        abort_if($info === null, 404, 'Detail lokasi tidak ada di snapshot.');
+
+        $minggu = (array) ($meta['beranda']['minggu'] ?? []);
+        $w = max(0, min(count($minggu) - 1, (int) $request->query('w', 0)));
+        abort_if($minggu === [], 404);
+        $dari = CarbonImmutable::parse((string) $minggu[$w]);
+        $akhirData = CarbonImmutable::parse((string) $meta['sampai']);
+        $sampai = $dari->addDays(6)->min($akhirData);
+
+        try {
+            return response()->json($sap->ambil((int) $dl, (string) $info[3], $dari, $sampai));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['pesan' => 'Laporan SAP tidak bisa dimuat dari ClickHouse saat ini. Coba lagi beberapa saat.'], 503);
+        }
     }
 
     /** Ringkasan semua cakupan (Site / Group Lokasi / PJA) untuk halaman indeks. */
