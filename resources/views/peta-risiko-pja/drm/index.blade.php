@@ -844,12 +844,22 @@
     const B = jumlah(diSite), G = B.t - B.full, W = DR.BW, wk = wKode(state.w);
     const kpi = (ac, kc, judul, angka, isi, k) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(k)}<small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
 
-    panel.innerHTML = `<div class="br-kpis">
+    // Kartu KPI memakai ringkasan baseline unik yang sama dengan tab Overview (bukan jumlah baris tingkat PJA,
+    // yang menghitung satu bahaya berulang di tiap PJA). Snapshot lama tanpa ringkasan unik: jumlah per PJA.
+    const kartuAtas = adaUnik()
+      ? (() => {
+        const P = cakupanP(), NW = M.beranda.minggu.length;
+        const V = jumlahF(P, (p) => vekPja(p, state.w)), V0 = state.w + 1 < NW ? jumlahF(P, (p) => vekPja(p, state.w + 1)) : null;
+        return kartu4(V, V0, `${state.site === 'ALL' ? 'BC' : DR.esc(state.site)} · ${diSite.length} PJA · ${wk}`);
+      })()
+      : null;
+
+    panel.innerHTML = (kartuAtas || `<div class="br-kpis">
         ${kpi('var(--navy)', 'var(--navy)', `Baris baseline · ${state.site === 'ALL' ? 'seluruh BC' : DR.esc(state.site)} · ${wk}`, DR.fmt(B.t), `${diSite.length} PJA · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}`, 't')}
         ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh', pctI(B.full, B.t), `${DR.fmt(B.full)} baris`, 'full')}
         ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pctI(B.part, B.t), `${DR.fmt(B.part)} baris · gap total ${pctI(G, B.t)}`, 'part')}
         ${kpi(W.none, W.bm, 'Tanpa laporan', pctI(B.none, B.t), `${DR.fmt(B.none)} baris${B.gapo ? ` · ${DR.fmt(B.gapo)} hanya bermasalah` : ''}`, 'none')}
-      </div>`
+      </div>`)
       + tabelSite(semua, wk) + tabelDaftar(tampil, semua.length, wk);
 
     panel.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => {
