@@ -207,12 +207,15 @@ class DrmSnapshotBuilder
         $rcPerDl = $this->kelompok($d['brc'] ?? [], 'dl');
         $hidPerDl = array_map(fn (string $isi) => $isi === '' ? [] : array_map(fn ($p) => (string) strstr($p, ':', true), explode(',', $isi)), $pasanganPerDl);
 
-        $mgmt = [];
+        $mgmt = $kamusDl = [];
         foreach ($pjaBc as $id => $info) {
             $dlIds = array_map('strval', $info['dl']);
             $berkas[$id]['beranda'] = $b->berkas($dlIds, $hidPerDl, $hira, $dl, $idx, $rcPerDl);
-            $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds),
+            $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds), 'dls' => $dlIds,
                 ...$b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden'])];
+            foreach ($dlIds as $d) {
+                $kamusDl[$d] ??= [(string) ($dl[$d]['site'] ?? ''), (string) ($dl[$d]['lokasi'] ?? ''), (string) ($dl[$d]['detlok'] ?? ''), (string) ($dl[$d]['grp'] ?? '')];
+            }
         }
 
         return [
@@ -225,6 +228,8 @@ class DrmSnapshotBuilder
             'lamaHari' => (int) $cfg['beranda']['lokasi_lama_hari'],
             'kolomMgmt' => DrmBeranda::KOLOM_MGMT,
             'mgmt' => $mgmt,
+            // dl => [site, lokasi, detail lokasi, grup lokasi] untuk tabel detail lokasi di tab Group Lokasi.
+            'dl' => (object) $kamusDl,
         ];
     }
 

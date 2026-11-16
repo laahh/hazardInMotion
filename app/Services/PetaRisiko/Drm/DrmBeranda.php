@@ -200,6 +200,9 @@ class DrmBeranda
      *   w[minggu][level]      = angka sesuai KOLOM_MGMT
      *   kel[minggu][level][kel] / grp[minggu][level][grup] = angka KOLOM_MGMT per kelompok / per grup lokasi
      *     (grup: satu baris = grup × kelompok × bahaya, status dihitung dari detail lokasi grup itu saja)
+     *   gk[minggu][level]["grup|kel"] = angka KOLOM_MGMT kelompok aktivitas di dalam satu grup lokasi
+     *   dlw[minggu][level][dl] = angka KOLOM_MGMT per detail lokasi (satu baris = kelompok × bahaya di DL itu;
+     *     kategori hanya penuh / hanya bermasalah / tanpa laporan)
      *   mx[minggu][level][kel] = ['a' => [sel => n], 'f' => [sel => n]] matriks 5x5 awal / final per kelompok,
      *     sel = kekerapan×5 + konsekuensi (matriks total = jumlah semua kelompok)
      *   kelTot[level][kel]    = baris ketat per kelompok;  kelGap[minggu][level][kel] = baris ketat bukan terkontrol penuh
@@ -213,9 +216,9 @@ class DrmBeranda
     public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden): array
     {
         $nW = (int) $this->cfg['beranda']['minggu'];
-        [$unik, $kgTot, $u4, $unikGrup] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
+        [$unik, $kgTot, $u4, $unikGrup, $dlW] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
 
-        $w = $kelGap = $kelW = $grpW = $mx = array_fill(0, $nW, []);
+        $w = $kelGap = $kelW = $grpW = $gk = $mx = array_fill(0, $nW, []);
         $kelTot = [];
         foreach ($unik as $ku => $x) {
             [$lv, $kel] = [$x['lv'], $x['kel']];
@@ -240,7 +243,9 @@ class DrmBeranda
         }
         foreach ($unikGrup as $x) {
             foreach ($x['w'] as $i => $st) {
-                self::tambah($grpW[$i][$x['lv']][$x['grp']], self::kategori($st), $st[3]);
+                $kat = self::kategori($st);
+                self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3]);
+                self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3]);
             }
         }
 
@@ -252,6 +257,8 @@ class DrmBeranda
             'w' => $w,
             'kel' => $kelW,
             'grp' => $grpW,
+            'gk' => $gk,
+            'dlw' => $dlW,
             'mx' => $mx,
             'kelTot' => $kelTot,
             'kelGap' => $kelGap,
@@ -274,7 +281,7 @@ class DrmBeranda
         $sp = (array) $berkasBeranda['sp'];
         $umum = array_map(fn ($l) => array_flip($l), (array) $berkasBeranda['umum']);
         $unik = $unikGrup = $kgIdx = $kgTot = [];
-        $u4 = array_fill(0, $nW, []);
+        $u4 = $dlW = array_fill(0, $nW, []);
         $kwCache = [];
 
         foreach ($dlIds as $d) {
@@ -291,13 +298,15 @@ class DrmBeranda
                 $ku = $kel.'|'.$hid;
                 $kgu = $grp.'|'.$ku;
                 $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
-                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
                 $ok = [];
                 for ($i = 0; $i < $nW; $i++) {
                     [$st, $m] = self::status($kw[$i] ?? 0, $sw[$i] ?? 0);
                     $ok[$i] = $st === 'ok';
                     $unik[$ku]['w'][$i] = self::langkah($unik[$ku]['w'][$i], $ok[$i], $st === 'bm', $m);
                     $unikGrup[$kgu]['w'][$i] = self::langkah($unikGrup[$kgu]['w'][$i], $ok[$i], $st === 'bm', $m);
+                    // Per detail lokasi: satu baris = kelompok × bahaya di DL ini → penuh / hanya bermasalah / tanpa laporan.
+                    self::tambah($dlW[$i][$lv][$d], self::kategori([1, (int) $ok[$i], (int) ($st === 'bm')]), $m);
                 }
                 $kg = $kgIdx[$kel.'|'.$grp] ??= count($kgIdx);
                 $kgTot[$lv][$kg] = ($kgTot[$lv][$kg] ?? 0) + 1;
@@ -309,7 +318,7 @@ class DrmBeranda
             }
         }
 
-        return [$unik, $kgTot, $u4, $unikGrup];
+        return [$unik, $kgTot, $u4, $unikGrup, $dlW];
     }
 
     /** Tambah satu detail lokasi ke status baris ketat [n DL, n terkontrol, n bermasalah, bit]. */

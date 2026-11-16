@@ -123,6 +123,12 @@ class DrmBerandaTest extends TestCase
         $this->assertSame([13 => 1], $m['mx'][0]['High']['K13']['a']);
         $this->assertSame([13 => 1], $m['mx'][0]['High']['K13']['f']);
         $this->assertArrayNotHasKey('K16', $m['mx'][0]['High']);
+        // Kelompok di dalam grup: jumlahnya sama dengan total grup.
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['gk'][0]['High']['Disposal|K13']);
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['gk'][0]['High']['Disposal|K16']);
+        // Per detail lokasi: DL 1 punya h1 terkontrol; DL 2 punya h1 & h2 tanpa laporan.
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['dlw'][0]['High']['1']);
+        $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], $m['dlw'][0]['High']['2']);
     }
 
     public function test_sql_beranda_memakai_minggu_kalender_dan_root_cause(): void

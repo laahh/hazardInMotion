@@ -93,12 +93,12 @@
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b>Per Group Lokasi</b><small>Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.</small></div></div>
+      <div class="pr-card-head"><div><b id="dr-grup-judul">Per Group Lokasi</b><small id="dr-grup-sub">Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-grup"></table></div>
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b>Per Kelompok Aktivitas</b><small>25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat kelompok itu.</small></div></div>
+      <div class="pr-card-head"><div><b id="dr-kel-judul">Per Kelompok Aktivitas</b><small id="dr-kel-sub">25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat kelompok itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-proses"></table></div>
     </div>
   </div>
@@ -221,8 +221,51 @@
     $('#dr-legenda').innerHTML = `<div class="dr-legend">${[[DR.BW.ok, 'Terkontrol penuh'], [DR.BW.part, 'Sebagian'], [DR.BW.bm, 'Hanya bermasalah'], [DR.BW.none, 'Tanpa laporan']].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
     document.querySelectorAll('#dr-tren .br-wc').forEach((c) => c.addEventListener('click', () => { state.w = +c.dataset.w; $('#dr-w').value = state.w; render(); }));
 
-    tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]), (p, i, g) => vekGrup(p, i, g), 'grup');
-    tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
+    const diGrup = state.tab === 'grup';
+    $('#dr-grup-judul').textContent = diGrup ? `Detail lokasi · ${state.grup}` : 'Per Group Lokasi';
+    $('#dr-grup-sub').textContent = diGrup
+      ? 'Detail lokasi di grup ini beserta PJA-nya. Satu baris = kelompok aktivitas × bahaya di detail lokasi itu (terkontrol / hanya bermasalah / tanpa laporan). Klik nama PJA untuk membuka Beranda PJA.'
+      : 'Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.';
+    $('#dr-kel-judul').textContent = diGrup ? `Kelompok aktivitas · ${state.grup}` : 'Per Kelompok Aktivitas';
+    $('#dr-kel-sub').textContent = diGrup
+      ? 'Kelompok aktivitas yang ada di grup lokasi ini; jumlah barisnya sama dengan baseline grup di kartu atas. Klik baris untuk melihat kelompok itu di semua grup.'
+      : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat kelompok itu.';
+    if (diGrup) {
+      tabelDetailLokasi(w);
+      tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekDari(ambilKunci((p.gk || [])[i], `${state.grup}|${k}`)), 'proses');
+    } else {
+      tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]), (p, i, g) => vekGrup(p, i, g), 'grup');
+      tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
+    }
+  }
+
+  /**
+   * Tab Group Lokasi: satu baris per detail lokasi di grup terpilih (site sesuai filter, menurut site detail lokasi).
+   * Detail lokasi milik 2 PJA dihitung sekali; semua PJA pemiliknya ditampilkan.
+   */
+  function tabelDetailLokasi(w) {
+    const NW = M.beranda.minggu.length, kamus = M.beranda.dl || {}, peta = new Map();
+    M.beranda.mgmt.forEach((p) => (p.dls || []).forEach((d) => {
+      const info = kamus[d];
+      if (!info || info[3] !== state.grup || (state.site !== 'ALL' && info[0] !== state.site)) return;
+      if (!peta.has(d)) {
+        peta.set(d, { d, info, pja: [], v: vekDari(ambilKunci((p.dlw || [])[w], d)), v0: w + 1 < NW ? vekDari(ambilKunci((p.dlw || [])[w + 1], d)) : null });
+      }
+      peta.get(d).pja.push(p);
+    }));
+    const L = [...peta.values()].filter((r) => r.v.t).sort((a, b) => (b.v.t - b.v.full) - (a.v.t - a.v.full) || b.v.t - a.v.t);
+    const kosongan = [...peta.values()].length - L.length;
+    $('#dr-tbl-grup').innerHTML = `<thead><tr><th style="min-width:240px">Detail lokasi</th><th style="min-width:200px">PJA</th><th style="min-width:180px">Komposisi</th>
+        <th class="r">Baris</th><th class="r">Terkontrol</th><th class="r">Hanya bermasalah</th><th class="r">Tanpa laporan</th><th>Laporan bermasalah</th></tr></thead><tbody>`
+      + (L.map(({ info, pja, v, v0 }) => `<tr>
+          <td><span class="pr-name">${DR.esc(info[2])}</span><br><span class="dr-mute">${DR.esc(info[1])} · ${DR.esc(info[0])}</span></td>
+          <td>${pja.map((p) => `<a href="${URL_PJA.replace('__ID__', p.id)}?w=${w}" style="display:block">${DR.esc(p.nama)}</a>`).join('')}</td>
+          <td>${DR.sb4(v.full, 0, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td>
+          <td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
+          <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
+        || `<tr><td colspan="8" class="pr-empty">Tidak ada detail lokasi ${DR.esc(state.grup)}${state.site === 'ALL' ? '' : ' di ' + DR.esc(state.site)} yang punya baris baseline${M.beranda.dl ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`)
+      + (kosongan ? `<tr><td colspan="8" class="dr-mute" style="font-size:12px">${kosongan} detail lokasi lain di grup ini tidak punya baris pada level risiko terpilih.</td></tr>` : '')
+      + '</tbody>';
   }
 
   /** Matriks 5x5 Baseline HIRA (risiko awal) dan Final; bila satu kelompok dipilih di treemap, hanya kelompok itu. */
