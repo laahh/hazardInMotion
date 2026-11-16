@@ -99,7 +99,7 @@
 
     <div class="pr-card" id="dr-card-tm">
       <div class="pr-card-head"><div><b>Kelompok aktivitas dengan risiko terbesar</b>
-        <small>Luas kotak = jumlah baris belum terkontrol penuh. Warna = porsi baris yang tidak terkontrol di detail lokasi mana pun (tanpa laporan atau hanya laporan bermasalah). Klik kotak atau daftar untuk memfilter matriks di bawah; klik lagi untuk semua kelompok.</small></div></div>
+        <small>Luas kotak = jumlah bahaya-risiko yang belum terkontrol di ≥80% detail lokasinya. Warna = porsi bahaya yang tidak terkontrol di detail lokasi mana pun. Klik kotak atau daftar untuk memfilter matriks di bawah; klik lagi untuk semua kelompok.</small></div></div>
       <div class="pr-card-body">
         <div class="dr-tm-wrap">
           <div>
@@ -113,7 +113,7 @@
 
     <div class="pr-card" id="dr-card-mx">
       <div class="pr-card-head"><div><b>Matriks 5x5</b> <span id="dr-mx-filter"></span>
-        <small>Satu baris = kelompok aktivitas × bahaya-risiko unik di cakupan ini. Final: terkontrol penuh memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
+        <small>Satu baris = kelompok aktivitas × bahaya-risiko unik di cakupan ini. Final: bahaya yang terkontrol di ≥80% detail lokasinya memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
       <div class="pr-card-body dr-two" id="dr-matriks"></div>
     </div>
 
@@ -303,16 +303,31 @@
     gapo: ['report', '#ffedd5', '#c2410c'], none: ['visibility_off', '#fde7d4', '#c2410c'] };
   const ikonKpi = (k) => { const [i, b, c] = IKON_KPI[k] || IKON_KPI.t; return `<span class="tp-ikon" style="--ib:${b};--ic:${c}" aria-hidden="true"><span class="material-symbols-outlined">${i}</span></span>`; };
 
+  /**
+   * Label kategori. Ringkasan baseline unik (tab Overview / Group Lokasi / Kelompok Aktivitas) memakai pita cakupan
+   * detail lokasi (keputusan user 17 Nov 2026); tab Semua PJA tetap memakai kategori spec per PJA.
+   */
+  const pitaAktif = () => adaUnik() && !!(M.beranda.ringkas.ALL || {}).pita;
+  const LBL_SPEC = { full: 'Terkontrol penuh', part: 'Terkontrol sebagian', gapo: 'Hanya laporan bermasalah', none: 'Tanpa laporan',
+    kFull: 'Terkontrol penuh', kPart: 'Sebagian', kGapo: 'Hanya bermasalah', kNone: 'Tanpa laporan' };
+  function LBL() {
+    if (!pitaAktif()) return LBL_SPEC;
+    const [atas, bawah] = M.beranda.ringkas.ALL.pita.map((x) => Math.round(100 * x));
+    return { full: `Terkontrol di ≥${atas}% DL`, part: `Terkontrol di ${bawah}–${atas}% DL`, gapo: `Terkontrol di <${bawah}% DL`, none: 'Tidak terkontrol di DL mana pun',
+      kFull: `≥${atas}% DL`, kPart: `${bawah}–${atas}% DL`, kGapo: `<${bawah}% DL`, kNone: '0% DL' };
+  }
+
   function kartu4(V, V0, judul) {
-    const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
+    const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null, L = LBL();
+    const cakupan = pitaAktif() && V.t ? ` · rata-rata cakupan ${DR.pct(V.cak / 1000, V.t)} DL` : '';
     const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(a)}<small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
     const satuan = R ? 'kelompok aktivitas × bahaya-risiko unik (tidak dipetakan ke PJA / detail lokasi)' : 'jumlah baris tingkat PJA';
     return `<div class="br-kpis br-kpis-5">
-        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
-        ${kartu(W.ok, 'var(--green-d)', 'Terkontrol penuh', 'full', true)}
-        ${kartu(W.part, '#9A7300', 'Terkontrol sebagian', 'part', false)}
-        ${kartu(W.bm, W.bm, 'Hanya laporan bermasalah', 'gapo', false)}
-        ${kartu(W.none, W.bm, 'Tanpa laporan', 'none', false)}
+        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}${cakupan} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
+        ${kartu(W.ok, 'var(--green-d)', L.full, 'full', true)}
+        ${kartu(W.part, '#9A7300', L.part, 'part', false)}
+        ${kartu(W.bm, W.bm, L.gapo, 'gapo', false)}
+        ${kartu(W.none, W.bm, L.none, 'none', false)}
       </div>`;
   }
 
@@ -340,8 +355,9 @@
 
     $('#dr-tren-judul').innerHTML = `Komposisi per minggu · ${judul}`;
     $('#dr-tren-sum').innerHTML = `<span>${DR.fmt(V.t)} baris</span><span>${gapTxt(V)}</span>`;
-    $('#dr-tren').innerHTML = trenPeriode(P, vekTab);
-    $('#dr-legenda').innerHTML = `<div class="dr-legend">${[[DR.BW.ok, 'Terkontrol penuh'], [DR.BW.part, 'Sebagian'], [DR.BW.bm, 'Hanya bermasalah'], [DR.BW.none, 'Tanpa laporan']].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
+    $('#dr-tren').innerHTML = trenPeriode(P, vekTab, LBL());
+    const Lc = LBL();
+    $('#dr-legenda').innerHTML = `<div class="dr-legend">${[[DR.BW.ok, Lc.kFull], [DR.BW.part, Lc.kPart], [DR.BW.bm, Lc.kGapo], [DR.BW.none, Lc.kNone]].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
     document.querySelectorAll('#dr-tren .br-wc').forEach((c) => c.addEventListener('click', () => { state.w = +c.dataset.w; $('#dr-w').value = state.w; render(); }));
 
     const diGrup = state.tab === 'grup';
@@ -528,14 +544,17 @@
     const el = $('#dr-treemap');
     const items = M.proses.map((k) => {
       const v = jumlahF(P, (p) => vekKel(p, w, k.kode));
-      return { kode: k.kode, nama: k.nama, t: v.t, gap: v.t - v.full, full: v.full, part: v.part, gapo: v.gapo, none: v.none, buta: v.t ? (v.none + v.gapo) / v.t : 0 };
+      // Pita: "buta" = tidak terkontrol di DL mana pun (pita 0%). Spec: tanpa laporan + hanya bermasalah.
+      const buta = pitaAktif() ? v.none : v.none + v.gapo;
+      return { kode: k.kode, nama: k.nama, t: v.t, gap: v.t - v.full, full: v.full, part: v.part, gapo: v.gapo, none: v.none, nb: buta, buta: v.t ? buta / v.t : 0 };
     }).filter((i) => i.gap > 0).sort((a, b) => b.gap - a.gap).map((i) => ({ ...i, v: i.gap }));
     if (!items.length) { el.innerHTML = '<div class="pr-empty">Tidak ada baris belum terkontrol penuh pada minggu ini.</div>'; $('#dr-tm-top').innerHTML = ''; $('#dr-tm-skala').innerHTML = ''; return; }
     const lo = Math.min(...items.map((i) => i.buta)), hi = Math.max(...items.map((i) => i.buta));
     const skala = (x) => (hi - lo < 0.005 ? 0.55 : 0.12 + 0.88 * (x - lo) / (hi - lo));
     const pilih = (k) => { state.kelMx = state.kelMx === k ? '' : k; render(); };
     const kls = (k) => `${state.kelMx === k ? ' on' : ''}${state.kelMx && state.kelMx !== k ? ' redup' : ''}`;
-    const ket = (b) => `${b.nama}: ${DR.fmt(b.gap)} dari ${DR.fmt(b.t)} baris belum terkontrol penuh (gap ${DR.pct(b.gap, b.t)}); sebagian ${DR.fmt(b.part)}, hanya bermasalah ${DR.fmt(b.gapo)}, tanpa laporan ${DR.fmt(b.none)}; ${DR.pct(b.none + b.gapo, b.t)} tanpa kontrol sama sekali`;
+    const L = LBL(), belum = pitaAktif() ? `belum terkontrol di ${L.kFull}` : 'belum terkontrol penuh';
+    const ket = (b) => `${b.nama}: ${DR.fmt(b.gap)} dari ${DR.fmt(b.t)} baris ${belum} (${DR.pct(b.gap, b.t)}); ${L.kPart} ${DR.fmt(b.part)}, ${L.kGapo} ${DR.fmt(b.gapo)}, ${L.kNone} ${DR.fmt(b.none)}; ${DR.pct(b.nb, b.t)} tidak terkontrol sama sekali`;
 
     const W = el.clientWidth || 800, H = el.clientHeight || 420, CELAH = 3;
     el.innerHTML = squarify(items, W, H).map((b) => {
@@ -543,7 +562,7 @@
       const besar = lw > 130 && lh > 78, sedang = lw > 78 && lh > 46, kecil = lw > 34 && lh > 22;
       const { bg, fg } = warnaTm(skala(b.buta));
       const isi = besar
-        ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b> baris<small>gap ${DR.pct(b.gap, b.t)} · ${DR.pct(b.none + b.gapo, b.t)} tanpa kontrol</small></span>`
+        ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b> baris<small>${DR.pct(b.gap, b.t)} ${pitaAktif() ? 'di bawah ' + L.kFull : 'gap'} · ${DR.pct(b.nb, b.t)} tanpa kontrol</small></span>`
         : sedang ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b></span>`
           : kecil ? `<span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b></span>` : '';
       return `<button type="button" role="listitem" class="dr-tm-k${besar || sedang ? '' : ' kecil'}${kls(b.kode)}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(ket(b))}" aria-label="${DR.esc(ket(b))}" aria-pressed="${state.kelMx === b.kode}"
@@ -551,7 +570,7 @@
     }).join('');
 
     const maks = items[0].gap;
-    $('#dr-tm-top').innerHTML = '<h4>5 teratas · baris belum terkontrol</h4>' + items.slice(0, 5).map((b, i) => {
+    $('#dr-tm-top').innerHTML = `<h4>5 teratas · baris ${pitaAktif() ? 'di bawah ' + L.kFull : 'belum terkontrol penuh'}</h4>` + items.slice(0, 5).map((b, i) => {
       const { bg, fg } = warnaTm(skala(b.buta));
       return `<button type="button" class="dr-tm-i${kls(b.kode)}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(ket(b))}" aria-pressed="${state.kelMx === b.kode}">
         <span class="r" style="background:${bg};color:${fg}">${i + 1}</span><span class="n">${DR.esc(b.nama)}</span><span class="v">${DR.fmt(b.gap)}</span>
@@ -577,7 +596,7 @@
     const aktif = (k) => state.tab === tab && (tab === 'grup' ? state.grup : state.proses) === k;
     // Baris kelompok bisa dibuka: menampilkan aktivitas HIRA (M03) kelompok itu, di grup terpilih bila tab Group Lokasi.
     const bisaBuka = tab === 'proses' && !!M.beranda.akt;
-    $(sel).innerHTML = `<thead><tr><th>${judulKolom}</th>${KEPALA_VEK}<th>Laporan bermasalah</th></tr></thead><tbody>`
+    $(sel).innerHTML = `<thead><tr><th>${judulKolom}</th>${kepalaVek(LBL())}<th>Laporan bermasalah</th></tr></thead><tbody>`
       + (baris.map(({ kunci, nama, v, v0 }) => {
         const buka = bisaBuka && !!state.kbuka[kunci];
         const kepala = `<tr data-kunci="${DR.esc(kunci)}" class="br-a${aktif(kunci) || buka ? ' open' : ''}" style="cursor:pointer">
@@ -626,13 +645,13 @@
   function renderW() { if (state.tab === 'periode') renderPeriode(); else renderPja(); }
 
   // ------------------------------------------------------------ Identifikasi per periode (satuan ketat per minggu)
-  const KOSONG = { t: 0, full: 0, part: 0, gapo: 0, none: 0, g2: 0, g3: 0, g4: 0 };
+  const KOSONG = { t: 0, full: 0, part: 0, gapo: 0, none: 0, g2: 0, g3: 0, g4: 0, cak: 0 };
 
   /** Vektor KOLOM_MGMT per level → komposisi untuk level risiko terpilih. */
   function vekDari(perLv) {
     const K = M.beranda.kolomMgmt, ix = Object.fromEntries(K.map((k, i) => [k, i])), c = Array(K.length).fill(0);
     lvAmbil(perLv).forEach((lv) => ((perLv || {})[lv] || []).forEach((v, i) => { c[i] += v; }));
-    return { t: c[ix.tot], full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop] };
+    return { t: c[ix.tot], full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop], cak: ix.cak === undefined ? 0 : c[ix.cak] };
   }
   /** Komposisi satu PJA pada minggu w. */
   const vekPja = (p, w) => vekDari((p.w || [])[w]);
@@ -674,11 +693,11 @@
     panel.querySelectorAll('[data-buka]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
   }
 
-  function trenPeriode(P, f = vekPja) {
+  function trenPeriode(P, f = vekPja, L = LBL_SPEC) {
     const W = DR.BW, NW = M.beranda.minggu.length, col = [];
     for (let i = NW - 1; i >= 0; i--) {
       const v = P.reduce((a, p) => tambahVek(a, f(p, i)), KOSONG), n = Math.max(1, v.t), H = (x) => (100 * x / n).toFixed(1) + '%';
-      col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label)}: penuh ${DR.fmt(v.full)}, sebagian ${DR.fmt(v.part)}, hanya bermasalah ${DR.fmt(v.gapo)}, tanpa laporan ${DR.fmt(v.none)}">
+      col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label)}: ${L.kFull} ${DR.fmt(v.full)}, ${L.kPart} ${DR.fmt(v.part)}, ${L.kGapo} ${DR.fmt(v.gapo)}, ${L.kNone} ${DR.fmt(v.none)}">
         <div class="stk"><i style="height:${H(v.none)};background:${W.none}"></i><i style="height:${H(v.gapo)};background:${W.bm}"></i><i style="height:${H(v.part)};background:${W.part}"></i><i style="height:${H(v.full)};background:${W.ok}"></i></div>
         <span>${wKode(i)}${wBerjalan(i) ? '*' : ''}</span><span>${pctI(v.full, v.t)}</span></div>`);
     }
@@ -689,7 +708,8 @@
     return `<td>${DR.sb4(v.full, v.part, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td><td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
       <td class="r">${pctI(v.part, v.t)}</td><td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td>`;
   }
-  const KEPALA_VEK = '<th style="min-width:200px">Komposisi</th><th class="r">Baris</th><th class="r">Terkontrol penuh</th><th class="r">Sebagian</th><th class="r">Hanya bermasalah</th><th class="r">Tanpa laporan</th>';
+  const kepalaVek = (L = LBL_SPEC) => `<th style="min-width:200px">Komposisi</th><th class="r">Baris</th><th class="r">${L.kFull === 'Terkontrol penuh' ? 'Terkontrol penuh' : 'Terkontrol ' + L.kFull}</th><th class="r">${L.kPart}</th><th class="r">${L.kGapo}</th><th class="r">${L.kNone}</th>`;
+  const KEPALA_VEK = kepalaVek();
 
   function tabelSitePeriode(w) {
     const NW = M.beranda.minggu.length, semua = M.beranda.mgmt;

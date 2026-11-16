@@ -83,11 +83,11 @@ class DrmBerandaTest extends TestCase
         $m = $b->ringkasMgmt(['1'], ['1' => ['h1', 'h2', 'h3']], $hira, $berkas, [['tanggal' => '2026-11-01'], ['tanggal' => '2026-01-01']]);
         // Satuan ketat [tot, penuh, sebagian, hanya bermasalah, tanpa laporan, closed, ulang, stop, tidak sesuai].
         // Minggu 0: CH terdeteksi → h1 (Significant) & h2 (High) terkontrol penuh; h3 belum closed → hanya bermasalah.
-        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['w'][0]['Significant']);
-        $this->assertSame([2, 1, 0, 1, 0, 1, 0, 0, 0], $m['w'][0]['High']);
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], array_slice($m['w'][0]['Significant'], 0, 9));
+        $this->assertSame([2, 1, 0, 1, 0, 1, 0, 0, 0], array_slice($m['w'][0]['High'], 0, 9));
         // Minggu 1: OAK stop di CH → h1 & h2 hanya bermasalah; h3 tanpa laporan.
-        $this->assertSame([1, 0, 0, 1, 0, 0, 0, 1, 0], $m['w'][1]['Significant']);
-        $this->assertSame([2, 0, 0, 1, 1, 0, 0, 1, 0], $m['w'][1]['High']);
+        $this->assertSame([1, 0, 0, 1, 0, 0, 0, 1, 0], array_slice($m['w'][1]['Significant'], 0, 9));
+        $this->assertSame([2, 0, 0, 1, 1, 0, 0, 1, 0], array_slice($m['w'][1]['High'], 0, 9));
         $this->assertSame(['CH' => 1, 'OB' => 1], $m['kelTot']['High']);
         $this->assertSame(['OB' => 1], $m['kelGap'][0]['High']);
         $this->assertSame([0 => 1, 1 => 1], $m['kgTot']['High']);
@@ -112,27 +112,27 @@ class DrmBerandaTest extends TestCase
         $m = $b->ringkasMgmt(['1', '2'], $pasangan, $hira, $berkas, []);
 
         // Total: h1 sebagian (1 dari 2 DL), h2 tanpa laporan.
-        $this->assertSame([2, 0, 1, 0, 1, 0, 0, 0, 0], $m['w'][0]['High']);
+        $this->assertSame([2, 0, 1, 0, 1, 0, 0, 0, 0], array_slice($m['w'][0]['High'], 0, 9));
         // Per kelompok: jumlahnya sama dengan total.
-        $this->assertSame([1, 0, 1, 0, 0, 0, 0, 0, 0], $m['kel'][0]['High']['K13']);
-        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['kel'][0]['High']['K16']);
+        $this->assertSame([1, 0, 1, 0, 0, 0, 0, 0, 0], array_slice($m['kel'][0]['High']['K13'], 0, 9));
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], array_slice($m['kel'][0]['High']['K16'], 0, 9));
         // Per grup: status dari detail lokasi grup itu saja (h1 penuh di Pit, tanpa laporan di Disposal).
-        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['grp'][0]['High']['Pit']);
-        $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], $m['grp'][0]['High']['Disposal']);
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], array_slice($m['grp'][0]['High']['Pit'], 0, 9));
+        $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], array_slice($m['grp'][0]['High']['Disposal'], 0, 9));
         // Matriks: hanya h1 punya nilai risiko; sebagian → final tetap risiko awal (Mungkin=2, Major=3 → sel 13).
         $this->assertSame([13 => 1], $m['mx'][0]['High']['K13']['a']);
         $this->assertSame([13 => 1], $m['mx'][0]['High']['K13']['f']);
         $this->assertArrayNotHasKey('K16', $m['mx'][0]['High']);
         // Kelompok di dalam grup: jumlahnya sama dengan total grup.
-        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['gk'][0]['High']['Disposal|K13']);
-        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['gk'][0]['High']['Disposal|K16']);
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], array_slice($m['gk'][0]['High']['Disposal|K13'], 0, 9));
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], array_slice($m['gk'][0]['High']['Disposal|K16'], 0, 9));
         // Per detail lokasi: DL 1 punya h1 terkontrol; DL 2 punya h1 & h2 tanpa laporan.
-        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['dlw'][0]['High']['1']);
-        $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], $m['dlw'][0]['High']['2']);
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], array_slice($m['dlw'][0]['High']['1'], 0, 9));
+        $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], array_slice($m['dlw'][0]['High']['2'], 0, 9));
         // Per aktivitas HIRA: di semua grup (h1 sebagian) dan di dalam grup (Disposal: tanpa laporan).
-        $this->assertSame([1, 0, 1, 0, 0, 0, 0, 0, 0], $m['akt'][0]['High']['7']);
-        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['gka'][0]['High']['Disposal|7']);
-        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['gka'][0]['High']['Pit|7']);
+        $this->assertSame([1, 0, 1, 0, 0, 0, 0, 0, 0], array_slice($m['akt'][0]['High']['7'], 0, 9));
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], array_slice($m['gka'][0]['High']['Disposal|7'], 0, 9));
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], array_slice($m['gka'][0]['High']['Pit|7'], 0, 9));
     }
 
     public function test_sql_beranda_memakai_minggu_kalender_dan_root_cause(): void
@@ -154,5 +154,25 @@ class DrmBerandaTest extends TestCase
         $inc = $sql->berandaInsiden();
         $this->assertStringContainsString("toDate('2025-10-01')", $inc);
         $this->assertStringContainsString("NOT IN ('CLOSED', 'DONE')", $inc);
+    }
+
+    public function test_mode_pita_cakupan_untuk_ringkasan_unik(): void
+    {
+        $b = (new DrmBeranda(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))
+            ->denganGrup(['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Pit'], '3' => ['grp' => 'Pit'], '4' => ['grp' => 'Pit'], '5' => ['grp' => 'Pit']]);
+        $hira = ['h1' => ['a' => '7', 'bn' => 'Jalan licin', 'proses' => 'K13', 'n1' => 'High']];
+        // h1 di 5 DL; terdeteksi (kelompok K13) di 4 DL → cakupan 80% → pita 1 (≥80%), bukan "sebagian".
+        $idx = $b->indeks(array_map(fn ($d) => ['dl' => (string) $d, 'kel' => 'K13', 'w' => '0:1', 'h' => '', 'last' => '2026-11-14'], [1, 2, 3, 4]), []);
+        $pasangan = array_fill_keys(['1', '2', '3', '4', '5'], ['h1']);
+        $dl = array_fill_keys(['1', '2', '3', '4', '5'], ['grp' => 'Pit']);
+        $berkas = $b->berkas(array_keys($pasangan), $pasangan, $hira, $dl, $idx, []);
+
+        $ketat = $b->ringkasMgmt(array_map('strval', array_keys($pasangan)), $pasangan, $hira, $berkas, []);
+        $pita = $b->ringkasMgmt(array_map('strval', array_keys($pasangan)), $pasangan, $hira, $berkas, [], true);
+        $this->assertSame([1, 0, 1, 0, 0], array_slice($ketat['w'][0]['High'], 0, 5)); // ketat: sebagian
+        $this->assertSame([1, 1, 0, 0, 0], array_slice($pita['w'][0]['High'], 0, 5));  // pita: ≥80%
+        $this->assertSame(800, $pita['w'][0]['High'][9]);                            // cakupan 80% (per mil)
+        // Minggu 1 tanpa deteksi: pita 4 (0%).
+        $this->assertSame([1, 0, 0, 0, 1], array_slice($pita['w'][1]['High'], 0, 5));
     }
 }

@@ -280,13 +280,15 @@ class DrmSnapshotBuilder
             }
             // Per detail lokasi cukup sekali (di ALL): status satu DL sama di cakupan mana pun.
             $hasil[$kunci] = [
-                ...array_diff_key($b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, []), $kunci === 'ALL' ? $buang : $buang + ['dlw' => 1]),
+                ...array_diff_key($b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, [], true), $kunci === 'ALL' ? $buang : $buang + ['dlw' => 1]),
                 'ndl' => count($ids),
                 // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
                 'nBarisDl' => count($ada),
             ];
         }
         $hasil['ALL']['nBarisMaster'] = count($hira);
+        // Kategori ringkasan unik memakai pita cakupan detail lokasi (lihat DrmBeranda::nilai).
+        $hasil['ALL']['pita'] = [DrmBeranda::PITA_ATAS, DrmBeranda::PITA_BAWAH];
 
         return $hasil;
     }

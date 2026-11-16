@@ -36,7 +36,12 @@ class DrmBeranda
     public const INSIDEN = 64;
 
     /** Urutan angka per level di tabel perbandingan (satuan ketat): total, 4 kategori, baris dengan tiap jenis masalah. */
-    public const KOLOM_MGMT = ['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop', 'tidak_sesuai'];
+    public const KOLOM_MGMT = ['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop', 'tidak_sesuai', 'cak'];
+
+    /** Batas pita cakupan (mode pita, ringkasan baseline unik): ≥80% DL terkontrol, 20–80%, >0–20%, 0%. */
+    public const PITA_ATAS = 0.8;
+
+    public const PITA_BAWAH = 0.2;
 
     /** @var array<string, string> detail lokasi → grup lokasi (diisi oleh denganGrup) */
     private array $grupDl = [];
@@ -205,6 +210,7 @@ class DrmBeranda
      *     (id_aktivitas master M03), di semua grup / di dalam satu grup
      *   dlw[minggu][level][dl] = angka KOLOM_MGMT per detail lokasi (satu baris = kelompok × bahaya di DL itu;
      *     kategori hanya penuh / hanya bermasalah / tanpa laporan)
+     *   cak (indeks 9) = jumlah cakupan per mil (rata-rata = cak / 1000 / tot); $pita = true memakai kategori pita cakupan
      *   mx[minggu][level][kel] = ['a' => [sel => n], 'f' => [sel => n]] matriks 5x5 awal / final per kelompok,
      *     sel = kekerapan×5 + konsekuensi (matriks total = jumlah semua kelompok)
      *   kelTot[level][kel]    = baris ketat per kelompok;  kelGap[minggu][level][kel] = baris ketat bukan terkontrol penuh
@@ -215,7 +221,7 @@ class DrmBeranda
      * @param  list<array<string, mixed>>  $insiden  insiden di detail lokasi PJA (tanggal Y-m-d)
      * @return array<string, mixed>
      */
-    public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden): array
+    public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden, bool $pita = false): array
     {
         $nW = (int) $this->cfg['beranda']['minggu'];
         [$unik, $kgTot, $u4, $unikGrup, $dlW] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
@@ -229,10 +235,10 @@ class DrmBeranda
             $selAwal = self::sel((string) ($h['k1'] ?? ''), (string) ($h['c1'] ?? ''));
             $selSisa = self::sel((string) ($h['k2'] ?? ''), (string) ($h['c2'] ?? ''));
             foreach ($x['w'] as $i => $st) {
-                $kat = self::kategori($st);
-                self::tambah($w[$i][$lv], $kat, $st[3]);
-                self::tambah($kelW[$i][$lv][$kel], $kat, $st[3]);
-                self::tambah($akt[$i][$lv][(string) ($h['a'] ?? '')], $kat, $st[3]);
+                [$kat, $cak] = self::nilai($st, $pita);
+                self::tambah($w[$i][$lv], $kat, $st[3], $cak);
+                self::tambah($kelW[$i][$lv][$kel], $kat, $st[3], $cak);
+                self::tambah($akt[$i][$lv][(string) ($h['a'] ?? '')], $kat, $st[3], $cak);
                 if ($kat !== 1) {
                     $kelGap[$i][$lv][$kel] = ($kelGap[$i][$lv][$kel] ?? 0) + 1;
                 }
@@ -247,10 +253,10 @@ class DrmBeranda
         foreach ($unikGrup as $x) {
             $a = (string) ($hira[$x['hid']]['a'] ?? '');
             foreach ($x['w'] as $i => $st) {
-                $kat = self::kategori($st);
-                self::tambah($gka[$i][$x['lv']][$x['grp'].'|'.$a], $kat, $st[3]);
-                self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3]);
-                self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3]);
+                [$kat, $cak] = self::nilai($st, $pita);
+                self::tambah($gka[$i][$x['lv']][$x['grp'].'|'.$a], $kat, $st[3], $cak);
+                self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3], $cak);
+                self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3], $cak);
             }
         }
 
@@ -335,6 +341,25 @@ class DrmBeranda
     }
 
     /** Kategori satuan ketat dari [n DL, n terkontrol, n bermasalah, bit]: 1 penuh, 2 sebagian, 3 hanya bermasalah, 4 tanpa laporan. */
+    /**
+     * Kategori + cakupan (per mil) satu baris dari [n DL, n terkontrol, n bermasalah, bit].
+     * Ketat (spec, per PJA): 1 penuh, 2 sebagian, 3 hanya bermasalah, 4 tanpa laporan.
+     * Pita (ringkasan baseline unik lintas banyak detail lokasi, keputusan user 17 Nov 2026):
+     *   1 = ≥80% DL terkontrol, 2 = 20–80%, 3 = >0–20%, 4 = 0% (tidak terkontrol di DL mana pun).
+     *
+     * @return array{0: int, 1: int}
+     */
+    private static function nilai(array $st, bool $pita): array
+    {
+        $r = $st[0] > 0 ? $st[1] / $st[0] : 0.0;
+        $cak = (int) round(1000 * $r);
+        if (! $pita) {
+            return [self::kategori($st), $cak];
+        }
+
+        return [$r >= self::PITA_ATAS ? 1 : ($r >= self::PITA_BAWAH ? 2 : ($r > 0 ? 3 : 4)), $cak];
+    }
+
     private static function kategori(array $st): int
     {
         [$n, $ok, $bm] = $st;
@@ -343,9 +368,10 @@ class DrmBeranda
     }
 
     /** Tambah satu baris ketat ke vektor KOLOM_MGMT. */
-    private static function tambah(?array &$v, int $kat, int $m): void
+    private static function tambah(?array &$v, int $kat, int $m, int $cak = 0): void
     {
         $v ??= array_fill(0, count(self::KOLOM_MGMT), 0);
+        $v[9] += $cak;
         $v[0]++;
         $v[$kat]++;
         $v[5] += (int) (bool) ($m & self::BELUM_CLOSED);
