@@ -1,18 +1,16 @@
-@extends('peta-risiko-pja._layout')
+@extends('peta-risiko-pja._layout-drm')
 
 @section('title', 'Peta Risiko PJA')
 
 @section('hero-aksi')
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    @if ($adaExcel)
-      <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}">⬇ Unduh Excel mapping</a>
-    @endif
-    <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}">Versi lama (impor)</a>
-  </div>
+  @if ($adaExcel)
+    <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh Excel mapping</a>
+  @endif
+  <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}"><span class="material-symbols-outlined" style="font-size:18px">history</span> Versi lama</a>
 @endsection
 
 @section('hero')
-  <p class="pr-kicker">HSE · Peta Risiko PJA · DRM 2.1</p>
+  <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Peta Risiko PJA</span></p>
   <h1 class="pr-title">Bahaya-risiko HIRA yang sudah teridentifikasi oleh SAP</h1>
   <p class="pr-sub">
     @if ($meta)
@@ -23,6 +21,34 @@
     @endif
   </p>
 @endsection
+
+@if ($meta)
+  @section('nav')
+    {{-- Tombol tab di bilah atas (konsep template dashboard-peer); JS memakai .dr-tabs button[data-tab]. --}}
+    <nav class="dr-tabs tp-nav" role="tablist" aria-label="Sudut pandang">
+      <button type="button" role="tab" data-tab="site" aria-selected="true">Overview</button>
+      <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
+      <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Kelompok Aktivitas</button>
+      {{-- Tab "Identifikasi per periode" disembunyikan sementara (permintaan user); kodenya tetap ada. --}}
+      <button type="button" role="tab" data-tab="periode" aria-selected="false" hidden>Identifikasi per periode</button>
+      <button type="button" role="tab" data-tab="pja" aria-selected="false">Semua PJA</button>
+      <button type="button" role="tab" data-tab="bpja" aria-selected="false">Beranda PJA</button>
+    </nav>
+  @endsection
+
+  @section('header-aksi')
+    <div class="dr-bar">
+      <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
+      <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
+      <label>Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
+      <label><span class="material-symbols-outlined" style="font-size:18px;color:var(--primary)">calendar_month</span> Periode <select id="dr-w"></select></label>
+      <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
+      <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
+      <label data-ctl="pja" hidden>Urutkan <select id="dr-urut"><option value="skor">Skor prioritas</option><option value="gap">% gap</option><option value="gapn">Jumlah baris gap</option><option value="none">% tanpa laporan</option><option value="lewat">Lewat janji</option><option value="nama">Nama</option></select></label>
+      <label data-ctl="pja" hidden><input type="search" class="pr-search" id="dr-cari" placeholder="Cari nama PJA" aria-label="Cari nama PJA"></label>
+    </div>
+  @endsection
+@endif
 
 @include('peta-risiko-pja.drm._beranda-style')
 
@@ -46,30 +72,7 @@
     Jalankan <code>php artisan peta-risiko:sync</code> di server yang terhubung ke ClickHouse OBDS, lalu muat ulang halaman ini.
   </div></div>
 @else
-  <div class="pr-card">
-    <div class="pr-card-body" style="padding-bottom:0">
-      <nav class="dr-tabs" role="tablist" aria-label="Sudut pandang">
-        <button type="button" role="tab" data-tab="site" aria-selected="true">Overview</button>
-        <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
-        <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Kelompok Aktivitas</button>
-        {{-- Tab "Identifikasi per periode" disembunyikan sementara (permintaan user); kodenya tetap ada. --}}
-        <button type="button" role="tab" data-tab="periode" aria-selected="false" hidden>Identifikasi per periode</button>
-        <button type="button" role="tab" data-tab="pja" aria-selected="false">Semua PJA</button>
-        <button type="button" role="tab" data-tab="bpja" aria-selected="false">Beranda PJA</button>
-      </nav>
-    </div>
-    <div class="dr-bar">
-      <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
-      <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
-      <label>Site / scope <select id="dr-site"><option value="ALL">Semua site</option></select></label>
-      <label>Periode <select id="dr-w"></select></label>
-      <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
-      <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
-      <label data-ctl="pja" hidden>Urutkan <select id="dr-urut"><option value="skor">Skor prioritas</option><option value="gap">% gap</option><option value="gapn">Jumlah baris gap</option><option value="none">% tanpa laporan</option><option value="lewat">Lewat janji</option><option value="nama">Nama</option></select></label>
-      <label data-ctl="pja" hidden><input type="search" class="pr-search" id="dr-cari" placeholder="Cari nama PJA" aria-label="Cari nama PJA"></label>
-    </div>
-    <div id="dr-ringkas"><div id="dr-kpis"></div></div>
-  </div>
+  <div id="dr-ringkas" hidden><div id="dr-kpis"></div></div>
 
   <div id="dr-panel-cakupan" class="br-root" style="margin-top:20px">
     <div id="dr-kpi4"></div>
@@ -141,7 +144,7 @@
   let M = null;
 
   fetch(URL_META, { headers: { Accept: 'application/json' } }).then((r) => r.json()).then((m) => { M = m; init(); })
-    .catch(() => { $('#dr-kpis').innerHTML = '<div class="pr-empty">Gagal memuat data.</div>'; });
+    .catch(() => { $('#dr-kpi4').innerHTML = '<div class="pr-card"><div class="pr-empty">Gagal memuat data.</div></div>'; });
 
   function init() {
     $('#dr-site').innerHTML += M.sites.map((s) => `<option value="${DR.esc(s)}">${DR.esc(s)}</option>`).join('');
@@ -229,12 +232,17 @@
    */
   const cakupanP = () => (adaUnik() ? [M.beranda.ringkas[state.site]].filter(Boolean) : pjaDiSite());
 
+  /** Ikon kartu KPI (gaya template dashboard-peer): kunci kategori → [ikon Material, latar, warna]. */
+  const IKON_KPI = { t: ['inventory_2', 'rgba(57,82,188,.1)', '#3952bc'], full: ['verified', '#dcfce7', '#16a34a'], part: ['rule', '#fef3c7', '#b45309'],
+    gapo: ['report', '#ffedd5', '#c2410c'], none: ['visibility_off', '#fde7d4', '#c2410c'] };
+  const ikonKpi = (k) => { const [i, b, c] = IKON_KPI[k] || IKON_KPI.t; return `<span class="tp-ikon" style="--ib:${b};--ic:${c}" aria-hidden="true"><span class="material-symbols-outlined">${i}</span></span>`; };
+
   function kartu4(V, V0, judul) {
     const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
-    const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
+    const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(a)}<small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
     const satuan = R ? 'kelompok aktivitas × bahaya-risiko unik (tidak dipetakan ke PJA / detail lokasi)' : 'jumlah baris tingkat PJA';
     return `<div class="br-kpis">
-        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}"><small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
+        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
         ${kartu(W.ok, 'var(--green-d)', 'Terkontrol penuh', 'full', true)}
         ${kartu(W.part, '#9A7300', 'Terkontrol sebagian', 'part', false)}
         ${kartu(W.bm, W.bm, 'Hanya laporan bermasalah', 'gapo', false)}
@@ -706,13 +714,13 @@
     }[state.urut];
     tampil.sort(urut);
     const B = jumlah(diSite), G = B.t - B.full, W = DR.BW, wk = wKode(state.w);
-    const kpi = (ac, kc, judul, angka, isi) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
+    const kpi = (ac, kc, judul, angka, isi, k) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(k)}<small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
 
     panel.innerHTML = `<div class="br-kpis">
-        ${kpi('var(--navy)', 'var(--navy)', `Baris baseline · ${state.site === 'ALL' ? 'seluruh BC' : DR.esc(state.site)} · ${wk}`, DR.fmt(B.t), `${diSite.length} PJA · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}`)}
-        ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh', pctI(B.full, B.t), `${DR.fmt(B.full)} baris`)}
-        ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pctI(B.part, B.t), `${DR.fmt(B.part)} baris · gap total ${pctI(G, B.t)}`)}
-        ${kpi(W.none, W.bm, 'Tanpa laporan', pctI(B.none, B.t), `${DR.fmt(B.none)} baris${B.gapo ? ` · ${DR.fmt(B.gapo)} hanya bermasalah` : ''}`)}
+        ${kpi('var(--navy)', 'var(--navy)', `Baris baseline · ${state.site === 'ALL' ? 'seluruh BC' : DR.esc(state.site)} · ${wk}`, DR.fmt(B.t), `${diSite.length} PJA · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}`, 't')}
+        ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh', pctI(B.full, B.t), `${DR.fmt(B.full)} baris`, 'full')}
+        ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pctI(B.part, B.t), `${DR.fmt(B.part)} baris · gap total ${pctI(G, B.t)}`, 'part')}
+        ${kpi(W.none, W.bm, 'Tanpa laporan', pctI(B.none, B.t), `${DR.fmt(B.none)} baris${B.gapo ? ` · ${DR.fmt(B.gapo)} hanya bermasalah` : ''}`, 'none')}
       </div>`
       + tabelSite(semua, wk) + tabelDaftar(tampil, semua.length, wk);
 
