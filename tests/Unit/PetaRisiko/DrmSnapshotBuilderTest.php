@@ -81,7 +81,7 @@ class DrmSnapshotBuilderTest extends TestCase
         $mingguan = $sql->matriksCakupan();
 
         // Literal master (angka + CRC32), bukan teks; baseline = detail lokasi × baris grupnya (M05).
-        $this->assertStringContainsString('(11,[7],'.DrmMaster::crc('Jalan licin').',3,13,4,0)', $status);
+        $this->assertStringContainsString("JSONExtract('[[11,[7],".DrmMaster::crc('Jalan licin').',3,13,4,0]', $status);
         $this->assertStringContainsString('JOIN mgx g ON g.gid = d.gid', $status);
         // Gerbang: bukti label hanya dihitung bila (detail lokasi, baris) ada di baseline.
         $this->assertStringContainsString('WHERE (sh.dl, m.hid) IN (SELECT dl, hid FROM basek)', $status);

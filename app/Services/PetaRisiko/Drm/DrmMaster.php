@@ -24,6 +24,8 @@ final class DrmMaster
 
     private const NAMA_XLSX = 'DRM21_Mapping_Master.xlsx';
 
+    private const TIPE_PETA = 'Array(Tuple(UInt32, Array(UInt32)))';
+
     /** Kode kategori bahaya di literal: urutan = nilai. */
     public const KB = ['', 'Low', 'Medium', 'High', 'Significant'];
 
@@ -224,6 +226,9 @@ final class DrmMaster
 
     /**
      * Literal SQL ringkas untuk prelude DrmSql (semua angka; teks diwakili CRC32).
+     * Tiap master dikirim sebagai SATU string JSON yang diurai JSONExtract di ClickHouse: literal array
+     * biasa dihitung satu simpul per angka dan disalin ke setiap CTE pemakainya, sehingga query matriks
+     * melewati batas "Query tree is too big" (500.000 simpul) — sync 16 Nov 2026.
      *   mh : [(ri, [id_hira_master], crc bahaya, id_aktivitas, kelompok, kb, umum)]
      *   mg : [(id_grup, [ri])]                       M05
      *   m6 : [(crcDl site|lokasi|detail, id_grup)]   M06
@@ -239,20 +244,20 @@ final class DrmMaster
     {
         $kel = $this->kelompokBaris($cfg['proses_bisnis']);
         $mh = array_map(fn ($b) => sprintf(
-            '(%d,[%s],%d,%d,%d,%d,%d)',
+            '[%d,[%s],%d,%d,%d,%d,%d]',
             $b['ri'], implode(',', $b['idh']), self::crc($b['bahaya']), $b['aid'],
             (int) substr($kel[$b['ri']], 1), max(0, (int) array_search($b['kb'], self::KB, true)), (int) $b['umum'],
         ), $this->data['baris']);
 
         $mg = [];
         foreach ($this->data['grupBaris'] as $gid => $ri) {
-            $mg[] = sprintf('(%d,[%s])', $gid, implode(',', $ri));
+            $mg[] = sprintf('[%d,[%s]]', $gid, implode(',', $ri));
         }
 
         $m6 = [];
         foreach ($this->data['dl'] as $d) {
             $c = self::crcDl($d['site'], $d['lokasi'], $d['detail']);
-            $m6[$c] = sprintf('(%d,%d)', $c, $d['gid']);
+            $m6[$c] = sprintf('[%d,%d]', $c, $d['gid']);
         }
 
         $m9 = [];
@@ -274,12 +279,12 @@ final class DrmMaster
         $namaGrup = array_map(fn ($i) => $gn[$i] ?? '', range(1, max(1, $maks)));
 
         return [
-            'mh' => '['.implode(',', $mh).']',
-            'mg' => '['.implode(',', $mg).']',
-            'm6' => '['.implode(',', $m6).']',
-            'm9' => self::petaLarik($m9),
-            'mo' => self::petaLarik($mo),
-            'mt' => self::petaLarik($this->temaBaris($cfg['tema_checklist'])),
+            'mh' => self::json('['.implode(',', $mh).']', 'Array(Tuple(UInt32, Array(Int64), UInt32, UInt32, UInt8, UInt8, UInt8))'),
+            'mg' => self::json('['.implode(',', $mg).']', self::TIPE_PETA),
+            'm6' => self::json('['.implode(',', $m6).']', 'Array(Tuple(UInt32, UInt32))'),
+            'm9' => self::json(self::petaLarik($m9), self::TIPE_PETA),
+            'mo' => self::json(self::petaLarik($mo), self::TIPE_PETA),
+            'mt' => self::json(self::petaLarik($this->temaBaris($cfg['tema_checklist'])), self::TIPE_PETA),
             'gn' => '['.implode(',', array_map(fn ($n) => "'".str_replace(['\\', "'"], ['\\\\', "\\'"], $n)."'", $namaGrup)).']',
         ];
     }
@@ -355,9 +360,15 @@ final class DrmMaster
     {
         $isi = [];
         foreach ($peta as $k => $v) {
-            $isi[] = sprintf('(%d,[%s])', $k, implode(',', $v));
+            $isi[] = sprintf('[%d,[%s]]', $k, implode(',', $v));
         }
 
         return '['.implode(',', $isi).']';
+    }
+
+    /** Ekspresi SQL: string JSON (hanya angka, kurung, koma) diurai menjadi tipe ClickHouse. */
+    private static function json(string $json, string $tipe): string
+    {
+        return "JSONExtract('".$json."', '".$tipe."')";
     }
 }
