@@ -132,8 +132,10 @@
 
   function init() {
     $('#dr-site').innerHTML += M.sites.map((s) => `<option value="${DR.esc(s)}">${DR.esc(s)}</option>`).join('');
+    // Grup lokasi tanpa baris baseline sama sekali (mis. grup master dengan 0 baris HIRA) tidak ditampilkan.
+    M.grup = grupBerisi();
     $('#dr-grup').innerHTML = M.grup.map((g) => `<option value="${DR.esc(g)}">${DR.esc(g)}</option>`).join('');
-    if (!state.grup) state.grup = M.grup[0];
+    if (!state.grup || !M.grup.includes(state.grup)) state.grup = M.grup[0];
     $('#dr-proses').innerHTML = M.proses.map((p) => `<option value="${DR.esc(p.kode)}">${DR.esc(p.nama)}</option>`).join('');
     if (!state.proses) state.proses = M.proses[0].kode;
     $('#dr-proses').value = state.proses;
@@ -151,6 +153,17 @@
     $('#dr-pri').addEventListener('change', (e) => { state.pri = e.target.value; renderPja(); });
     $('#dr-urut').addEventListener('change', (e) => { state.urut = e.target.value; renderPja(); });
     render();
+  }
+
+  /** Grup lokasi yang punya minimal satu baris baseline di minggu dan level mana pun (semua site). */
+  function grupBerisi() {
+    const sumber = M.beranda && M.beranda.ringkas && M.beranda.ringkas.ALL ? [M.beranda.ringkas.ALL] : ((M.beranda || {}).mgmt || []);
+    const ada = new Set();
+    sumber.forEach((p) => (p.grp || []).forEach((perLv) => Object.values(perLv || {}).forEach((m) => Object.entries(m || {}).forEach(([g, v]) => {
+      if ((v || [])[0] > 0) ada.add(g);
+    }))));
+    const hasil = M.grup.filter((g) => ada.has(g));
+    return hasil.length ? hasil : M.grup;
   }
 
   function simpanUrl() {
