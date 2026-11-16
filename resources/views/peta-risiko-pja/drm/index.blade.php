@@ -199,7 +199,9 @@
     $('#dr-ringkas').hidden = true;
     const bpja = state.tab === 'bpja';
     $('#dr-panel-bpja').hidden = !bpja;
-    $('.dr-bar').hidden = bpja; // filter site/periode/risiko tidak berlaku untuk prototipe
+    // Filter site/periode/risiko tidak berlaku untuk prototipe. Pakai style.display: CSS .dr-bar (display:flex)
+    // mengalahkan atribut hidden.
+    $('.dr-bar').style.display = bpja ? 'none' : '';
     if (bpja) {
       $('#dr-panel-cakupan').hidden = true;
       const fr = $('#dr-bpja-frame');
