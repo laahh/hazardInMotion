@@ -230,6 +230,12 @@ class DrmSnapshotBuilder
             'mgmt' => $mgmt,
             // dl => [site, lokasi, detail lokasi, grup lokasi] untuk tabel detail lokasi di tab Group Lokasi.
             'dl' => (object) $kamusDl,
+            // id aktivitas HIRA => [nama aktivitas, kelompok aktivitas] untuk rincian baris kelompok.
+            'akt' => (object) array_reduce($hira, function (array $c, array $h) {
+                $c[(string) $h['a']] ??= [(string) ($h['an'] ?? ''), (string) ($h['proses'] ?? 'X')];
+
+                return $c;
+            }, []),
         ];
     }
 

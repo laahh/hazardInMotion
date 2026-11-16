@@ -201,6 +201,8 @@ class DrmBeranda
      *   kel[minggu][level][kel] / grp[minggu][level][grup] = angka KOLOM_MGMT per kelompok / per grup lokasi
      *     (grup: satu baris = grup × kelompok × bahaya, status dihitung dari detail lokasi grup itu saja)
      *   gk[minggu][level]["grup|kel"] = angka KOLOM_MGMT kelompok aktivitas di dalam satu grup lokasi
+     *   akt[minggu][level][aktivitas] / gka[minggu][level]["grup|aktivitas"] = angka KOLOM_MGMT per aktivitas HIRA
+     *     (id_aktivitas master M03), di semua grup / di dalam satu grup
      *   dlw[minggu][level][dl] = angka KOLOM_MGMT per detail lokasi (satu baris = kelompok × bahaya di DL itu;
      *     kategori hanya penuh / hanya bermasalah / tanpa laporan)
      *   mx[minggu][level][kel] = ['a' => [sel => n], 'f' => [sel => n]] matriks 5x5 awal / final per kelompok,
@@ -218,7 +220,7 @@ class DrmBeranda
         $nW = (int) $this->cfg['beranda']['minggu'];
         [$unik, $kgTot, $u4, $unikGrup, $dlW] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
 
-        $w = $kelGap = $kelW = $grpW = $gk = $mx = array_fill(0, $nW, []);
+        $w = $kelGap = $kelW = $grpW = $gk = $akt = $gka = $mx = array_fill(0, $nW, []);
         $kelTot = [];
         foreach ($unik as $ku => $x) {
             [$lv, $kel] = [$x['lv'], $x['kel']];
@@ -230,6 +232,7 @@ class DrmBeranda
                 $kat = self::kategori($st);
                 self::tambah($w[$i][$lv], $kat, $st[3]);
                 self::tambah($kelW[$i][$lv][$kel], $kat, $st[3]);
+                self::tambah($akt[$i][$lv][(string) ($h['a'] ?? '')], $kat, $st[3]);
                 if ($kat !== 1) {
                     $kelGap[$i][$lv][$kel] = ($kelGap[$i][$lv][$kel] ?? 0) + 1;
                 }
@@ -242,8 +245,10 @@ class DrmBeranda
             }
         }
         foreach ($unikGrup as $x) {
+            $a = (string) ($hira[$x['hid']]['a'] ?? '');
             foreach ($x['w'] as $i => $st) {
                 $kat = self::kategori($st);
+                self::tambah($gka[$i][$x['lv']][$x['grp'].'|'.$a], $kat, $st[3]);
                 self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3]);
                 self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3]);
             }
@@ -258,6 +263,8 @@ class DrmBeranda
             'kel' => $kelW,
             'grp' => $grpW,
             'gk' => $gk,
+            'akt' => $akt,
+            'gka' => $gka,
             'dlw' => $dlW,
             'mx' => $mx,
             'kelTot' => $kelTot,
@@ -298,7 +305,7 @@ class DrmBeranda
                 $ku = $kel.'|'.$hid;
                 $kgu = $grp.'|'.$ku;
                 $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
-                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'hid' => (string) $hid, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
                 $ok = [];
                 for ($i = 0; $i < $nW; $i++) {
                     [$st, $m] = self::status($kw[$i] ?? 0, $sw[$i] ?? 0);

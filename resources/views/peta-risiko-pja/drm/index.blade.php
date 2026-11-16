@@ -98,7 +98,7 @@
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b id="dr-kel-judul">Per Kelompok Aktivitas</b><small id="dr-kel-sub">25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat kelompok itu.</small></div></div>
+      <div class="pr-card-head"><div><b id="dr-kel-judul">Per Kelompok Aktivitas</b><small id="dr-kel-sub">25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat aktivitas HIRA di kelompok itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-proses"></table></div>
     </div>
   </div>
@@ -123,7 +123,7 @@
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kelMx: q.get('kel') || '' };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, kelMx: q.get('kel') || '' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -228,8 +228,8 @@
       : 'Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.';
     $('#dr-kel-judul').textContent = diGrup ? `Kelompok aktivitas · ${state.grup}` : 'Per Kelompok Aktivitas';
     $('#dr-kel-sub').textContent = diGrup
-      ? 'Kelompok aktivitas yang ada di grup lokasi ini; jumlah barisnya sama dengan baseline grup di kartu atas. Klik baris untuk melihat kelompok itu di semua grup.'
-      : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat kelompok itu.';
+      ? 'Kelompok aktivitas yang ada di grup lokasi ini (dari master M05); jumlah barisnya sama dengan baseline grup di kartu atas. Klik baris untuk melihat aktivitas HIRA kelompok itu di grup ini.'
+      : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat aktivitas HIRA di kelompok itu.';
     if (diGrup) {
       tabelDetailLokasi(w);
       tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekDari(ambilKunci((p.gk || [])[i], `${state.grup}|${k}`)), 'proses');
@@ -368,15 +368,40 @@
     const baris = daftar.map(([kunci, nama]) => ({ kunci, nama, v: jumlahF(P, (p) => f(p, w, kunci)), v0: w + 1 < NW ? jumlahF(P, (p) => f(p, w + 1, kunci)) : null }))
       .filter((r) => r.v.t).sort((a, b) => b.v.t - a.v.t);
     const aktif = (k) => state.tab === tab && (tab === 'grup' ? state.grup : state.proses) === k;
+    // Baris kelompok bisa dibuka: menampilkan aktivitas HIRA (M03) kelompok itu, di grup terpilih bila tab Group Lokasi.
+    const bisaBuka = tab === 'proses' && !!M.beranda.akt;
     $(sel).innerHTML = `<thead><tr><th>${judulKolom}</th>${KEPALA_VEK}<th>Laporan bermasalah</th></tr></thead><tbody>`
-      + (baris.map(({ kunci, nama, v, v0 }) => `<tr data-kunci="${DR.esc(kunci)}" class="br-a${aktif(kunci) ? ' open' : ''}" style="cursor:pointer">
-          <td><span class="pr-name">${DR.esc(nama)}</span></td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
+      + (baris.map(({ kunci, nama, v, v0 }) => {
+        const buka = bisaBuka && !!state.kbuka[kunci];
+        const kepala = `<tr data-kunci="${DR.esc(kunci)}" class="br-a${aktif(kunci) || buka ? ' open' : ''}" style="cursor:pointer">
+          <td>${bisaBuka ? `<button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} aktivitas ${DR.esc(nama)}">▸</button>` : ''}<span class="pr-name">${DR.esc(nama)}</span></td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`;
+        return kepala + (buka ? barisAktivitas(kunci, P, w, NW) : '');
+      }).join('')
         || '<tr><td colspan="8" class="pr-empty">Tidak ada baris.</td></tr>') + '</tbody>';
     document.querySelectorAll(`${sel} tr[data-kunci]`).forEach((tr) => tr.addEventListener('click', () => {
+      if (bisaBuka) { state.kbuka[tr.dataset.kunci] = !state.kbuka[tr.dataset.kunci]; render(); return; }
       state.tab = tab;
       if (tab === 'grup') { state.grup = tr.dataset.kunci; $('#dr-grup').value = state.grup; } else { state.proses = tr.dataset.kunci; $('#dr-proses').value = state.proses; }
       render(); window.scrollTo({ top: 0, behavior: 'smooth' });
     }));
+    document.querySelectorAll(`${sel} [data-kekel]`).forEach((a) => a.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      state.tab = 'proses'; state.proses = a.dataset.kekel; $('#dr-proses').value = state.proses; render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    }));
+  }
+
+  /** Sub-baris aktivitas HIRA satu kelompok; di tab Group Lokasi hanya aktivitas dan baris di grup terpilih. */
+  function barisAktivitas(kel, P, w, NW) {
+    const diGrup = state.tab === 'grup';
+    const vek = (p, i, a) => vekDari(ambilKunci(diGrup ? (p.gka || [])[i] : (p.akt || [])[i], diGrup ? `${state.grup}|${a}` : a));
+    const L = Object.entries(M.beranda.akt).filter(([, x]) => x[1] === kel)
+      .map(([a, x]) => ({ nama: x[0], v: jumlahF(P, (p) => vek(p, w, a)), v0: w + 1 < NW ? jumlahF(P, (p) => vek(p, w + 1, a)) : null }))
+      .filter((r) => r.v.t).sort((a, b) => (b.v.t - b.v.full) - (a.v.t - a.v.full) || b.v.t - a.v.t);
+    const isi = L.map(({ nama, v, v0 }) => `<tr class="br-sub"><td style="padding-left:40px">${DR.esc(nama)}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
+      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${M.beranda.mgmt.some((p) => p.akt) ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
+    const tautan = diGrup || state.tab !== 'proses' || state.proses !== kel
+      ? `<tr class="br-sub"><td colspan="8" style="padding-left:40px"><a href="#" data-kekel="${DR.esc(kel)}">Lihat kelompok ini di semua grup ›</a></td></tr>` : '';
+    return isi + tautan;
   }
 
   // ------------------------------------------------------------ Per PJA (konsep Beranda PJA, satuan ketat)

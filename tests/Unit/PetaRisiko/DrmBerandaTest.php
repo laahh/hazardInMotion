@@ -102,8 +102,8 @@ class DrmBerandaTest extends TestCase
         $b = (new DrmBeranda(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))
             ->denganGrup(['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Disposal']]);
         $hira = [
-            'h1' => ['bn' => 'Jalan licin', 'proses' => 'K13', 'n1' => 'High', 'k1' => 'Mungkin', 'c1' => 'Major', 'k2' => 'Langka', 'c2' => 'Minor'],
-            'h2' => ['bn' => 'Retakan', 'proses' => 'K16', 'n1' => 'High', 'k1' => '', 'c1' => ''],
+            'h1' => ['a' => '7', 'bn' => 'Jalan licin', 'proses' => 'K13', 'n1' => 'High', 'k1' => 'Mungkin', 'c1' => 'Major', 'k2' => 'Langka', 'c2' => 'Minor'],
+            'h2' => ['a' => '8', 'bn' => 'Retakan', 'proses' => 'K16', 'n1' => 'High', 'k1' => '', 'c1' => ''],
         ];
         // h1 ada di dua detail lokasi (Pit terdeteksi, Disposal tanpa laporan); h2 hanya di Disposal tanpa laporan.
         $idx = $b->indeks([['dl' => '1', 'kel' => 'K13', 'w' => '0:1', 'h' => '', 'last' => '2026-11-14']], []);
@@ -129,6 +129,10 @@ class DrmBerandaTest extends TestCase
         // Per detail lokasi: DL 1 punya h1 terkontrol; DL 2 punya h1 & h2 tanpa laporan.
         $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['dlw'][0]['High']['1']);
         $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], $m['dlw'][0]['High']['2']);
+        // Per aktivitas HIRA: di semua grup (h1 sebagian) dan di dalam grup (Disposal: tanpa laporan).
+        $this->assertSame([1, 0, 1, 0, 0, 0, 0, 0, 0], $m['akt'][0]['High']['7']);
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['gka'][0]['High']['Disposal|7']);
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['gka'][0]['High']['Pit|7']);
     }
 
     public function test_sql_beranda_memakai_minggu_kalender_dan_root_cause(): void
