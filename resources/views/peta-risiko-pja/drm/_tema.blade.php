@@ -64,6 +64,13 @@
   body.tp .br-kpi small { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--mute); padding-right: 46px; }
   body.tp .br-kpi b { margin: 14px 0 6px; font-size: 34px; font-weight: 800; letter-spacing: -.02em; }
   body.tp .br-kpi em { font-size: 11.5px; font-weight: 500; }
+  /* 5 kartu KPI dalam satu baris (Overview / Group Lokasi / Kelompok Aktivitas). */
+  body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+  body.tp .br-kpis-5 .br-kpi { padding: 20px 18px 18px; }
+  body.tp .br-kpis-5 .br-kpi b { font-size: 30px; }
+  @media (max-width: 1280px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: 1fr; } }
   .tp-ikon { position: absolute; top: 18px; right: 18px; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--ib, rgba(57, 82, 188, .1)); color: var(--ic, var(--primary)); }
   .tp-ikon .material-symbols-outlined { font-size: 22px; }
 

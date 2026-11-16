@@ -241,7 +241,7 @@
     const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
     const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(a)}<small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
     const satuan = R ? 'kelompok aktivitas × bahaya-risiko unik (tidak dipetakan ke PJA / detail lokasi)' : 'jumlah baris tingkat PJA';
-    return `<div class="br-kpis">
+    return `<div class="br-kpis br-kpis-5">
         <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
         ${kartu(W.ok, 'var(--green-d)', 'Terkontrol penuh', 'full', true)}
         ${kartu(W.part, '#9A7300', 'Terkontrol sebagian', 'part', false)}

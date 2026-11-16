@@ -30,7 +30,7 @@
     <div class="tp-bar-in">
       <a class="tp-brand" href="{{ route('peta-risiko-pja.index') }}">
         <img src="{{ asset('build/images/logo-removebg.png') }}" alt="">
-        <div><b>PT. Berau Coal</b><span>Peta Risiko PJA · DRM 2.1</span></div>
+        <div><b>PT. Berau Coal</b><span></span></div>
       </a>
       <div class="tp-sep" aria-hidden="true"></div>
       @hasSection('nav')
