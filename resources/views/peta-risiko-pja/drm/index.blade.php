@@ -100,7 +100,7 @@
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {} };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {} };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -434,7 +434,11 @@
     panel.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => {
       state.site = state.site === tr.dataset.site ? 'ALL' : tr.dataset.site; $('#dr-site').value = state.site; render();
     }));
-    panel.querySelectorAll('tr.br-a').forEach((tr) => tr.addEventListener('click', () => { state.buka[tr.dataset.id] = !state.buka[tr.dataset.id]; state.baru = tr.dataset.id; renderPja(); state.baru = ''; }));
+    panel.querySelectorAll('tr.br-a[data-id]').forEach((tr) => tr.addEventListener('click', () => { state.buka[tr.dataset.id] = !state.buka[tr.dataset.id]; state.baru = tr.dataset.id; renderPja(); state.baru = ''; }));
+    panel.querySelectorAll('tr[data-situs]').forEach((tr) => tr.addEventListener('click', () => { state.situs[tr.dataset.situs] = !siteTerbuka(tr.dataset.situs); renderPja(); }));
+    panel.querySelectorAll('[data-semua]').forEach((b) => b.addEventListener('click', () => {
+      M.sites.forEach((s) => { state.situs[s] = b.dataset.semua === '1'; }); renderPja();
+    }));
     panel.querySelectorAll('[data-buka]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
   }
 
@@ -456,18 +460,28 @@
   function judulSite(site, L) {
     const v = jumlah(L), op = L.reduce((s, o) => s + o.op, 0), lewat = L.reduce((s, o) => s + o.lewat, 0);
     const lama30 = L.reduce((s, o) => s + o.lama30, 0), ins = L.reduce((s, o) => s + o.insiden, 0), tinggi = L.filter((o) => o.pri === 'T').length;
-    return `<tr style="background:#EEF3FA;font-weight:700"><td>${DR.esc(site)}<br><span class="dr-mute" style="font-weight:400">${L.length} PJA${tinggi ? ` · ${tinggi} prioritas tinggi` : ''}</span></td>
+    const buka = siteTerbuka(site);
+    return `<tr class="br-a${buka ? ' open' : ''}" data-situs="${DR.esc(site)}" style="background:#EEF3FA;font-weight:700;cursor:pointer"><td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} daftar PJA ${DR.esc(site)}">▸</button>${DR.esc(site)}<br><span class="dr-mute" style="font-weight:400;padding-left:24px">${L.length} PJA${tinggi ? ` · ${tinggi} prioritas tinggi` : ''}</span></td>
       <td>${v.t ? DR.sb4(v.full, v.part, v.gapo, v.none) + `<span class="dr-mute" style="font-weight:400">${DR.fmt(v.t)} baris</span>` : ''}</td>
       <td class="r">${pctI(v.full, v.t)}</td><td class="r">${pctI(v.t - v.full, v.t)}</td><td class="r">${DR.fmt(v.part)}</td><td class="r">${DR.fmt(v.none)}</td>
       <td class="r">${DR.fmt(op)}</td><td class="r">${DR.fmt(lewat)}<br><span class="dr-mute" style="font-weight:400">${pctI(lewat, op)}</span></td>
       <td class="r">${DR.fmt(lama30)}<br><span class="dr-mute" style="font-weight:400">${pctI(lama30, op)}</span></td><td class="r">${ins || ''}</td><td></td></tr>`;
   }
 
+  /**
+   * Site di tabel Semua PJA tertutup secara bawaan; terbuka bila diklik, bila satu site dipilih di filter,
+   * atau saat mencari nama / memfilter prioritas (supaya hasilnya langsung terlihat).
+   */
+  function siteTerbuka(site) {
+    if (site in state.situs) return state.situs[site];
+    return state.site !== 'ALL' || !!state.cari || state.pri !== 'all';
+  }
+
   function tabelDaftar(L, total, wk) {
     // Dikelompokkan per site (urutan daftar site); di dalam site tetap mengikuti pilihan "Urutkan".
     const perSite = new Map([...M.sites, ...L.map((o) => o.site)].map((s) => [s, []]));
     L.forEach((o) => perSite.get(o.site).push(o));
-    const rows = [...perSite].filter(([, d]) => d.length).map(([site, d]) => judulSite(site, d) + d.map((o) => {
+    const rows = [...perSite].filter(([, d]) => d.length).map(([site, d]) => judulSite(site, d) + (!siteTerbuka(site) ? '' : d.map((o) => {
       const buka = !!state.buka[o.id];
       const utama = `<tr class="br-a${buka ? ' open' : ''}" data-id="${o.id}" style="cursor:pointer">
         <td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Buka rincian PJA">▸</button><b>${DR.esc(o.nama)}</b><br><span class="dr-mute" style="padding-left:24px">${DR.esc(o.site)} · ${o.ndl} detail lokasi · ${DR.fmt(o.personil)} personil</span></td>
@@ -478,8 +492,9 @@
         <td class="r">${o.insiden ? `<b class="br-red">${o.insiden}</b>` : ''}</td>
         <td><span class="br-pill" style="background:${PRI[o.pri][1]}">${PRI[o.pri][0]}</span><br><span class="dr-mute">skor ${o.skor}</span></td></tr>`;
       return utama + (buka ? rincian(o) : '');
-    }).join('')).join('');
-    return `<div class="pr-card"><div class="pr-card-head"><div><b>Semua PJA per site · ${wk}</b><small>${L.length} dari ${total} PJA · dikelompokkan per site · subtotal site = jumlah baris tingkat PJA · klik baris untuk rincian</small></div></div>
+    }).join(''))).join('');
+    return `<div class="pr-card"><div class="pr-card-head"><div><b>Semua PJA per site · ${wk}</b><small>${L.length} dari ${total} PJA · klik site untuk membuka daftar PJA-nya, klik PJA untuk rincian · subtotal site = jumlah baris tingkat PJA</small></div>
+        <div style="display:flex;gap:8px"><button type="button" class="pr-back" data-semua="1">Buka semua</button><button type="button" class="pr-back" data-semua="0">Tutup semua</button></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:1200px"><thead><tr><th style="min-width:260px">PJA</th><th style="min-width:200px">Komposisi</th>
       <th class="r">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Sebagian</th><th class="r">Tanpa laporan</th>
       <th class="r">Open</th><th class="r">Lewat janji</th><th class="r">Open &gt; 30 hari</th><th class="r">Insiden ${M.beranda.hari} hr</th><th>Prioritas</th></tr></thead>
