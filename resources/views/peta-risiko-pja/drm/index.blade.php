@@ -112,8 +112,8 @@
   <div id="dr-panel-bpja" style="margin-top:20px" hidden>
     <div class="pr-card">
       <div class="pr-card-head"><div><b>Beranda PJA — prototipe DRM 2.1</b>
-        <small>Prototipe "Platform PJA Command Center" dengan data bawaannya sendiri (sampai 14 Nov 2026, W46), belum terhubung ke hasil sync halaman ini. <a href="{{ route('peta-risiko-pja.prototipe') }}#bpja" target="_blank" rel="noopener">Buka di tab baru ↗</a></small></div></div>
-      <iframe id="dr-bpja-frame" title="Beranda PJA — prototipe DRM 2.1" data-src="{{ route('peta-risiko-pja.prototipe') }}#bpja"
+        <small>Prototipe "Platform PJA Command Center" dengan data bawaannya sendiri (sampai 14 Nov 2026, W46), belum terhubung ke hasil sync halaman ini. <a href="{{ route('peta-risiko-pja.prototipe', ['bagian' => 'bpja']) }}#bpja" target="_blank" rel="noopener">Buka di tab baru ↗</a></small></div></div>
+      <iframe id="dr-bpja-frame" title="Beranda PJA — prototipe DRM 2.1" data-src="{{ route('peta-risiko-pja.prototipe', ['bagian' => 'bpja']) }}#bpja"
         style="display:block;width:100%;height:85vh;min-height:600px;border:0;border-top:1px solid #E5E9F0;border-radius:0 0 12px 12px;background:#fff" loading="lazy"></iframe>
     </div>
   </div>

@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * Peta Risiko PJA (DRM 2.1): identifikasi bahaya-risiko HIRA oleh SAP per Site / Group Lokasi / PJA.
@@ -88,16 +89,29 @@ class PetaRisikoDrmController extends Controller
      * ditampilkan di tab Beranda PJA lewat iframe. Disajikan dari repo lewat route ber-login (bukan public/)
      * karena berisi data internal PJA.
      */
-    public function prototipe(): BinaryFileResponse
+    public function prototipe(Request $request): SymfonyResponse
     {
         $path = base_path('database/data/peta-risiko/prototipe-pja-command-center.html');
         abort_unless(is_file($path), 404, 'File prototipe belum ada di server.');
+        $headers = ['Content-Type' => 'text/html; charset=UTF-8', 'X-Frame-Options' => 'SAMEORIGIN', 'Cache-Control' => 'private, max-age=3600'];
 
-        return response()->file($path, [
-            'Content-Type' => 'text/html; charset=UTF-8',
-            'X-Frame-Options' => 'SAMEORIGIN',
-            'Cache-Control' => 'private, max-age=3600',
-        ]);
+        if ($request->query('bagian') !== 'bpja') {
+            return response()->file($path, $headers);
+        }
+
+        // Hanya bagian Beranda PJA: sembunyikan bilah atas (judul + menu tab prototipe) dan banner keterangan,
+        // lalu kunci ke tab #bpja. File aslinya tidak diubah.
+        $sisip = '<style>.top{display:none!important}#s-bpja>.banner{display:none!important}.wrap{padding-top:12px}</style>';
+        $kunci = '<script>(function(){function k(){if(location.hash!=="#bpja"){location.hash="bpja";}}k();window.addEventListener("hashchange",k);})();</script>';
+        $html = (string) file_get_contents($path);
+        $kepala = stripos($html, '</head>');
+        if ($kepala !== false) {
+            $html = substr_replace($html, $sisip, $kepala, 0);
+        }
+        $badan = strripos($html, '</body>');
+        $html = $badan !== false ? substr_replace($html, $kunci, $badan, 0) : $html.$kunci;
+
+        return response($html, 200, $headers);
     }
 
     /** Ringkasan semua cakupan (Site / Group Lokasi / PJA) untuk halaman indeks. */
