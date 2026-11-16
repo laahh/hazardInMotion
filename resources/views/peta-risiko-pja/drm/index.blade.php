@@ -111,7 +111,7 @@
     </div>
 
     <div class="pr-card" id="dr-card-mx">
-      <div class="pr-card-head"><div><b>Matriks 5x5 — baris satuan ketat</b> <span id="dr-mx-filter"></span>
+      <div class="pr-card-head"><div><b>Matriks 5x5</b> <span id="dr-mx-filter"></span>
         <small>Satu baris = kelompok aktivitas × bahaya-risiko unik di cakupan ini. Final: terkontrol penuh memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
       <div class="pr-card-body dr-two" id="dr-matriks"></div>
     </div>
@@ -372,7 +372,9 @@
       if (!info || info[3] !== state.grup || (state.site !== 'ALL' && info[0] !== state.site)) return;
       if (!peta.has(d)) {
         // Status per detail lokasi dari ringkasan unik "semua site" (sama untuk setiap PJA pemiliknya).
-        const sumber = (M.beranda.ringkas && M.beranda.ringkas.ALL) || p;
+        // Snapshot lama (sebelum 17 Nov 2026) menyimpan dlw per PJA, bukan di ringkasan ALL: pakai yang tersedia.
+        const ra = M.beranda.ringkas && M.beranda.ringkas.ALL;
+        const sumber = ra && ra.dlw ? ra : p;
         peta.set(d, { d, info, pja: [], v: vekDari(ambilKunci((sumber.dlw || [])[w], d)), v0: w + 1 < NW ? vekDari(ambilKunci((sumber.dlw || [])[w + 1], d)) : null });
       }
       peta.get(d).pja.push(p);
