@@ -111,14 +111,18 @@
   <div id="dr-panel-periode" class="br-root" style="margin-top:20px" hidden></div>
   <div id="dr-panel-pja" class="br-root" style="margin-top:20px" hidden></div>
 
-  {{-- Tab Beranda PJA: prototipe DRM 2.1 (HTML statis, data sendiri per 14 Nov 2026), dimuat saat tab pertama dibuka. --}}
-  <div id="dr-panel-bpja" style="margin-top:20px" hidden>
-    <div class="pr-card">
-      <div class="pr-card-head"><div><b>Beranda PJA — prototipe DRM 2.1</b>
-        <small>Prototipe "Platform PJA Command Center" dengan data bawaannya sendiri (sampai 14 Nov 2026, W46), belum terhubung ke hasil sync halaman ini. <a href="{{ route('peta-risiko-pja.prototipe', ['bagian' => 'bpja']) }}#bpja" target="_blank" rel="noopener">Buka di tab baru ↗</a></small></div></div>
-      <iframe id="dr-bpja-frame" title="Beranda PJA — prototipe DRM 2.1" data-src="{{ route('peta-risiko-pja.prototipe', ['bagian' => 'bpja']) }}#bpja"
-        style="display:block;width:100%;height:85vh;min-height:600px;border:0;border-top:1px solid #E5E9F0;border-radius:0 0 12px 12px;background:#fff" loading="lazy"></iframe>
+  {{-- Tab Beranda PJA: Beranda PJA hidup (data snapshot sync), dirender langsung tanpa iframe. --}}
+  <div id="dr-panel-bpja" class="br-root" style="margin-top:20px" hidden>
+    <div class="pr-card" style="margin-bottom:18px">
+      <div class="pr-card-body" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+        <label class="dr-bpja-pilih" style="display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:13px">
+          <span class="material-symbols-outlined" style="color:var(--primary)">badge</span> PJA
+          <select id="dr-bpja-pja" style="min-width:320px;padding:8px 10px;border-radius:10px;border:1px solid rgba(171,173,175,.45);font-weight:600"></select>
+        </label>
+        <a class="pr-back" id="dr-bpja-buka" href="#" style="margin-left:auto"><span class="material-symbols-outlined" style="font-size:18px">open_in_new</span> Buka halaman PJA</a>
+      </div>
     </div>
+    @include('peta-risiko-pja.drm._beranda-pja-isi', ['denganSub' => true])
   </div>
 
   <div class="pr-foot">
@@ -131,6 +135,9 @@
 @section('scripts')
 @include('peta-risiko-pja.drm._ui')
 @if ($meta)
+@include('peta-risiko-pja.drm._beranda-pja-script')
+@endif
+@if ($meta)
 <script>
 (() => {
   const URL_META = @json(route('peta-risiko-pja.meta'));
@@ -139,7 +146,7 @@
   const q = new URLSearchParams(location.search);
   // Tab "periode" sedang disembunyikan: tautan lama ?tab=periode diarahkan ke Overview.
   const state = { tab: ['periode'].includes(q.get('tab')) ? 'site' : (q.get('tab') || 'site'), site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, dlbuka: {}, kelMx: q.get('kel') || '' };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, dlbuka: {}, pjaB: q.get('pja') || '', kelMx: q.get('kel') || '' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -188,6 +195,7 @@
     if (state.tab === 'site' && state.kelMx) p.set('kel', state.kelMx);
     if (state.tab === 'grup') p.set('grup', state.grup);
     if (state.tab === 'proses') p.set('proses', state.proses);
+    if (state.tab === 'bpja' && state.pjaB) p.set('pja', state.pjaB);
     history.replaceState(null, '', '?' + p.toString());
   }
 
@@ -202,18 +210,51 @@
     $('#dr-ringkas').hidden = true;
     const bpja = state.tab === 'bpja';
     $('#dr-panel-bpja').hidden = !bpja;
-    // Filter site/periode/risiko tidak berlaku untuk prototipe. Pakai style.display: CSS .dr-bar (display:flex)
+    // Beranda PJA punya filter minggu & tingkat risiko sendiri. Pakai style.display: CSS .dr-bar (display:flex)
     // mengalahkan atribut hidden.
     $('.dr-bar').style.display = bpja ? 'none' : '';
     if (bpja) {
       $('#dr-panel-cakupan').hidden = true;
-      const fr = $('#dr-bpja-frame');
-      if (!fr.getAttribute('src')) fr.setAttribute('src', fr.dataset.src);
+      bukaBeranda();
     } else if (TAB_W.includes(state.tab)) renderW(); else renderCakupan();
     simpanUrl();
   }
 
   function kosong() { return Array.from({ length: 5 }, () => [0, 0, 0, 0, 0]); }
+
+  // ------------------------------------------------------------ Beranda PJA (komponen bersama _beranda-pja-*)
+  let berandaDimuat = '';
+  /** Isi pemilih PJA (dikelompokkan per site) sekali, lalu muat Beranda PJA terpilih bila belum dimuat. */
+  function bukaBeranda() {
+    const sel = $('#dr-bpja-pja');
+    const L = ((M.beranda || {}).mgmt || []).slice().sort((a, b) => a.site.localeCompare(b.site) || a.nama.localeCompare(b.nama));
+    if (!L.length) { $('#br-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
+    if (!sel.options.length) {
+      const perSite = {};
+      L.forEach((p) => { (perSite[p.site] ||= []).push(p); });
+      sel.innerHTML = Object.entries(perSite).map(([site, d]) => `<optgroup label="${DR.esc(site)}">${d.map((p) => `<option value="${DR.esc(p.id)}">${DR.esc(p.nama)}</option>`).join('')}</optgroup>`).join('');
+      sel.addEventListener('change', () => { state.pjaB = sel.value; muatBeranda(state.w); simpanUrl(); });
+    }
+    if (!state.pjaB || !L.some((p) => String(p.id) === String(state.pjaB))) {
+      state.pjaB = String((L.find((p) => state.site === 'ALL' || p.site === state.site) || L[0]).id);
+    }
+    sel.value = state.pjaB;
+    if (berandaDimuat !== state.pjaB) muatBeranda(state.w);
+  }
+
+  function muatBeranda(w) {
+    const p = M.beranda.mgmt.find((x) => String(x.id) === String(state.pjaB));
+    if (!p) return;
+    berandaDimuat = String(p.id);
+    $('#dr-bpja-buka').href = URL_PJA.replace('__ID__', p.id) + '?w=' + w;
+    $('#dr-sub').textContent = `${p.nama} · ${p.site} · data sampai ${M.sampai.split('-').reverse().join('/')} · periode minggu kalender (Minggu–Sabtu)`;
+    $('#br-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Memuat Beranda PJA…</div></div>';
+    BerandaPJA({
+      meta: M, id: String(p.id), w,
+      // Memilih PJA lain di tabel antar PJA: ganti isi tab tanpa memuat ulang halaman.
+      pindahPja: (id, wk) => { state.pjaB = String(id); $('#dr-bpja-pja').value = state.pjaB; muatBeranda(wk); simpanUrl(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+    });
+  }
 
   // ------------------------------------------------------------ Per Site / Group Lokasi / Kelompok Aktivitas (satuan ketat)
   /** Peta {level: peta kunci → vektor} menjadi {level: vektor} untuk satu kunci (grup / kelompok). */
