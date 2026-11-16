@@ -77,7 +77,7 @@
         <small>Luas kotak = jumlah baris belum terkontrol penuh; warna = % gap (hijau rendah → oranye tinggi). Klik kotak untuk memfilter matriks Baseline HIRA dan Final di bawah, klik lagi untuk semua kelompok.</small></div></div>
       <div class="pr-card-body">
         <div id="dr-treemap" class="dr-tm" role="list" aria-label="Treemap kelompok aktivitas"></div>
-        <div class="dr-tm-skala"><span>% gap</span><i></i><span>0%</span><span style="margin-left:auto">100%</span></div>
+        <div class="dr-tm-skala"><span>% gap</span><span>0%</span><i></i><span>100%</span></div>
       </div>
     </div>
 
@@ -228,18 +228,32 @@
   /** Matriks 5x5 Baseline HIRA (risiko awal) dan Final; bila satu kelompok dipilih di treemap, hanya kelompok itu. */
   function renderMatriks(P, w, wk) {
     const A = kosong(), F = kosong(), kel = state.kelMx;
+    const isi = (x) => {
+      Object.entries(x.a || {}).forEach(([s, n]) => { A[Math.floor(s / 5)][s % 5] += n; });
+      Object.entries(x.f || {}).forEach(([s, n]) => { F[Math.floor(s / 5)][s % 5] += n; });
+    };
+    // Snapshot sebelum 17 Nov 2026 menyimpan mx[minggu][level] = {a, f} tanpa pecahan per kelompok.
+    let lama = false;
     P.forEach((p) => {
       const m = (p.mx || [])[w] || {};
-      lvAmbil(m).forEach((lv) => Object.entries(m[lv] || {}).forEach(([k, x]) => {
-        if (kel && k !== kel) return;
-        Object.entries(x.a || {}).forEach(([s, n]) => { A[Math.floor(s / 5)][s % 5] += n; });
-        Object.entries(x.f || {}).forEach(([s, n]) => { F[Math.floor(s / 5)][s % 5] += n; });
-      }));
+      lvAmbil(m).forEach((lv) => {
+        const x = m[lv] || {};
+        if ('a' in x || 'f' in x) { lama = true; if (!kel) isi(x); return; }
+        Object.entries(x).forEach(([k, v]) => { if (!kel || k === kel) isi(v); });
+      });
     });
     const nama = kel ? (M.proses.find((p) => p.kode === kel) || {}).nama || kel : '';
     const akhiran = kel ? ` · ${DR.esc(nama)}` : '';
     $('#dr-mx-filter').innerHTML = kel ? `<button type="button" class="dr-chip" id="dr-mx-hapus" aria-label="Hapus filter kelompok">${DR.esc(nama)} ✕</button>` : '';
-    $('#dr-matriks').innerHTML = DR.matriks(`Baseline HIRA (risiko awal) · ${wk}${akhiran}`, A, M) + DR.matriks(`Final · ${wk}${akhiran}`, F, M);
+    const nBaris = A.flat().reduce((s, n) => s + n, 0);
+    const nKel = kel ? jumlahF(P, (p) => vekKel(p, w, kel)).t : 0;
+    const catatan = lama && kel
+      ? `<div class="pr-empty" style="grid-column:1/-1">Snapshot masih format lama (matriks belum dipecah per kelompok aktivitas). Jalankan ulang <code>php artisan peta-risiko:sync</code> agar filter kelompok di matriks bekerja.</div>`
+      : kel && !nBaris && nKel
+        ? `<div class="pr-empty" style="grid-column:1/-1">${DR.fmt(nKel)} baris ${DR.esc(nama)} tidak punya nilai kekerapan/konsekuensi di HIRA (ID HIRA v31 tidak ada di mv_hira_master), jadi tidak bisa digambar di matriks.</div>`
+        : '';
+    $('#dr-matriks').innerHTML = catatan || (DR.matriks(`Baseline HIRA (risiko awal) · ${wk}${akhiran}`, A, M) + DR.matriks(`Final · ${wk}${akhiran}`, F, M)
+      + (kel && nKel > nBaris ? `<div class="dr-mute" style="grid-column:1/-1;font-size:12px">${DR.fmt(nBaris)} dari ${DR.fmt(nKel)} baris kelompok ini punya nilai risiko di HIRA; sisanya tidak masuk matriks.</div>` : ''));
     const hapus = $('#dr-mx-hapus');
     if (hapus) hapus.addEventListener('click', () => { state.kelMx = ''; render(); });
   }
