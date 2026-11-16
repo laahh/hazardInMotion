@@ -54,18 +54,37 @@
 
 @section('content')
 <style>
-  .dr-tm { position: relative; height: 380px; border-radius: 8px; overflow: hidden; background: #F3F5F8; }
-  .dr-tm-k { position: absolute; box-sizing: border-box; border: 2px solid #fff; padding: 6px 8px; cursor: pointer; overflow: hidden;
-    color: #10203A; font-size: 12px; line-height: 1.25; text-align: left; font-family: inherit; transition: filter .15s, outline-color .15s; outline: 3px solid transparent; outline-offset: -5px; }
-  .dr-tm-k:hover, .dr-tm-k:focus-visible { filter: brightness(1.08); outline-color: #16294F; }
-  .dr-tm-k.on { outline-color: #16294F; }
-  .dr-tm-k.redup { opacity: .45; }
-  .dr-tm-k b { display: block; font-size: 13px; }
-  .dr-tm-k span { display: block; opacity: .85; }
-  .dr-tm-skala { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #5B6675; }
-  .dr-tm-skala i { width: 160px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #1F9A3A, #E3B341, #D0640C); }
-  .dr-chip { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 2px 10px; border-radius: 999px; background: #16294F; color: #fff; font-size: 12px; font-weight: 600; border: 0; cursor: pointer; }
-  @media (max-width: 640px) { .dr-tm { height: 300px; } }
+  /* Treemap kelompok aktivitas */
+  .dr-tm-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: stretch; }
+  .dr-tm { position: relative; height: 420px; border-radius: 14px; overflow: hidden; background: #f5f7f9; }
+  .dr-tm-k { position: absolute; box-sizing: border-box; border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: space-between; text-align: left; font-family: inherit;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease; }
+  .dr-tm-k:hover, .dr-tm-k:focus-visible { transform: scale(1.015); z-index: 2; box-shadow: 0 10px 24px -8px rgba(0, 0, 0, .35), inset 0 0 0 2px rgba(255, 255, 255, .55); outline: none; }
+  .dr-tm-k.on { z-index: 3; box-shadow: 0 0 0 3px #fff, 0 0 0 6px #3952bc, 0 12px 28px -8px rgba(0, 0, 0, .35); }
+  .dr-tm-k.redup { opacity: .35; }
+  .dr-tm-n { font-size: 12.5px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .dr-tm-v { line-height: 1.1; }
+  .dr-tm-v b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+  .dr-tm-v small { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; opacity: .85; }
+  .dr-tm-k.kecil { padding: 6px 8px; justify-content: center; }
+  .dr-tm-k.kecil .dr-tm-v b { font-size: 14px; }
+  .dr-tm-top { display: flex; flex-direction: column; gap: 10px; }
+  .dr-tm-top h4 { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #595c5e; }
+  .dr-tm-i { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px 12px; border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, .07); background: #fff; cursor: pointer; text-align: left; font-family: inherit; transition: border-color .15s, background .15s; }
+  .dr-tm-i:hover, .dr-tm-i:focus-visible { border-color: #3952bc; background: #f7f8fe; outline: none; }
+  .dr-tm-i.on { border-color: #3952bc; background: #eef1fd; }
+  .dr-tm-i.redup { opacity: .5; }
+  .dr-tm-i .r { grid-row: span 2; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; font-size: 12px; font-weight: 800; }
+  .dr-tm-i .n { font-size: 12.5px; font-weight: 600; color: #2c2f31; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dr-tm-i .v { font-size: 13px; font-weight: 800; color: #2c2f31; }
+  .dr-tm-i .bar { grid-column: 2 / span 2; height: 6px; border-radius: 3px; background: #eef1f3; overflow: hidden; }
+  .dr-tm-i .bar i { display: block; height: 100%; border-radius: 3px; }
+  .dr-tm-skala { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 11.5px; color: #595c5e; flex-wrap: wrap; }
+  .dr-tm-skala i { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #fff1dc, #fbbf24, #ea580c, #7c2d12); }
+  @media (max-width: 1100px) { .dr-tm-wrap { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .dr-tm { height: 320px; } }
 </style>
 @if (! $meta)
   <div class="pr-card"><div class="pr-empty">
@@ -79,10 +98,15 @@
 
     <div class="pr-card" id="dr-card-tm">
       <div class="pr-card-head"><div><b>Kelompok aktivitas dengan risiko terbesar</b>
-        <small>Luas kotak = jumlah baris belum terkontrol penuh; warna = % gap (hijau rendah → oranye tinggi). Klik kotak untuk memfilter matriks Baseline HIRA dan Final di bawah, klik lagi untuk semua kelompok.</small></div></div>
+        <small>Luas kotak = jumlah baris belum terkontrol penuh. Warna = porsi baris yang tidak terkontrol di detail lokasi mana pun (tanpa laporan atau hanya laporan bermasalah). Klik kotak atau daftar untuk memfilter matriks di bawah; klik lagi untuk semua kelompok.</small></div></div>
       <div class="pr-card-body">
-        <div id="dr-treemap" class="dr-tm" role="list" aria-label="Treemap kelompok aktivitas"></div>
-        <div class="dr-tm-skala"><span>% gap</span><span>0%</span><i></i><span>100%</span></div>
+        <div class="dr-tm-wrap">
+          <div>
+            <div id="dr-treemap" class="dr-tm" role="list" aria-label="Treemap kelompok aktivitas"></div>
+            <div class="dr-tm-skala" id="dr-tm-skala"></div>
+          </div>
+          <div class="dr-tm-top" id="dr-tm-top" aria-label="Lima kelompok dengan baris belum terkontrol terbanyak"></div>
+        </div>
       </div>
     </div>
 
@@ -454,10 +478,13 @@
     if (hapus) hapus.addEventListener('click', () => { state.kelMx = ''; render(); });
   }
 
-  /** Warna % gap: hijau (0) → kuning (0,5) → oranye (1). */
-  function warnaGap(r) {
-    const c = [[31, 154, 58], [227, 179, 65], [208, 100, 12]], t = Math.max(0, Math.min(1, r)) * 2, i = Math.min(1, Math.floor(t)), f = t - i;
-    return `rgb(${c[i].map((v, j) => Math.round(v + (c[i + 1][j] - v) * f)).join(',')})`;
+  /** Palet berurutan (terang → gelap) untuk nilai 0–1, plus warna teks yang kontras. */
+  const PALET_TM = [[255, 241, 220], [251, 191, 36], [234, 88, 12], [124, 45, 18]];
+  function warnaTm(r) {
+    const t = Math.max(0, Math.min(1, r)) * (PALET_TM.length - 1), i = Math.min(PALET_TM.length - 2, Math.floor(t)), f = t - i;
+    const c = PALET_TM[i].map((v, j) => Math.round(v + (PALET_TM[i + 1][j] - v) * f));
+    const terang = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) > 165;
+    return { bg: `rgb(${c.join(',')})`, fg: terang ? '#3b1d0a' : '#fff' };
   }
 
   /** Tata letak treemap squarified (Bruls dkk.): item urut menurun, nilai v → kotak {x, y, w, h} dalam lebar × tinggi. */
@@ -489,26 +516,50 @@
     return out;
   }
 
-  /** Treemap kelompok aktivitas: luas = baris belum terkontrol penuh, warna = % gap; klik memfilter matriks. */
+  /**
+   * Treemap kelompok aktivitas: luas = baris belum terkontrol penuh; warna = porsi baris tanpa kontrol sama sekali
+   * (tanpa laporan + hanya bermasalah), diskalakan relatif min–maks antar kotak supaya perbedaannya terlihat.
+   * Klik kotak / daftar 5 teratas memfilter matriks.
+   */
   function renderTreemap(P, w) {
     const el = $('#dr-treemap');
     const items = M.proses.map((k) => {
       const v = jumlahF(P, (p) => vekKel(p, w, k.kode));
-      return { kode: k.kode, nama: k.nama, t: v.t, gap: v.t - v.full, full: v.full, part: v.part, none: v.none };
+      return { kode: k.kode, nama: k.nama, t: v.t, gap: v.t - v.full, full: v.full, part: v.part, gapo: v.gapo, none: v.none, buta: v.t ? (v.none + v.gapo) / v.t : 0 };
     }).filter((i) => i.gap > 0).sort((a, b) => b.gap - a.gap).map((i) => ({ ...i, v: i.gap }));
-    if (!items.length) { el.innerHTML = '<div class="pr-empty">Tidak ada baris belum terkontrol penuh pada minggu ini.</div>'; return; }
-    const W = el.clientWidth || 800, H = el.clientHeight || 380;
+    if (!items.length) { el.innerHTML = '<div class="pr-empty">Tidak ada baris belum terkontrol penuh pada minggu ini.</div>'; $('#dr-tm-top').innerHTML = ''; $('#dr-tm-skala').innerHTML = ''; return; }
+    const lo = Math.min(...items.map((i) => i.buta)), hi = Math.max(...items.map((i) => i.buta));
+    const skala = (x) => (hi - lo < 0.005 ? 0.55 : 0.12 + 0.88 * (x - lo) / (hi - lo));
+    const pilih = (k) => { state.kelMx = state.kelMx === k ? '' : k; render(); };
+    const kls = (k) => `${state.kelMx === k ? ' on' : ''}${state.kelMx && state.kelMx !== k ? ' redup' : ''}`;
+    const ket = (b) => `${b.nama}: ${DR.fmt(b.gap)} dari ${DR.fmt(b.t)} baris belum terkontrol penuh (gap ${DR.pct(b.gap, b.t)}); sebagian ${DR.fmt(b.part)}, hanya bermasalah ${DR.fmt(b.gapo)}, tanpa laporan ${DR.fmt(b.none)}; ${DR.pct(b.none + b.gapo, b.t)} tanpa kontrol sama sekali`;
+
+    const W = el.clientWidth || 800, H = el.clientHeight || 420, CELAH = 3;
     el.innerHTML = squarify(items, W, H).map((b) => {
-      const besar = b.w > 90 && b.h > 44, sedang = b.w > 56 && b.h > 26;
-      const judul = `${b.nama}: ${DR.fmt(b.gap)} dari ${DR.fmt(b.t)} baris belum terkontrol penuh (gap ${DR.pct(b.gap, b.t)}); sebagian ${DR.fmt(b.part)}, tanpa laporan ${DR.fmt(b.none)}`;
-      const kls = `dr-tm-k${state.kelMx === b.kode ? ' on' : ''}${state.kelMx && state.kelMx !== b.kode ? ' redup' : ''}`;
-      return `<button type="button" role="listitem" class="${kls}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(judul)}" aria-label="${DR.esc(judul)}" aria-pressed="${state.kelMx === b.kode}"
-        style="left:${b.x.toFixed(1)}px;top:${b.y.toFixed(1)}px;width:${b.w.toFixed(1)}px;height:${b.h.toFixed(1)}px;background:${warnaGap(b.gap / b.t)}">
-        ${besar ? `<b>${DR.esc(b.nama)}</b><span>${DR.fmt(b.gap)} baris · gap ${DR.pct(b.gap, b.t)}</span>` : sedang ? `<b>${DR.esc(b.nama.split(/[ ,&]/)[0])}</b>` : ''}</button>`;
+      const x = b.x + CELAH / 2, y = b.y + CELAH / 2, lw = Math.max(0, b.w - CELAH), lh = Math.max(0, b.h - CELAH);
+      const besar = lw > 130 && lh > 78, sedang = lw > 78 && lh > 46, kecil = lw > 34 && lh > 22;
+      const { bg, fg } = warnaTm(skala(b.buta));
+      const isi = besar
+        ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b> baris<small>gap ${DR.pct(b.gap, b.t)} · ${DR.pct(b.none + b.gapo, b.t)} tanpa kontrol</small></span>`
+        : sedang ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b></span>`
+          : kecil ? `<span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b></span>` : '';
+      return `<button type="button" role="listitem" class="dr-tm-k${besar || sedang ? '' : ' kecil'}${kls(b.kode)}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(ket(b))}" aria-label="${DR.esc(ket(b))}" aria-pressed="${state.kelMx === b.kode}"
+        style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${lw.toFixed(1)}px;height:${lh.toFixed(1)}px;background:${bg};color:${fg}">${isi}</button>`;
     }).join('');
-    el.querySelectorAll('[data-kel]').forEach((t) => t.addEventListener('click', () => {
-      state.kelMx = state.kelMx === t.dataset.kel ? '' : t.dataset.kel; render();
-    }));
+
+    const maks = items[0].gap;
+    $('#dr-tm-top').innerHTML = '<h4>5 teratas · baris belum terkontrol</h4>' + items.slice(0, 5).map((b, i) => {
+      const { bg, fg } = warnaTm(skala(b.buta));
+      return `<button type="button" class="dr-tm-i${kls(b.kode)}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(ket(b))}" aria-pressed="${state.kelMx === b.kode}">
+        <span class="r" style="background:${bg};color:${fg}">${i + 1}</span><span class="n">${DR.esc(b.nama)}</span><span class="v">${DR.fmt(b.gap)}</span>
+        <span class="bar"><i style="width:${(100 * b.gap / maks).toFixed(1)}%;background:${bg}"></i></span></button>`;
+    }).join('') + `<p class="dr-mute" style="margin:2px 0 0;font-size:11.5px">${DR.fmt(items.length)} kelompok punya baris belum terkontrol · total ${DR.fmt(items.reduce((s, b) => s + b.gap, 0))} baris.</p>`;
+
+    $('#dr-tm-skala').innerHTML = hi - lo < 0.005
+      ? `<span>Tanpa kontrol sama sekali: semua kelompok ±${DR.pct(lo, 1)}</span>`
+      : `<span>Tanpa kontrol sama sekali</span><span>${DR.pct(lo, 1)}</span><i></i><span>${DR.pct(hi, 1)}</span><span class="dr-mute">(skala relatif antar kelompok)</span>`;
+
+    document.querySelectorAll('#dr-treemap [data-kel], #dr-tm-top [data-kel]').forEach((t) => t.addEventListener('click', () => pilih(t.dataset.kel)));
   }
 
   // Treemap dihitung dari lebar wadah: gambar ulang saat ukuran layar berubah.
