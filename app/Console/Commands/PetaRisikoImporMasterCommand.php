@@ -20,7 +20,9 @@ class PetaRisikoImporMasterCommand extends Command
     public function handle(): int
     {
         ini_set('memory_limit', '1024M');
-        $file = (string) ($this->argument('file') ?: DrmMaster::pathXlsx());
+        // Bawaan: workbook yang ikut repo, lalu salinan terakhir yang sudah diimpor.
+        $repo = base_path('database/data/peta-risiko/DRM21_Mapping_Master_Overall.xlsx');
+        $file = (string) ($this->argument('file') ?: (is_file($repo) ? $repo : DrmMaster::pathXlsx()));
 
         try {
             $master = DrmMaster::dariXlsx($file);
