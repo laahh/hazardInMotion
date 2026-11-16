@@ -18,7 +18,7 @@ class DrmSnapshotBuilderTest extends TestCase
     public function test_kpi_dan_matriks_cakupan_dari_minggu_terakhir(): void
     {
         $snap = $this->susun();
-        $kpi = $snap['meta']['cakupan']['SITE|LMO']['kpi'];
+        $kpi = $snap['cakupan']['SITE|LMO']['kpi'];
 
         $this->assertSame(3, $kpi['total']);
         $this->assertSame(1, $kpi['K']);
@@ -28,9 +28,9 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(1, $kpi['turun']);
         $this->assertSame(1, $kpi['final']['Medium']);
         // Minggu lama hanya masuk tren, tidak ke KPI.
-        $this->assertSame(5, $snap['meta']['cakupan']['SITE|LMO']['tren']['2026-11-07']['total']);
+        $this->assertSame(5, $snap['cakupan']['SITE|LMO']['tren']['2026-11-07']['total']);
         // Matriks awal: Hampir Pasti (baris 0) × Bencana (kolom 4).
-        $this->assertSame(2, $snap['meta']['cakupan']['SITE|LMO']['mAwal'][0][4]);
+        $this->assertSame(2, $snap['cakupan']['SITE|LMO']['mAwal'][0][4]);
     }
 
     public function test_risiko_laten_diambil_dari_kolom_laten_matriks_minggu_terakhir(): void
@@ -38,11 +38,11 @@ class DrmSnapshotBuilderTest extends TestCase
         $snap = $this->susun();
 
         // Hanya baris laten=1 di minggu terakhir yang dihitung (minggu lama & baris G diabaikan).
-        $this->assertSame(1, $snap['meta']['cakupan']['SITE|LMO']['kpi']['laten']);
-        $this->assertSame(2, $snap['meta']['cakupan']['PJA|10']['kpi']['laten']);
-        $this->assertSame(0, $snap['meta']['cakupan']['PROSES|K16|ALL']['kpi']['laten']);
+        $this->assertSame(1, $snap['cakupan']['SITE|LMO']['kpi']['laten']);
+        $this->assertSame(2, $snap['cakupan']['PJA|10']['kpi']['laten']);
+        $this->assertSame(0, $snap['cakupan']['PROSES|K16|ALL']['kpi']['laten']);
         // Laten tidak boleh melebihi jumlah tidak teridentifikasi + tidak terpetakan.
-        foreach ($snap['meta']['cakupan'] as $c) {
+        foreach ($snap['cakupan'] as $c) {
             $this->assertLessThanOrEqual($c['kpi']['T'] + $c['kpi']['X'], $c['kpi']['laten']);
         }
     }
@@ -172,7 +172,7 @@ class DrmSnapshotBuilderTest extends TestCase
         // 26 kelompok aktivitas M02 (K1..K25 + K0 Lainnya) + X cadangan.
         $this->assertCount(27, $kode);
         $this->assertSame(['K1', 'K0', 'X'], [$kode[0], $kode[25], end($kode)]);
-        $this->assertSame(4, $snap['meta']['cakupan']['PROSES|K16|ALL']['kpi']['G']);
+        $this->assertSame(4, $snap['cakupan']['PROSES|K16|ALL']['kpi']['G']);
         $kolom = array_flip($snap['meta']['kolomAkt']);
         $this->assertSame('K16', $snap['pja']['10']['akt'][0][$kolom['proses']]);
     }

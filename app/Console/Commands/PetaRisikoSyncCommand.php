@@ -59,7 +59,7 @@ class PetaRisikoSyncCommand extends Command
             $this->warn('Snapshot tersimpan, tetapi Excel mapping gagal ditulis: '.$e->getMessage());
         }
 
-        $semua = $snapshot['meta']['cakupan']['SITE|ALL']['kpi'] ?? [];
+        $semua = $snapshot['cakupan']['SITE|ALL']['kpi'] ?? [];
         $this->info(sprintf(
             'Selesai: %d PJA, %s bahaya unik (terkontrol %s, ada gap %s, tidak teridentifikasi %s) — %.1f dtk.',
             count($snapshot['pja']),

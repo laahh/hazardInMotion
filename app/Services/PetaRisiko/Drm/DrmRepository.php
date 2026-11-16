@@ -25,7 +25,22 @@ class DrmRepository extends PetaRisikoRepository
     public function simpan(array $snapshot): void
     {
         parent::simpan($snapshot);
+        $this->tulisGzipMeta();
         $this->bukaIzinBaca(Storage::disk('local')->path(static::DIR));
+    }
+
+    /** Path meta.json.gz (dikirim ke browser yang menerima gzip; Apache server ini tanpa mod_deflate). */
+    public function pathMetaGz(): string
+    {
+        return $this->pathMeta().'.gz';
+    }
+
+    private function tulisGzipMeta(): void
+    {
+        $isi = @file_get_contents($this->pathMeta());
+        if ($isi !== false) {
+            @file_put_contents($this->pathMetaGz(), gzencode($isi, 6));
+        }
     }
 
     /** Path absolut file Excel mapping (ditulis setelah simpan, karena simpan mengganti folder). */

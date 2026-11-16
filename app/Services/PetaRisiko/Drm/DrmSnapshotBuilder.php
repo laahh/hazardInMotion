@@ -28,6 +28,9 @@ class DrmSnapshotBuilder
 
     private const TEMUAN_MAKS_PER_PJA = 400;
 
+    /** Kunci ringkasMgmt yang tidak disimpan per PJA di meta (lihat beranda()). */
+    private const BERAT_PER_PJA = ['kel' => 1, 'grp' => 1, 'gk' => 1, 'akt' => 1, 'gka' => 1, 'dlw' => 1, 'mx' => 1];
+
     /** Temuan open lebih lama dari ini (hari) dihitung "open lama" di tab Per PJA. */
     private const TEMUAN_LAMA_HARI = 30;
 
@@ -171,13 +174,14 @@ class DrmSnapshotBuilder
                 'grup' => array_values(isset($d['master']) ? $d['master']->data['grup'] : array_unique(array_column($d['dl'], 'grp'))),
                 'grupDl' => $this->jumlahDlPerGrup($dl),
                 'proses' => $this->daftarProses($cfg),
-                'cakupan' => $cakupan,
                 'pja' => array_values(array_map(fn ($p) => [...$this->ringkasPja($p, $cakupan, $berkas[$p['id']]), 'tm' => $statTemuan[$p['id']]], $pjaBc)),
                 'kolomAkt' => self::KOLOM_AKT,
                 'kolomBahaya' => self::KOLOM_BAHAYA,
                 'beranda' => $beranda,
             ],
             'pja' => $berkas,
+            // Cakupan versi lama (matriks per SITE/GRUP/PROSES/PJA): tidak ditulis ke meta.json karena tidak dipakai tampilan.
+            'cakupan' => $cakupan,
             'ekspor' => [
                 'baris' => $this->barisEkspor($hira, $d['mapping'] ?? [], $d['statusBahaya'] ?? [], $sorot, $cfg),
                 'dl' => array_values($dl),
@@ -211,8 +215,11 @@ class DrmSnapshotBuilder
         foreach ($pjaBc as $id => $info) {
             $dlIds = array_map('strval', $info['dl']);
             $berkas[$id]['beranda'] = $b->berkas($dlIds, $hidPerDl, $hira, $dl, $idx, $rcPerDl);
+            // Agregat per kelompok/grup/aktivitas/detail lokasi/matriks tidak disimpan per PJA: tab Overview, Group Lokasi,
+            // dan Kelompok Aktivitas memakai ringkasan unik per site (ringkasUnik). Menyimpannya per PJA × 12 minggu
+            // membuat meta.json 47 MB dan halaman tidak termuat (16 Nov 2026).
             $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds), 'dls' => $dlIds,
-                ...$b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden'])];
+                ...array_diff_key($b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden']), self::BERAT_PER_PJA)];
             foreach ($dlIds as $d) {
                 $kamusDl[$d] ??= [(string) ($dl[$d]['site'] ?? ''), (string) ($dl[$d]['lokasi'] ?? ''), (string) ($dl[$d]['detlok'] ?? ''), (string) ($dl[$d]['grp'] ?? '')];
             }
@@ -259,7 +266,7 @@ class DrmSnapshotBuilder
             $cakupan['ALL'][] = (string) $id;
             $cakupan[(string) $d['site']][] = (string) $id;
         }
-        $buang = array_flip(['dlw', 'kgTot', 'u4', 'kelTot', 'kelGap', 'lama', 'insiden']);
+        $buang = array_flip(['kgTot', 'u4', 'kelTot', 'kelGap', 'lama', 'insiden']);
         $hasil = [];
         foreach ($cakupan as $kunci => $ids) {
             $berkas = $b->berkas($ids, $hidPerDl, $hira, $dl, $idx, []);
@@ -269,8 +276,9 @@ class DrmSnapshotBuilder
                     $ada[$hid] = true;
                 }
             }
+            // Per detail lokasi cukup sekali (di ALL): status satu DL sama di cakupan mana pun.
             $hasil[$kunci] = [
-                ...array_diff_key($b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, []), $buang),
+                ...array_diff_key($b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, []), $kunci === 'ALL' ? $buang : $buang + ['dlw' => 1]),
                 'ndl' => count($ids),
                 // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
                 'nBarisDl' => count($ada),

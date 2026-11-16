@@ -101,11 +101,18 @@ class PetaRisikoDrmController extends Controller
     }
 
     /** Ringkasan semua cakupan (Site / Group Lokasi / PJA) untuk halaman indeks. */
-    public function meta(Request $request): JsonResponse
+    public function meta(Request $request): BinaryFileResponse
     {
-        $meta = $this->repo->meta();
-        abort_if($meta === null, 404);
+        abort_unless($this->repo->ada(), 404);
 
-        return response()->json($meta);
+        // File sudah berupa JSON: kirim apa adanya (decode + encode ulang file besar memakan waktu & memori).
+        // Versi gzip ditulis saat sync; dipakai bila browser menerimanya dan file gzip tidak lebih tua dari meta.json.
+        $headers = ['Content-Type' => 'application/json; charset=UTF-8', 'Cache-Control' => 'private, no-cache', 'Vary' => 'Accept-Encoding'];
+        $gz = $this->repo->pathMetaGz();
+        if (str_contains((string) $request->header('Accept-Encoding'), 'gzip') && is_file($gz) && filemtime($gz) >= filemtime($this->repo->pathMeta())) {
+            return response()->file($gz, $headers + ['Content-Encoding' => 'gzip']);
+        }
+
+        return response()->file($this->repo->pathMeta(), $headers);
     }
 }

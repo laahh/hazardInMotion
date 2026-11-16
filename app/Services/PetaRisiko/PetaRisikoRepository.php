@@ -23,6 +23,12 @@ class PetaRisikoRepository
         return $this->disk()->exists(static::DIR.'/meta.json');
     }
 
+    /** Path absolut meta.json (untuk disajikan langsung tanpa decode/encode ulang). */
+    public function pathMeta(): string
+    {
+        return $this->disk()->path(static::DIR.'/meta.json');
+    }
+
     /** @return array<string, mixed>|null */
     public function meta(): ?array
     {

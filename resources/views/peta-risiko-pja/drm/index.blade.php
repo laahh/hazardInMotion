@@ -241,7 +241,7 @@
   }
 
   function renderCakupan() {
-    if (!formatBaru() || !M.beranda.mgmt.every((p) => p.kel && p.grp)) { $('#dr-kpi4').innerHTML = pesanLama(); return; }
+    if (!formatBaru() || !(adaUnik() || M.beranda.mgmt.every((p) => p.kel && p.grp))) { $('#dr-kpi4').innerHTML = pesanLama(); return; }
     const P = cakupanP(), w = state.w, NW = M.beranda.minggu.length, wk = wKode(w);
     const lokasi = state.site === 'ALL' ? 'BC' : DR.esc(state.site);
     const namaKel = (M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses;
@@ -296,7 +296,9 @@
       const info = kamus[d];
       if (!info || info[3] !== state.grup || (state.site !== 'ALL' && info[0] !== state.site)) return;
       if (!peta.has(d)) {
-        peta.set(d, { d, info, pja: [], v: vekDari(ambilKunci((p.dlw || [])[w], d)), v0: w + 1 < NW ? vekDari(ambilKunci((p.dlw || [])[w + 1], d)) : null });
+        // Status per detail lokasi dari ringkasan unik "semua site" (sama untuk setiap PJA pemiliknya).
+        const sumber = (M.beranda.ringkas && M.beranda.ringkas.ALL) || p;
+        peta.set(d, { d, info, pja: [], v: vekDari(ambilKunci((sumber.dlw || [])[w], d)), v0: w + 1 < NW ? vekDari(ambilKunci((sumber.dlw || [])[w + 1], d)) : null });
       }
       peta.get(d).pja.push(p);
     }));
@@ -498,7 +500,7 @@
       .map(([a, x]) => ({ nama: x[0], v: jumlahF(P, (p) => vek(p, w, a)), v0: w + 1 < NW ? jumlahF(P, (p) => vek(p, w + 1, a)) : null }))
       .filter((r) => r.v.t).sort((a, b) => (b.v.t - b.v.full) - (a.v.t - a.v.full) || b.v.t - a.v.t);
     const isi = L.map(({ nama, v, v0 }) => `<tr class="br-sub"><td style="padding-left:40px">${DR.esc(nama)}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
-      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${M.beranda.mgmt.some((p) => p.akt) ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
+      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${adaUnik() && M.beranda.ringkas.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
     const tautan = diGrup || state.tab !== 'proses' || state.proses !== kel
       ? `<tr class="br-sub"><td colspan="8" style="padding-left:40px"><a href="#" data-kekel="${DR.esc(kel)}">Lihat kelompok ini di semua grup ›</a></td></tr>` : '';
     return isi + tautan;
