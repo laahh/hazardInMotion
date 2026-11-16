@@ -198,6 +198,9 @@ class DrmBeranda
      *
      * Semua angka bisa dijumlahkan antar level risiko, sehingga filter level dihitung di browser:
      *   w[minggu][level]      = angka sesuai KOLOM_MGMT
+     *   kel[minggu][level][kel] / grp[minggu][level][grup] = angka KOLOM_MGMT per kelompok / per grup lokasi
+     *     (grup: satu baris = grup × kelompok × bahaya, status dihitung dari detail lokasi grup itu saja)
+     *   mx[minggu][level]     = ['a' => [sel => n], 'f' => [sel => n]] matriks 5x5 awal / final, sel = kekerapan×5 + konsekuensi
      *   kelTot[level][kel]    = baris ketat per kelompok;  kelGap[minggu][level][kel] = baris ketat bukan terkontrol penuh
      *   kgTot[level][i]       = baris rincian per kombinasi kelompok × grup lokasi ke-i
      *   u4[minggu][level][i]  = baris rincian kombinasi ke-i yang tidak terkontrol 4 minggu berturut-turut
@@ -209,25 +212,34 @@ class DrmBeranda
     public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden): array
     {
         $nW = (int) $this->cfg['beranda']['minggu'];
-        [$unik, $kgTot, $u4] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
+        [$unik, $kgTot, $u4, $unikGrup] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
 
-        $w = $kelGap = array_fill(0, $nW, []);
+        $w = $kelGap = $kelW = $grpW = $mx = array_fill(0, $nW, []);
         $kelTot = [];
-        foreach ($unik as $x) {
+        foreach ($unik as $ku => $x) {
             [$lv, $kel] = [$x['lv'], $x['kel']];
             $kelTot[$lv][$kel] = ($kelTot[$lv][$kel] ?? 0) + 1;
-            foreach ($x['w'] as $i => [$n, $ok, $bm, $m]) {
-                $kat = $ok === $n ? 1 : ($ok > 0 ? 2 : ($bm > 0 ? 3 : 4));
-                $w[$i][$lv] ??= array_fill(0, count(self::KOLOM_MGMT), 0);
-                $w[$i][$lv][0]++;
-                $w[$i][$lv][$kat]++;
-                $w[$i][$lv][5] += (int) (bool) ($m & self::BELUM_CLOSED);
-                $w[$i][$lv][6] += (int) (bool) ($m & self::BERULANG);
-                $w[$i][$lv][7] += (int) (bool) ($m & self::OAK_STOP);
-                $w[$i][$lv][8] += (int) (bool) ($m & self::TIDAK_SESUAI);
+            $h = $hira[substr($ku, strpos($ku, '|') + 1)] ?? [];
+            $selAwal = self::sel((string) ($h['k1'] ?? ''), (string) ($h['c1'] ?? ''));
+            $selSisa = self::sel((string) ($h['k2'] ?? ''), (string) ($h['c2'] ?? ''));
+            foreach ($x['w'] as $i => $st) {
+                $kat = self::kategori($st);
+                self::tambah($w[$i][$lv], $kat, $st[3]);
+                self::tambah($kelW[$i][$lv][$kel], $kat, $st[3]);
                 if ($kat !== 1) {
                     $kelGap[$i][$lv][$kel] = ($kelGap[$i][$lv][$kel] ?? 0) + 1;
                 }
+                // Matriks 5x5: awal = risiko awal HIRA; final = residual bila terkontrol penuh, selain itu awal.
+                if ($selAwal !== null) {
+                    $mx[$i][$lv]['a'][$selAwal] = ($mx[$i][$lv]['a'][$selAwal] ?? 0) + 1;
+                    $f = $kat === 1 && $selSisa !== null ? $selSisa : $selAwal;
+                    $mx[$i][$lv]['f'][$f] = ($mx[$i][$lv]['f'][$f] ?? 0) + 1;
+                }
+            }
+        }
+        foreach ($unikGrup as $x) {
+            foreach ($x['w'] as $i => $st) {
+                self::tambah($grpW[$i][$x['lv']][$x['grp']], self::kategori($st), $st[3]);
             }
         }
 
@@ -237,6 +249,9 @@ class DrmBeranda
 
         return [
             'w' => $w,
+            'kel' => $kelW,
+            'grp' => $grpW,
+            'mx' => $mx,
             'kelTot' => $kelTot,
             'kelGap' => $kelGap,
             'kgTot' => $kgTot,
@@ -257,7 +272,7 @@ class DrmBeranda
         $kd = (array) $berkasBeranda['kd'];
         $sp = (array) $berkasBeranda['sp'];
         $umum = array_map(fn ($l) => array_flip($l), (array) $berkasBeranda['umum']);
-        $unik = $kgIdx = $kgTot = [];
+        $unik = $unikGrup = $kgIdx = $kgTot = [];
         $u4 = array_fill(0, $nW, []);
         $kwCache = [];
 
@@ -273,13 +288,15 @@ class DrmBeranda
                 $kw = $kwCache[$d.'|'.$kel] ??= self::urai((string) ($kd[$d.'|'.$kel][0] ?? ''));
                 $sw = self::urai((string) ($sp[$d.'|'.$hid][0] ?? ''));
                 $ku = $kel.'|'.$hid;
+                $kgu = $grp.'|'.$ku;
                 $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
                 $ok = [];
                 for ($i = 0; $i < $nW; $i++) {
                     [$st, $m] = self::status($kw[$i] ?? 0, $sw[$i] ?? 0);
                     $ok[$i] = $st === 'ok';
-                    $c = $unik[$ku]['w'][$i];
-                    $unik[$ku]['w'][$i] = [$c[0] + 1, $c[1] + (int) $ok[$i], $c[2] + (int) ($st === 'bm'), $c[3] | $m];
+                    $unik[$ku]['w'][$i] = self::langkah($unik[$ku]['w'][$i], $ok[$i], $st === 'bm', $m);
+                    $unikGrup[$kgu]['w'][$i] = self::langkah($unikGrup[$kgu]['w'][$i], $ok[$i], $st === 'bm', $m);
                 }
                 $kg = $kgIdx[$kel.'|'.$grp] ??= count($kgIdx);
                 $kgTot[$lv][$kg] = ($kgTot[$lv][$kg] ?? 0) + 1;
@@ -291,7 +308,42 @@ class DrmBeranda
             }
         }
 
-        return [$unik, $kgTot, $u4];
+        return [$unik, $kgTot, $u4, $unikGrup];
+    }
+
+    /** Tambah satu detail lokasi ke status baris ketat [n DL, n terkontrol, n bermasalah, bit]. */
+    private static function langkah(array $c, bool $ok, bool $bm, int $m): array
+    {
+        return [$c[0] + 1, $c[1] + (int) $ok, $c[2] + (int) $bm, $c[3] | $m];
+    }
+
+    /** Kategori satuan ketat dari [n DL, n terkontrol, n bermasalah, bit]: 1 penuh, 2 sebagian, 3 hanya bermasalah, 4 tanpa laporan. */
+    private static function kategori(array $st): int
+    {
+        [$n, $ok, $bm] = $st;
+
+        return $ok === $n ? 1 : ($ok > 0 ? 2 : ($bm > 0 ? 3 : 4));
+    }
+
+    /** Tambah satu baris ketat ke vektor KOLOM_MGMT. */
+    private static function tambah(?array &$v, int $kat, int $m): void
+    {
+        $v ??= array_fill(0, count(self::KOLOM_MGMT), 0);
+        $v[0]++;
+        $v[$kat]++;
+        $v[5] += (int) (bool) ($m & self::BELUM_CLOSED);
+        $v[6] += (int) (bool) ($m & self::BERULANG);
+        $v[7] += (int) (bool) ($m & self::OAK_STOP);
+        $v[8] += (int) (bool) ($m & self::TIDAK_SESUAI);
+    }
+
+    /** Indeks sel matriks 5x5 (baris = kekerapan Hampir Pasti → Langka, kolom = konsekuensi), null bila tidak dikenal. */
+    private static function sel(string $kekerapan, string $konsekuensi): ?int
+    {
+        $i = array_search($kekerapan, DrmSnapshotBuilder::KEKERAPAN, true);
+        $j = array_search($konsekuensi, DrmSnapshotBuilder::KONSEKUENSI, true);
+
+        return $i === false || $j === false ? null : $i * 5 + $j;
     }
 
 }

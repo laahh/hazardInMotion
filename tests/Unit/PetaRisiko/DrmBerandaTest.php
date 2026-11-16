@@ -97,6 +97,33 @@ class DrmBerandaTest extends TestCase
         $this->assertSame(1, $m['insiden']);
     }
 
+    public function test_ringkasan_per_kelompok_grup_dan_matriks_konsisten_dengan_total(): void
+    {
+        $b = (new DrmBeranda(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))
+            ->denganGrup(['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Disposal']]);
+        $hira = [
+            'h1' => ['bn' => 'Jalan licin', 'proses' => 'K13', 'n1' => 'High', 'k1' => 'Mungkin', 'c1' => 'Major', 'k2' => 'Langka', 'c2' => 'Minor'],
+            'h2' => ['bn' => 'Retakan', 'proses' => 'K16', 'n1' => 'High', 'k1' => '', 'c1' => ''],
+        ];
+        // h1 ada di dua detail lokasi (Pit terdeteksi, Disposal tanpa laporan); h2 hanya di Disposal tanpa laporan.
+        $idx = $b->indeks([['dl' => '1', 'kel' => 'K13', 'w' => '0:1', 'h' => '', 'last' => '2026-11-14']], []);
+        $pasangan = ['1' => ['h1'], '2' => ['h1', 'h2']];
+        $berkas = $b->berkas(['1', '2'], $pasangan, $hira, ['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Disposal']], $idx, []);
+        $m = $b->ringkasMgmt(['1', '2'], $pasangan, $hira, $berkas, []);
+
+        // Total: h1 sebagian (1 dari 2 DL), h2 tanpa laporan.
+        $this->assertSame([2, 0, 1, 0, 1, 0, 0, 0, 0], $m['w'][0]['High']);
+        // Per kelompok: jumlahnya sama dengan total.
+        $this->assertSame([1, 0, 1, 0, 0, 0, 0, 0, 0], $m['kel'][0]['High']['K13']);
+        $this->assertSame([1, 0, 0, 0, 1, 0, 0, 0, 0], $m['kel'][0]['High']['K16']);
+        // Per grup: status dari detail lokasi grup itu saja (h1 penuh di Pit, tanpa laporan di Disposal).
+        $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['grp'][0]['High']['Pit']);
+        $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], $m['grp'][0]['High']['Disposal']);
+        // Matriks: hanya h1 punya nilai risiko; sebagian → final tetap risiko awal (Mungkin=2, Major=3 → sel 13).
+        $this->assertSame([13 => 1], $m['mx'][0]['High']['a']);
+        $this->assertSame([13 => 1], $m['mx'][0]['High']['f']);
+    }
+
     public function test_sql_beranda_memakai_minggu_kalender_dan_root_cause(): void
     {
         $sql = (new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI), DrmMaster::dariArray([])->literal(config('peta_risiko_drm'))))->untukSite('LMO');

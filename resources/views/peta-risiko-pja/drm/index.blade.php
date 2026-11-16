@@ -46,36 +46,36 @@
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label>Site / scope <select id="dr-site"><option value="ALL">Semua site</option></select></label>
-      <label data-ctl="w" hidden>Periode <select id="dr-w"></select></label>
+      <label>Periode <select id="dr-w"></select></label>
+      <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
       <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
       <label data-ctl="pja" hidden>Urutkan <select id="dr-urut"><option value="skor">Skor prioritas</option><option value="gap">% gap</option><option value="gapn">Jumlah baris gap</option><option value="none">% tanpa laporan</option><option value="lewat">Lewat janji</option><option value="nama">Nama</option></select></label>
       <label data-ctl="pja" hidden><input type="search" class="pr-search" id="dr-cari" placeholder="Cari nama PJA" aria-label="Cari nama PJA"></label>
     </div>
-    <div id="dr-ringkas">
-      <div class="dr-kpis" id="dr-kpis"></div>
-    </div>
+    <div id="dr-ringkas"><div id="dr-kpis"></div></div>
   </div>
 
-  <div id="dr-panel-cakupan">
-    <div class="pr-card">
-      <div class="pr-card-head"><div><b>Matriks 5x5 — jumlah bahaya-risiko unik</b>
-        <small>Grain aktivitas – sub aktivitas – bahaya. Final: terkontrol menurut SAP memakai risiko residual HIRA, selain itu tetap risiko awal.</small></div></div>
+  <div id="dr-panel-cakupan" class="br-root" style="margin-top:20px">
+    <div id="dr-kpi4"></div>
+
+    <div class="pr-card" id="dr-card-mx">
+      <div class="pr-card-head"><div><b>Matriks 5x5 — baris satuan ketat</b>
+        <small>Satu baris = kelompok aktivitas × bahaya-risiko per PJA (dijumlah antar PJA). Final: terkontrol penuh memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
       <div class="pr-card-body dr-two" id="dr-matriks"></div>
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b>Tren mingguan</b><small>Status pada akhir tiap minggu (jendela {{ $meta['jendela'] }} hari)</small></div></div>
-      <div class="pr-card-body"><div id="dr-tren"></div></div>
-      <div id="dr-legenda"></div>
+      <div class="br-rhead"><b class="t" id="dr-tren-judul">Komposisi per minggu</b><span class="br-sum" id="dr-tren-sum"></span></div>
+      <div class="pr-card-body"><div id="dr-tren"></div><div id="dr-legenda"></div></div>
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b>Evaluasi per Group Lokasi</b><small id="dr-grup-sub">Klik baris untuk melihat Group Lokasi itu</small></div></div>
+      <div class="pr-card-head"><div><b>Per Group Lokasi</b><small>Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-grup"></table></div>
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b>Evaluasi per Kelompok Aktivitas</b><small>25 kelompok aktivitas master DRM 2.1 (M02). Klik baris untuk melihat kelompok itu.</small></div></div>
+      <div class="pr-card-head"><div><b>Per Kelompok Aktivitas</b><small>25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat kelompok itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-proses"></table></div>
     </div>
   </div>
@@ -84,8 +84,8 @@
   <div id="dr-panel-pja" class="br-root" style="margin-top:20px" hidden></div>
 
   <div class="pr-foot">
-    <p>Pemetaan HIRA ↔ SAP berbasis kata kunci (kamus 29 tema, Master A/B/C/D DRM 2.1: label Hazard/Inspeksi → bahaya, Observasi/OAK → aktivitas, butir checklist OAK → bahaya) dan belum diuji silang pakar. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
-    <p>"Tidak teridentifikasi" bukan berarti aman. Satu detail lokasi bisa dimiliki beberapa PJA: jangan menjumlahkan angka antar PJA.</p>
+    <p>Baseline dan pemetaan HIRA ↔ SAP mengikuti master mapping DRM 2.1 (M01–M16, unduh lewat "Unduh Excel mapping"). Semua tab memakai satuan ketat yang sama: kelompok aktivitas × bahaya-risiko per PJA, status mingguan (Minggu–Sabtu), bahaya umum dikeluarkan. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
+    <p>Tanpa laporan bukan berarti aman. Angka site/BC = jumlah baris tingkat PJA (satu detail lokasi bisa dimiliki 2 PJA), bukan baris unik.</p>
   </div>
 @endif
 @endsection
@@ -100,7 +100,7 @@
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, pri: 'all', urut: 'skor', buka: {}, pbuka: {} };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {} };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -115,26 +115,26 @@
     if (!state.proses) state.proses = M.proses[0].kode;
     $('#dr-proses').value = state.proses;
     $('#dr-proses').addEventListener('change', (e) => { state.proses = e.target.value; render(); });
-    $('#dr-site').value = state.site; $('#dr-grup').value = state.grup;
-    $('#dr-legenda').innerHTML = DR.legendaStatus();
+    $('#dr-site').value = state.site; $('#dr-grup').value = state.grup; $('#dr-lv').value = state.lv;
     document.querySelectorAll('.dr-tabs button').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
     $('#dr-site').addEventListener('change', (e) => { state.site = e.target.value; render(); });
     $('#dr-grup').addEventListener('change', (e) => { state.grup = e.target.value; render(); });
+    $('#dr-lv').addEventListener('change', (e) => { state.lv = e.target.value; render(); });
     $('#dr-cari').addEventListener('input', (e) => { state.cari = e.target.value.toLowerCase(); renderPja(); });
     const mg = (M.beranda || {}).minggu || [];
     if (state.w < 0 || state.w >= mg.length) state.w = DR.wDefault(mg, M.sampai);
     $('#dr-w').innerHTML = mg.map((a, i) => `<option value="${i}"${i === state.w ? ' selected' : ''}>${DR.esc(DR.minggu(a, M.sampai, i, mg[0]).label)}</option>`).join('');
-    $('#dr-w').addEventListener('change', (e) => { state.w = +e.target.value; renderW(); simpanUrl(); });
+    $('#dr-w').addEventListener('change', (e) => { state.w = +e.target.value; render(); });
     $('#dr-pri').addEventListener('change', (e) => { state.pri = e.target.value; renderPja(); });
     $('#dr-urut').addEventListener('change', (e) => { state.urut = e.target.value; renderPja(); });
     render();
   }
 
   function simpanUrl() {
-    const p = new URLSearchParams({ tab: state.tab, site: state.site });
+    const p = new URLSearchParams({ tab: state.tab, site: state.site, w: state.w });
+    if (state.lv === 'ALL') p.set('lv', 'ALL');
     if (state.tab === 'grup') p.set('grup', state.grup);
     if (state.tab === 'proses') p.set('proses', state.proses);
-    if (TAB_W.includes(state.tab)) p.set('w', state.w);
     history.replaceState(null, '', '?' + p.toString());
   }
 
@@ -142,70 +142,90 @@
     document.querySelectorAll('.dr-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
     document.querySelector('[data-ctl="grup"]').hidden = state.tab !== 'grup';
     document.querySelectorAll('[data-ctl="pja"]').forEach((e) => { e.hidden = state.tab !== 'pja'; });
-    document.querySelector('[data-ctl="w"]').hidden = !TAB_W.includes(state.tab);
     document.querySelector('[data-ctl="proses"]').hidden = state.tab !== 'proses';
     $('#dr-panel-cakupan').hidden = TAB_W.includes(state.tab);
     $('#dr-panel-pja').hidden = state.tab !== 'pja';
     $('#dr-panel-periode').hidden = state.tab !== 'periode';
-    $('#dr-ringkas').hidden = TAB_W.includes(state.tab);
-    const kunci = state.tab === 'grup' ? `GRUP|${state.grup}|${state.site}`
-      : state.tab === 'proses' ? `PROSES|${state.proses}|${state.site}` : `SITE|${state.site}`;
-    const c = M.cakupan[kunci] || { kpi: { total: 0, final: {} }, tren: {}, mAwal: kosong(), mFinal: kosong() };
-    $('#dr-kpis').innerHTML = DR.kpiCards(c.kpi);
-    if (TAB_W.includes(state.tab)) { renderW(); simpanUrl(); return; }
-    const akhir = M.sampai.split('-').reverse().join('/');
-    $('#dr-matriks').innerHTML = DR.matriks('Baseline (BeHIRA, risiko awal)', c.mAwal, M) + DR.matriks(`Final (per ${akhir})`, c.mFinal, M);
-    $('#dr-tren').innerHTML = DR.tren(c.tren);
-    renderGrup();
-    renderProses();
+    $('#dr-ringkas').hidden = true;
+    if (TAB_W.includes(state.tab)) renderW(); else renderCakupan();
     simpanUrl();
   }
 
   function kosong() { return Array.from({ length: 5 }, () => [0, 0, 0, 0, 0]); }
 
-  function renderGrup() {
-    const dlGrup = M.grupDl[state.site] || {};
-    const rows = M.grup.map((g) => ({ g, c: (M.cakupan[`GRUP|${g}|${state.site}`] || {}).kpi, dl: dlGrup[g] || 0 }))
-      .filter((r) => r.c && r.c.total).sort((a, b) => b.c.total - a.c.total);
-    $('#dr-tbl-grup').innerHTML = `<thead><tr><th>Group Lokasi</th><th class="r">Detail lokasi aktif</th><th class="r">Baseline</th><th>Komposisi</th>
-      <th class="r">✓ Terkontrol</th><th class="r">! Ada gap</th><th class="r">○ Tidak teridentifikasi</th><th class="r">% teridentifikasi</th>
-      <th class="r hide-sm">Low</th><th class="r hide-sm">Medium</th><th class="r hide-sm">High</th><th class="r hide-sm">Significant</th></tr></thead><tbody>`
-      + rows.map(({ g, c, dl }) => {
-        const f = c.final || {};
-        const aktif = state.tab === 'grup' && g === state.grup;
-        return `<tr data-grup="${DR.esc(g)}" style="cursor:pointer${aktif ? ';background:#F5F8FD' : ''}"${aktif ? ' aria-current="true"' : ''}>
-          <td><span class="pr-name">${DR.esc(g)}</span></td><td class="r">${DR.fmt(dl)}</td><td class="r dr-num">${DR.fmt(c.total)}</td>
-          <td>${DR.comp(c)}</td><td class="r">${DR.fmt(c.K)}</td><td class="r">${c.G ? DR.tag('G', ' ' + DR.fmt(c.G)) : 0}</td>
-          <td class="r">${c.T ? DR.tag('T', ' ' + DR.fmt(c.T)) : 0}</td><td class="r">${DR.pct(c.K + c.G, c.total)}</td>
-          <td class="r hide-sm">${DR.fmt(f.Low)}</td><td class="r hide-sm">${DR.fmt(f.Medium)}</td><td class="r hide-sm">${DR.fmt(f.High)}</td>
-          <td class="r hide-sm" style="color:var(--red);font-weight:700">${DR.fmt(f.Significant)}</td></tr>`;
-      }).join('') + '</tbody>';
-    document.querySelectorAll('#dr-tbl-grup tr[data-grup]').forEach((tr) => tr.addEventListener('click', () => {
-      state.tab = 'grup'; state.grup = tr.dataset.grup; $('#dr-grup').value = state.grup; render(); window.scrollTo({ top: 0, behavior: 'smooth' });
-    }));
+  // ------------------------------------------------------------ Per Site / Group Lokasi / Kelompok Aktivitas (satuan ketat)
+  /** Peta {level: peta kunci → vektor} menjadi {level: vektor} untuk satu kunci (grup / kelompok). */
+  const ambilKunci = (perLv, kunci) => Object.fromEntries(Object.entries(perLv || {}).map(([lv, m]) => [lv, (m || {})[kunci] || []]));
+  const vekGrup = (p, w, g) => vekDari(ambilKunci((p.grp || [])[w], g));
+  const vekKel = (p, w, k) => vekDari(ambilKunci((p.kel || [])[w], k));
+  /** Vektor satu PJA untuk cakupan tab yang aktif. */
+  const vekTab = (p, w) => (state.tab === 'grup' ? vekGrup(p, w, state.grup) : state.tab === 'proses' ? vekKel(p, w, state.proses) : vekPja(p, w));
+  const jumlahF = (P, f) => P.reduce((a, p) => tambahVek(a, f(p)), KOSONG);
+  const pjaDiSite = () => M.beranda.mgmt.filter((p) => state.site === 'ALL' || p.site === state.site);
+
+  function kartu4(V, V0, judul) {
+    const W = DR.BW;
+    const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
+    return `<div class="br-kpis">
+        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)"><small>Baris baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
+        ${kartu(W.ok, 'var(--green-d)', 'Terkontrol penuh', 'full', true)}
+        ${kartu(W.part, '#9A7300', 'Terkontrol sebagian', 'part', false)}
+        ${kartu(W.bm, W.bm, 'Hanya laporan bermasalah', 'gapo', false)}
+        ${kartu(W.none, W.bm, 'Tanpa laporan', 'none', false)}
+      </div>`;
   }
 
-  function renderProses() {
-    const rows = M.proses.map((p) => ({ p, c: (M.cakupan[`PROSES|${p.kode}|${state.site}`] || {}).kpi })).filter((r) => r.c && r.c.total);
-    $('#dr-tbl-proses').innerHTML = `<thead><tr><th>Kelompok aktivitas</th><th class="r">Baseline</th><th>Komposisi</th>
-      <th class="r">✓ Terkontrol</th><th class="r">! Ada gap</th><th class="r">○ Tidak teridentifikasi</th><th class="r">% teridentifikasi</th>
-      <th class="r hide-sm">Laten</th><th class="r hide-sm">Significant (final)</th></tr></thead><tbody>`
-      + rows.map(({ p, c }) => {
-        const aktif = state.tab === 'proses' && p.kode === state.proses;
-        return `<tr data-proses="${DR.esc(p.kode)}" style="cursor:pointer${aktif ? ';background:#F5F8FD' : ''}">
-          <td><span class="pr-name">${DR.esc(p.nama)}</span></td>
-          <td class="r dr-num">${DR.fmt(c.total)}</td><td>${DR.comp(c)}</td><td class="r">${DR.fmt(c.K)}</td>
-          <td class="r">${c.G ? DR.tag('G', ' ' + DR.fmt(c.G)) : 0}</td><td class="r">${c.T ? DR.tag('T', ' ' + DR.fmt(c.T)) : 0}</td>
-          <td class="r">${DR.pct(c.K + c.G, c.total)}</td><td class="r hide-sm">${DR.fmt(c.laten)}</td>
-          <td class="r hide-sm" style="color:var(--red);font-weight:700">${DR.fmt((c.final || {}).Significant)}</td></tr>`;
-      }).join('') + '</tbody>';
-    document.querySelectorAll('#dr-tbl-proses tr[data-proses]').forEach((tr) => tr.addEventListener('click', () => {
-      state.tab = 'proses'; state.proses = tr.dataset.proses; $('#dr-proses').value = state.proses; render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+  function renderCakupan() {
+    if (!formatBaru() || !M.beranda.mgmt.every((p) => p.kel && p.grp)) { $('#dr-kpi4').innerHTML = pesanLama(); return; }
+    const P = pjaDiSite(), w = state.w, NW = M.beranda.minggu.length, wk = wKode(w);
+    const lokasi = state.site === 'ALL' ? 'BC' : DR.esc(state.site);
+    const namaKel = (M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses;
+    const judul = state.tab === 'grup' ? `${DR.esc(state.grup)} · ${lokasi}` : state.tab === 'proses' ? `${DR.esc(namaKel)} · ${lokasi}` : lokasi;
+    const V = jumlahF(P, (p) => vekTab(p, w)), V0 = w + 1 < NW ? jumlahF(P, (p) => vekTab(p, w + 1)) : null;
+    $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`);
+
+    $('#dr-card-mx').hidden = state.tab !== 'site';
+    if (state.tab === 'site') {
+      const A = kosong(), F = kosong();
+      P.forEach((p) => {
+        const m = (p.mx || [])[w] || {};
+        lvAmbil(m).forEach((lv) => ['a', 'f'].forEach((k) => Object.entries((m[lv] || {})[k] || {}).forEach(([s, n]) => {
+          (k === 'a' ? A : F)[Math.floor(s / 5)][s % 5] += n;
+        })));
+      });
+      $('#dr-matriks').innerHTML = DR.matriks(`Awal (risiko awal HIRA) · ${wk}`, A, M) + DR.matriks(`Final · ${wk}`, F, M);
+    }
+
+    $('#dr-tren-judul').innerHTML = `Komposisi per minggu · ${judul}`;
+    $('#dr-tren-sum').innerHTML = `<span>${DR.fmt(V.t)} baris</span><span>${gapTxt(V)}</span>`;
+    $('#dr-tren').innerHTML = trenPeriode(P, vekTab);
+    $('#dr-legenda').innerHTML = `<div class="dr-legend">${[[DR.BW.ok, 'Terkontrol penuh'], [DR.BW.part, 'Sebagian'], [DR.BW.bm, 'Hanya bermasalah'], [DR.BW.none, 'Tanpa laporan']].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
+    document.querySelectorAll('#dr-tren .br-wc').forEach((c) => c.addEventListener('click', () => { state.w = +c.dataset.w; $('#dr-w').value = state.w; render(); }));
+
+    tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]), (p, i, g) => vekGrup(p, i, g), 'grup');
+    tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
+  }
+
+  /** Tabel per grup / per kelompok: komposisi satuan ketat minggu terpilih + perubahan vs minggu lalu. */
+  function tabelCakupan(sel, judulKolom, daftar, f, tab) {
+    const P = pjaDiSite(), w = state.w, NW = M.beranda.minggu.length;
+    const baris = daftar.map(([kunci, nama]) => ({ kunci, nama, v: jumlahF(P, (p) => f(p, w, kunci)), v0: w + 1 < NW ? jumlahF(P, (p) => f(p, w + 1, kunci)) : null }))
+      .filter((r) => r.v.t).sort((a, b) => b.v.t - a.v.t);
+    const aktif = (k) => state.tab === tab && (tab === 'grup' ? state.grup : state.proses) === k;
+    $(sel).innerHTML = `<thead><tr><th>${judulKolom}</th>${KEPALA_VEK}<th>Laporan bermasalah</th></tr></thead><tbody>`
+      + (baris.map(({ kunci, nama, v, v0 }) => `<tr data-kunci="${DR.esc(kunci)}" class="br-a${aktif(kunci) ? ' open' : ''}" style="cursor:pointer">
+          <td><span class="pr-name">${DR.esc(nama)}</span></td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
+        || '<tr><td colspan="8" class="pr-empty">Tidak ada baris.</td></tr>') + '</tbody>';
+    document.querySelectorAll(`${sel} tr[data-kunci]`).forEach((tr) => tr.addEventListener('click', () => {
+      state.tab = tab;
+      if (tab === 'grup') { state.grup = tr.dataset.kunci; $('#dr-grup').value = state.grup; } else { state.proses = tr.dataset.kunci; $('#dr-proses').value = state.proses; }
+      render(); window.scrollTo({ top: 0, behavior: 'smooth' });
     }));
   }
 
   // ------------------------------------------------------------ Per PJA (konsep Beranda PJA, satuan ketat)
-  const LV_PJA = ['Significant', 'High'];
+  /** Level risiko awal yang dihitung: Significant + High (bawaan spec) atau semua level yang ada di data. */
+  const lvAmbil = (perLv) => (state.lv === 'ALL' ? Object.keys(perLv || {}) : ['Significant', 'High']);
   const PRI = { T: ['Tinggi', 'var(--red)'], S: ['Sedang', '#C28F12'], R: ['Rendah', '#1F9A3A'], K: ['Volume kecil', '#8A939C'] };
   const TEMUAN_MIN = 20;
   const pctI = (a, b) => (b ? DR.pct(a, b) : '–');
@@ -220,12 +240,14 @@
   // ------------------------------------------------------------ Identifikasi per periode (satuan ketat per minggu)
   const KOSONG = { t: 0, full: 0, part: 0, gapo: 0, none: 0, g2: 0, g3: 0, g4: 0 };
 
-  /** Komposisi satu PJA pada minggu w (Significant + High). */
-  function vekPja(p, w) {
+  /** Vektor KOLOM_MGMT per level → komposisi untuk level risiko terpilih. */
+  function vekDari(perLv) {
     const K = M.beranda.kolomMgmt, ix = Object.fromEntries(K.map((k, i) => [k, i])), c = Array(K.length).fill(0);
-    LV_PJA.forEach((lv) => (((p.w || [])[w] || {})[lv] || []).forEach((v, i) => { c[i] += v; }));
+    lvAmbil(perLv).forEach((lv) => ((perLv || {})[lv] || []).forEach((v, i) => { c[i] += v; }));
     return { t: c[ix.tot], full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop] };
   }
+  /** Komposisi satu PJA pada minggu w. */
+  const vekPja = (p, w) => vekDari((p.w || [])[w]);
   const tambahVek = (a, b) => Object.fromEntries(Object.keys(KOSONG).map((k) => [k, a[k] + b[k]]));
   const sumVek = (L, w) => L.reduce((a, p) => tambahVek(a, vekPja(p, w)), KOSONG);
   const gapTxt = (v) => `belum closed ${DR.fmt(v.g2)}, berulang ${DR.fmt(v.g3)}, OAK Stop ${DR.fmt(v.g4)}`;
@@ -264,10 +286,10 @@
     panel.querySelectorAll('[data-buka]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
   }
 
-  function trenPeriode(P) {
+  function trenPeriode(P, f = vekPja) {
     const W = DR.BW, NW = M.beranda.minggu.length, col = [];
     for (let i = NW - 1; i >= 0; i--) {
-      const v = sumVek(P, i), n = Math.max(1, v.t), H = (x) => (100 * x / n).toFixed(1) + '%';
+      const v = P.reduce((a, p) => tambahVek(a, f(p, i)), KOSONG), n = Math.max(1, v.t), H = (x) => (100 * x / n).toFixed(1) + '%';
       col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label)}: penuh ${DR.fmt(v.full)}, sebagian ${DR.fmt(v.part)}, hanya bermasalah ${DR.fmt(v.gapo)}, tanpa laporan ${DR.fmt(v.none)}">
         <div class="stk"><i style="height:${H(v.none)};background:${W.none}"></i><i style="height:${H(v.gapo)};background:${W.bm}"></i><i style="height:${H(v.part)};background:${W.part}"></i><i style="height:${H(v.full)};background:${W.ok}"></i></div>
         <span>${wKode(i)}${wBerjalan(i) ? '*' : ''}</span><span>${pctI(v.full, v.t)}</span></div>`);
@@ -296,7 +318,7 @@
 
   function tabelKelPeriode(P, w) {
     const kelNama = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]), kel = {};
-    const isi = (obj, f) => LV_PJA.forEach((lv) => Object.entries((obj || {})[lv] || {}).forEach(([k, v]) => f(kel[k] ||= { t: 0, g: 0, g0: 0 }, v)));
+    const isi = (obj, f) => lvAmbil(obj).forEach((lv) => Object.entries((obj || {})[lv] || {}).forEach(([k, v]) => f(kel[k] ||= { t: 0, g: 0, g0: 0 }, v)));
     P.forEach((p) => {
       isi(p.kelTot, (x, v) => { x.t += v; });
       isi((p.kelGap || [])[w], (x, v) => { x.g += v; });
@@ -334,7 +356,7 @@
     const kelNama = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]);
     const L = M.beranda.mgmt.map((p) => {
       const c = Array(K.length).fill(0), kel = {};
-      LV_PJA.forEach((lv) => {
+      lvAmbil(((p.w || [])[state.w]) || {}).forEach((lv) => {
         (((p.w || [])[state.w] || {})[lv] || []).forEach((v, i) => { c[i] += v; });
         Object.entries((p.kelTot || {})[lv] || {}).forEach(([k, v]) => { (kel[k] ||= { t: 0, g: 0 }).t += v; });
         Object.entries((((p.kelGap || [])[state.w]) || {})[lv] || {}).forEach(([k, v]) => { (kel[k] ||= { t: 0, g: 0 }).g += v; });
@@ -402,7 +424,7 @@
     const kpi = (ac, kc, judul, angka, isi) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
 
     panel.innerHTML = `<div class="br-kpis">
-        ${kpi('var(--navy)', 'var(--navy)', `Baris baseline · ${state.site === 'ALL' ? 'seluruh BC' : DR.esc(state.site)} · ${wk}`, DR.fmt(B.t), `${diSite.length} PJA · Significant + High`)}
+        ${kpi('var(--navy)', 'var(--navy)', `Baris baseline · ${state.site === 'ALL' ? 'seluruh BC' : DR.esc(state.site)} · ${wk}`, DR.fmt(B.t), `${diSite.length} PJA · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}`)}
         ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh', pctI(B.full, B.t), `${DR.fmt(B.full)} baris`)}
         ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pctI(B.part, B.t), `${DR.fmt(B.part)} baris · gap total ${pctI(G, B.t)}`)}
         ${kpi(W.none, W.bm, 'Tanpa laporan', pctI(B.none, B.t), `${DR.fmt(B.none)} baris${B.gapo ? ` · ${DR.fmt(B.gapo)} hanya bermasalah` : ''}`)}
