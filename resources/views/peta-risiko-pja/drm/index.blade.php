@@ -52,7 +52,8 @@
         <button type="button" role="tab" data-tab="site" aria-selected="true">Overview</button>
         <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
         <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Kelompok Aktivitas</button>
-        <button type="button" role="tab" data-tab="periode" aria-selected="false">Identifikasi per periode</button>
+        {{-- Tab "Identifikasi per periode" disembunyikan sementara (permintaan user); kodenya tetap ada. --}}
+        <button type="button" role="tab" data-tab="periode" aria-selected="false" hidden>Identifikasi per periode</button>
         <button type="button" role="tab" data-tab="pja" aria-selected="false">Semua PJA</button>
       </nav>
     </div>
@@ -122,7 +123,8 @@
   const URL_PJA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.pja', ['pja' => '__ID__'])) }};
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
-  const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
+  // Tab "periode" sedang disembunyikan: tautan lama ?tab=periode diarahkan ke Overview.
+  const state = { tab: ['periode'].includes(q.get('tab')) ? 'site' : (q.get('tab') || 'site'), site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
     w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, dlbuka: {}, kelMx: q.get('kel') || '' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
