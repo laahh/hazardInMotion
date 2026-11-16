@@ -27,6 +27,20 @@
 @include('peta-risiko-pja.drm._beranda-style')
 
 @section('content')
+<style>
+  .dr-tm { position: relative; height: 380px; border-radius: 8px; overflow: hidden; background: #F3F5F8; }
+  .dr-tm-k { position: absolute; box-sizing: border-box; border: 2px solid #fff; padding: 6px 8px; cursor: pointer; overflow: hidden;
+    color: #10203A; font-size: 12px; line-height: 1.25; text-align: left; font-family: inherit; transition: filter .15s, outline-color .15s; outline: 3px solid transparent; outline-offset: -5px; }
+  .dr-tm-k:hover, .dr-tm-k:focus-visible { filter: brightness(1.08); outline-color: #16294F; }
+  .dr-tm-k.on { outline-color: #16294F; }
+  .dr-tm-k.redup { opacity: .45; }
+  .dr-tm-k b { display: block; font-size: 13px; }
+  .dr-tm-k span { display: block; opacity: .85; }
+  .dr-tm-skala { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #5B6675; }
+  .dr-tm-skala i { width: 160px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #1F9A3A, #E3B341, #D0640C); }
+  .dr-chip { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 2px 10px; border-radius: 999px; background: #16294F; color: #fff; font-size: 12px; font-weight: 600; border: 0; cursor: pointer; }
+  @media (max-width: 640px) { .dr-tm { height: 300px; } }
+</style>
 @if (! $meta)
   <div class="pr-card"><div class="pr-empty">
     Jalankan <code>php artisan peta-risiko:sync</code> di server yang terhubung ke ClickHouse OBDS, lalu muat ulang halaman ini.
@@ -58,8 +72,17 @@
   <div id="dr-panel-cakupan" class="br-root" style="margin-top:20px">
     <div id="dr-kpi4"></div>
 
+    <div class="pr-card" id="dr-card-tm">
+      <div class="pr-card-head"><div><b>Kelompok aktivitas dengan risiko terbesar</b>
+        <small>Luas kotak = jumlah baris belum terkontrol penuh; warna = % gap (hijau rendah → oranye tinggi). Klik kotak untuk memfilter matriks Baseline HIRA dan Final di bawah, klik lagi untuk semua kelompok.</small></div></div>
+      <div class="pr-card-body">
+        <div id="dr-treemap" class="dr-tm" role="list" aria-label="Treemap kelompok aktivitas"></div>
+        <div class="dr-tm-skala"><span>% gap</span><i></i><span>0%</span><span style="margin-left:auto">100%</span></div>
+      </div>
+    </div>
+
     <div class="pr-card" id="dr-card-mx">
-      <div class="pr-card-head"><div><b>Matriks 5x5 — baris satuan ketat</b>
+      <div class="pr-card-head"><div><b>Matriks 5x5 — baris satuan ketat</b> <span id="dr-mx-filter"></span>
         <small>Satu baris = kelompok aktivitas × bahaya-risiko per PJA (dijumlah antar PJA). Final: terkontrol penuh memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
       <div class="pr-card-body dr-two" id="dr-matriks"></div>
     </div>
@@ -100,7 +123,7 @@
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {} };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kelMx: q.get('kel') || '' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -133,6 +156,7 @@
   function simpanUrl() {
     const p = new URLSearchParams({ tab: state.tab, site: state.site, w: state.w });
     if (state.lv === 'ALL') p.set('lv', 'ALL');
+    if (state.tab === 'site' && state.kelMx) p.set('kel', state.kelMx);
     if (state.tab === 'grup') p.set('grup', state.grup);
     if (state.tab === 'proses') p.set('proses', state.proses);
     history.replaceState(null, '', '?' + p.toString());
@@ -185,15 +209,10 @@
     $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`);
 
     $('#dr-card-mx').hidden = state.tab !== 'site';
+    $('#dr-card-tm').hidden = state.tab !== 'site';
     if (state.tab === 'site') {
-      const A = kosong(), F = kosong();
-      P.forEach((p) => {
-        const m = (p.mx || [])[w] || {};
-        lvAmbil(m).forEach((lv) => ['a', 'f'].forEach((k) => Object.entries((m[lv] || {})[k] || {}).forEach(([s, n]) => {
-          (k === 'a' ? A : F)[Math.floor(s / 5)][s % 5] += n;
-        })));
-      });
-      $('#dr-matriks').innerHTML = DR.matriks(`Awal (risiko awal HIRA) · ${wk}`, A, M) + DR.matriks(`Final · ${wk}`, F, M);
+      renderTreemap(P, w);
+      renderMatriks(P, w, wk);
     }
 
     $('#dr-tren-judul').innerHTML = `Komposisi per minggu · ${judul}`;
@@ -205,6 +224,86 @@
     tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]), (p, i, g) => vekGrup(p, i, g), 'grup');
     tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
   }
+
+  /** Matriks 5x5 Baseline HIRA (risiko awal) dan Final; bila satu kelompok dipilih di treemap, hanya kelompok itu. */
+  function renderMatriks(P, w, wk) {
+    const A = kosong(), F = kosong(), kel = state.kelMx;
+    P.forEach((p) => {
+      const m = (p.mx || [])[w] || {};
+      lvAmbil(m).forEach((lv) => Object.entries(m[lv] || {}).forEach(([k, x]) => {
+        if (kel && k !== kel) return;
+        Object.entries(x.a || {}).forEach(([s, n]) => { A[Math.floor(s / 5)][s % 5] += n; });
+        Object.entries(x.f || {}).forEach(([s, n]) => { F[Math.floor(s / 5)][s % 5] += n; });
+      }));
+    });
+    const nama = kel ? (M.proses.find((p) => p.kode === kel) || {}).nama || kel : '';
+    const akhiran = kel ? ` · ${DR.esc(nama)}` : '';
+    $('#dr-mx-filter').innerHTML = kel ? `<button type="button" class="dr-chip" id="dr-mx-hapus" aria-label="Hapus filter kelompok">${DR.esc(nama)} ✕</button>` : '';
+    $('#dr-matriks').innerHTML = DR.matriks(`Baseline HIRA (risiko awal) · ${wk}${akhiran}`, A, M) + DR.matriks(`Final · ${wk}${akhiran}`, F, M);
+    const hapus = $('#dr-mx-hapus');
+    if (hapus) hapus.addEventListener('click', () => { state.kelMx = ''; render(); });
+  }
+
+  /** Warna % gap: hijau (0) → kuning (0,5) → oranye (1). */
+  function warnaGap(r) {
+    const c = [[31, 154, 58], [227, 179, 65], [208, 100, 12]], t = Math.max(0, Math.min(1, r)) * 2, i = Math.min(1, Math.floor(t)), f = t - i;
+    return `rgb(${c[i].map((v, j) => Math.round(v + (c[i + 1][j] - v) * f)).join(',')})`;
+  }
+
+  /** Tata letak treemap squarified (Bruls dkk.): item urut menurun, nilai v → kotak {x, y, w, h} dalam lebar × tinggi. */
+  function squarify(items, W, H) {
+    const total = items.reduce((s, i) => s + i.v, 0);
+    if (!total) return [];
+    let rest = items.map((i) => ({ ...i, a: i.v * W * H / total })), x = 0, y = 0, w = W, h = H;
+    const out = [];
+    const terburuk = (row, sisi) => {
+      const s = row.reduce((a, b) => a + b.a, 0), mx = Math.max(...row.map((b) => b.a)), mn = Math.min(...row.map((b) => b.a));
+      return Math.max(sisi * sisi * mx / (s * s), s * s / (sisi * sisi * mn));
+    };
+    while (rest.length) {
+      const sisi = Math.min(w, h);
+      let n = 1;
+      while (n < rest.length && terburuk(rest.slice(0, n + 1), sisi) <= terburuk(rest.slice(0, n), sisi)) n++;
+      const row = rest.slice(0, n), s = row.reduce((a, b) => a + b.a, 0);
+      if (w >= h) {
+        const cw = s / h; let cy = y;
+        row.forEach((b) => { out.push({ ...b, x, y: cy, w: cw, h: b.a / cw }); cy += b.a / cw; });
+        x += cw; w -= cw;
+      } else {
+        const rh = s / w; let cx = x;
+        row.forEach((b) => { out.push({ ...b, x: cx, y, w: b.a / rh, h: rh }); cx += b.a / rh; });
+        y += rh; h -= rh;
+      }
+      rest = rest.slice(n);
+    }
+    return out;
+  }
+
+  /** Treemap kelompok aktivitas: luas = baris belum terkontrol penuh, warna = % gap; klik memfilter matriks. */
+  function renderTreemap(P, w) {
+    const el = $('#dr-treemap');
+    const items = M.proses.map((k) => {
+      const v = jumlahF(P, (p) => vekKel(p, w, k.kode));
+      return { kode: k.kode, nama: k.nama, t: v.t, gap: v.t - v.full, full: v.full, part: v.part, none: v.none };
+    }).filter((i) => i.gap > 0).sort((a, b) => b.gap - a.gap).map((i) => ({ ...i, v: i.gap }));
+    if (!items.length) { el.innerHTML = '<div class="pr-empty">Tidak ada baris belum terkontrol penuh pada minggu ini.</div>'; return; }
+    const W = el.clientWidth || 800, H = el.clientHeight || 380;
+    el.innerHTML = squarify(items, W, H).map((b) => {
+      const besar = b.w > 90 && b.h > 44, sedang = b.w > 56 && b.h > 26;
+      const judul = `${b.nama}: ${DR.fmt(b.gap)} dari ${DR.fmt(b.t)} baris belum terkontrol penuh (gap ${DR.pct(b.gap, b.t)}); sebagian ${DR.fmt(b.part)}, tanpa laporan ${DR.fmt(b.none)}`;
+      const kls = `dr-tm-k${state.kelMx === b.kode ? ' on' : ''}${state.kelMx && state.kelMx !== b.kode ? ' redup' : ''}`;
+      return `<button type="button" role="listitem" class="${kls}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(judul)}" aria-label="${DR.esc(judul)}" aria-pressed="${state.kelMx === b.kode}"
+        style="left:${b.x.toFixed(1)}px;top:${b.y.toFixed(1)}px;width:${b.w.toFixed(1)}px;height:${b.h.toFixed(1)}px;background:${warnaGap(b.gap / b.t)}">
+        ${besar ? `<b>${DR.esc(b.nama)}</b><span>${DR.fmt(b.gap)} baris · gap ${DR.pct(b.gap, b.t)}</span>` : sedang ? `<b>${DR.esc(b.nama.split(/[ ,&]/)[0])}</b>` : ''}</button>`;
+    }).join('');
+    el.querySelectorAll('[data-kel]').forEach((t) => t.addEventListener('click', () => {
+      state.kelMx = state.kelMx === t.dataset.kel ? '' : t.dataset.kel; render();
+    }));
+  }
+
+  // Treemap dihitung dari lebar wadah: gambar ulang saat ukuran layar berubah.
+  let tundaUkur = 0;
+  window.addEventListener('resize', () => { clearTimeout(tundaUkur); tundaUkur = setTimeout(() => { if (M && state.tab === 'site') renderTreemap(pjaDiSite(), state.w); }, 150); });
 
   /** Tabel per grup / per kelompok: komposisi satuan ketat minggu terpilih + perubahan vs minggu lalu. */
   function tabelCakupan(sel, judulKolom, daftar, f, tab) {

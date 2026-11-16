@@ -120,8 +120,9 @@ class DrmBerandaTest extends TestCase
         $this->assertSame([1, 1, 0, 0, 0, 0, 0, 0, 0], $m['grp'][0]['High']['Pit']);
         $this->assertSame([2, 0, 0, 0, 2, 0, 0, 0, 0], $m['grp'][0]['High']['Disposal']);
         // Matriks: hanya h1 punya nilai risiko; sebagian → final tetap risiko awal (Mungkin=2, Major=3 → sel 13).
-        $this->assertSame([13 => 1], $m['mx'][0]['High']['a']);
-        $this->assertSame([13 => 1], $m['mx'][0]['High']['f']);
+        $this->assertSame([13 => 1], $m['mx'][0]['High']['K13']['a']);
+        $this->assertSame([13 => 1], $m['mx'][0]['High']['K13']['f']);
+        $this->assertArrayNotHasKey('K16', $m['mx'][0]['High']);
     }
 
     public function test_sql_beranda_memakai_minggu_kalender_dan_root_cause(): void

@@ -200,7 +200,8 @@ class DrmBeranda
      *   w[minggu][level]      = angka sesuai KOLOM_MGMT
      *   kel[minggu][level][kel] / grp[minggu][level][grup] = angka KOLOM_MGMT per kelompok / per grup lokasi
      *     (grup: satu baris = grup × kelompok × bahaya, status dihitung dari detail lokasi grup itu saja)
-     *   mx[minggu][level]     = ['a' => [sel => n], 'f' => [sel => n]] matriks 5x5 awal / final, sel = kekerapan×5 + konsekuensi
+     *   mx[minggu][level][kel] = ['a' => [sel => n], 'f' => [sel => n]] matriks 5x5 awal / final per kelompok,
+     *     sel = kekerapan×5 + konsekuensi (matriks total = jumlah semua kelompok)
      *   kelTot[level][kel]    = baris ketat per kelompok;  kelGap[minggu][level][kel] = baris ketat bukan terkontrol penuh
      *   kgTot[level][i]       = baris rincian per kombinasi kelompok × grup lokasi ke-i
      *   u4[minggu][level][i]  = baris rincian kombinasi ke-i yang tidak terkontrol 4 minggu berturut-turut
@@ -231,9 +232,9 @@ class DrmBeranda
                 }
                 // Matriks 5x5: awal = risiko awal HIRA; final = residual bila terkontrol penuh, selain itu awal.
                 if ($selAwal !== null) {
-                    $mx[$i][$lv]['a'][$selAwal] = ($mx[$i][$lv]['a'][$selAwal] ?? 0) + 1;
+                    $mx[$i][$lv][$kel]['a'][$selAwal] = ($mx[$i][$lv][$kel]['a'][$selAwal] ?? 0) + 1;
                     $f = $kat === 1 && $selSisa !== null ? $selSisa : $selAwal;
-                    $mx[$i][$lv]['f'][$f] = ($mx[$i][$lv]['f'][$f] ?? 0) + 1;
+                    $mx[$i][$lv][$kel]['f'][$f] = ($mx[$i][$lv][$kel]['f'][$f] ?? 0) + 1;
                 }
             }
         }
