@@ -35,7 +35,7 @@
   <div class="pr-card">
     <div class="pr-card-body" style="padding-bottom:0">
       <nav class="dr-tabs" role="tablist" aria-label="Sudut pandang">
-        <button type="button" role="tab" data-tab="site" aria-selected="true">Per Site</button>
+        <button type="button" role="tab" data-tab="site" aria-selected="true">Overview</button>
         <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
         <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Kelompok Aktivitas</button>
         <button type="button" role="tab" data-tab="periode" aria-selected="false">Identifikasi per periode</button>
