@@ -64,7 +64,7 @@
   if (!BR) { $('#br-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data Beranda PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
   NW = BR.minggu.length; NH = BR.hari;
   const wUrl = parseInt(new URLSearchParams(location.search).get('w'), 10);
-  if (wUrl >= 0 && wUrl < NW) S.w = wUrl;
+  S.w = wUrl >= 0 && wUrl < NW ? wUrl : DR.wDefault(BR.minggu, META.sampai);
 
   Promise.all([
     fetch(URL_DATA, { headers: { Accept: 'application/json' } }).then((r) => r.json()),
@@ -77,9 +77,9 @@
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const tambahHari = (s, n) => { const d = tgl(s); d.setDate(d.getDate() + n); return iso(d); };
   const pendek = (s) => tgl(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-  const isoMinggu = (s) => { const d = tgl(s); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day); const y = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return Math.ceil(((t - y) / 864e5 + 1) / 7); };
-  const wKode = (i) => 'W' + isoMinggu(tambahHari(BR.minggu[i], 1));
-  const wLabel = (i) => `${wKode(i)} · ${pendek(BR.minggu[i])} – ${pendek(tambahHari(BR.minggu[i], 6))}${i === 0 ? ' (berjalan, s.d. ' + pendek(META.sampai) + ')' : ''}`;
+  const wKode = (i) => 'W' + DR.wNo(BR.minggu[i]);
+  const berjalan = (i) => i === 0 && !DR.penuh0(BR.minggu[0], META.sampai);
+  const wLabel = (i) => `${wKode(i)} · ${pendek(BR.minggu[i])} – ${pendek(tambahHari(BR.minggu[i], 6))}${berjalan(i) ? ' (berjalan, s.d. ' + pendek(META.sampai) + ')' : ''}`;
   const hariKe = (i) => tambahHari(BR.hari0, i);
   const sejak = (s) => { const n = Math.round((tgl(META.sampai) - tgl(s)) / 864e5); return n <= 0 ? 'hari ini' : n + ' hari lalu'; };
   const terakhir = (s) => !s || s === '1970-01-01' ? '<span class="dr-mute">belum ada</span>' : `${pendek(s)} <span class="dr-mute">(${sejak(s)})</span>`;
@@ -87,16 +87,16 @@
   const urai = (s) => { const o = {}; if (s) s.split(',').forEach((p) => { const [i, b] = p.split(':'); o[+i] = (o[+i] || 0) | +b; }); return o; };
   const lvTag = (l) => `<span class="br-pill" style="background:${LVC[l] || '#888'}">${E(l)}</span>`;
 
-  /** Sama dengan DrmBeranda::status() di PHP: ['ok'|'bm'|'none', bit masalah]. */
+  /** Sama dengan DrmBeranda::status() di PHP: ['ok'|'bm'|'none', bit masalah]. Gap = belum closed | berulang | OAK Stop. */
   function statusBit(k, s) {
-    const m = (s & (BIT.CLOSED | BIT.ULANG | BIT.TS)) | (k & BIT.STOP);
+    const m = (s & (BIT.CLOSED | BIT.ULANG)) | (k & BIT.STOP);
     if (m) return ['bm', m];
     return [(k & BIT.DET) || (s & BIT.SPE) ? 'ok' : 'none', 0];
   }
-  const baru = () => ({ ok: 0, bm: 0, none: 0, g2: 0, g3: 0, g4: 0, g5: 0, excl: 0, u4: 0 });
+  const baru = () => ({ ok: 0, bm: 0, none: 0, g2: 0, g3: 0, g4: 0, excl: 0, u4: 0 });
   function tambah(c, st, m) {
     c[st]++;
-    if (st === 'bm') { if (m & BIT.CLOSED) c.g2++; if (m & BIT.ULANG) c.g3++; if (m & BIT.STOP) c.g4++; if (m & BIT.TS) c.g5++; }
+    if (st === 'bm') { if (m & BIT.CLOSED) c.g2++; if (m & BIT.ULANG) c.g3++; if (m & BIT.STOP) c.g4++; }
   }
   const nrel = (c) => c.ok + c.bm + c.none;
 
@@ -185,11 +185,11 @@
       u.n++;
       if (st === 'ok') u.ok++; else if (st === 'bm') { u.bm++; u.m |= m; }
     });
-    const T = { tot: 0, full: 0, part: 0, gaponly: 0, none: 0, g2: 0, g3: 0, g4: 0, g5: 0, excl: 0 }, A = {}, list = Object.values(Rk);
+    const T = { tot: 0, full: 0, part: 0, gaponly: 0, none: 0, g2: 0, g3: 0, g4: 0, excl: 0 }, A = {}, list = Object.values(Rk);
     list.forEach((u) => {
       u.cat = u.ok === u.n ? 'full' : u.ok > 0 ? 'part' : u.bm > 0 ? 'gaponly' : 'none';
       T.tot++; T[u.cat]++;
-      if (u.m & BIT.CLOSED) T.g2++; if (u.m & BIT.ULANG) T.g3++; if (u.m & BIT.STOP) T.g4++; if (u.m & BIT.TS) T.g5++;
+      if (u.m & BIT.CLOSED) T.g2++; if (u.m & BIT.ULANG) T.g3++; if (u.m & BIT.STOP) T.g4++;
       const a = A[u.kel] || (A[u.kel] = { tot: 0, full: 0, part: 0, gaponly: 0, none: 0 });
       a.tot++; a[u.cat]++;
     });
@@ -244,14 +244,36 @@
     const f = ciri(days), t = TIER[tekanan(f, c)], tot = nrel(c), sh = tot ? Math.round(100 * c.u4 / tot) : 0;
     return `<span class="br-pill" style="background:${t[1]}" title="${sh}% tidak terkontrol 4 minggu berturut-turut; laporan bermasalah ${f.c7} dari 7 hari terakhir">${t[0]}</span>`;
   }
-  function proyeksi(days, tot) {
-    tot = Math.max(1, tot);
-    let g7 = 0, p7 = 0, g28 = 0;
-    days.forEach((e, i) => { const g = 1 - e.ok / tot, p = e.bm / tot; g28 += g; if (i >= NH - 7) { g7 += g; p7 += p; } });
-    g7 /= 7; p7 /= 7; g28 /= NH;
-    const n = Math.round(100 * g7), pp = Math.round(100 * Math.min(p7, g7)), tr = g7 - g28 > 0.03 ? 'naik' : g28 - g7 > 0.03 ? 'turun' : 'stabil';
-    const isi = Array.from({ length: 7 }, (_, i) => `<div title="${pendek(tambahHari(META.sampai, i + 1))}: perkiraan gap ${n}% (bermasalah ${pp}%, tanpa laporan ${n - pp}%)"><i style="height:${Math.max(2, n * 0.34).toFixed(0)}px;background:linear-gradient(to top,${W.bm} ${(n ? 100 * pp / n : 0).toFixed(0)}%,${W.none} 0)"></i></div>`).join('');
-    return `<div class="br-pj" title="${pp}% bermasalah + ${n - pp}% tanpa laporan; rata-rata ${NH} hari ${Math.round(100 * g28)}% (${tr})"><div class="br-pb">${isi}</div><b>~${n}%</b></div>`;
+  const EW = { alpha: 0.3, minTitik: 5, minResidu: 8, rentang: [-0.111, 0.073], lebarMin: 0.02, ambang: 0.03 };
+  const kuantil = (a, q) => { const b = [...a].sort((x, y) => x - y), k = (b.length - 1) * q, lo = Math.floor(k); return b[lo] + (b[Math.ceil(k)] - b[lo]) * (k - lo); };
+  /** EWMA atas % gap mingguan: s0 = y0; residu = y − s; s = 0,3·y + 0,7·s. Prakiraan = s akhir. */
+  function ewma(y) {
+    let s = y[0];
+    const res = [];
+    for (let i = 1; i < y.length; i++) { res.push(y[i] - s); s = EW.alpha * y[i] + (1 - EW.alpha) * s; }
+    const [a, b] = res.length >= EW.minResidu ? [kuantil(res, 0.1), kuantil(res, 0.9)] : EW.rentang;
+    const jepit = (x) => Math.min(1, Math.max(0, x));
+    return { f: s, lo: jepit(s + Math.min(a, -EW.lebarMin)), hi: jepit(s + Math.max(b, EW.lebarMin)) };
+  }
+  /** Seri % gap per minggu penuh (terlama → minggu terpilih) untuk baris aktif. */
+  function seriGap(rows, spesifik) {
+    const y = [], akhir = Math.max(S.w, berjalan(0) ? 1 : 0);
+    if (!rows.length) return y;
+    for (let i = NW - 1; i >= akhir; i--) {
+      let ok = 0;
+      rows.forEach((r) => { if (statusBit(spesifik ? 0 : (r.K.w[i] || 0), r.Sw[i] || 0)[0] === 'ok') ok++; });
+      y.push(1 - ok / rows.length);
+    }
+    return y;
+  }
+  function proyeksi(rows, spesifik = false) {
+    const y = seriGap(rows, spesifik);
+    if (y.length < EW.minTitik) return '<span class="dr-mute">data kurang</span>';
+    const e = ewma(y), akhir = y[y.length - 1], P = (x) => Math.round(100 * x);
+    const arah = e.f - akhir > EW.ambang ? 'naik' : akhir - e.f > EW.ambang ? 'turun' : 'stabil';
+    const isi = y.map((v, i) => `<div title="${wKode(NW - 1 - i)}: gap ${P(v)}%"><i style="height:${Math.max(2, v * 34).toFixed(0)}px;background:${W.none}"></i></div>`).join('')
+      + `<div title="Prakiraan minggu depan: ${P(e.f)}% (80%: ${P(e.lo)}–${P(e.hi)}%)"><i style="height:${Math.max(2, e.f * 34).toFixed(0)}px;background:${W.bm}"></i></div>`;
+    return `<div class="br-pj" title="EWMA % gap mingguan: prakiraan ${P(e.f)}% (rentang 80% ${P(e.lo)}–${P(e.hi)}%), ${arah} dibanding minggu terakhir ${P(akhir)}%"><div class="br-pb">${isi}</div><b>~${P(e.f)}%<br><span class="dr-mute" style="font-weight:600;font-size:11px;white-space:nowrap">${P(e.lo)}–${P(e.hi)}% · ${arah}</span></b></div>`;
   }
   const legenda = () => `<div class="dr-legend"><span><i style="--c:${W.ok}"></i>Terkontrol</span><span><i style="--c:${W.bm}"></i>Laporan bermasalah</span><span><i style="--c:${W.none}"></i>Tanpa laporan</span><span><i style="--c:#ff1a2e"></i>Insiden</span></div>`;
 
@@ -321,7 +343,7 @@
     const wk = Array.from({ length: NW }, (_, j) => NW - 1 - j);
     const kepala = `<div class="pr-card-head"><div><b>Heatmap: % terkontrol penuh per kelompok aktivitas × minggu</b><small>0%<span class="br-hlg"></span>100%</small></div></div>`;
     if (!L.length) return `<div class="pr-card">${kepala}<div class="pr-empty">Tidak ada baris baseline pada filter ini.</div></div>`;
-    return `<div class="pr-card">${kepala}<div class="pr-card-body dr-scroll"><table class="br-hm"><thead><tr><th style="text-align:left;min-width:220px">Kelompok aktivitas</th>${wk.map((i) => `<th${i === S.w ? ' style="color:#1d2b4f"' : ''}>${wKode(i)}${i === 0 ? '*' : ''}</th>`).join('')}</tr></thead><tbody>${
+    return `<div class="pr-card">${kepala}<div class="pr-card-body dr-scroll"><table class="br-hm"><thead><tr><th style="text-align:left;min-width:220px">Kelompok aktivitas</th>${wk.map((i) => `<th${i === S.w ? ' style="color:#1d2b4f"' : ''}>${wKode(i)}${berjalan(i) ? '*' : ''}</th>`).join('')}</tr></thead><tbody>${
       L.map(([k, per]) => `<tr><td><b>${E(KEL[k] || k)}</b> <span class="dr-mute">${F((per[S.w] || {}).tot || 0)} baris</span></td>${wk.map((i) => {
         const a = per[i], x = v(a);
         if (x === null) return `<td class="c${i === S.w ? ' sel' : ''}" data-w="${i}" style="background:#f1f3f5;color:#9aa3ad">–</td>`;
@@ -356,7 +378,6 @@
     if (UT.g2) tl.push([C.bm, `<b>Tutup temuan:</b> ${F(UT.g2)} baris belum closed.`]);
     if (UT.g3) tl.push([C.bm, `<b>Laporan berulang:</b> ${F(UT.g3)} baris. Buat perbaikan permanen.`]);
     if (UT.g4) tl.push([C.bm, `<b>OAK Stop Pekerjaan:</b> ${F(UT.g4)} baris. Verifikasi sebelum lanjut.`]);
-    if (UT.g5) tl.push([C.bm, `<b>Checklist OAK tidak sesuai:</b> ${F(UT.g5)} baris.`]);
     if (nSig) tl.push([C.bm, `<b>Significant tanpa laporan:</b> ${F(nSig)} baris (${sigL.slice(0, 3).map(([t]) => E(t)).join(', ')}${sigL.length > 3 ? ', …' : ''}).`]);
     if (inc.length) tl.push([C.inc, `<b>Insiden ${NH} hari:</b> ${inc.length} kejadian (${inc.slice(0, 3).map((i) => E(i.detlok) + ' ' + pendek(i.tanggal)).join(', ')}).`]);
 
@@ -379,8 +400,8 @@
       const s = r.Sw[S.w] || 0, [st, m] = statusBit(0, s), inc = Object.values(r.Sh).some((b) => b & BIT.INC);
       const key = r.bn + '|' + r.n1;
       if (st === 'bm' || inc) {
-        const b = Bm[key] || (Bm[key] = { t: r.bn, kb: r.n1, g2: 0, g3: 0, g5: 0, inc: 0, f: {} });
-        if (m & BIT.CLOSED) b.g2++; if (m & BIT.ULANG) b.g3++; if (m & BIT.TS) b.g5++; if (inc) b.inc++;
+        const b = Bm[key] || (Bm[key] = { t: r.bn, kb: r.n1, g2: 0, g3: 0, inc: 0, f: {} });
+        if (m & BIT.CLOSED) b.g2++; if (m & BIT.ULANG) b.g3++; if (inc) b.inc++;
         b.f[r.kel] = (b.f[r.kel] || 0) + 1;
       }
       if (st === 'none' && (r.n1 === 'Significant' || r.n1 === 'High')) {
@@ -388,10 +409,10 @@
       }
     }));
     const kel3 = (f) => Object.entries(f).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => E(KEL[k] || k) + ' (' + v + ')').join('; ');
-    const aksi = (b) => [b.g2 && 'tutup temuan di SAP', b.g3 && 'perbaikan permanen', b.g5 && 'perbaiki kondisi butir checklist', b.inc && 'cek padanan root cause insiden'].filter(Boolean).join('; ') || '–';
-    const BL = Object.values(Bm).sort((a, b) => KO[a.kb] - KO[b.kb] || (b.g2 + b.g3 + b.g5 + b.inc) - (a.g2 + a.g3 + a.g5 + a.inc));
+    const aksi = (b) => [b.g2 && 'tutup temuan di SAP', b.g3 && 'perbaikan permanen', b.inc && 'cek padanan root cause insiden'].filter(Boolean).join('; ') || '–';
+    const BL = Object.values(Bm).sort((a, b) => KO[a.kb] - KO[b.kb] || (b.g2 + b.g3 + b.inc) - (a.g2 + a.g3 + a.inc));
     const ZL = Object.values(Z).sort((a, b) => KO[a.kb] - KO[b.kb] || b.n - a.n);
-    const baris = (b) => `<tr><td>${E(b.t)}</td><td>${lvTag(b.kb)}</td><td class="dr-mute">${kel3(b.f)}</td><td class="dr-mute">${b.g2 ? 'belum closed ' + b.g2 + '<br>' : ''}${b.g3 ? 'berulang ' + b.g3 + '<br>' : ''}${b.g5 ? 'butir tidak sesuai ' + b.g5 + '<br>' : ''}${b.inc ? '<span class="br-red">terkait insiden</span>' : ''}</td><td class="dr-mute">${aksi(b)}</td></tr>`;
+    const baris = (b) => `<tr><td>${E(b.t)}</td><td>${lvTag(b.kb)}</td><td class="dr-mute">${kel3(b.f)}</td><td class="dr-mute">${b.g2 ? 'belum closed ' + b.g2 + '<br>' : ''}${b.g3 ? 'berulang ' + b.g3 + '<br>' : ''}${b.inc ? '<span class="br-red">terkait insiden</span>' : ''}</td><td class="dr-mute">${aksi(b)}</td></tr>`;
     const kepala = '<thead><tr><th style="min-width:220px">Bahaya-risiko</th><th>Risiko awal</th><th style="min-width:200px">Kelompok aktivitas (jumlah baris)</th><th>Jenis gap</th><th>Tindak lanjut</th></tr></thead>';
     return `<span class="br-h">Bahaya-risiko perlu perhatian</span>${
       BL.length ? `<div class="dr-scroll"><table class="pr-tbl dr-tbl">${kepala}<tbody>${BL.slice(0, 10).map(baris).join('')}</tbody></table></div>${BL.length > 10 ? `<details style="margin-top:6px"><summary class="dr-mute">Tampilkan ${BL.length - 10} lainnya</summary><div class="dr-scroll"><table class="pr-tbl dr-tbl">${kepala}<tbody>${BL.slice(10).map(baris).join('')}</tbody></table></div></details>` : ''}` : '<div class="dr-mute">Tidak ada bahaya-risiko dengan laporan bermasalah atau keterkaitan insiden pada periode ini.</div>'}
@@ -434,10 +455,10 @@
       return { p, c, tot, gap: tot ? (tot - c[ix.full]) / tot : 0, hi: kgL.filter((x) => x.u / x.t >= BR.tekanan.u4_tinggi).length, all: kgL.length, top };
     }).filter((e) => e.tot).sort((a, b) => b.gap - a.gap);
     const r = (x) => `<td class="r">${F(x)}</td>`;
-    return `      <div class="dr-scroll" style="max-height:560px;overflow:auto"><table class="pr-tbl dr-tbl" style="min-width:1250px"><thead><tr><th>PJA</th><th class="r">Detail lokasi</th><th class="r">Baris (kelompok × bahaya)</th><th style="min-width:150px">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th class="r">Sebagian</th><th class="r">Hanya bermasalah</th><th class="r">Belum closed</th><th class="r">Berulang</th><th class="r">OAK Stop</th><th class="r">Butir tdk sesuai</th><th class="r">Kelompok × grup tekanan tinggi</th><th class="r">DL tanpa laporan ${BR.lamaHari} hr+</th><th class="r">Insiden ${NH} hr</th><th style="min-width:200px">Kelompok gap tertinggi</th></tr></thead><tbody>${
+    return `      <div class="dr-scroll" style="max-height:560px;overflow:auto"><table class="pr-tbl dr-tbl" style="min-width:1250px"><thead><tr><th>PJA</th><th class="r">Detail lokasi</th><th class="r">Baris (kelompok × bahaya)</th><th style="min-width:150px">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th class="r">Sebagian</th><th class="r">Hanya bermasalah</th><th class="r">Belum closed</th><th class="r">Berulang</th><th class="r">OAK Stop</th><th class="r">Kelompok × grup tekanan tinggi</th><th class="r">DL tanpa laporan ${BR.lamaHari} hr+</th><th class="r">Insiden ${NH} hr</th><th style="min-width:200px">Kelompok gap tertinggi</th></tr></thead><tbody>${
       L.map((e) => `<tr data-pja="${E(e.p.id)}" style="cursor:pointer${e.p.id === ID_PJA ? ';background:#eef4fb' : ''}"><td><b>${E(e.p.nama)}</b><br><span class="dr-mute">${E(e.p.site)}</span></td><td class="r">${e.p.ndl}</td>${r(e.tot)}
         <td>${sb4(e.c[ix.full], e.c[ix.part], e.c[ix.gaponly], e.c[ix.none])}<span class="dr-mute">${pct(e.c[ix.full], e.tot)}</span></td><td class="r"><b>${pct(e.tot - e.c[ix.full], e.tot)}</b></td>
-        ${r(e.c[ix.none])}${r(e.c[ix.part])}${r(e.c[ix.gaponly])}${r(e.c[ix.closed])}${r(e.c[ix.ulang])}${r(e.c[ix.stop])}${r(e.c[ix.tidak_sesuai])}
+        ${r(e.c[ix.none])}${r(e.c[ix.part])}${r(e.c[ix.gaponly])}${r(e.c[ix.closed])}${r(e.c[ix.ulang])}${r(e.c[ix.stop])}
         <td class="r">${e.hi} dari ${e.all}</td><td class="r">${e.p.lama}</td><td class="r">${e.p.insiden || ''}</td><td class="dr-mute">${E(e.top.join(', '))}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
@@ -475,14 +496,14 @@
   }
 
   function tabelGrup(gl) {
-    return `<table class="pr-tbl dr-tbl"><thead><tr><th style="min-width:200px">Grup lokasi</th><th style="min-width:140px">Komposisi</th><th class="r">Terkontrol</th><th class="r">Gap laporan</th><th class="r">Tanpa laporan</th><th>Laporan SAP terakhir</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi 7 hari</th></tr></thead><tbody>${
+    return `<table class="pr-tbl dr-tbl"><thead><tr><th style="min-width:200px">Grup lokasi</th><th style="min-width:140px">Komposisi</th><th class="r">Terkontrol</th><th class="r">Gap laporan</th><th class="r">Tanpa laporan</th><th>Laporan SAP terakhir</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi minggu depan</th></tr></thead><tbody>${
       gl.sort((x, y) => (y.c.bm + y.c.none) / Math.max(1, nrel(y.c)) - (x.c.bm + x.c.none) / Math.max(1, nrel(x.c))).map((o) => {
         const key = o.kel + '|' + o.grp, buka = !!S.gopen[key], days = harian(o.rows), n = nrel(o.c);
         const last = [...o.live].map((d) => (o.rows.find((r) => r.dl === d) || { K: { last: '' } }).K.last).filter(Boolean).sort().pop() || '';
         const ninc = days.filter((x) => x.inc).length, off = o.dls.size - o.live.size;
         return `<tr class="br-g${buka ? ' open' : ''}" data-g="${E(key)}" style="cursor:pointer"><td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Buka grup lokasi">▸</button><b>${E(o.grp)}</b><br><span class="dr-mute" style="padding-left:18px">${o.dls.size} detail lokasi${off ? ` (${off} nonaktif)` : ''} · ${F(n)} baris</span></td>
           <td>${sb(o.c.ok, o.c.bm, o.c.none)}</td><td class="r">${F(o.c.ok)}</td><td class="r">${F(o.c.bm)}</td><td class="r">${F(o.c.none)}</td><td>${terakhir(last)}</td>
-          <td>${batangHarian(days, n)}${ninc ? `<div class="br-red" style="font-size:12px">insiden di ${ninc} hari</div>` : ''}</td><td>${selTekanan(days, o.c)}</td><td>${proyeksi(days, n)}</td></tr>`
+          <td>${batangHarian(days, n)}${ninc ? `<div class="br-red" style="font-size:12px">insiden di ${ninc} hari</div>` : ''}</td><td>${selTekanan(days, o.c)}</td><td>${proyeksi(o.rows)}</td></tr>`
           + (buka ? `<tr class="br-sub${S.baru === 'g:' + key ? ' br-buka' : ''}"><td colspan="9" style="padding:6px 8px 12px 22px">${tabelDl(o)}${tabelBahaya(o)}${tabelUmum(o)}</td></tr>` : '');
       }).join('')}</tbody></table>`;
   }
@@ -495,13 +516,13 @@
       if (!off) rows.forEach((r) => { const [st, m] = statusBit(r.K.w[S.w] || 0, r.Sw[S.w] || 0); tambah(c, st, m); if (tidakTerkontrol4(r, S.w)) c.u4++; });
       return { dl, rows, off, c };
     }).sort((a, b) => (b.c.bm + b.c.none) - (a.c.bm + a.c.none) || String((idx.dl[a.dl] || {}).detlok).localeCompare(String((idx.dl[b.dl] || {}).detlok)));
-    return `<span class="br-h">Detail lokasi</span><div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Detail lokasi</th><th style="min-width:110px">Komposisi</th><th>Laporan SAP kelompok ini</th><th>Terakhir (apa pun)</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi 7 hari</th><th>Flag PJA</th></tr></thead><tbody>${
+    return `<span class="br-h">Detail lokasi</span><div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Detail lokasi</th><th style="min-width:110px">Komposisi</th><th>Laporan SAP kelompok ini</th><th>Terakhir (apa pun)</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi minggu depan</th><th>Flag PJA</th></tr></thead><tbody>${
       daftar.map((z) => {
         const l = idx.dl[z.dl] || {}, n = nrel(z.c), days = z.off ? null : harian(z.rows), fl = flagKel(z.dl, o.kel);
         const pending = fl.some((f) => f.review === 'PENDING');
         return `<tr${z.off ? ' style="opacity:.55"' : ''}><td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td><td>${z.off ? '<span class="dr-mute">dikecualikan</span>' : sb(z.c.ok, z.c.bm, z.c.none)}</td>
           <td>${terakhir((z.rows[0] || { K: {} }).K.last)}</td><td>${terakhir(D.beranda.dlast[z.dl])}</td>
-          ${z.off ? '<td colspan="3" class="dr-mute">dikecualikan</td>' : `<td>${batangHarian(days, n)}</td><td>${selTekanan(days, z.c)}</td><td>${proyeksi(days, n)}</td>`}
+          ${z.off ? '<td colspan="3" class="dr-mute">dikecualikan</td>' : `<td>${batangHarian(days, n)}</td><td>${selTekanan(days, z.c)}</td><td>${proyeksi(z.rows)}</td>`}
           <td><button type="button" class="pr-back" data-flag="${E(z.dl)}" data-kel="${E(o.kel)}">${z.off ? 'Nonaktif' : 'Ada aktivitas'}</button>${pending ? '<br><span class="dr-tag st-X">Menunggu review</span>' : ''}</td></tr>`;
       }).join('')}</tbody></table></div>`;
   }
@@ -522,10 +543,10 @@
     const KO = { Significant: 0, High: 1, Medium: 2, Low: 3 };
     const L = perBahaya(o.rows).sort((a, b) => KO[a.r.n1] - KO[b.r.n1] || (b.c.bm + b.c.none) - (a.c.bm + a.c.none));
     return `<span class="br-h">Bahaya-risiko · identifikasi spesifik</span>
-      <div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th style="min-width:230px">Bahaya-risiko</th><th>Risiko awal</th><th style="min-width:110px">Komposisi detail lokasi</th><th class="r">Terkontrol</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi 7 hari</th></tr></thead><tbody>${
+      <div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th style="min-width:230px">Bahaya-risiko</th><th>Risiko awal</th><th style="min-width:110px">Komposisi detail lokasi</th><th class="r">Terkontrol</th><th class="r">Gap</th><th class="r">Tanpa laporan</th><th>Harian ${NH} hari</th><th>Tekanan gap</th><th>Proyeksi minggu depan</th></tr></thead><tbody>${
       L.slice(0, 200).map((p) => { const days = harian(p.rows, true), n = nrel(p.c);
         return `<tr><td>${E(p.r.bn)}</td><td>${lvTag(p.r.n1)}</td><td>${sb(p.c.ok, p.c.bm, p.c.none)}</td><td class="r">${p.c.ok}</td><td class="r">${p.c.bm}</td><td class="r">${p.c.none}</td>
-          <td>${batangHarian(days, n)}</td><td>${selTekanan(days, p.c)}</td><td>${proyeksi(days, n)}</td></tr>`; }).join('')}</tbody></table></div>${L.length > 200 ? `<div class="dr-mute">Menampilkan 200 dari ${L.length} bahaya-risiko.</div>` : ''}`;
+          <td>${batangHarian(days, n)}</td><td>${selTekanan(days, p.c)}</td><td>${proyeksi(p.rows, true)}</td></tr>`; }).join('')}</tbody></table></div>${L.length > 200 ? `<div class="dr-mute">Menampilkan 200 dari ${L.length} bahaya-risiko.</div>` : ''}`;
   }
 
   function tabelUmum(o) {
@@ -539,13 +560,13 @@
     return `<details class="pr-card" style="padding:0"><summary class="pr-card-head" style="cursor:pointer"><div><b>Cara membaca, metode, dan batasan</b></div></summary><div class="pr-card-body"><ol class="br-ol">
       <li><b>Satuan kartu, ringkasan, peta panas, dan tabel antar PJA (versi ketat):</b> satu baris = kelompok aktivitas × bahaya-risiko, dihitung sekali walau muncul di beberapa detail lokasi. <b>Terkontrol penuh</b> bila semua detail lokasi aktifnya terkontrol; <b>sebagian</b> bila ada yang terkontrol dan ada yang belum; <b>hanya bermasalah</b> bila tidak ada yang terkontrol tetapi ada laporan bermasalah; <b>tanpa laporan</b> bila tidak ada laporan SAP di lokasi mana pun. Gap = semua selain terkontrol penuh.</li>
       <li><b>Baseline rincian (tabel kelompok → grup → detail lokasi, tren mingguan):</b> satu baris = kelompok aktivitas (proses bisnis HIRA) × detail lokasi × bahaya-risiko. Hanya bahaya yang bisa diidentifikasi lewat SAP. Detail lokasi yang dimiliki dua PJA dihitung di masing-masing, jadi angka antar PJA tidak boleh dijumlahkan.</li>
-      <li><b>Periode:</b> minggu kalender Minggu–Sabtu; minggu berjalan masih sebagian. Filter tingkat risiko awal mengubah pembagi.</li>
+      <li><b>Periode:</b> minggu Minggu–Sabtu; W1 = 1 Jan s.d. Sabtu pertama (W46 2026 = 8–14 Nov). Default = minggu penuh terakhir. Filter tingkat risiko awal mengubah pembagi.</li>
       <li><b>Sumber identifikasi (digabung):</b> (a) Observasi/OAK yang aktivitasnya terpetakan ke kelompok di detail lokasi itu menandai seluruh bahaya kelompok tersebut; (b) label Hazard/Inspeksi yang cocok ke bahaya — label spesifik (cocok ke ≤2 kelompok di lokasi itu) juga menandai kelompoknya; (c) butir checklist OAK yang cocok ke bahaya. Karena satu laporan OAK/OBS menutup semua baris kelompok, persen terkontrol di tingkat kelompok lebih tinggi daripada di tabel bahaya-risiko (yang hanya memakai bukti spesifik).</li>
-      <li><b>Dua status:</b> terkontrol (ada laporan, tanpa masalah) dan gap. Gap = laporan bermasalah (belum closed pada akhir minggu — REJECT dihitung belum closed; berulang ≥${BR.ambangUlang} laporan bahaya sama di lokasi sama dalam seminggu; OAK Stop Pekerjaan; butir checklist tidak sesuai) + tanpa laporan. Terkontrol menurut SAP bukan bukti pengendalian di lapangan.</li>
+      <li><b>Dua status:</b> terkontrol (ada laporan, tanpa masalah) dan gap. Gap = laporan bermasalah (status belum CLOSED/DONE — REJECT dihitung terbuka; ≥${BR.ambangUlang} laporan label ketidaksesuaian sama di detail lokasi yang sama dalam seminggu; OAK Stop Pekerjaan) + tanpa laporan. BUKAN TEMUAN dan DELETED dibuang. Terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</li>
       <li><b>Bahaya umum:</b> teks bahaya yang sama di ≥${BR.umumMin} kelompok dalam satu grup lokasi ditampilkan terpisah dan tidak masuk pembagi.</li>
       <li><b>Flag:</b> per kelompok aktivitas di satu detail lokasi, dengan alasan, masa berlaku, dan persetujuan orang lain. Flag nonaktif yang disetujui dan beririsan dengan minggu terpilih mengeluarkan barisnya dari pembagi. Bar harian dan proyeksi belum memperhitungkan flag.</li>
       <li><b>Tekanan gap</b> = yang lebih berat dari: (1) porsi baris tidak terkontrol 4 minggu berturut-turut (≥${Math.round(100 * BR.tekanan.u4_tinggi)}% Tinggi, ≥${Math.round(100 * BR.tekanan.u4_sedang)}% Sedang); (2) hari dengan laporan bermasalah dalam 7 hari terakhir (≥${BR.tekanan.hari_tinggi} hari atau ${BR.tekanan.beruntun_tinggi} hari beruntun = Tinggi, ≥${BR.tekanan.hari_sedang} = Sedang). Penanda perhatian, bukan prediksi; belum diuji terhadap insiden.</li>
-      <li><b>Proyeksi 7 hari:</b> rata-rata persen gap harian 7 hari terakhir, datar per hari — tingkat gap yang mungkin bertahan, bukan ramalan hari tertentu. Karena laporan SAP tidak terbit tiap hari, persen gap harian lebih tinggi daripada status mingguan.</li>
+      <li><b>Proyeksi minggu depan:</b> EWMA (α 0,3) atas % gap mingguan sampai minggu terpilih, butuh ≥5 minggu. Rentang 80% dari kuantil 10%/90% residu satu langkah (≥8 residu; selain itu −11,1/+7,3 poin), minimal ±2 poin. Naik/turun bila selisih dengan minggu terakhir >3 poin.</li>
       <li><b>Tanda merah insiden:</b> hanya pada bahaya yang label root cause insidennya (Hazard_Related_Incident) terpetakan ke bahaya itu di detail lokasi insiden.</li>
       <li>Pemetaan HIRA ↔ SAP berbasis kata kunci (draf) dan belum dikoreksi HSE.</li></ol></div></details>`;
   }

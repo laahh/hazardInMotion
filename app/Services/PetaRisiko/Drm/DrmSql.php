@@ -302,8 +302,9 @@ SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
     /**
      * Beranda PJA — bukti SPESIFIK per (detail lokasi, bahaya baseline), dijalankan per site:
      * label Hazard/Inspeksi yang cocok ke bahaya dan butir checklist OAK.
-     * Bit: 2 = teridentifikasi spesifik, 4 = belum closed (pada akhir minggu / pada tanggal akhir untuk harian),
-     * 8 = berulang (≥ ambang laporan dalam minggu yang sama), 32 = butir checklist tidak sesuai,
+     * Bit: 2 = teridentifikasi spesifik, 4 = belum closed (status saat ini bukan CLOSED/DONE; REJECT terbuka),
+     * 8 = berulang (≥ ambang laporan berlabel sama di detail lokasi itu dalam minggu yang sama),
+     * 32 = butir checklist tidak sesuai (informasi, bukan gap),
      * 64 (harian) = insiden pada hari itu yang root cause-nya terpetakan ke bahaya ini.
      */
     public function berandaSpesifik(): string
@@ -311,13 +312,13 @@ SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
         $ulang = (int) $this->cfg['beranda']['ambang_berulang'];
 
         return $this->prelude().$this->berandaDasarCte().$this->rootCauseCte().',
-sx AS (
-  SELECT dl, hid, d, sum(n) AS n,
-         max(toUInt8(ifNull(cd > least(toStartOfWeek(d, 0) + 6, t_end), 1))) AS open_w,
-         max(toUInt8(ifNull(cd > t_end, 1))) AS open_h
-  FROM evh GROUP BY dl, hid, d
+lw AS (SELECT dl, k, sk, toStartOfWeek(d, 0) AS ws, sum(n) AS nl FROM sh GROUP BY dl, k, sk, ws),
+sxw AS (
+  SELECT e.dl AS dl, e.hid AS hid, e.d AS d, max(toUInt8(e.cd IS NULL)) AS op, max(toUInt8(l.nl >= '.$ulang.')) AS ul
+  FROM (SELECT dl, k, sk, hid, d, cd, toStartOfWeek(d, 0) AS ws FROM evh) e
+  JOIN lw l ON l.dl = e.dl AND l.k = e.k AND l.sk = e.sk AND l.ws = e.ws
+  GROUP BY e.dl, e.hid, e.d
 ),
-sxw AS (SELECT dl, hid, d, n, open_w, open_h, sum(n) OVER (PARTITION BY dl, hid, toStartOfWeek(d, 0)) AS nw FROM sx),
 dx AS (SELECT dl, hid, d, ts FROM evd WHERE (dl, hid) IN (SELECT dl, hid FROM basek)),
 ix AS (
   SELECT DISTINCT r.dl AS dl, m.hid AS hid, r.tgl AS d FROM rci r JOIN mar m ON m.k = r.k AND m.sk = r.sk
@@ -326,14 +327,14 @@ ix AS (
 sw AS (
   SELECT dl, hid, wi, groupBitOr(bit) AS bit FROM (
     SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi,
-           toUInt8(2 + 4 * open_w + 8 * (nw >= '.$ulang.')) AS bit FROM sxw WHERE d >= wk_awal
+           toUInt8(2 + 4 * op + 8 * ul) AS bit FROM sxw WHERE d >= wk_awal
     UNION ALL
     SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7), toUInt8(2 + 32 * ts) FROM dx WHERE d >= wk_awal
   ) GROUP BY dl, hid, wi
 ),
 shd AS (
   SELECT dl, hid, di, groupBitOr(bit) AS bit FROM (
-    SELECT dl, hid, dateDiff(\'day\', h0, d) AS di, toUInt8(2 + 4 * open_h + 8 * (nw >= '.$ulang.')) AS bit FROM sxw WHERE d >= h0
+    SELECT dl, hid, dateDiff(\'day\', h0, d) AS di, toUInt8(2 + 4 * op + 8 * ul) AS bit FROM sxw WHERE d >= h0
     UNION ALL
     SELECT dl, hid, dateDiff(\'day\', h0, d), toUInt8(2 + 32 * ts) FROM dx WHERE d >= h0
     UNION ALL
@@ -722,7 +723,7 @@ sap AS (
          lower(ifNull(ketidaksesuaian, \'\')) AS k, lower(ifNull(subketidaksesuaian, \'\')) AS sk,
          lower(if(jenis_data = \'OBSERVASI\', ifNull(`aktivitas  OBS`, \'\'),
                   concat(ifNull(`aktivitas pekerjaan OAK`, \'\'), \' \', ifNull(`sub aktivitas pekerjaan OAK`, \'\')))) AS tx,
-         ifNull(`hasil OAK`, \'\') = \'Stop Pekerjaan\' AS stop,
+         positionCaseInsensitive(ifNull(`hasil OAK`, \'\'), \'stop\') > 0 AS stop,
          multiSearchAny(lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'), \' \', ifNull(tindakan, \'\'))),
                         ['.$this->daftar((array) $c['obs_tanpa_aktivitas']).']) AS na,
          ifNull(status, \'\') AS st,

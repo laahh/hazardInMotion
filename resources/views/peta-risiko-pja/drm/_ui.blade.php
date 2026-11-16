@@ -152,15 +152,24 @@
       const w = (x) => (100 * x / t).toFixed(2) + '%';
       return `<div class="br-sb${besar ? ' big' : ''}" title="${this.fmt(ok)} terkontrol penuh; ${this.fmt(pt)} sebagian; ${this.fmt(pb)} hanya bermasalah; ${this.fmt(no)} tanpa laporan"><i style="width:${w(ok)};background:${W.ok}"></i><i style="width:${w(pt)};background:${W.part}"></i><i style="width:${w(pb)};background:${W.bm}"></i><i style="width:${w(no)};background:${W.none}"></i></div>`;
     },
-    /** Minggu kalender (Minggu–Sabtu) beranda: kode W ISO dari hari Senin-nya dan label rentang tanggal. */
-    minggu(awal, sampai, i) {
+    /** Nomor minggu DRM 2.1: W1 = 1 Jan s.d. Sabtu pertama, lalu Minggu–Sabtu (W46 2026 = 8–14 Nov). */
+    wNo(awal) {
+      const d = new Date(awal + 'T00:00:00'), j1 = new Date(d.getFullYear(), 0, 1);
+      return Math.floor((Math.round((d - j1) / 864e5) + j1.getDay()) / 7) + 1;
+    },
+    /** Minggu indeks 0 sudah penuh bila Sabtunya ≤ tanggal data. */
+    penuh0(awal0, sampai) {
+      const z = new Date(awal0 + 'T00:00:00'); z.setDate(z.getDate() + 6);
+      return z <= new Date(sampai + 'T00:00:00');
+    },
+    /** Default minggu = minggu penuh terakhir. */
+    wDefault(mg, sampai) { return mg.length > 1 && !this.penuh0(mg[0], sampai) ? 1 : 0; },
+    minggu(awal, sampai, i, awal0) {
       const tgl = (s) => new Date(s + 'T00:00:00');
       const geser = (s, n) => { const d = tgl(s); d.setDate(d.getDate() + n); return d; };
-      const sen = geser(awal, 1), t = new Date(Date.UTC(sen.getFullYear(), sen.getMonth(), sen.getDate()));
-      t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-      const w = Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+      const w = this.wNo(awal), berjalan = i === 0 && !this.penuh0(awal0 || awal, sampai);
       const pendek = (d) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-      return { kode: 'W' + w, label: `W${w} · ${pendek(tgl(awal))} – ${pendek(geser(awal, 6))}${i === 0 ? ' (berjalan, s.d. ' + pendek(tgl(sampai)) + ')' : ''}` };
+      return { kode: 'W' + w, label: `W${w} · ${pendek(tgl(awal))} – ${pendek(geser(awal, 6))}${berjalan ? ' (berjalan, s.d. ' + pendek(tgl(sampai)) + ')' : ''}` };
     },
   };
 </script>

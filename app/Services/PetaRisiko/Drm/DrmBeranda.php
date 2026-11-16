@@ -10,10 +10,12 @@ use Carbon\CarbonImmutable;
  * Bukti datang dari dua query per site (lihat DrmSql::berandaKelompok / berandaSpesifik) dalam bentuk
  * bit jarang "indeks:bit,...":
  *   kelompok (dl|kel): 1 = kelompok terdeteksi (Obs/OAK/label spesifik), 16 = OAK Stop Pekerjaan
- *   spesifik (dl|hid): 2 = teridentifikasi spesifik, 4 = belum closed, 8 = berulang, 32 = butir tidak sesuai,
+ *   spesifik (dl|hid): 2 = teridentifikasi spesifik, 4 = belum closed (status kini bukan CLOSED/DONE),
+ *                      8 = berulang (≥3 laporan label sama di detail lokasi dalam minggu itu),
+ *                      32 = butir checklist tidak sesuai (hanya informasi, bukan gap),
  *                      64 = (harian) insiden yang root cause-nya terpetakan ke bahaya ini.
- * Status baris = BERMASALAH bila ada bit 4/8/32 atau OAK stop kelompok; TERKONTROL bila terdeteksi
- * tanpa masalah; selain itu TANPA LAPORAN. Gap = bermasalah + tanpa laporan.
+ * Status baris = BERMASALAH bila ada bit 4/8 atau OAK stop kelompok (aturan DRM 2.1: gap = belum closed |
+ * berulang | OAK Stop); TERKONTROL bila terdeteksi tanpa masalah; selain itu TANPA LAPORAN.
  *
  * Logika yang sama dipakai JS halaman PJA (pja.blade.php → fungsi statusBit); ubah keduanya bersamaan.
  */
@@ -68,7 +70,7 @@ class DrmBeranda
     /** Status satu baris dari bit kelompok (K) dan bit spesifik (S): ['ok'|'bm'|'none', bit masalah]. */
     public static function status(int $k, int $s): array
     {
-        $masalah = ($s & (self::BELUM_CLOSED | self::BERULANG | self::TIDAK_SESUAI)) | ($k & self::OAK_STOP);
+        $masalah = ($s & (self::BELUM_CLOSED | self::BERULANG)) | ($k & self::OAK_STOP);
         if ($masalah) {
             return ['bm', $masalah];
         }

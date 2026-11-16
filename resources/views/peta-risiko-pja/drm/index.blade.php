@@ -38,14 +38,15 @@
         <button type="button" role="tab" data-tab="site" aria-selected="true">Per Site</button>
         <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
         <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Proses Bisnis</button>
-        <button type="button" role="tab" data-tab="pja" aria-selected="false">Per PJA</button>
+        <button type="button" role="tab" data-tab="periode" aria-selected="false">Identifikasi per periode</button>
+        <button type="button" role="tab" data-tab="pja" aria-selected="false">Semua PJA</button>
       </nav>
     </div>
     <div class="dr-bar">
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="proses" hidden>Proses bisnis <select id="dr-proses"></select></label>
       <label>Site / scope <select id="dr-site"><option value="ALL">Semua site</option></select></label>
-      <label data-ctl="pja" hidden>Periode <select id="dr-w"></select></label>
+      <label data-ctl="w" hidden>Periode <select id="dr-w"></select></label>
       <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
       <label data-ctl="pja" hidden>Urutkan <select id="dr-urut"><option value="skor">Skor prioritas</option><option value="gap">% gap</option><option value="gapn">Jumlah baris gap</option><option value="none">% tanpa laporan</option><option value="lewat">Lewat janji</option><option value="nama">Nama</option></select></label>
       <label data-ctl="pja" hidden><input type="search" class="pr-search" id="dr-cari" placeholder="Cari nama PJA" aria-label="Cari nama PJA"></label>
@@ -79,10 +80,11 @@
     </div>
   </div>
 
+  <div id="dr-panel-periode" class="br-root" style="margin-top:20px" hidden></div>
   <div id="dr-panel-pja" class="br-root" style="margin-top:20px" hidden></div>
 
   <div class="pr-foot">
-    <p>Pemetaan HIRA ↔ SAP berbasis kata kunci (kamus 29 tema, Master A/B/C/D DRM 2.1: label Hazard/Inspeksi → bahaya, Observasi/OAK → aktivitas, butir checklist OAK → bahaya) dan belum diuji silang pakar. "Terkontrol" = terkontrol menurut SAP, bukan bukti efektivitas lapangan.</p>
+    <p>Pemetaan HIRA ↔ SAP berbasis kata kunci (kamus 29 tema, Master A/B/C/D DRM 2.1: label Hazard/Inspeksi → bahaya, Observasi/OAK → aktivitas, butir checklist OAK → bahaya) dan belum diuji silang pakar. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
     <p>"Tidak teridentifikasi" bukan berarti aman. Satu detail lokasi bisa dimiliki beberapa PJA: jangan menjumlahkan angka antar PJA.</p>
   </div>
 @endif
@@ -98,7 +100,8 @@
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   const state = { tab: q.get('tab') || 'site', site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: Math.max(0, parseInt(q.get('w'), 10) || 0), pri: 'all', urut: 'skor', buka: {} };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, pri: 'all', urut: 'skor', buka: {}, pbuka: {} };
+  const TAB_W = ['pja', 'periode'];
   let M = null;
 
   fetch(URL_META, { headers: { Accept: 'application/json' } }).then((r) => r.json()).then((m) => { M = m; init(); })
@@ -119,9 +122,9 @@
     $('#dr-grup').addEventListener('change', (e) => { state.grup = e.target.value; render(); });
     $('#dr-cari').addEventListener('input', (e) => { state.cari = e.target.value.toLowerCase(); renderPja(); });
     const mg = (M.beranda || {}).minggu || [];
-    if (state.w >= mg.length) state.w = 0;
-    $('#dr-w').innerHTML = mg.map((a, i) => `<option value="${i}"${i === state.w ? ' selected' : ''}>${DR.esc(DR.minggu(a, M.sampai, i).label)}</option>`).join('');
-    $('#dr-w').addEventListener('change', (e) => { state.w = +e.target.value; renderPja(); simpanUrl(); });
+    if (state.w < 0 || state.w >= mg.length) state.w = DR.wDefault(mg, M.sampai);
+    $('#dr-w').innerHTML = mg.map((a, i) => `<option value="${i}"${i === state.w ? ' selected' : ''}>${DR.esc(DR.minggu(a, M.sampai, i, mg[0]).label)}</option>`).join('');
+    $('#dr-w').addEventListener('change', (e) => { state.w = +e.target.value; renderW(); simpanUrl(); });
     $('#dr-pri').addEventListener('change', (e) => { state.pri = e.target.value; renderPja(); });
     $('#dr-urut').addEventListener('change', (e) => { state.urut = e.target.value; renderPja(); });
     render();
@@ -131,7 +134,7 @@
     const p = new URLSearchParams({ tab: state.tab, site: state.site });
     if (state.tab === 'grup') p.set('grup', state.grup);
     if (state.tab === 'proses') p.set('proses', state.proses);
-    if (state.tab === 'pja' && state.w) p.set('w', state.w);
+    if (TAB_W.includes(state.tab)) p.set('w', state.w);
     history.replaceState(null, '', '?' + p.toString());
   }
 
@@ -139,15 +142,17 @@
     document.querySelectorAll('.dr-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
     document.querySelector('[data-ctl="grup"]').hidden = state.tab !== 'grup';
     document.querySelectorAll('[data-ctl="pja"]').forEach((e) => { e.hidden = state.tab !== 'pja'; });
+    document.querySelector('[data-ctl="w"]').hidden = !TAB_W.includes(state.tab);
     document.querySelector('[data-ctl="proses"]').hidden = state.tab !== 'proses';
-    $('#dr-panel-cakupan').hidden = state.tab === 'pja';
+    $('#dr-panel-cakupan').hidden = TAB_W.includes(state.tab);
     $('#dr-panel-pja').hidden = state.tab !== 'pja';
-    $('#dr-ringkas').hidden = state.tab === 'pja';
+    $('#dr-panel-periode').hidden = state.tab !== 'periode';
+    $('#dr-ringkas').hidden = TAB_W.includes(state.tab);
     const kunci = state.tab === 'grup' ? `GRUP|${state.grup}|${state.site}`
       : state.tab === 'proses' ? `PROSES|${state.proses}|${state.site}` : `SITE|${state.site}`;
     const c = M.cakupan[kunci] || { kpi: { total: 0, final: {} }, tren: {}, mAwal: kosong(), mFinal: kosong() };
     $('#dr-kpis').innerHTML = DR.kpiCards(c.kpi);
-    if (state.tab === 'pja') { renderPja(); simpanUrl(); return; }
+    if (TAB_W.includes(state.tab)) { renderW(); simpanUrl(); return; }
     const akhir = M.sampai.split('-').reverse().join('/');
     $('#dr-matriks').innerHTML = DR.matriks('Baseline (BeHIRA, risiko awal)', c.mAwal, M) + DR.matriks(`Final (per ${akhir})`, c.mFinal, M);
     $('#dr-tren').innerHTML = DR.tren(c.tren);
@@ -204,6 +209,123 @@
   const PRI = { T: ['Tinggi', 'var(--red)'], S: ['Sedang', '#C28F12'], R: ['Rendah', '#1F9A3A'], K: ['Volume kecil', '#8A939C'] };
   const TEMUAN_MIN = 20;
   const pctI = (a, b) => (b ? DR.pct(a, b) : '–');
+
+  // Snapshot dari kode lama: ringkasan PJA belum satuan ketat (tanpa kolom "tot") atau tanpa statistik temuan.
+  const formatBaru = () => M.beranda && M.beranda.mgmt && (M.beranda.kolomMgmt || []).includes('tot') && M.pja.every((p) => Array.isArray(p.tm));
+  const pesanLama = () => '<div class="pr-card"><div class="pr-empty">Snapshot masih format lama (dihitung ' + DR.esc(String(M.dibuat || '').slice(0, 16).replace('T', ' ')) + '). Jalankan ulang <code>php artisan peta-risiko:sync</code> agar tab ini terisi.</div></div>';
+  const wKode = (i) => DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).kode;
+  const wBerjalan = (i) => i === 0 && !DR.penuh0(M.beranda.minggu[0], M.sampai);
+  function renderW() { if (state.tab === 'periode') renderPeriode(); else renderPja(); }
+
+  // ------------------------------------------------------------ Identifikasi per periode (satuan ketat per minggu)
+  const KOSONG = { t: 0, full: 0, part: 0, gapo: 0, none: 0, g2: 0, g3: 0, g4: 0 };
+
+  /** Komposisi satu PJA pada minggu w (Significant + High). */
+  function vekPja(p, w) {
+    const K = M.beranda.kolomMgmt, ix = Object.fromEntries(K.map((k, i) => [k, i])), c = Array(K.length).fill(0);
+    LV_PJA.forEach((lv) => (((p.w || [])[w] || {})[lv] || []).forEach((v, i) => { c[i] += v; }));
+    return { t: c[ix.tot], full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop] };
+  }
+  const tambahVek = (a, b) => Object.fromEntries(Object.keys(KOSONG).map((k) => [k, a[k] + b[k]]));
+  const sumVek = (L, w) => L.reduce((a, p) => tambahVek(a, vekPja(p, w)), KOSONG);
+  const gapTxt = (v) => `belum closed ${DR.fmt(v.g2)}, berulang ${DR.fmt(v.g3)}, OAK Stop ${DR.fmt(v.g4)}`;
+
+  /** Perubahan proporsi a/ta terhadap minggu lalu b/tb, dalam poin persen. */
+  function delta(a, ta, b, tb, naikBaik) {
+    if (!ta || !tb) return '';
+    const d = 100 * (a / ta - b / tb);
+    if (Math.abs(d) < 0.05) return '<span class="dr-mute">tetap</span>';
+    const baik = naikBaik ? d > 0 : d < 0;
+    return `<span style="color:${baik ? 'var(--green-d)' : 'var(--red)'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d).toLocaleString('id-ID', { maximumFractionDigits: 1 })} poin</span>`;
+  }
+
+  function renderPeriode() {
+    const panel = $('#dr-panel-periode');
+    if (!formatBaru()) { panel.innerHTML = pesanLama(); return; }
+    const P = M.beranda.mgmt.filter((p) => state.site === 'ALL' || p.site === state.site), NW = M.beranda.minggu.length, w = state.w;
+    const V = sumVek(P, w), V0 = w + 1 < NW ? sumVek(P, w + 1) : null, W = DR.BW, wk = wKode(w);
+    const kartu = (ac, kc, judul, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${judul}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
+    const lingkup = state.site === 'ALL' ? 'BC' : DR.esc(state.site);
+    panel.innerHTML = `<div class="br-kpis">
+        ${kartu(W.ok, 'var(--green-d)', `Terkontrol penuh · ${lingkup} · ${wk}`, 'full', true)}
+        ${kartu(W.part, '#9A7300', 'Terkontrol sebagian', 'part', false)}
+        ${kartu(W.bm, W.bm, 'Hanya laporan bermasalah', 'gapo', false)}
+        ${kartu(W.none, W.bm, 'Tanpa laporan', 'none', false)}
+      </div>
+      <div class="pr-card"><div class="br-rhead"><b class="t">Komposisi per minggu · ${lingkup}</b><span class="br-sum"><span>${DR.fmt(V.t)} baris</span><span>${gapTxt(V)}</span></span></div>
+        <div class="pr-card-body">${trenPeriode(P)}<div class="dr-legend">${[[W.ok, 'Terkontrol penuh'], [W.part, 'Sebagian'], [W.bm, 'Hanya bermasalah'], [W.none, 'Tanpa laporan']].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div></div></div>
+      ${tabelSitePeriode(w)}${tabelKelPeriode(P, w)}${tabelPjaPeriode(P, w)}
+      <p class="dr-mute" style="margin-top:8px">Baris site/BC = jumlah baris tingkat PJA (satu detail lokasi bisa dimiliki 2 PJA), bukan baris unik. Terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>`;
+    panel.querySelectorAll('.br-wc').forEach((c) => c.addEventListener('click', () => { state.w = +c.dataset.w; $('#dr-w').value = state.w; renderPeriode(); simpanUrl(); }));
+    panel.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => {
+      state.site = state.site === tr.dataset.site ? 'ALL' : tr.dataset.site; $('#dr-site').value = state.site; render();
+    }));
+    panel.querySelectorAll('tr.br-a[data-pid]').forEach((tr) => tr.addEventListener('click', () => { state.pbuka[tr.dataset.pid] = !state.pbuka[tr.dataset.pid]; renderPeriode(); }));
+    panel.querySelectorAll('[data-buka]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
+  }
+
+  function trenPeriode(P) {
+    const W = DR.BW, NW = M.beranda.minggu.length, col = [];
+    for (let i = NW - 1; i >= 0; i--) {
+      const v = sumVek(P, i), n = Math.max(1, v.t), H = (x) => (100 * x / n).toFixed(1) + '%';
+      col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label)}: penuh ${DR.fmt(v.full)}, sebagian ${DR.fmt(v.part)}, hanya bermasalah ${DR.fmt(v.gapo)}, tanpa laporan ${DR.fmt(v.none)}">
+        <div class="stk"><i style="height:${H(v.none)};background:${W.none}"></i><i style="height:${H(v.gapo)};background:${W.bm}"></i><i style="height:${H(v.part)};background:${W.part}"></i><i style="height:${H(v.full)};background:${W.ok}"></i></div>
+        <span>${wKode(i)}${wBerjalan(i) ? '*' : ''}</span><span>${pctI(v.full, v.t)}</span></div>`);
+    }
+    return `<div class="br-wb">${col.join('')}</div>${wBerjalan(0) ? '<div class="dr-mute" style="font-size:12px">* minggu berjalan, belum penuh</div>' : ''}`;
+  }
+
+  function barisVek(v, v0) {
+    return `<td>${DR.sb4(v.full, v.part, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td><td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
+      <td class="r">${pctI(v.part, v.t)}</td><td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td>`;
+  }
+  const KEPALA_VEK = '<th style="min-width:200px">Komposisi</th><th class="r">Baris</th><th class="r">Terkontrol penuh</th><th class="r">Sebagian</th><th class="r">Hanya bermasalah</th><th class="r">Tanpa laporan</th>';
+
+  function tabelSitePeriode(w) {
+    const NW = M.beranda.minggu.length, semua = M.beranda.mgmt;
+    const baris = [...M.sites.map((s) => [s, semua.filter((p) => p.site === s)]), ['BC', semua]].map(([s, L]) => {
+      const v = sumVek(L, w);
+      if (!v.t) return '';
+      const atr = s === 'BC' ? ' style="font-weight:700;background:#F5F8FD"' : ` data-site="${DR.esc(s)}" class="br-a${state.site === s ? ' open' : ''}" style="cursor:pointer"`;
+      return `<tr${atr}><td>${DR.esc(s)}</td><td class="r">${L.filter((p) => vekPja(p, w).t).length}</td>
+        ${barisVek(v, w + 1 < NW ? sumVek(L, w + 1) : null)}<td class="dr-mute">${gapTxt(v)}</td></tr>`;
+    }).join('');
+    return `<div class="pr-card"><div class="pr-card-head"><div><b>Site dan BC · ${wKode(w)}</b><small>Klik site untuk memfilter</small></div></div>
+      <div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Site</th><th class="r">PJA</th>${KEPALA_VEK}<th>Laporan bermasalah</th></tr></thead><tbody>${baris}</tbody></table></div></div>`;
+  }
+
+  function tabelKelPeriode(P, w) {
+    const kelNama = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]), kel = {};
+    const isi = (obj, f) => LV_PJA.forEach((lv) => Object.entries((obj || {})[lv] || {}).forEach(([k, v]) => f(kel[k] ||= { t: 0, g: 0, g0: 0 }, v)));
+    P.forEach((p) => {
+      isi(p.kelTot, (x, v) => { x.t += v; });
+      isi((p.kelGap || [])[w], (x, v) => { x.g += v; });
+      isi((p.kelGap || [])[w + 1], (x, v) => { x.g0 += v; });
+    });
+    const adaLalu = M.beranda.minggu.length > w + 1;
+    const L = Object.entries(kel).filter(([, x]) => x.t).sort((a, b) => b[1].g / b[1].t - a[1].g / a[1].t || b[1].t - a[1].t);
+    const baris = L.map(([k, x]) => `<tr><td>${DR.esc(kelNama[k] || k)}</td><td><div class="br-sb"><i style="width:${(100 * (x.t - x.g) / x.t).toFixed(1)}%;background:${DR.BW.ok}"></i><i style="width:${(100 * x.g / x.t).toFixed(1)}%;background:${DR.BW.bm}"></i></div></td>
+      <td class="r">${DR.fmt(x.t)}</td><td class="r"><b>${pctI(x.t - x.g, x.t)}</b>${adaLalu ? '<br>' + delta(x.t - x.g, x.t, x.t - x.g0, x.t, true) : ''}</td><td class="r">${DR.fmt(x.g)}</td></tr>`).join('');
+    return `<div class="pr-card"><div class="pr-card-head"><div><b>Kelompok aktivitas · ${wKode(w)}</b><small>Urut % gap tertinggi</small></div></div>
+      <div class="dr-scroll"><table class="pr-tbl dr-tbl"><thead><tr><th>Kelompok aktivitas</th><th style="min-width:160px">Terkontrol penuh / gap</th><th class="r">Baris</th><th class="r">Terkontrol penuh</th><th class="r">Gap</th></tr></thead>
+      <tbody>${baris || '<tr><td colspan="5" class="pr-empty">Tidak ada baris.</td></tr>'}</tbody></table></div></div>`;
+  }
+
+  function tabelPjaPeriode(P, w) {
+    const NW = M.beranda.minggu.length;
+    const L = P.map((p) => ({ p, v: vekPja(p, w), v0: w + 1 < NW ? vekPja(p, w + 1) : null })).filter((o) => o.v.t)
+      .sort((a, b) => (b.v.t - b.v.full) / b.v.t - (a.v.t - a.v.full) / a.v.t);
+    const baris = L.map(({ p, v, v0 }) => {
+      const id = String(p.id), buka = !!state.pbuka[id];
+      const utama = `<tr class="br-a${buka ? ' open' : ''}" data-pid="${DR.esc(id)}" style="cursor:pointer"><td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Buka tren PJA">▸</button><b>${DR.esc(p.nama)}</b><br><span class="dr-mute" style="padding-left:24px">${DR.esc(p.site)}</span></td>${barisVek(v, v0)}</tr>`;
+      if (!buka) return utama;
+      return utama + `<tr class="br-sub br-buka"><td colspan="7" style="padding:12px 16px 16px 26px">${trenPeriode([p])}
+        <div class="dr-mute" style="margin:8px 0">${gapTxt(v)}</div><a class="pr-back" data-buka href="${URL_PJA.replace('__ID__', id)}?w=${w}">Buka di Beranda PJA ›</a></td></tr>`;
+    }).join('');
+    return `<div class="pr-card"><div class="pr-card-head"><div><b>PJA · ${wKode(w)}</b><small>${L.length} PJA · urut % tidak terkontrol penuh · klik baris untuk tren</small></div></div>
+      <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:900px"><thead><tr><th style="min-width:260px">PJA</th>${KEPALA_VEK}</tr></thead>
+      <tbody>${baris || '<tr><td colspan="7" class="pr-empty">Tidak ada PJA.</td></tr>'}</tbody></table></div></div>`;
+  }
 
   /** Satu baris per PJA untuk minggu terpilih (risiko awal Significant + High), digabung dengan temuan open. */
   function dataPja() {
@@ -267,9 +389,7 @@
 
   function renderPja() {
     const panel = $('#dr-panel-pja');
-    // Snapshot dari kode lama: ringkasan PJA belum satuan ketat (tanpa kolom "tot") atau tanpa statistik temuan.
-    const formatBaru = M.beranda && M.beranda.mgmt && (M.beranda.kolomMgmt || []).includes('tot') && M.pja.every((p) => Array.isArray(p.tm));
-    if (!formatBaru) { panel.innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot masih format lama (dihitung ' + DR.esc(String(M.dibuat || '').slice(0, 16).replace('T', ' ')) + '). Jalankan ulang <code>php artisan peta-risiko:sync</code> agar tab ini terisi.</div></div>'; return; }
+    if (!formatBaru()) { panel.innerHTML = pesanLama(); return; }
     const semua = dataPja();
     const diSite = semua.filter((o) => state.site === 'ALL' || o.site === state.site);
     const tampil = diSite.filter((o) => (state.pri === 'all' || o.pri === state.pri) && (!state.cari || o.nama.toLowerCase().includes(state.cari)));
@@ -278,7 +398,7 @@
       none: (a, b) => b.nr - a.nr, lewat: (a, b) => b.lewat - a.lewat, nama: (a, b) => a.nama.localeCompare(b.nama),
     }[state.urut];
     tampil.sort(urut);
-    const B = jumlah(diSite), G = B.t - B.full, W = DR.BW, wk = DR.minggu(M.beranda.minggu[state.w], M.sampai, state.w).kode;
+    const B = jumlah(diSite), G = B.t - B.full, W = DR.BW, wk = wKode(state.w);
     const kpi = (ac, kc, judul, angka, isi) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
 
     panel.innerHTML = `<div class="br-kpis">

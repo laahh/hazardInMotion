@@ -19,7 +19,7 @@ class DrmBerandaTest extends TestCase
         // OAK stop di kelompok membuat semua baris kelompok bermasalah walau ada deteksi.
         $this->assertSame(['bm', DrmBeranda::OAK_STOP], DrmBeranda::status(DrmBeranda::DETEKSI | DrmBeranda::OAK_STOP, 0));
         $this->assertSame(['bm', DrmBeranda::BELUM_CLOSED | DrmBeranda::BERULANG], DrmBeranda::status(DrmBeranda::DETEKSI, 2 | 4 | 8));
-        $this->assertSame(['bm', DrmBeranda::TIDAK_SESUAI], DrmBeranda::status(0, 2 | 32));
+        $this->assertSame(['ok', 0], DrmBeranda::status(0, 2 | 32));
         // Bit insiden (harian) bukan masalah dan bukan deteksi.
         $this->assertSame(['none', 0], DrmBeranda::status(0, DrmBeranda::INSIDEN));
     }
@@ -107,7 +107,8 @@ class DrmBerandaTest extends TestCase
 
         $spe = $sql->berandaSpesifik();
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
-        $this->assertStringContainsString('8 * (nw >= 3)', $spe);
+        $this->assertStringContainsString('max(toUInt8(l.nl >= 3)) AS ul', $spe);
+        $this->assertStringContainsString('max(toUInt8(e.cd IS NULL)) AS op', $spe);
         $this->assertStringContainsString('parseDateTimeBestEffortUSOrNull', $spe);
 
         $inc = $sql->berandaInsiden();
