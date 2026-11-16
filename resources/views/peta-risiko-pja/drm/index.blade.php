@@ -83,7 +83,7 @@
 
     <div class="pr-card" id="dr-card-mx">
       <div class="pr-card-head"><div><b>Matriks 5x5 — baris satuan ketat</b> <span id="dr-mx-filter"></span>
-        <small>Satu baris = kelompok aktivitas × bahaya-risiko per PJA (dijumlah antar PJA). Final: terkontrol penuh memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
+        <small>Satu baris = kelompok aktivitas × bahaya-risiko unik di cakupan ini. Final: terkontrol penuh memakai risiko residual HIRA, selain itu tetap risiko awal. Baris tanpa nilai risiko di HIRA tidak masuk matriks.</small></div></div>
       <div class="pr-card-body dr-two" id="dr-matriks"></div>
     </div>
 
@@ -93,12 +93,12 @@
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b id="dr-grup-judul">Per Group Lokasi</b><small id="dr-grup-sub">Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.</small></div></div>
+      <div class="pr-card-head"><div><b id="dr-grup-judul">Per Group Lokasi</b><small id="dr-grup-sub">Satu baris = grup × kelompok aktivitas × bahaya unik; status dari detail lokasi grup itu saja. Satu bahaya bisa berlaku di beberapa grup, jadi jumlah antar grup bisa melebihi baseline. Klik baris untuk melihat grup itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-grup"></table></div>
     </div>
 
     <div class="pr-card">
-      <div class="pr-card-head"><div><b id="dr-kel-judul">Per Kelompok Aktivitas</b><small id="dr-kel-sub">25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat aktivitas HIRA di kelompok itu.</small></div></div>
+      <div class="pr-card-head"><div><b id="dr-kel-judul">Per Kelompok Aktivitas</b><small id="dr-kel-sub">25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA di kelompok itu.</small></div></div>
       <div class="dr-scroll"><table class="pr-tbl dr-tbl" id="dr-tbl-proses"></table></div>
     </div>
   </div>
@@ -107,8 +107,8 @@
   <div id="dr-panel-pja" class="br-root" style="margin-top:20px" hidden></div>
 
   <div class="pr-foot">
-    <p>Baseline dan pemetaan HIRA ↔ SAP mengikuti master mapping DRM 2.1 (M01–M16, unduh lewat "Unduh Excel mapping"). Semua tab memakai satuan ketat yang sama: kelompok aktivitas × bahaya-risiko per PJA, status mingguan (Minggu–Sabtu), bahaya umum dikeluarkan. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
-    <p>Tanpa laporan bukan berarti aman. Angka site/BC = jumlah baris tingkat PJA (satu detail lokasi bisa dimiliki 2 PJA), bukan baris unik.</p>
+    <p>Baseline dan pemetaan HIRA ↔ SAP mengikuti master mapping DRM 2.1 (M01–M16, unduh lewat "Unduh Excel mapping"). Semua tab memakai status mingguan (Minggu–Sabtu), bahaya umum dikeluarkan. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
+    <p>Tanpa laporan bukan berarti aman. Overview, Group Lokasi, dan Kelompok Aktivitas memakai baseline unik (kelompok aktivitas × bahaya, tidak dipetakan ke PJA); Identifikasi per periode dan Semua PJA menjumlahkan baris tingkat PJA (satu detail lokasi bisa dimiliki 2 PJA).</p>
   </div>
 @endif
 @endsection
@@ -186,12 +186,20 @@
   const vekTab = (p, w) => (state.tab === 'grup' ? vekGrup(p, w, state.grup) : state.tab === 'proses' ? vekKel(p, w, state.proses) : vekPja(p, w));
   const jumlahF = (P, f) => P.reduce((a, p) => tambahVek(a, f(p)), KOSONG);
   const pjaDiSite = () => M.beranda.mgmt.filter((p) => state.site === 'ALL' || p.site === state.site);
+  /** Snapshot punya ringkasan baseline unik (kelompok aktivitas × bahaya, tidak dipetakan ke PJA)? */
+  const adaUnik = () => !!(M.beranda.ringkas && M.beranda.ringkas.ALL);
+  /**
+   * Sumber angka tab Overview / Group Lokasi / Kelompok Aktivitas: ringkasan baseline unik cakupan itu
+   * (satu "PJA semu" berisi semua detail lokasi site). Snapshot lama: jumlah baris tingkat PJA.
+   */
+  const cakupanP = () => (adaUnik() ? [M.beranda.ringkas[state.site]].filter(Boolean) : pjaDiSite());
 
   function kartu4(V, V0, judul) {
-    const W = DR.BW;
+    const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
     const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}"><small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
+    const satuan = R ? 'kelompok aktivitas × bahaya-risiko unik (tidak dipetakan ke PJA / detail lokasi)' : 'jumlah baris tingkat PJA';
     return `<div class="br-kpis">
-        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)"><small>Baris baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
+        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}"><small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
         ${kartu(W.ok, 'var(--green-d)', 'Terkontrol penuh', 'full', true)}
         ${kartu(W.part, '#9A7300', 'Terkontrol sebagian', 'part', false)}
         ${kartu(W.bm, W.bm, 'Hanya laporan bermasalah', 'gapo', false)}
@@ -201,12 +209,16 @@
 
   function renderCakupan() {
     if (!formatBaru() || !M.beranda.mgmt.every((p) => p.kel && p.grp)) { $('#dr-kpi4').innerHTML = pesanLama(); return; }
-    const P = pjaDiSite(), w = state.w, NW = M.beranda.minggu.length, wk = wKode(w);
+    const P = cakupanP(), w = state.w, NW = M.beranda.minggu.length, wk = wKode(w);
     const lokasi = state.site === 'ALL' ? 'BC' : DR.esc(state.site);
     const namaKel = (M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses;
     const judul = state.tab === 'grup' ? `${DR.esc(state.grup)} · ${lokasi}` : state.tab === 'proses' ? `${DR.esc(namaKel)} · ${lokasi}` : lokasi;
     const V = jumlahF(P, (p) => vekTab(p, w)), V0 = w + 1 < NW ? jumlahF(P, (p) => vekTab(p, w + 1)) : null;
-    $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`);
+    const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
+    const catatan = R
+      ? `<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Baseline = kelompok aktivitas × bahaya-risiko unik dari master HIRA v31, dihitung sekali walau ada di banyak detail lokasi atau dimiliki beberapa PJA. Status digabung dari ${DR.fmt(R.ndl)} detail lokasi${state.site === 'ALL' ? '' : ' ' + DR.esc(state.site)}: terkontrol penuh bila terkontrol di semua detail lokasinya. Bahaya umum dikeluarkan.${state.site === 'ALL' && R.nBarisMaster ? ` ${DR.fmt(R.nBarisMaster - R.nBarisDl)} dari ${DR.fmt(R.nBarisMaster)} baris master tidak punya detail lokasi mana pun, jadi tidak masuk baseline.` : ''} Tab Identifikasi per periode dan Semua PJA tetap menghitung per PJA, jadi angkanya lebih besar.</p>`
+      : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot lama: angka masih jumlah baris tingkat PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code> untuk baseline unik.</p>';
+    $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`) + catatan;
 
     $('#dr-card-mx').hidden = state.tab !== 'site';
     $('#dr-card-tm').hidden = state.tab !== 'site';
@@ -225,11 +237,11 @@
     $('#dr-grup-judul').textContent = diGrup ? `Detail lokasi · ${state.grup}` : 'Per Group Lokasi';
     $('#dr-grup-sub').textContent = diGrup
       ? 'Detail lokasi di grup ini beserta PJA-nya. Satu baris = kelompok aktivitas × bahaya di detail lokasi itu (terkontrol / hanya bermasalah / tanpa laporan). Klik nama PJA untuk membuka Beranda PJA.'
-      : 'Satu baris = grup × kelompok aktivitas × bahaya per PJA; status dari detail lokasi grup itu saja. Klik baris untuk melihat grup itu.';
+      : 'Satu baris = grup × kelompok aktivitas × bahaya unik; status dari detail lokasi grup itu saja. Satu bahaya bisa berlaku di beberapa grup, jadi jumlah antar grup bisa melebihi baseline. Klik baris untuk melihat grup itu.';
     $('#dr-kel-judul').textContent = diGrup ? `Kelompok aktivitas · ${state.grup}` : 'Per Kelompok Aktivitas';
     $('#dr-kel-sub').textContent = diGrup
       ? 'Kelompok aktivitas yang ada di grup lokasi ini (dari master M05); jumlah barisnya sama dengan baseline grup di kartu atas. Klik baris untuk melihat aktivitas HIRA kelompok itu di grup ini.'
-      : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan total site. Klik baris untuk melihat aktivitas HIRA di kelompok itu.';
+      : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA di kelompok itu.';
     if (diGrup) {
       tabelDetailLokasi(w);
       tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekDari(ambilKunci((p.gk || [])[i], `${state.grup}|${k}`)), 'proses');
@@ -413,11 +425,11 @@
 
   // Treemap dihitung dari lebar wadah: gambar ulang saat ukuran layar berubah.
   let tundaUkur = 0;
-  window.addEventListener('resize', () => { clearTimeout(tundaUkur); tundaUkur = setTimeout(() => { if (M && state.tab === 'site') renderTreemap(pjaDiSite(), state.w); }, 150); });
+  window.addEventListener('resize', () => { clearTimeout(tundaUkur); tundaUkur = setTimeout(() => { if (M && state.tab === 'site') renderTreemap(cakupanP(), state.w); }, 150); });
 
   /** Tabel per grup / per kelompok: komposisi satuan ketat minggu terpilih + perubahan vs minggu lalu. */
   function tabelCakupan(sel, judulKolom, daftar, f, tab) {
-    const P = pjaDiSite(), w = state.w, NW = M.beranda.minggu.length;
+    const P = cakupanP(), w = state.w, NW = M.beranda.minggu.length;
     const baris = daftar.map(([kunci, nama]) => ({ kunci, nama, v: jumlahF(P, (p) => f(p, w, kunci)), v0: w + 1 < NW ? jumlahF(P, (p) => f(p, w + 1, kunci)) : null }))
       .filter((r) => r.v.t).sort((a, b) => b.v.t - a.v.t);
     const aktif = (k) => state.tab === tab && (tab === 'grup' ? state.grup : state.proses) === k;

@@ -150,6 +150,20 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(1, $snap['meta']['pja'][0]['insiden']);
     }
 
+    public function test_ringkasan_baseline_unik_tidak_dipetakan_ke_pja(): void
+    {
+        $r = $this->susun()['meta']['beranda']['ringkas'];
+
+        // Semua detail lokasi (termasuk DL 201 tanpa PJA): bahaya 1, 2, 3, 5 masing-masing dihitung sekali.
+        $this->assertSame(['ALL', 'LMO'], array_keys($r));
+        $this->assertSame(4, $r['ALL']['w'][0]['High'][0]);
+        $this->assertSame(3, $r['ALL']['ndl']);
+        $this->assertSame(5, $r['ALL']['nBarisMaster']);
+        $this->assertSame(4, $r['ALL']['nBarisDl']);
+        // Jumlah per kelompok = baseline.
+        $this->assertSame(4, array_sum(array_map(fn ($v) => $v[0], $r['ALL']['kel'][0]['High'])));
+    }
+
     public function test_proses_bisnis_masuk_meta_cakupan_dan_baris_aktivitas(): void
     {
         $snap = $this->susun();

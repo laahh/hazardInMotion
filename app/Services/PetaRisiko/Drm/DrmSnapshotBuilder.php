@@ -220,6 +220,7 @@ class DrmSnapshotBuilder
 
         return [
             'minggu' => $b->minggu(),
+            'ringkas' => $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx),
             'hari0' => $b->hari0(),
             'hari' => (int) $cfg['beranda']['hari'],
             'ambangUlang' => (int) $cfg['beranda']['ambang_berulang'],
@@ -237,6 +238,47 @@ class DrmSnapshotBuilder
                 return $c;
             }, []),
         ];
+    }
+
+    /**
+     * Ringkasan baseline UNIK per cakupan (ALL + tiap site): satu baris = kelompok aktivitas × bahaya-risiko,
+     * dihitung sekali walau ada di banyak detail lokasi / dimiliki beberapa PJA (tidak dipetakan ke PJA).
+     * Status baris digabung dari semua detail lokasi cakupan (terkontrol penuh bila semuanya terkontrol).
+     * Bentuk datanya sama dengan ringkasan satu PJA (DrmBeranda::ringkasMgmt), sehingga tampilan bisa dipakai ulang.
+     *
+     * @param  array<string, array<string, mixed>>  $dl
+     * @param  array<string, list<string>>  $hidPerDl
+     * @param  array<string, array<string, mixed>>  $hira
+     * @param  array<string, mixed>  $idx
+     * @return array<string, array<string, mixed>>
+     */
+    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx): array
+    {
+        $cakupan = ['ALL' => []];
+        foreach ($dl as $id => $d) {
+            $cakupan['ALL'][] = (string) $id;
+            $cakupan[(string) $d['site']][] = (string) $id;
+        }
+        $buang = array_flip(['dlw', 'kgTot', 'u4', 'kelTot', 'kelGap', 'lama', 'insiden']);
+        $hasil = [];
+        foreach ($cakupan as $kunci => $ids) {
+            $berkas = $b->berkas($ids, $hidPerDl, $hira, $dl, $idx, []);
+            $ada = [];
+            foreach ($ids as $d) {
+                foreach ($hidPerDl[$d] ?? [] as $hid) {
+                    $ada[$hid] = true;
+                }
+            }
+            $hasil[$kunci] = [
+                ...array_diff_key($b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, []), $buang),
+                'ndl' => count($ids),
+                // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
+                'nBarisDl' => count($ada),
+            ];
+        }
+        $hasil['ALL']['nBarisMaster'] = count($hira);
+
+        return $hasil;
     }
 
     // ------------------------------------------------------------ cakupan
