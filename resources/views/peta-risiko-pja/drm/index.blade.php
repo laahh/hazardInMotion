@@ -259,7 +259,7 @@
     const V = jumlahF(P, (p) => vekTab(p, w)), V0 = w + 1 < NW ? jumlahF(P, (p) => vekTab(p, w + 1)) : null;
     const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
     const catatan = R
-      ? `<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Baseline = kelompok aktivitas × bahaya-risiko unik dari master HIRA v31, dihitung sekali walau ada di banyak detail lokasi atau dimiliki beberapa PJA. Status digabung dari ${DR.fmt(R.ndl)} detail lokasi${state.site === 'ALL' ? '' : ' ' + DR.esc(state.site)}: terkontrol penuh bila terkontrol di semua detail lokasinya. Bahaya umum dikeluarkan.${state.site === 'ALL' && R.nBarisMaster ? ` ${DR.fmt(R.nBarisMaster - R.nBarisDl)} dari ${DR.fmt(R.nBarisMaster)} baris master tidak punya detail lokasi mana pun, jadi tidak masuk baseline.` : ''} Tab Identifikasi per periode dan Semua PJA tetap menghitung per PJA, jadi angkanya lebih besar.</p>`
+      ? '' // keterangan satuan baseline dihapus atas permintaan user
       : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot lama: angka masih jumlah baris tingkat PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code> untuk baseline unik.</p>';
     $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`) + catatan;
 
