@@ -17,6 +17,7 @@ Route::prefix('peta-risiko-pja')
             Route::get('/', 'index')->name('index');
             Route::get('/data/meta', 'meta')->name('meta');
             Route::get('/unduh/mapping', 'unduhMapping')->name('unduh.mapping');
+            Route::get('/prototipe', 'prototipe')->name('prototipe');
             Route::get('/pja/{pja}', 'pja')->where('pja', '[0-9]+')->name('pja');
             Route::get('/pja/{pja}/data', 'pjaData')->where('pja', '[0-9]+')->name('pja.data');
             Route::get('/dl/{dl}/sap', 'sapDetailLokasi')->where('dl', '[0-9]+')->middleware('throttle:60,1')->name('dl.sap');

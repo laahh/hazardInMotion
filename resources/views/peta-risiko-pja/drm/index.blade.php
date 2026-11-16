@@ -55,6 +55,7 @@
         {{-- Tab "Identifikasi per periode" disembunyikan sementara (permintaan user); kodenya tetap ada. --}}
         <button type="button" role="tab" data-tab="periode" aria-selected="false" hidden>Identifikasi per periode</button>
         <button type="button" role="tab" data-tab="pja" aria-selected="false">Semua PJA</button>
+        <button type="button" role="tab" data-tab="bpja" aria-selected="false">Beranda PJA</button>
       </nav>
     </div>
     <div class="dr-bar">
@@ -106,6 +107,16 @@
 
   <div id="dr-panel-periode" class="br-root" style="margin-top:20px" hidden></div>
   <div id="dr-panel-pja" class="br-root" style="margin-top:20px" hidden></div>
+
+  {{-- Tab Beranda PJA: prototipe DRM 2.1 (HTML statis, data sendiri per 14 Nov 2026), dimuat saat tab pertama dibuka. --}}
+  <div id="dr-panel-bpja" style="margin-top:20px" hidden>
+    <div class="pr-card">
+      <div class="pr-card-head"><div><b>Beranda PJA — prototipe DRM 2.1</b>
+        <small>Prototipe "Platform PJA Command Center" dengan data bawaannya sendiri (sampai 14 Nov 2026, W46), belum terhubung ke hasil sync halaman ini. <a href="{{ route('peta-risiko-pja.prototipe') }}#bpja" target="_blank" rel="noopener">Buka di tab baru ↗</a></small></div></div>
+      <iframe id="dr-bpja-frame" title="Beranda PJA — prototipe DRM 2.1" data-src="{{ route('peta-risiko-pja.prototipe') }}#bpja"
+        style="display:block;width:100%;height:85vh;min-height:600px;border:0;border-top:1px solid #E5E9F0;border-radius:0 0 12px 12px;background:#fff" loading="lazy"></iframe>
+    </div>
+  </div>
 
   <div class="pr-foot">
     <p>Baseline dan pemetaan HIRA ↔ SAP mengikuti master mapping DRM 2.1 (M01–M16, unduh lewat "Unduh Excel mapping"). Semua tab memakai status mingguan (Minggu–Sabtu), bahaya umum dikeluarkan. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
@@ -186,7 +197,14 @@
     $('#dr-panel-pja').hidden = state.tab !== 'pja';
     $('#dr-panel-periode').hidden = state.tab !== 'periode';
     $('#dr-ringkas').hidden = true;
-    if (TAB_W.includes(state.tab)) renderW(); else renderCakupan();
+    const bpja = state.tab === 'bpja';
+    $('#dr-panel-bpja').hidden = !bpja;
+    $('.dr-bar').hidden = bpja; // filter site/periode/risiko tidak berlaku untuk prototipe
+    if (bpja) {
+      $('#dr-panel-cakupan').hidden = true;
+      const fr = $('#dr-bpja-frame');
+      if (!fr.getAttribute('src')) fr.setAttribute('src', fr.dataset.src);
+    } else if (TAB_W.includes(state.tab)) renderW(); else renderCakupan();
     simpanUrl();
   }
 

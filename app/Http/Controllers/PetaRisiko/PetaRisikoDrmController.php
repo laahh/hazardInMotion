@@ -83,6 +83,23 @@ class PetaRisikoDrmController extends Controller
         }
     }
 
+    /**
+     * Prototipe "DRM 2.1 - Platform PJA Command Center" (HTML statis berisi data sendiri, per 14 Nov 2026),
+     * ditampilkan di tab Beranda PJA lewat iframe. Disajikan dari repo lewat route ber-login (bukan public/)
+     * karena berisi data internal PJA.
+     */
+    public function prototipe(): BinaryFileResponse
+    {
+        $path = base_path('database/data/peta-risiko/prototipe-pja-command-center.html');
+        abort_unless(is_file($path), 404, 'File prototipe belum ada di server.');
+
+        return response()->file($path, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+            'X-Frame-Options' => 'SAMEORIGIN',
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
+    }
+
     /** Ringkasan semua cakupan (Site / Group Lokasi / PJA) untuk halaman indeks. */
     public function meta(Request $request): JsonResponse
     {
