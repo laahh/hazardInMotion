@@ -38,12 +38,29 @@ class PetaRisikoMasterController extends Controller
 
         $query = DB::table($skema['tabel']);
         if ($data['q'] !== '') {
-            $query->where(function ($w) use ($skema, $data) {
-                foreach ($skema['cari'] as $kolom) {
-                    $w->orWhere($kolom, 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $data['q']).'%');
+            // Cari di semua kolom teks + kolom cari; angka murni juga dicocokkan persis ke kolom angka (ID).
+            $pola = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $data['q']).'%';
+            $kolomTeks = array_keys(array_filter($skema['kolom'], fn ($k) => in_array($k[1], ['teks', 'teks_panjang'], true)));
+            $query->where(function ($w) use ($skema, $data, $pola, $kolomTeks) {
+                foreach (array_unique([...$skema['cari'], ...$kolomTeks]) as $kolom) {
+                    $w->orWhere($kolom, 'like', $pola);
+                }
+                if (ctype_digit($data['q'])) {
+                    foreach ($skema['kolom'] as $kolom => [, $tipe]) {
+                        if ($tipe === 'int' || ($tipe === 'pilih' && $kolom !== 'kelompok')) {
+                            $w->orWhere($kolom, (int) $data['q']);
+                        }
+                    }
                 }
             });
         }
+        // Filter dropdown per kolom (bool / pilihan): f[kolom]=nilai.
+        $filter = array_intersect_key(array_filter((array) $request->query('f', []), fn ($v) => $v !== null && $v !== ''), $this->kolomFilter($skema));
+        foreach ($filter as $kolom => $v) {
+            $query->where($kolom, $skema['kolom'][$kolom][1] === 'bool' ? (int) (bool) $v : $v);
+        }
+        $data['filter'] = $filter;
+        $data['kolomFilter'] = $this->kolomFilter($skema);
         $baris = $query->orderBy($skema['urut'])->orderBy($skema['kunci'])->paginate(self::PER_HALAMAN)->withQueryString();
 
         $ubah = null;
@@ -166,6 +183,17 @@ class PetaRisikoMasterController extends Controller
             'log' => DB::table('drm_master_log')->orderByDesc('id')->paginate(50),
             'semua' => DrmMasterSkema::semua(),
         ]);
+    }
+
+    /**
+     * Kolom yang bisa difilter lewat dropdown: bool dan pilihan.
+     *
+     * @param  array<string, mixed>  $skema
+     * @return array<string, array<int, mixed>>
+     */
+    private function kolomFilter(array $skema): array
+    {
+        return array_filter($skema['kolom'], fn ($k) => in_array($k[1], ['bool', 'pilih'], true));
     }
 
     /** @return array<string, array<string, string>> */

@@ -31,8 +31,13 @@
   .mm-tab small { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #3952bc; }
   .mm-tab b { font-size: 13.5px; font-weight: 700; }
   .mm-tab span { font-size: 12px; color: #595c5e; }
-  .mm-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid rgba(171, 173, 175, .2); }
-  .mm-cari { display: flex; gap: 8px; align-items: center; flex: 1; max-width: 520px; }
+  .mm-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-start; padding: 14px 24px; border-bottom: 1px solid rgba(171, 173, 175, .2); }
+  .mm-cari { display: flex; gap: 8px; align-items: center; flex: 1 1 320px; max-width: 460px; }
+  .mm-filter { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 999px; background: #f8fafc; border: 1px solid rgba(171, 173, 175, .4);
+    font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #595c5e; }
+  .mm-filter.on { background: #eef1fd; border-color: #3952bc; color: #3952bc; }
+  .mm-filter select { border: 0; background: transparent; font-size: 13px; font-weight: 600; color: #2c2f31; text-transform: none; letter-spacing: 0; padding: 5px 6px; max-width: 220px; }
+  .mm-hasil { font-size: 12.5px; font-weight: 600; color: #595c5e; }
   .mm-cari input { flex: 1; padding: 9px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #f8fafc; font-size: 13.5px; }
   .mm-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; border: 0; background: #3952bc; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
   .mm-btn:hover { background: #2b45af; }
@@ -110,21 +115,57 @@
 
   <div class="pr-card">
     <div class="pr-card-head"><div><b>{{ $skema['sheet'] }} · {{ $skema['judul'] }}</b><small>{{ $skema['catatan'] }}</small></div></div>
-    <div class="mm-bar">
-      <form class="mm-cari" method="get" action="{{ route('peta-risiko-pja.master.index') }}">
-        <input type="hidden" name="t" value="{{ $kode }}">
-        <input type="search" name="q" value="{{ $q }}" placeholder="Cari {{ implode(', ', array_map(fn ($c) => mb_strtolower($skema['kolom'][$c][0] ?? $c), $skema['cari'])) }}…" aria-label="Cari">
-        <button class="mm-btn sek" type="submit"><span class="material-symbols-outlined" style="font-size:18px">search</span> Cari</button>
-      </form>
-      @if ($bolehUbah)
-        <a class="mm-btn" href="{{ route('peta-risiko-pja.master.index', ['t' => $kode, 'q' => $q, 'tambah' => 1]) }}"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah</a>
+    @php
+      // URL daftar dengan pencarian + filter saat ini (dipakai tombol Tambah/Ubah/tutup modal/hapus).
+      $dasar = array_filter(['t' => $kode, 'q' => $q, 'f' => $filter ?: null, 'page' => request('page')], fn ($v) => $v !== null && $v !== '');
+      $urlDaftar = fn (array $tambahan = []) => route('peta-risiko-pja.master.index', array_merge($dasar, $tambahan));
+    @endphp
+    <form class="mm-bar" method="get" action="{{ route('peta-risiko-pja.master.index') }}" id="mm-cari-form">
+      <input type="hidden" name="t" value="{{ $kode }}">
+      <div class="mm-cari">
+        <span class="mm-cari-in" style="flex:1"><span class="material-symbols-outlined" style="left:12px;right:auto">search</span>
+          <input type="search" name="q" value="{{ $q }}" id="mm-q" style="padding-left:40px" autocomplete="off"
+            placeholder="Cari di semua kolom teks{{ collect($skema['kolom'])->contains(fn ($k) => $k[1] === 'int') ? ' atau ketik ID' : '' }}…" aria-label="Cari">
+        </span>
+      </div>
+      @foreach ($kolomFilter as $kolom => [$label, $tipe, $aturan, $opsi])
+        @php $daftar = $tipe === 'bool' ? ['1' => 'Ya', '0' => 'Tidak'] : (is_array($opsi['pilihan']) ? array_combine($opsi['pilihan'], $opsi['pilihan']) : ($pilihan[$opsi['pilihan']] ?? [])); @endphp
+        <label class="mm-filter{{ isset($filter[$kolom]) ? ' on' : '' }}">{{ $label }}
+          <select name="f[{{ $kolom }}]" data-auto>
+            <option value="">Semua</option>
+            @foreach ($daftar as $v => $teks)
+              <option value="{{ $v }}" @selected(isset($filter[$kolom]) && (string) $filter[$kolom] === (string) $v)>{{ $teks }}</option>
+            @endforeach
+          </select>
+        </label>
+      @endforeach
+      <span class="mm-hasil">{{ number_format($baris->total(), 0, ',', '.') }} hasil</span>
+      @if ($q !== '' || $filter)
+        <a class="mm-btn sek" href="{{ route('peta-risiko-pja.master.index', ['t' => $kode]) }}"><span class="material-symbols-outlined" style="font-size:18px">filter_alt_off</span> Reset</a>
       @endif
-    </div>
+      <noscript><button class="mm-btn sek" type="submit">Cari</button></noscript>
+      @if ($bolehUbah)
+        <a class="mm-btn" style="margin-left:auto" href="{{ $urlDaftar(['tambah' => 1, 'page' => null]) }}"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah</a>
+      @endif
+    </form>
+    <script>
+      (() => {
+        // Cari otomatis saat mengetik (jeda 450 ms) dan saat filter dipilih; kembali ke halaman 1.
+        const f = document.getElementById('mm-cari-form'), q = document.getElementById('mm-q');
+        let t = 0;
+        const kirim = () => f.submit();
+        q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(kirim, 450); });
+        q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(t); kirim(); } });
+        f.querySelectorAll('[data-auto]').forEach((s) => s.addEventListener('change', kirim));
+        // Kursor kembali ke akhir teks cari setelah halaman dimuat ulang.
+        if (q.value) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+      })();
+    </script>
 
     @if ($bolehUbah && ($tambah || $ubah))
       @php
         $kunci = $skema['kunci'];
-        $urlTutup = route('peta-risiko-pja.master.index', array_filter(['t' => $kode, 'q' => $q, 'page' => request('page')]));
+        $urlTutup = $urlDaftar();
         $teksRiPeta = collect($saran['ri'] ?? [])->mapWithKeys(fn ($r) => [$r[0] => $r[1]])->all();
       @endphp
       <dialog class="mm-modal" id="mm-modal" data-tutup="{{ $urlTutup }}" aria-labelledby="mm-modal-judul">
@@ -251,7 +292,7 @@
               @endforeach
               @if ($bolehUbah)
                 <td class="r" style="white-space:nowrap">
-                  <a class="mm-btn sek" style="padding:6px 12px" href="{{ route('peta-risiko-pja.master.index', ['t' => $kode, 'q' => $q, 'ubah' => $r->{$skema['kunci']}, 'page' => $baris->currentPage()]) }}">Ubah</a>
+                  <a class="mm-btn sek" style="padding:6px 12px" href="{{ $urlDaftar(['ubah' => $r->{$skema['kunci']}, 'page' => $baris->currentPage()]) }}">Ubah</a>
                   <form method="post" action="{{ route('peta-risiko-pja.master.hapus', ['tabel' => $kode, 'id' => $r->{$skema['kunci']}]) }}" style="display:inline" onsubmit="return confirm('Hapus baris ini dari master? Berlaku setelah sync berikutnya.')">
                     @csrf<input type="hidden" name="_q" value="{{ $q }}">
                     <button class="mm-btn bahaya" type="submit">Hapus</button>
