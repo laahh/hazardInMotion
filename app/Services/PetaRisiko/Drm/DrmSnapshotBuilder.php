@@ -305,15 +305,14 @@ class DrmSnapshotBuilder
         $hasil = [];
         foreach ($hira as $hid => $h) {
             $s = $st[$hid] ?? [];
-            // Baseline hanya bahaya yang terpetakan ke SAP. Di luar baseline: X = tidak punya pasangan
-            // SAP (Master A/B/D), '-' = terpetakan tetapi tidak masuk detail lokasi mana pun.
-            $terpetakan = (int) ($h['di_a'] ?? 0) === 1 || (int) ($h['di_b'] ?? 0) === 1 || (int) ($h['di_d'] ?? 0) === 1;
+            // Baseline HIRA: semua bahaya yang masuk detail lokasi. X = di baseline tetapi tidak punya
+            // pasangan SAP (Master A/B/D) sehingga selalu tanpa laporan; '-' = tidak ada detail lokasi.
             $status = match (true) {
-                ! $terpetakan => DrmSql::STATUS_TIDAK_TERPETAKAN,
+                ($s['dl_n'] ?? 0) === 0 => '-',
                 ($s['g'] ?? 0) > 0 => DrmSql::STATUS_GAP,
                 ($s['k'] ?? 0) > 0 => DrmSql::STATUS_TERKONTROL,
                 ($s['t'] ?? 0) > 0 => DrmSql::STATUS_TIDAK,
-                default => '-',
+                default => DrmSql::STATUS_TIDAK_TERPETAKAN,
             };
             $m = $map[$hid] ?? [];
             $i = $inc[$hid] ?? [];
@@ -323,7 +322,7 @@ class DrmSnapshotBuilder
                 'proses' => $namaProses[$h['proses'] ?? 'X'] ?? (string) ($h['proses'] ?? ''), 'faktor' => $h['faktor'],
                 'n1' => $h['n1'], 'k1' => $h['k1'], 'c1' => $h['c1'], 'n2' => $h['n2'], 'k2' => $h['k2'], 'c2' => $h['c2'],
                 'kontrol' => $h['kt'], 'status' => $status,
-                'final' => $status === DrmSql::STATUS_TERKONTROL ? $h['n2'] : (in_array($status, ['G', 'T'], true) ? $h['n1'] : ''),
+                'final' => $status === DrmSql::STATUS_TERKONTROL ? $h['n2'] : (in_array($status, ['G', 'T', 'X'], true) ? $h['n1'] : ''),
                 'dl_n' => $s['dl_n'] ?? 0, 'dl_k' => $s['k'] ?? 0, 'dl_g' => $s['g'] ?? 0, 'dl_t' => $s['t'] ?? 0, 'dl_x' => $s['x'] ?? 0,
                 'dl_open' => $s['dl_open'] ?? 0, 'dl_ulang' => $s['dl_ulang'] ?? 0, 'dl_stop' => $s['dl_stop'] ?? 0,
                 'temuan_open' => $s['temuan_open'] ?? 0, 'temuan_jendela' => $s['temuan_jendela'] ?? 0, 'terakhir' => $s['terakhir'] ?? '',

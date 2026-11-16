@@ -17,7 +17,7 @@ class DrmMappingEkspor
         'G' => '! Teridentifikasi – ada gap',
         'K' => '✓ Teridentifikasi & terkontrol',
         'T' => '○ Tidak teridentifikasi (open risk)',
-        'X' => '× Di luar baseline: tidak terpetakan ke SAP',
+        'X' => '? Baseline, tidak terpetakan ke SAP (tanpa laporan)',
         '-' => '× Di luar baseline: tidak ada detail lokasi',
     ];
 
@@ -110,16 +110,16 @@ class DrmMappingEkspor
     {
         $n = array_count_values(array_column($baris, 'status'));
         $laten = count(array_filter($baris, fn ($r) => $r['laten']));
-        $baseline = ($n['K'] ?? 0) + ($n['G'] ?? 0) + ($n['T'] ?? 0);
+        $baseline = ($n['K'] ?? 0) + ($n['G'] ?? 0) + ($n['T'] ?? 0) + ($n['X'] ?? 0);
 
         return [
             ['Total bahaya-risiko HIRA aktif', count($baris), 'Unik per aktivitas – sub aktivitas – bahaya.'],
-            ['BASELINE (terpetakan ke SAP + punya detail lokasi)', $baseline, 'Angka "Total bahaya-risiko unik (baseline)" di dashboard (Semua site). Hanya bahaya yang bisa diidentifikasi lewat SAP.'],
+            ['BASELINE HIRA (punya detail lokasi)', $baseline, 'Angka "Total bahaya-risiko unik (baseline HIRA)" di dashboard (Semua site). Termasuk bahaya yang tidak terpetakan ke SAP.'],
             [self::STATUS['K'], $n['K'] ?? 0, 'Ada sinyal SAP dalam jendela pada butir yang cocok dan tidak ada gap.'],
             [self::STATUS['G'], $n['G'] ?? 0, 'Temuan Hazard/Inspeksi masih open, berulang, OAK stop pekerjaan, atau butir checklist OAK tidak sesuai — di salah satu detail lokasi.'],
             [self::STATUS['T'], $n['T'] ?? 0, 'Terpetakan ke SAP tapi tidak ada laporan dalam jendela.'],
-            [self::STATUS['X'], $n['X'] ?? 0, 'Tidak punya pasangan label SAP (Master A), Observasi/OAK (Master B), maupun butir checklist OAK (Master D). Tidak dipaksakan, tidak dihitung di baseline.'],
-            [self::STATUS['-'], $n['-'] ?? 0, 'Terpetakan ke SAP, tetapi aktivitasnya tidak cocok Group Lokasi di site-nya dan tidak ada laporan Obs/OAK-nya di lokasi mana pun.'],
+            [self::STATUS['X'], $n['X'] ?? 0, 'Tidak punya pasangan label SAP (Master A), Observasi/OAK (Master B), maupun butir checklist OAK (Master D). Tetap dihitung di baseline sebagai tanpa laporan (gap).'],
+            [self::STATUS['-'], $n['-'] ?? 0, 'Aktivitasnya tidak cocok Group Lokasi di site-nya dan tidak ada laporan Obs/OAK-nya di lokasi mana pun.'],
             ['Risiko laten', $laten, 'Terkait insiden 12 bulan terakhir tapi tidak teridentifikasi SAP dalam jendela.'],
         ];
     }
@@ -136,7 +136,7 @@ class DrmMappingEkspor
             ['Data sampai', $sampai->toDateString().' (data SAP dibaca mulai '.$mulai.', '.$cfg['rentang_hari'].' hari)'],
             ['Jendela sinyal', $cfg['jendela_hari'].' hari terakhir untuk status terkontrol / ada gap.'],
             ['Satu baris', 'Satu bahaya-risiko HIRA aktif (mv_hira_master, JSON causes) per aktivitas – sub aktivitas – bahaya. Risiko awal/residual memakai baris terburuk bila ada duplikat.'],
-            ['Baseline', 'Hanya bahaya yang BISA diidentifikasi lewat SAP (punya pasangan Master A, B, atau D). Bahaya tersebut masuk detail lokasi bila site HIRA cocok DAN Group Lokasi aktivitas = Group Lokasi detail lokasi, ATAU aktivitasnya pernah dilaporkan lewat Observasi/OAK, ATAU butir checklist OAK-nya pernah diisi di detail lokasi itu.'],
+            ['Baseline', 'Baseline HIRA: semua bahaya HIRA aktif, termasuk yang tidak punya pasangan SAP (Master A, B, atau D). Bahaya masuk detail lokasi bila site HIRA cocok DAN Group Lokasi aktivitas = Group Lokasi detail lokasi, ATAU aktivitasnya pernah dilaporkan lewat Observasi/OAK, ATAU butir checklist OAK-nya pernah diisi di detail lokasi itu.'],
             ['Status gabungan', 'Terburuk antar detail lokasi baseline: Ada gap > Terkontrol > Tidak teridentifikasi > Tidak terpetakan. Sama dengan angka "Semua site" di dashboard.'],
             ['Risiko final', 'Terkontrol → risiko residual HIRA; selain itu tetap risiko awal.'],
             ['DL …', 'Jumlah detail lokasi baseline per status (satu bahaya bisa berstatus berbeda di detail lokasi yang berbeda).'],

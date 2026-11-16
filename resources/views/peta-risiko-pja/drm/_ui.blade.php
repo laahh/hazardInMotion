@@ -118,7 +118,7 @@
     kpiCards(kpi) {
       const f = kpi.final || {};
       const kartu = [
-        [kpi.total, 'Total bahaya-risiko unik (baseline: bisa diidentifikasi SAP)', ''],
+        [kpi.total, 'Total bahaya-risiko unik (baseline HIRA)', ''],
         [f.Low, 'Low (final)', 'lv-Low'], [f.Medium, 'Medium (final)', 'lv-Medium'],
         [f.High, 'High (final)', 'lv-High'], [f.Significant, 'Significant (final)', 'lv-Significant'],
         [kpi.K, '✓ Teridentifikasi & terkontrol', 'st-K'], [kpi.G, '! Teridentifikasi – ada gap', 'st-G'],

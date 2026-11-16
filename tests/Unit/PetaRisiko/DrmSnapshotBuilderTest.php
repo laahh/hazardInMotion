@@ -62,9 +62,10 @@ class DrmSnapshotBuilderTest extends TestCase
         // hid 3: tidak punya DL baseline.
         $this->assertSame('-', $baris['3']['status']);
         $this->assertSame('OB Removal', $baris['3']['proses']);
-        // hid 4: tidak punya pasangan SAP (Master A/B) → di luar baseline, tidak dipaksakan.
+        // hid 4: tidak punya pasangan SAP tapi punya DL → tetap baseline HIRA (X = tanpa laporan), final = risiko awal.
         $this->assertSame('X', $baris['4']['status']);
-        $this->assertSame('', $baris['4']['final']);
+        $this->assertSame(1, $baris['4']['dl_x']);
+        $this->assertSame('High', $baris['4']['final']);
         $this->assertFalse($baris['4']['laten']);
         // hid 5: hanya punya pasangan butir checklist OAK (Master D) → tetap terpetakan, bukan X.
         $this->assertSame('-', $baris['5']['status']);
@@ -102,7 +103,7 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(6, $ws->getHighestRow());
         $this->assertSame(1, $ws->getCell('A2')->getValue());
         $ringkas = $wb->getSheet(1)->toArray();
-        $this->assertEquals(['BASELINE (terpetakan ke SAP + punya detail lokasi)', 2], array_slice($ringkas[2], 0, 2));
+        $this->assertEquals(['BASELINE HIRA (punya detail lokasi)', 3], array_slice($ringkas[2], 0, 2));
         @unlink($file);
     }
 
@@ -230,6 +231,8 @@ class DrmSnapshotBuilderTest extends TestCase
                     'temuan_open' => '0', 'temuan_jendela' => '3', 'terakhir' => '2026-11-01'],
                 ['hid' => '2', 'dl_n' => '1', 'g' => '1', 'k' => '0', 't' => '0', 'x' => '0', 'dl_open' => '1', 'dl_ulang' => '0', 'dl_stop' => '0',
                     'temuan_open' => '1', 'temuan_jendela' => '1', 'terakhir' => '2026-11-10'],
+                ['hid' => '4', 'dl_n' => '1', 'g' => '0', 'k' => '0', 't' => '0', 'x' => '1', 'dl_open' => '0', 'dl_ulang' => '0', 'dl_stop' => '0',
+                    'temuan_open' => '0', 'temuan_jendela' => '0', 'terakhir' => '1970-01-01'],
             ],
         ];
 

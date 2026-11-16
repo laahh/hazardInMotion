@@ -862,18 +862,18 @@ evd AS (
 ),
 -- Bahaya yang BISA diidentifikasi lewat SAP: punya pasangan Master A (label Hazard/Inspeksi),
 -- aktivitasnya punya pasangan Master B (Observasi/OAK), atau punya butir checklist OAK (Master D).
--- Hanya ini yang masuk baseline; bahaya tanpa pasangan SAP tidak dihitung (keputusan user 15 Nov 2026).
+-- Hanya penanda status X; baseline TIDAK difilter (baseline HIRA, keputusan user 16 Nov 2026).
 petakan AS (
   SELECT hid FROM hira
   WHERE hid IN (SELECT hid FROM ma) OR (a, s) IN (SELECT a, s FROM mb) OR hid IN (SELECT hid FROM md)
 ),
+-- Baseline HIRA: tiap detail lokasi mewarisi semua bahaya HIRA grup lokasinya (site cocok),
+-- termasuk yang tidak punya pasangan SAP (tanpa laporan = gap).
 base AS (
   SELECT d.dl AS dl, h.hid AS hid, 0 AS via_bukti
   FROM dl d JOIN (SELECT hid, st, g FROM hira ARRAY JOIN sites AS st ARRAY JOIN grp AS g) h ON h.st = d.site AND h.g = d.grp
-  WHERE h.hid IN (SELECT hid FROM petakan)
   UNION DISTINCT
   SELECT e.dl, h.hid, 1 FROM (SELECT DISTINCT dl, a, s FROM evo) e JOIN hira h ON h.a = e.a AND h.s = e.s
-  WHERE h.hid IN (SELECT hid FROM petakan)
   UNION DISTINCT
   SELECT dl, hid, 1 FROM (SELECT DISTINCT dl, hid FROM evd)
 )';
