@@ -26,7 +26,30 @@ class DrmRepository extends PetaRisikoRepository
     {
         parent::simpan($snapshot);
         $this->tulisGzipMeta();
+        $this->tulisRincian($snapshot['rincian'] ?? null);
         $this->bukaIzinBaca(Storage::disk('local')->path(static::DIR));
+    }
+
+    /** Path rincian.json: baris per status untuk modal kartu KPI (dimuat saat modal dibuka). */
+    public function pathRincian(): string
+    {
+        return Storage::disk('local')->path(static::DIR.'/rincian.json');
+    }
+
+    /** @param array<string, mixed>|null $rincian */
+    private function tulisRincian(?array $rincian): void
+    {
+        $path = $this->pathRincian();
+        if ($rincian === null) {
+            @unlink($path);
+            @unlink($path.'.gz');
+
+            return;
+        }
+        $isi = json_encode($rincian, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        file_put_contents($path.'.tmp', $isi);
+        rename($path.'.tmp', $path);
+        @file_put_contents($path.'.gz', gzencode($isi, 6));
     }
 
     /** Path meta.json.gz (dikirim ke browser yang menerima gzip; Apache server ini tanpa mod_deflate). */

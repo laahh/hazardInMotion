@@ -115,6 +115,20 @@ class PetaRisikoDrmController extends Controller
     }
 
     /** Ringkasan semua cakupan (Site / Group Lokasi / PJA) untuk halaman indeks. */
+    /** Rincian baris per status untuk modal kartu KPI (ditulis oleh peta-risiko:sync). */
+    public function rincian(Request $request): BinaryFileResponse
+    {
+        $path = $this->repo->pathRincian();
+        abort_unless(is_file($path), 404, 'Rincian belum tersedia. Jalankan php artisan peta-risiko:sync.');
+        $headers = ['Content-Type' => 'application/json; charset=UTF-8', 'Cache-Control' => 'private, no-cache', 'Vary' => 'Accept-Encoding'];
+        $gz = $path.'.gz';
+        if (str_contains((string) $request->header('Accept-Encoding'), 'gzip') && is_file($gz) && filemtime($gz) >= filemtime($path)) {
+            return response()->file($gz, $headers + ['Content-Encoding' => 'gzip']);
+        }
+
+        return response()->file($path, $headers);
+    }
+
     public function meta(Request $request): BinaryFileResponse
     {
         abort_unless($this->repo->ada(), 404);

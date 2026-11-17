@@ -79,6 +79,40 @@
   @media (max-width: 1440px) { body.tp .br-kpis.br-kpis-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 760px) { body.tp .br-kpis.br-kpis-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 480px) { body.tp .br-kpis.br-kpis-6 { grid-template-columns: 1fr; } }
+  /* Kartu KPI yang bisa diklik → modal daftar bahaya. */
+  body.tp .br-kpi-klik { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+  body.tp .br-kpi-klik:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(20, 26, 34, .10); }
+  body.tp .br-kpi-klik:focus-visible { outline: 2px solid #3952bc; outline-offset: 3px; }
+  .dr-modal { --mc: #3952bc; width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 0; border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, .28); font-family: Poppins, sans-serif; color: #2c2f31; overflow: hidden; }
+  .dr-modal[open] { display: flex; flex-direction: column; }
+  .dr-modal::backdrop { background: rgba(15, 23, 42, .45); }
+  .dr-modal-kepala { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; padding: 20px 24px 14px; border-top: 5px solid var(--mc); }
+  .dr-modal-kepala h3 { margin: 0; font-size: 18px; font-weight: 700; color: var(--mc); }
+  .dr-modal-kepala p { margin: 4px 0 0; font-size: 12.5px; color: #595c5e; line-height: 1.45; }
+  .dr-modal-tutup { border: 0; background: #f3f4f6; border-radius: 999px; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; flex: none; }
+  .dr-modal-tutup:hover { background: #e5e7eb; }
+  .dr-modal-alat { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 0 24px 12px; border-bottom: 1px solid #eef0f2; font-size: 12.5px; }
+  .dr-modal-cari { position: relative; flex: 1 1 280px; max-width: 460px; }
+  .dr-modal-cari .material-symbols-outlined { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 19px; color: #8a8d90; }
+  .dr-modal-cari input { width: 100%; padding: 9px 12px 9px 36px; border: 1px solid #d9dce0; border-radius: 10px; font: inherit; font-size: 13px; }
+  .dr-modal-cari input:focus { outline: 2px solid var(--mc); outline-offset: 0; border-color: transparent; }
+  .dr-modal-isi { overflow: auto; padding: 0 24px 20px; flex: 1; min-height: 160px; }
+  .dr-modal-tbl { width: 100%; font-size: 12.5px; }
+  .dr-modal-tbl thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+  .dr-modal-tbl td small { display: block; color: #8a8d90; font-size: 11.5px; margin-top: 2px; }
+  .dr-modal-grp td { background: #f8fafc; font-weight: 700; font-size: 12px; color: #3f4346; padding-top: 10px; }
+  .dr-modal-grp td span { margin-left: 6px; font-weight: 600; color: #8a8d90; }
+  .dr-jejak { display: inline-flex; gap: 2px; }
+  .dr-jejak i { width: 9px; height: 16px; border-radius: 2px; }
+  .dr-jejak i.sel { outline: 2px solid #2c2f31; outline-offset: 1px; }
+  .dr-lv { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #f3f4f6; color: #4b5563; }
+  .dr-lv.lv-Significant { background: #fdecee; color: #b91c1c; } .dr-lv.lv-High { background: #fff0e3; color: #b45309; }
+  .dr-lv.lv-Medium { background: #fef8e1; color: #92650a; } .dr-lv.lv-Low { background: #eef8f0; color: #15803d; }
+  .dr-tanda { display: inline-block; margin: 4px 6px 0 0; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
+  .dr-tanda.ungu { background: #f1e8fa; color: #7e3fb3; } .dr-tanda.hijau { background: #dcfce7; color: #15803d; }
+  @media (max-width: 640px) { .dr-modal-kepala, .dr-modal-alat, .dr-modal-isi { padding-left: 16px; padding-right: 16px; } }
+  @media (prefers-reduced-motion: reduce) { body.tp .br-kpi-klik { transition: none; } body.tp .br-kpi-klik:hover { transform: none; } }
   /* Kartu status (angka, garis warna di kiri) — gaya dashboard DRM 2.1 lama. */
   body.tp .tp-stat-sub { font-size: 12.5px; color: #595c5e; margin: 0 0 10px; }
   body.tp .tp-stat-sub b { color: #2c2f31; }

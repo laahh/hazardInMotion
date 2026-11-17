@@ -159,6 +159,9 @@ class DrmSnapshotBuilder
             $berkas[$id] = $this->berkasPja($info, $dl, $hira, $hiraPerA, $pasanganPerDl, $perDl, $personil, $bearcPerSid, $coveragePerPja[$id] ?? []);
         }
         $beranda = $this->beranda($d, $sampai, $cfg, $pjaBc, $berkas, $hira, $dl, $pasanganPerDl);
+        // Rincian baris per status (modal kartu KPI) ditulis ke rincian.json terpisah, dimuat saat modal dibuka.
+        $rincian = $beranda['_rincian'];
+        unset($beranda['_rincian']);
         $statTemuan = array_map(fn ($info) => $this->statTemuan(array_map('strval', $info['dl']), $perDl['temuan'], $sampai), $pjaBc);
 
         return [
@@ -182,6 +185,7 @@ class DrmSnapshotBuilder
                 'beranda' => $beranda,
             ],
             'pja' => $berkas,
+            'rincian' => $rincian,
             // Cakupan versi lama (matriks per SITE/GRUP/PROSES/PJA): tidak ditulis ke meta.json karena tidak dipakai tampilan.
             'cakupan' => $cakupan,
             'ekspor' => [
@@ -234,9 +238,12 @@ class DrmSnapshotBuilder
             }
         }
 
+        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx);
+
         return [
             'minggu' => $b->minggu(),
-            'ringkas' => $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx),
+            'ringkas' => $ringkas,
+            '_rincian' => $rincian,
             'hari0' => $b->hari0(),
             'hari' => (int) $cfg['beranda']['hari'],
             'ambangUlang' => (int) $cfg['beranda']['ambang_berulang'],
@@ -266,7 +273,7 @@ class DrmSnapshotBuilder
      * @param  array<string, list<string>>  $hidPerDl
      * @param  array<string, array<string, mixed>>  $hira
      * @param  array<string, mixed>  $idx
-     * @return array<string, array<string, mixed>>
+     * @return array{0: array<string, array<string, mixed>>, 1: array<string, mixed>}  [ringkasan, rincian baris per status]
      */
     private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx): array
     {
@@ -276,9 +283,15 @@ class DrmSnapshotBuilder
             $cakupan[(string) $d['site']][] = (string) $id;
         }
         $buang = array_flip(['kgTot', 'u4', 'kelTot', 'kelGap', 'lama', 'insiden']);
-        $hasil = [];
+        $hasil = $lingkup = $hidDipakai = [];
         foreach ($cakupan as $kunci => $ids) {
             $berkas = $b->berkas($ids, $hidPerDl, $hira, $dl, $idx, []);
+            $r = $b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, [], true, true);
+            $lingkup[$kunci] = $r['rincian'];
+            foreach ($r['rincian']['u'] as $baris) {
+                $hidDipakai[$baris[1]] = true;
+            }
+            unset($r['rincian']);
             $ada = [];
             foreach ($ids as $d) {
                 foreach ($hidPerDl[$d] ?? [] as $hid) {
@@ -287,7 +300,7 @@ class DrmSnapshotBuilder
             }
             // Per detail lokasi cukup sekali (di ALL): status satu DL sama di cakupan mana pun.
             $hasil[$kunci] = [
-                ...array_diff_key($b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, [], true), $kunci === 'ALL' ? $buang : $buang + ['dlw' => 1]),
+                ...array_diff_key($r, $kunci === 'ALL' ? $buang : $buang + ['dlw' => 1]),
                 'ndl' => count($ids),
                 // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
                 'nBarisDl' => count($ada),
@@ -297,7 +310,14 @@ class DrmSnapshotBuilder
         // Kategori ringkasan unik memakai pita cakupan detail lokasi (lihat DrmBeranda::nilai).
         $hasil['ALL']['pita'] = [DrmBeranda::PITA_ATAS, DrmBeranda::PITA_BAWAH];
 
-        return $hasil;
+        // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi].
+        $teks = [];
+        foreach (array_keys($hidDipakai) as $hid) {
+            $h = $hira[$hid] ?? [];
+            $teks[$hid] = [(string) ($h['an'] ?? ''), (string) ($h['sn'] ?? ''), (string) ($h['bn'] ?? ''), (string) ($h['p'] ?? '')];
+        }
+
+        return [$hasil, ['minggu' => $b->minggu(), 'teks' => (object) $teks, 'lingkup' => $lingkup]];
     }
 
     // ------------------------------------------------------------ cakupan

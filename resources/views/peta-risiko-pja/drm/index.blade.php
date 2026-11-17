@@ -329,11 +329,12 @@
       const baik = (d > 0) === naikBaik;
       return `<span style="color:${baik ? 'var(--green-d)' : '#c0262d'}">${d > 0 ? '▲' : '▼'} ${DR.fmt(Math.abs(d))}</span> vs minggu lalu`;
     };
-    const kartu = (warna, ik, k, label, ket, naikBaik) => `<div class="br-kpi" style="--ac:${warna};--kc:${warna}" title="${DR.esc(ket)}">${ikonKpi(ik)}
+    const klik = (k) => `class="br-kpi br-kpi-klik" data-kat="${k}" role="button" tabindex="0" aria-haspopup="dialog"`;
+    const kartu = (warna, ik, k, label, ket, naikBaik) => `<div ${klik(k)} style="--ac:${warna};--kc:${warna}" title="${DR.esc(ket)} · klik untuk melihat daftarnya">${ikonKpi(ik)}
       <small>${label}</small><b>${ada ? DR.fmt(V[k]) : '–'}</b><em>${beda(k, naikBaik) || '&nbsp;'}</em></div>`;
     const catatanSync = ada ? '' : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot ini dihitung sebelum kartu status ditambahkan. Jalankan <code>php artisan peta-risiko:sync</code> untuk mengisi angkanya.</p>';
     return `<div class="br-kpis br-kpis-6">
-        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</em></div>
+        <div ${klik('t')} style="--ac:var(--navy);--kc:var(--navy)" title="Klik untuk melihat semua baris baseline">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</em></div>
         ${kartu('#1a7f37', 'full', 'idk', 'Teridentifikasi &amp; Terkontrol', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun', true)}
         ${kartu('#a07a00', 'part', 'idg', 'Teridentifikasi - Ada Gap', 'Bermasalah di minimal satu detail lokasi: belum closed, berulang, atau OAK Stop', false)}
         ${kartu('#b42318', 'none', 'tid', 'Tidak Teridentifikasi (Open Risk)', 'Tidak ada laporan SAP di semua detail lokasinya', false)}
@@ -341,6 +342,124 @@
         ${kartu('#1a7f37', 'turun', 'turun', 'Risiko Turun Kategori (Berhasil Dikontrol)', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal', true)}
       </div>${catatanSync}`;
   }
+
+  // ------------------------------------------------------------ Modal kartu KPI (daftar bahaya per status)
+  const URL_RINCIAN = @json(route('peta-risiko-pja.rincian'));
+  /** Definisi tiap kartu: judul, warna, keterangan, penyaring baris (kode minggu K/G/T, inc, tr). */
+  const KAT_MODAL = {
+    t: ['Baseline', '#3952bc', 'Semua kelompok aktivitas × bahaya-risiko unik di cakupan ini.', () => true],
+    idk: ['Teridentifikasi & Terkontrol', '#1a7f37', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun.', (b, c) => c === 'K'],
+    idg: ['Teridentifikasi - Ada Gap', '#a07a00', 'Bermasalah di minimal satu detail lokasi: laporan belum closed, berulang (≥3 per minggu), atau OAK Stop.', (b, c) => c === 'G'],
+    tid: ['Tidak Teridentifikasi (Open Risk)', '#b42318', 'Tidak ada laporan SAP di semua detail lokasinya.', (b, c) => c === 'T'],
+    laten: ['Risiko Laten', '#7e3fb3', 'Tidak teridentifikasi, tetapi pernah terkait insiden 12 bulan terakhir di salah satu detail lokasinya (blind spot SAP).', (b, c) => c === 'T' && b.inc],
+    turun: ['Risiko Turun Kategori', '#1a7f37', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal.', (b, c) => c === 'K' && b.tr],
+  };
+  const KODE_MODAL = { K: ['#1a7f37', 'Terkontrol'], G: ['#d9a400', 'Ada gap'], T: ['#d4d7db', 'Tidak teridentifikasi'] };
+  let rincianJanji = null;
+  const muatRincian = () => (rincianJanji ||= fetch(URL_RINCIAN, { headers: { Accept: 'application/json' } })
+    .then((r) => { if (!r.ok) throw new Error(r.status === 404 ? 'Rincian belum tersedia. Jalankan php artisan peta-risiko:sync.' : `Gagal memuat rincian (HTTP ${r.status}).`); return r.json(); })
+    .catch((e) => { rincianJanji = null; throw e; }));
+
+  function dialogModal() {
+    let d = document.getElementById('dr-modal');
+    if (d) return d;
+    d = document.createElement('dialog');
+    d.id = 'dr-modal';
+    d.className = 'dr-modal';
+    d.setAttribute('aria-labelledby', 'dr-modal-judul');
+    d.innerHTML = `<div class="dr-modal-kepala"><div><h3 id="dr-modal-judul"></h3><p id="dr-modal-ket"></p></div>
+        <button type="button" class="dr-modal-tutup" aria-label="Tutup"><span class="material-symbols-outlined">close</span></button></div>
+      <div class="dr-modal-alat"><span class="dr-modal-cari"><span class="material-symbols-outlined">search</span><input type="search" id="dr-modal-q" placeholder="Cari kelompok, aktivitas, atau bahaya…" aria-label="Cari"></span>
+        <span id="dr-modal-n" class="dr-mute"></span></div>
+      <div class="dr-modal-isi" id="dr-modal-isi"></div>`;
+    document.body.appendChild(d);
+    d.querySelector('.dr-modal-tutup').addEventListener('click', () => d.close());
+    // Klik di luar kotak (backdrop) menutup modal.
+    d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+    let t = 0;
+    d.querySelector('#dr-modal-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => isiModal(), 200); });
+    return d;
+  }
+
+  let modalBaris = [];
+  /** Baris rincian untuk cakupan & filter aktif (tab, site, grup, kelompok, level, minggu) — sama dengan angka kartu. */
+  function barisModal(R, kat) {
+    const L = R.lingkup[state.site];
+    if (!L) return null;
+    const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+    const daftar = state.tab === 'grup'
+      ? L.g.filter((x) => x[0] === state.grup).map(([, kel, hid, lv, inc, tr, kode]) => ({ kel, hid, lv, inc, tr, kode }))
+      : L.u.map(([kel, hid, lv, inc, tr, kode]) => ({ kel, hid, lv, inc, tr, kode }));
+    const f = KAT_MODAL[kat][3];
+    return daftar.filter((b) => (state.tab !== 'proses' || b.kel === state.proses) && (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
+  }
+
+  async function bukaModal(kat) {
+    const d = dialogModal(), [judul, warna, ket] = KAT_MODAL[kat];
+    const lokasi = state.site === 'ALL' ? 'BC' : state.site;
+    const cakupan = state.tab === 'grup' ? `${state.grup} · ${lokasi}` : state.tab === 'proses' ? `${(M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses} · ${lokasi}` : lokasi;
+    d.style.setProperty('--mc', warna);
+    d.querySelector('#dr-modal-judul').textContent = judul;
+    d.querySelector('#dr-modal-ket').textContent = `${cakupan} · ${wKode(state.w)} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}. ${ket}`;
+    d.querySelector('#dr-modal-q').value = '';
+    d.querySelector('#dr-modal-n').textContent = '';
+    d.querySelector('#dr-modal-isi').innerHTML = '<div class="pr-empty">Memuat daftar…</div>';
+    if (!d.open) d.showModal();
+    try {
+      const R = await muatRincian();
+      d._rincian = R;
+      const b = barisModal(R, kat);
+      if (b === null) { d.querySelector('#dr-modal-isi').innerHTML = '<div class="pr-empty">Rincian untuk cakupan ini belum ada di snapshot. Jalankan ulang sync.</div>'; return; }
+      modalBaris = b;
+      isiModal();
+    } catch (e) {
+      d.querySelector('#dr-modal-isi').innerHTML = `<div class="pr-empty">${DR.esc(e.message)}</div>`;
+    }
+  }
+
+  /** Tabel baris modal, dikelompokkan per kelompok aktivitas, dengan jejak status 12 minggu. */
+  function isiModal() {
+    const d = dialogModal(), R = d._rincian;
+    if (!R) return;
+    const q = d.querySelector('#dr-modal-q').value.trim().toLowerCase();
+    const namaKel = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]);
+    const urutLv = { Significant: 0, High: 1, Medium: 2, Low: 3 };
+    const baris = modalBaris.map((b) => ({ ...b, t: R.teks[b.hid] || ['', '', '', ''], kn: namaKel[b.kel] || b.kel }))
+      .filter((b) => !q || `${b.kn} ${b.t.join(' ')}`.toLowerCase().includes(q))
+      .sort((a, b) => a.kn.localeCompare(b.kn) || (urutLv[a.lv] ?? 9) - (urutLv[b.lv] ?? 9) || a.t[2].localeCompare(b.t[2]));
+    d.querySelector('#dr-modal-n').textContent = `${DR.fmt(baris.length)} baris${q ? ` (dari ${DR.fmt(modalBaris.length)})` : ''}`;
+    if (!baris.length) { d.querySelector('#dr-modal-isi').innerHTML = `<div class="pr-empty">${q ? 'Tidak ada yang cocok dengan pencarian.' : 'Tidak ada baris di kategori ini.'}</div>`; return; }
+    const NW = R.minggu.length;
+    const jejak = (kode) => {
+      let h = '';
+      for (let i = NW - 1; i >= 0; i--) {
+        const [c, t] = KODE_MODAL[kode[i] || 'T'];
+        h += `<i style="background:${c}" class="${i === state.w ? 'sel' : ''}" title="${wKode(i)}: ${t}"></i>`;
+      }
+      return `<span class="dr-jejak">${h}</span>`;
+    };
+    let kel = '', html = '';
+    const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
+    for (const b of baris) {
+      if (b.kel !== kel) {
+        kel = b.kel;
+        html += `<tr class="dr-modal-grp"><td colspan="5">${DR.esc(b.kn)} <span>${DR.fmt(jumlahKel[kel])}</span></td></tr>`;
+      }
+      const ket = [b.inc ? '<span class="dr-tanda ungu">insiden 12 bln</span>' : '', b.tr ? '<span class="dr-tanda hijau">residual lebih rendah</span>' : ''].join('');
+      html += `<tr><td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${b.t[3] ? `<small>${DR.esc(b.t[3])}</small>` : ''}${ket}</td>
+        <td>${DR.esc(b.t[0])}${b.t[1] ? `<small>${DR.esc(b.t[1])}</small>` : ''}</td>
+        <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td><td>${jejak(b.kode)}</td><td class="dr-mute r">${DR.esc(b.hid)}</td></tr>`;
+    }
+    d.querySelector('#dr-modal-isi').innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl"><thead><tr><th>Bahaya-risiko</th><th>Aktivitas HIRA</th><th>Risiko awal</th>
+      <th>Status ${NW} minggu <small>(lama → baru)</small></th><th class="r">ID baris</th></tr></thead><tbody>${html}</tbody></table>`;
+  }
+
+  // Klik / Enter / Spasi pada kartu KPI membuka modal (delegasi: kartu dirender ulang tiap filter berubah).
+  document.addEventListener('click', (e) => { const k = e.target.closest('.br-kpi-klik'); if (k) bukaModal(k.dataset.kat); });
+  document.addEventListener('keydown', (e) => {
+    const k = e.target.closest && e.target.closest('.br-kpi-klik');
+    if (k && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); bukaModal(k.dataset.kat); }
+  });
 
   function renderCakupan() {
     if (!formatBaru() || !(adaUnik() || M.beranda.mgmt.every((p) => p.kel && p.grp))) { $('#dr-kpi4').innerHTML = pesanLama(); return; }

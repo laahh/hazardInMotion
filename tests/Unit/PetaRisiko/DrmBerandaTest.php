@@ -196,5 +196,14 @@ class DrmBerandaTest extends TestCase
         // [idk, idg, tid, turun, laten]
         $this->assertSame([1, 0, 1, 1, 1], array_slice($m['w'][0]['High'], 10, 5));
         $this->assertSame([0, 0, 2, 0, 1], array_slice($m['w'][1]['High'], 10, 5));
+
+        // Rincian modal: [kel, hid, level, inc, tr, kode minggu]; minggu 0 = K (h1) / T (h3), minggu 1 = T.
+        $r = $b->ringkasMgmt(['1', '2'], $pasangan, $hira, $berkas, [], true, true)['rincian'];
+        $u = array_column($r['u'], null, 1);
+        $this->assertSame(['K13', 'h1', 'High', 0, 1], array_slice($u['h1'], 0, 5));
+        $this->assertSame('KT', substr($u['h1'][5], 0, 2));
+        $this->assertSame(['K6', 'h3', 'High', 1, 1], array_slice($u['h3'], 0, 5));
+        $this->assertSame('TT', substr($u['h3'][5], 0, 2));
+        $this->assertSame(['Pit', 'K13', 'h1'], array_slice($r['g'][0], 0, 3));
     }
 }

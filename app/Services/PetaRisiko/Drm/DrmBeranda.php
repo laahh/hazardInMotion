@@ -243,7 +243,7 @@ class DrmBeranda
      * @param  list<array<string, mixed>>  $insiden  insiden di detail lokasi PJA (tanggal Y-m-d)
      * @return array<string, mixed>
      */
-    public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden, bool $pita = false): array
+    public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden, bool $pita = false, bool $rincian = false): array
     {
         $nW = (int) $this->cfg['beranda']['minggu'];
         [$unik, $kgTot, $u4, $unikGrup, $dlW] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
@@ -289,6 +289,8 @@ class DrmBeranda
         $dlast = (array) $berkasBeranda['dlast'];
 
         return [
+            // Daftar baris per status untuk modal kartu KPI (hanya ringkasan unik; lihat rincianBaris).
+            ...($rincian ? ['rincian' => self::rincianBaris($unik, $unikGrup, $hira)] : []),
             'w' => $w,
             'kel' => $kelW,
             'grp' => $grpW,
@@ -359,6 +361,36 @@ class DrmBeranda
         }
 
         return [$unik, $kgTot, $u4, $unikGrup, $dlW];
+    }
+
+    /**
+     * Baris gabungan per status mingguan untuk modal kartu KPI. Kode minggu (indeks 0 = minggu berjalan):
+     * K = teridentifikasi & terkontrol, G = ada gap, T = tidak teridentifikasi. inc = terkait insiden 12 bulan
+     * (laten bila T), tr = residual HIRA lebih rendah dari risiko awal (turun kategori bila K).
+     *   u: [kel, hid, level, inc, tr, kode]          — baseline unik (Overview / Kelompok Aktivitas / Semua PJA)
+     *   g: [grup, kel, hid, level, inc, tr, kode]    — per grup lokasi (tab Group Lokasi)
+     *
+     * @return array{u: list<list<int|string>>, g: list<list<int|string>>}
+     */
+    private static function rincianBaris(array $unik, array $unikGrup, array $hira): array
+    {
+        $kode = fn (array $w) => implode('', array_map(fn ($st) => $st[2] > 0 ? 'G' : ($st[1] > 0 ? 'K' : 'T'), $w));
+        $turun = function (string $hid) use ($hira): int {
+            $h = $hira[$hid] ?? [];
+            $n2 = self::LEVEL[(string) ($h['n2'] ?? '')] ?? 0;
+
+            return (int) ($n2 > 0 && $n2 < (self::LEVEL[(string) ($h['n1'] ?? '')] ?? 0));
+        };
+        $u = $g = [];
+        foreach ($unik as $ku => $x) {
+            $hid = substr($ku, strpos($ku, '|') + 1);
+            $u[] = [$x['kel'], $hid, $x['lv'], (int) $x['inc'], $turun($hid), $kode($x['w'])];
+        }
+        foreach ($unikGrup as $x) {
+            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], (int) $x['inc'], $turun($x['hid']), $kode($x['w'])];
+        }
+
+        return ['u' => $u, 'g' => $g];
     }
 
     /** Tambah satu detail lokasi ke status baris ketat [n DL, n terkontrol, n bermasalah, bit]. */
