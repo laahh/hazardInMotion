@@ -67,6 +67,24 @@ class DrmSapBahayaTest extends TestCase
         $this->assertSame([['teks' => 'Dumping', 'crc' => DrmMaster::crcTeks('Dumping'), 'ri' => [1, 2]]], $hasil);
     }
 
+    public function test_oak_berlaku_lewat_label_atau_aktivitas_dan_tertangkap_lewat_butir_bertema(): void
+    {
+        $p = ['dari' => CarbonImmutable::parse('2026-11-08'), 'sampai' => CarbonImmutable::parse('2026-11-14'), 'cfg' => config('peta_risiko_drm'),
+            'labelOak' => [202], 'labelOakAkt' => [303], 'tema' => [['Longsor/retakan/dumping', 'dumping|longsor']]];
+        $item = $this->panggil('sqlOakButir', [$p, [11], 'item']);
+
+        $this->assertStringContainsString("WITH ['dumping|longsor'] AS tr", $item);
+        $this->assertStringContainsString('FROM bcbeats.oak_register', $item);
+        $this->assertStringContainsString('WHERE (r.kl IN (202) OR r.ka IN (303))', $item);
+        $this->assertStringContainsString("multiMatchAny(concat(' ', lower(concat(o.name, ' ', dt.name)), ' '), tr)", $item);
+        $this->assertStringContainsString('WHERE id_suitability IN (10186, 10187)', $item);
+        $this->assertStringContainsString('GROUP BY kl, ka', $item);
+
+        $laporan = $this->panggil('sqlOakButir', [$p, [11], 'laporan']);
+        $this->assertStringContainsString('toUInt8(ifNull(x.id_conclusion, 0) = 19502) AS stop', $laporan);
+        $this->assertStringContainsString('GROUP BY rid', $laporan);
+    }
+
     public function test_hazard_hanya_label_dari_ch_rfid(): void
     {
         $sql = $this->panggil('sqlHazard', [[11, 22], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'), [123], ['DELETED']]);

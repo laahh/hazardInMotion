@@ -152,13 +152,14 @@ class DrmBerandaTest extends TestCase
 
         $spe = $sql->berandaSpesifik();
         // OBS / OAK: label persis M11 / M12 (dokumentasi Risk Matrix 5x5), bukan checklist / tema / kelompok.
-        $this->assertStringContainsString('LEFT JOIN mox m ON m.kc = k.kc', $spe);
-        // OAK juga lewat kurasi aktivitas OAK → aktivitas HIRA (mkx), digabung tanpa duplikat.
-        $this->assertStringContainsString('LEFT JOIN mkx a ON a.ka = k.ka', $spe);
-        $this->assertStringContainsString("ARRAY JOIN arrayDistinct(arrayConcat(m.rs, if(s.j = 'OBSERVASI AREA KRITIS', a.rs,", $spe);
-        $this->assertStringContainsString("CRC32(replaceRegexpAll(replaceRegexpAll(lowerUTF8(ifNull(tx, '')), 'risk\\\\s*intervention\\\\s*center', 'langsung'), '[^0-9a-z]+', '')) AS kc", $spe);
-        $this->assertStringNotContainsString('bcbeats.', $spe);
-        $this->assertStringNotContainsString('obds.m_oak_detail_objek', $spe);
+        // OBS: label persis M11 dari ch_rfid.
+        $this->assertStringContainsString("WHERE s.j = 'OBSERVASI' AND NOT s.na", $spe);
+        // OAK (gabungan): berlaku = label M12 ∪ kurasi aktivitas (mkx), tertangkap = butir checklist bertema sama (bcbeats).
+        $this->assertStringContainsString('FROM bcbeats.oak_register r', $spe);
+        $this->assertStringContainsString('FROM oakr o LEFT JOIN mox m ON m.kc = o.kl LEFT JOIN mkx a ON a.ka = o.ka', $spe);
+        $this->assertStringContainsString('FROM bcbeats.oak_detail_object', $spe);
+        $this->assertStringContainsString('JOIN mtx t ON t.tema = i.tema', $spe);
+        $this->assertStringContainsString('WHERE has(e.el, b.hid)', $spe);
         $this->assertStringContainsString('toUInt8(2 + 16 * stop + 32 * ts)', $spe);
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
         $this->assertStringContainsString('max(toUInt8(l.nl >= 3)) AS ul', $spe);
