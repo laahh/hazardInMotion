@@ -56,9 +56,12 @@ return [
     | plus ≥1 kata sama harus ada di teks bahayanya sendiri). Aktivitas butir diambil dari register
     | OAK yang diisi, karena checklist versi baru tidak mengikat objek ke aktivitas di master.
     | Kode id_suitability di oak_detail_object: sesuai → terkontrol, tidak sesuai → gap,
-    | tidak relevan/N/A (10188) diabaikan. Kode "tidak sesuai" = 10187 masih perlu dipastikan user.
+    | tidak relevan/N/A (10188) diabaikan. Kode dipastikan di bcbeats.oak_detail_object 17 Nov 2026
+    | (10187 = Tidak Sesuai, catatannya di tx_suitability). stop = id_conclusion "Stop Pekerjaan"
+    | di bcbeats.oak_register (19501 = Pekerjaan Dilanjutkan).
+    | Saat ini TIDAK dipakai: OBS / OAK ditangkap lewat label persis M11/M12 (dokumentasi Risk Matrix 5x5, 17 Nov 2026).
     */
-    'oak_checklist' => ['sesuai' => 10186, 'tidak_sesuai' => 10187],
+    'oak_checklist' => ['sesuai' => 10186, 'tidak_sesuai' => 10187, 'stop' => 19502],
 
     /*
     | Label Hazard/Inspeksi disebut SPESIFIK bila di satu detail lokasi hanya cocok ke bahaya dari

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\PetaRisiko;
 
+use App\Services\PetaRisiko\Drm\DrmMaster;
 use App\Services\PetaRisiko\Drm\DrmSapBahaya;
 use Carbon\CarbonImmutable;
 use ReflectionClass;
@@ -16,58 +17,47 @@ class DrmSapBahayaTest extends TestCase
         return $r->getMethod($metode)->invoke($r->newInstanceWithoutConstructor(), ...$arg);
     }
 
-    private function sql(array $pola, string $kel, array $label = [123]): string
+    private function teks(array $obs, array $oak, string $mode): string
     {
-        return $this->panggil('sql', [[11, 22], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'),
-            $label, $pola, $kel, ['DELETED'], ['tidak ada aktivitas']]);
+        return $this->panggil('sqlTeks', [[11, 22], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'),
+            $obs, $oak, ['DELETED'], ['tidak ada aktivitas'], $mode]);
     }
 
-    public function test_obs_oak_hanya_kelompok_dengan_regex_pertama_dan_hazard_lewat_label(): void
+    public function test_label_obs_oak_dinormalisasi_seperti_dokumentasi_risk_matrix(): void
     {
-        $sql = $this->sql(['K10' => 'maintenance', 'K13' => 'jalan|road'], 'K13');
-
-        // "hauling road maintenance" masuk K10 (cocok lebih dulu), bukan K13 — sama dengan okx di DrmSql.
-        $this->assertStringContainsString("arrayFirst(r -> match(tx, r.2), [('K10', '(?i)maintenance'), ('K13', '(?i)jalan|road')]).1 = 'K13'", $sql);
-        $this->assertStringContainsString("kc IN (123), 'hazard'", $sql);
-        $this->assertStringContainsString('`id detail lokasi` IN (11,22)', $sql);
-        $this->assertStringContainsString("toDate('2026-11-14') + 1", $sql);
-        // OBS/OAK tidak lagi memetakan ke bahaya lewat teks aktivitas (M11/M12).
-        $this->assertStringNotContainsString("'teks'", $sql);
+        // Huruf kecil, hanya huruf + angka, "Risk Intervention Center" = "Langsung".
+        $this->assertSame('dumpinglangsungpenimbunandumping', DrmMaster::normTeks('Dumping / Risk Intervention Center - Penimbunan (Dumping)'));
+        $this->assertSame(DrmMaster::crcTeks('Dumping / Langsung - Penimbunan (Dumping)'), DrmMaster::crcTeks('dumping/RISK INTERVENTION CENTER  -  penimbunan (dumping)'));
+        $this->assertSame(DrmMaster::crcTeks('Pembuatan dan Perawatan Jalan'), DrmMaster::crcTeks('Pembuatan  dan perawatan jalan.'));
     }
 
-    public function test_kelompok_belum_terpetakan_hanya_bukti_label(): void
+    public function test_obs_oak_ditangkap_lewat_label_persis_m11_m12(): void
     {
-        $sql = $this->sql(['K13' => 'jalan'], 'X', []);
+        $item = $this->teks([101], [202], 'item');
 
-        $this->assertStringNotContainsString('arrayFirst', $sql);
-        $this->assertStringContainsString("kc IN (0), 'hazard'", $sql);
+        $this->assertStringContainsString('FROM obds.ch_rfid_sap_cuti_all_site', $item);
+        $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (101)) OR (jenis = 'OBSERVASI AREA KRITIS' AND kc IN (202))", $item);
+        $this->assertStringContainsString("'risk\\\\s*intervention\\\\s*center', 'langsung'), '[^0-9a-z]+', '')) AS kc", $item);
+        $this->assertStringContainsString('`id detail lokasi` IN (11,22)', $item);
+        $this->assertStringContainsString('countIf(stop = 1) AS nstop', $item);
+        $this->assertStringContainsString('GROUP BY kc', $item);
+        $this->assertStringNotContainsString('bcbeats', $item);
+
+        // Tanpa label di master untuk satu jenis → jenis itu tidak bisa menangkap.
+        $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (0))", $this->teks([], [202], 'laporan'));
     }
 
-    public function test_item_sumber_mengelompokkan_kunci_penangkap_bukan_laporan(): void
+    public function test_hazard_hanya_label_dari_ch_rfid(): void
     {
-        $arg = fn (string $sumber) => [[11], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'), $sumber, [123],
-            ['K10' => 'maintenance', 'K13' => 'jalan|road'], 'K13', ['DELETED'], ['tidak ada aktivitas']];
-
-        $obs = $this->panggil('sqlItem', $arg('obs'));
-        $this->assertStringContainsString("jenis_data = 'OBSERVASI'", $obs);
-        $this->assertStringContainsString("any(extract(tx, '(?i)(jalan|road)')) AS kunci", $obs);
-        $this->assertStringContainsString("arrayFirst(r -> match(tx, r.2), [('K10', '(?i)maintenance'), ('K13', '(?i)jalan|road')]).1 = 'K13'", $obs);
-        $this->assertStringContainsString('GROUP BY tx', $obs);
-
-        $this->assertStringContainsString("jenis_data = 'OBSERVASI AREA KRITIS'", $this->panggil('sqlItem', $arg('oak')));
-
-        $ket = $this->panggil('sqlItem', $arg('ket'));
-        $this->assertStringContainsString("jenis_data IN ('HAZARD', 'INSPEKSI')", $ket);
-        $this->assertStringContainsString(')) IN (123)', $ket);
-        $this->assertStringContainsString('GROUP BY isi', $ket);
-    }
-
-    public function test_semua_laporan_hanya_dari_ch_rfid_sap(): void
-    {
-        $sql = $this->sql(['K13' => 'jalan'], 'K13');
+        $sql = $this->panggil('sqlHazard', [[11, 22], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'), [123], ['DELETED']]);
 
         $this->assertStringContainsString('FROM obds.ch_rfid_sap_cuti_all_site', $sql);
-        $this->assertStringNotContainsString('oak_register', $sql);
-        $this->assertStringNotContainsString('oak_detail_object', $sql);
+        $this->assertStringContainsString("jenis_data IN ('HAZARD', 'INSPEKSI')", $sql);
+        $this->assertStringContainsString('WHERE kc IN (123)', $sql);
+        $this->assertStringContainsString("toDate('2026-11-14') + 1", $sql);
+
+        $item = $this->panggil('sqlItemLabel', [[11], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'), [123], ['DELETED']]);
+        $this->assertStringContainsString(')) IN (123)', $item);
+        $this->assertStringContainsString('GROUP BY isi', $item);
     }
 }

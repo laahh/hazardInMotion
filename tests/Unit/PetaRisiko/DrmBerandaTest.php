@@ -20,6 +20,8 @@ class DrmBerandaTest extends TestCase
         // OAK stop di kelompok membuat semua baris kelompok bermasalah walau ada deteksi.
         $this->assertSame(['bm', DrmBeranda::OAK_STOP], DrmBeranda::status(DrmBeranda::DETEKSI | DrmBeranda::OAK_STOP, 0));
         $this->assertSame(['bm', DrmBeranda::BELUM_CLOSED | DrmBeranda::BERULANG], DrmBeranda::status(DrmBeranda::DETEKSI, 2 | 4 | 8));
+        // OAK Stop pada OAK yang checklist-nya menangkap bahaya ini (bit spesifik 16) = gap.
+        $this->assertSame(['bm', DrmBeranda::OAK_STOP], DrmBeranda::status(0, 2 | 16));
         // Butir checklist OAK Tidak Sesuai (lookup 10187) = gap.
         $this->assertSame(['bm', DrmBeranda::TIDAK_SESUAI], DrmBeranda::status(0, 2 | 32));
         // Bit insiden (harian) bukan masalah dan bukan deteksi.
@@ -143,19 +145,19 @@ class DrmBerandaTest extends TestCase
         $kel = $sql->berandaKelompok();
         $this->assertStringContainsString('toStartOfWeek(t_end, 0) AS wk0', $kel);
         $this->assertStringContainsString("AND t.Site = 'LMO'", $kel);
-        // Deteksi keluarga dari kelompok aktivitas teks OBS/OAK (spec dlEntB).
-        $this->assertStringContainsString('FROM sap s JOIN okx k ON k.tx = s.tx', $kel);
+        // OBS/OAK tidak lagi menandai seluruh kelompok aktivitas (17 Nov 2026).
+        $this->assertStringNotContainsString('FROM sap s JOIN okx k ON k.tx = s.tx', $kel);
         // Hazard/Inspeksi berlabel spesifik ikut menandai kelompok aktivitasnya (aktivitas diturunkan dari lokasi).
         $this->assertStringContainsString('WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)', $kel);
         $this->assertStringContainsString('HAVING uniqExact(h.proses) <= 2', $kel);
 
         $spe = $sql->berandaSpesifik();
-        // OBS tidak menandai bahaya spesifik; OAK hanya dari ch_rfid_sap_cuti_all_site (tanpa checklist oak_register).
-        $this->assertStringNotContainsString('evt AS (', $spe);
-        $this->assertStringNotContainsString('FROM obds.oak_register', $spe);
-        $this->assertStringNotContainsString('FROM obds.oak_detail_object', $spe);
-        $this->assertStringNotContainsString('obds.m_oak_', $spe);
-        $this->assertStringContainsString('evd AS (SELECT toInt64(0) AS dl', $spe);
+        // OBS / OAK: label persis M11 / M12 (dokumentasi Risk Matrix 5x5), bukan checklist / tema / kelompok.
+        $this->assertStringContainsString('JOIN (SELECT kc, arrayJoin(rs) AS hid FROM mox) m ON m.kc = k.kc', $spe);
+        $this->assertStringContainsString("CRC32(replaceRegexpAll(replaceRegexpAll(lowerUTF8(ifNull(tx, '')), 'risk\\\\s*intervention\\\\s*center', 'langsung'), '[^0-9a-z]+', '')) AS kc", $spe);
+        $this->assertStringNotContainsString('bcbeats.', $spe);
+        $this->assertStringNotContainsString('obds.m_oak_detail_objek', $spe);
+        $this->assertStringContainsString('toUInt8(2 + 16 * stop + 32 * ts)', $spe);
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
         $this->assertStringContainsString('max(toUInt8(l.nl >= 3)) AS ul', $spe);
         $this->assertStringContainsString('max(toUInt8(e.cd IS NULL)) AS op', $spe);
@@ -222,12 +224,12 @@ class DrmBerandaTest extends TestCase
         $b = (new DrmBeranda(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))
             ->denganGrup(['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Pit']]);
         $hira = ['h1' => ['a' => '7', 'bn' => 'Jalan licin', 'proses' => 'K13', 'n1' => 'High', 'n2' => 'Medium']];
-        // DL 1: kelompok K13 dilaporkan OBS 3x (2 teks) + OAK 1x minggu 0; DL 2: OBS 2x (1 teks) minggu 0.
-        // Spesifik DL 1: label belum closed + berulang minggu 0 (bit 2|4|8), 4 laporan dari 2 label; minggu 1 OAK Stop di DL 2.
-        $idx = $b->indeks([
-            ['dl' => '1', 'kel' => 'K13', 'w' => '0:1', 'h' => '', 'last' => '2026-11-14', 'v' => '0:3:1:2:1'],
-            ['dl' => '2', 'kel' => 'K13', 'w' => '0:1,1:17', 'h' => '', 'last' => '2026-11-14', 'v' => '0:2:0:1:0,1:0:1:0:1'],
-        ], [['dl' => '1', 'hid' => 'h1', 'w' => '0:14', 'h' => '', 'v' => '0:4:2']]);
+        // DL 1 minggu 0: label belum closed + berulang (bit 2|4|8); OBS 3 laporan (2 tema), OAK 1 (1 butir), 4 Hazard (2 label).
+        // DL 2: OBS 2 laporan minggu 0; minggu 1 OAK Stop (bit 2|16) dari 1 OAK.
+        $idx = $b->indeks([], [
+            ['dl' => '1', 'hid' => 'h1', 'w' => '0:14', 'h' => '', 'v' => '0:3:1:4:2:1:2'],
+            ['dl' => '2', 'hid' => 'h1', 'w' => '0:2,1:18', 'h' => '', 'v' => '0:2:0:0:1:0:0,1:0:1:0:0:1:0'],
+        ]);
         $pasangan = ['1' => ['h1'], '2' => ['h1']];
         $dl = ['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Pit']];
         $berkas = $b->berkas(['1', '2'], $pasangan, $hira, $dl, $idx, []);
@@ -239,15 +241,16 @@ class DrmBerandaTest extends TestCase
         $this->assertSame('0:5:1:4:3:1:2,1:0:1:0:0:1:0', $r['u'][0][7]);
         $this->assertSame($r['u'][0][7], $r['g'][0][8]);
         // Berkas PJA tidak ikut membawa volume.
-        $this->assertCount(3, ((array) $berkas['kd'])['1|K13']);
+        $this->assertCount(2, ((array) $berkas['sp'])['1|h1']);
     }
 
     public function test_sql_beranda_menghasilkan_kolom_volume(): void
     {
         $sql = (new DrmSql(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI), DrmMaster::dariArray([])->literal(config('peta_risiko_drm'))))->untukSite('LMO');
 
-        $this->assertStringContainsString("countIf(j = 'OBSERVASI AREA KRITIS') AS nok", $sql->berandaKelompok());
-        $this->assertStringContainsString("ifNull(a.v, '') AS v", $sql->berandaKelompok());
-        $this->assertStringContainsString('sum(n) AS nh, uniqExact(k, sk) AS ih', $sql->berandaSpesifik());
+        $spe = $sql->berandaSpesifik();
+        $this->assertStringContainsString("toUInt64(countIf(src = 'obs')), toUInt64(countIf(src = 'oak'))", $spe);
+        $this->assertStringContainsString('toUInt64(sum(n)) AS nh', $spe);
+        $this->assertStringContainsString("ifNull(c.v, '') AS v", $spe);
     }
 }

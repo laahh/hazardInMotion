@@ -427,7 +427,8 @@
   const CARA_SAP = {
     label: ['#1a7f37', 'Hazard/Inspeksi · label → bahaya'],
     label_kelompok: ['#8a6a00', 'Hazard/Inspeksi · label spesifik → kelompok'],
-    kelompok: ['#a05a00', 'OBS/OAK · aktivitas → kelompok'],
+    obs: ['#7e3fb3', 'OBS · jenis kegiatan → baris (M11)'],
+    oak: ['#1d4ed8', 'OAK · aktivitas / sub → baris (M12)'],
   };
   const STATUS_SAP = { K: 'Teridentifikasi - Terkontrol', G: 'Teridentifikasi - Ada Gap', T: 'Tidak Teridentifikasi' };
   const GAP_BIT = { closed: 1, ulang: 2, stop: 4 };
@@ -557,13 +558,13 @@
 
   /**
    * Modal item sumber: BAGAIMANA SAP tertangkap ke baris HIRA (kunci penangkapnya), bukan isi laporan.
-   * OBS / OAK = teks aktivitas yang masuk kelompok aktivitas baris ini lewat pola kata kunci kelompok (M02);
-   * Ketidaksesuaian = label ketidaksesuaian / sub ketidaksesuaian Hazard/Inspeksi yang dipetakan ke bahaya ini (M09).
+   * Semua lewat label persis di master pemetaan (dokumentasi Risk Matrix 5x5): OBS = jenis kegiatan (M11),
+   * OAK = aktivitas / sub aktivitas (M12), Ketidaksesuaian = label ketidaksesuaian / sub Hazard & Inspeksi (M09).
    */
   const SUMBER_ITEM = {
-    obs: ['Observasi', 'Teks aktivitas OBS yang masuk kelompok aktivitas', 'kelompok'],
-    oak: ['OAK', 'Teks "aktivitas / sub aktivitas" OAK yang masuk kelompok aktivitas', 'kelompok'],
-    ket: ['Ketidaksesuaian/Sub Ketidaksesuaian', 'Label ketidaksesuaian / sub ketidaksesuaian Hazard & Inspeksi yang di master pemetaan (M09) terhubung ke bahaya-risiko ini', 'bahaya'],
+    obs: ['Observasi', 'Jenis kegiatan OBS yang di master pemetaan (M11) dipetakan ke baris HIRA ini'],
+    oak: ['OAK', 'Aktivitas / sub aktivitas OAK yang di master pemetaan (M12) dipetakan ke baris HIRA ini ("Risk Intervention Center" disamakan dengan "Langsung")'],
+    ket: ['Ketidaksesuaian/Sub Ketidaksesuaian', 'Label ketidaksesuaian / sub ketidaksesuaian Hazard & Inspeksi yang di master pemetaan (M09) dipetakan ke baris HIRA ini'],
   };
   function dialogItem() {
     let d = document.getElementById('dr-item-modal');
@@ -580,14 +581,8 @@
     d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
     return d;
   }
-  const tebal = (teks, kunci) => {
-    const t = DR.esc(teks);
-    if (!kunci) return t;
-    const i = teks.toLowerCase().indexOf(kunci.toLowerCase());
-    return i < 0 ? t : `${DR.esc(teks.slice(0, i))}<mark>${DR.esc(teks.slice(i, i + kunci.length))}</mark>${DR.esc(teks.slice(i + kunci.length))}`;
-  };
   async function bukaItem(b, sumber) {
-    const [nama, aturan, ke] = SUMBER_ITEM[sumber];
+    const [nama, aturan] = SUMBER_ITEM[sumber];
     const d = dialogItem(), isi = d.querySelector('#dr-item-isi');
     d.querySelector('#dr-item-judul').textContent = `Item Sumber - ${nama} ( ${b.t[0] || '-'} / ${b.t[2] || '-'} )`;
     isi.innerHTML = '<div class="dr-mute">Memuat item dari ClickHouse…</div>';
@@ -598,14 +593,13 @@
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.pesan || data.message || `HTTP ${r.status}`);
       const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
-      const cara = ke === 'kelompok'
-        ? `${aturan} <b>${DR.esc(b.kn)}</b> (aktivitas HIRA baris ini). Kata kunci kelompok: <code>${DR.esc(data.pola || '-')}</code>. Bagian teks yang cocok ditandai.`
-        : `${aturan}.`;
-      const daftar = (data.item || []).map((x) => `<li><span>${tebal(x.isi || '-', x.kunci)}</span>
-          <small>${DR.fmt(x.n)} laporan · ${DR.fmt(x.ndl)} detail lokasi</small></li>`).join('');
-      isi.innerHTML = `<p class="dr-item-cara"><b>Cara tertangkap:</b> ${cara}</p>
+      const nLabel = `<p class="dr-item-cara" style="margin-top:4px">${DR.fmt(data.nlabel || 0)} label di master dipetakan ke baris ini${data.nlabel ? '' : ' — sumber ini tidak bisa menangkap baris ini'}.</p>`;
+      const daftar = (data.item || []).map((x) => {
+        const sub = [`${DR.fmt(x.n)} laporan · ${DR.fmt(x.ndl)} detail lokasi`, x.nstop ? `<b style="color:#b91c1c">${DR.fmt(x.nstop)} Stop Pekerjaan</b>` : ''].filter(Boolean).join(' · ');
+        return `<li><div><span>${DR.esc(x.isi || '-')}</span></div><small>${sub}</small></li>`;
+      }).join('');
+      isi.innerHTML = `<p class="dr-item-cara"><b>Cara tertangkap:</b> ${aturan}.</p>${nLabel}
         <p class="dr-mute" style="margin:0 0 10px;font-size:12px">${wKode(state.w)} · ${periode} · ${DR.fmt((data.item || []).length)} item berbeda di ${DR.fmt(data.ndl)} detail lokasi cakupan</p>
-        ${sumber === 'oak' ? '<p class="dr-mute" style="margin:0 0 10px;font-size:12px">Butir checklist OAK (objek / detail objek) belum bisa dipakai: tabel checklist berhenti tersinkron sejak 28 Okt 2026, jadi OAK ditangkap dari aktivitas / sub aktivitasnya.</p>' : ''}
         ${daftar ? `<ul class="dr-item-daftar">${daftar}</ul>` : '<div class="dr-mute">Tidak ada item pada minggu ini.</div>'}`;
     } catch (e) {
       isi.innerHTML = `<div class="dr-mute">Item gagal dimuat: ${DR.esc(e.message)}</div>`;

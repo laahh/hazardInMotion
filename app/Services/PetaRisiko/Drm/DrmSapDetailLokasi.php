@@ -72,7 +72,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
             };
             $kandidat = $hazard
                 ? ($petaLabel[DrmMaster::crc(DrmMaster::norm((string) $r['k']).' / '.DrmMaster::norm((string) $r['sk']))] ?? [])
-                : ($petaTeks[DrmMaster::crc($teks)] ?? []);
+                : ($petaTeks[DrmMaster::crcTeks($teks)] ?? []);
             $lolos = array_values(array_filter($kandidat, fn ($ri) => isset($barisGrup[$ri])));
             $pemetaan = $lolos !== [] ? 'lolos' : ($kandidat !== [] ? 'luar_grup' : 'tak_terpetakan');
             $belum = $hazard && ! in_array(strtoupper((string) $r['status']), self::STATUS_SELESAI, true);
@@ -115,7 +115,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
             $label[DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']))] = $l['ri'];
         }
         foreach ([...$m['obs'], ...$m['oak']] as $t) {
-            $c = DrmMaster::crc($t['teks']);
+            $c = DrmMaster::crcTeks($t['teks']);
             $teks[$c] = array_values(array_unique([...($teks[$c] ?? []), ...$t['ri']]));
         }
         $gid = array_search($grup, $m['grup'], true);

@@ -175,6 +175,23 @@ final class DrmMaster
         return crc32(self::norm($s));
     }
 
+    /**
+     * Kunci label OBS (jenis kegiatan) / OAK ("aktivitas / sub") untuk M11/M12, mengikuti dokumentasi Risk Matrix 5x5:
+     * huruf kecil, alias "Risk Intervention Center" = "Langsung", lalu hanya huruf + angka (spasi & tanda baca dibuang).
+     * Pasangan SQL: DrmSql::normTeksSql().
+     */
+    public static function normTeks(string $s): string
+    {
+        $s = (string) preg_replace('/risk\s*intervention\s*center/u', 'langsung', mb_strtolower($s, 'UTF-8'));
+
+        return (string) preg_replace('/[^0-9a-z]+/', '', $s);
+    }
+
+    public static function crcTeks(string $s): int
+    {
+        return crc32(self::normTeks($s));
+    }
+
     /** Kunci lokasi: CRC32("site|lokasi" ternormalisasi), sama dengan dl.lk di DrmSql. */
     public static function crcLokasi(string $site, string $lokasi): int
     {
@@ -320,7 +337,7 @@ final class DrmMaster
 
         $mo = [];
         foreach ([...$this->data['obs'], ...$this->data['oak']] as $t) {
-            $c = self::crc($t['teks']);
+            $c = self::crcTeks($t['teks']);
             $mo[$c] = array_values(array_unique([...($mo[$c] ?? []), ...$t['ri']]));
         }
 

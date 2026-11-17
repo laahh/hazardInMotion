@@ -252,7 +252,7 @@ mapb AS (
   SELECT h.hid AS hid, count() AS n, arraySlice(groupUniqArray(m.tx), 1, 10) AS contoh
   FROM mb m JOIN hira h ON h.a = m.a AND h.s = m.s GROUP BY hid
 ),
--- Butir checklist OAK tidak dipakai (lihat md di prelude): kolom Master D dibiarkan kosong.
+-- Butir checklist OAK tidak dipakai (OAK ditangkap lewat label aktivitas / sub, M12): kolom Master D dikosongkan.
 mapd AS (SELECT toUInt32(0) AS hid, toUInt64(0) AS n, CAST([], \'Array(String)\') AS contoh WHERE 0)
 SELECT toString(h.hid) AS hid, ifNull(a.n, 0) AS n_a, a.contoh AS label_a, ifNull(b.n, 0) AS n_b, b.contoh AS teks_b,
        ifNull(dd.n, 0) AS n_d, dd.contoh AS butir_d
@@ -263,65 +263,48 @@ FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid 
 
     /**
      * Beranda PJA — bukti tingkat KELOMPOK aktivitas per (detail lokasi, kelompok), dijalankan per site.
-     * Kelompok terdeteksi oleh: Observasi/OAK yang aktivitasnya terpetakan ke kelompok itu, atau label
-     * Hazard/Inspeksi spesifik (cocok ke ≤ N kelompok di detail lokasi itu).
+     * Kelompok terdeteksi hanya oleh label Hazard/Inspeksi SPESIFIK (cocok ke ≤ N kelompok di detail lokasi itu).
+     * OBS / OAK tidak lagi menandai seluruh kelompok (17 Nov 2026): keduanya menangkap bahaya lewat objek /
+     * butir checklist (berandaSpesifik, CTE evr).
      * w / h: daftar jarang "indeks:bit" per minggu (0 = minggu berjalan) / per hari (0 = hari pertama strip).
-     * Bit: 1 = terdeteksi, 16 = OAK Stop Pekerjaan. last = laporan terakhir (rentang data).
+     * Bit: 1 = terdeteksi. last = laporan terakhir (rentang data).
      * Baris kel = '' berisi laporan SAP terakhir apa pun di detail lokasi itu.
      */
     public function berandaKelompok(): string
     {
         return $this->prelude().$this->berandaDasarCte().',
-bk AS (SELECT DISTINCT b.dl AS dl, h.proses AS kel FROM basek b JOIN hira h ON h.hid = b.hid),
--- Deteksi keluarga (spec dlEntB): kelompok aktivitas (M02) dari teks aktivitas OBS / "aktivitas / sub"
--- OAK yang dilaporkan di detail lokasi itu (tanpa "tidak ada aktivitas"); OAK Stop ikut ditandai.
+-- Hazard/Inspeksi: aktivitas diturunkan dari lokasi. Label SPESIFIK (bahaya kandidatnya di grup lokasi DL hanya
+-- dari ≤ N kelompok, CTE spes) menandai kelompok itu terdeteksi; label umum hanya mengonfirmasi bahaya (evh).
 kev AS (
-  SELECT s.dl AS dl, k.kel AS kel, s.d AS d, toUInt8(s.stop) AS stop, s.j AS j, s.tx AS tx
-  FROM sap s JOIN okx k ON k.tx = s.tx
-  WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND NOT s.na
-    AND (s.dl, k.kel) IN (SELECT dl, kel FROM bk)
-  UNION ALL
-  -- Hazard/Inspeksi: aktivitas diturunkan dari lokasi. Label SPESIFIK (bahaya kandidatnya di grup lokasi DL hanya
-  -- dari ≤ N kelompok, CTE spes) ikut menandai kelompok itu terdeteksi; label umum hanya mengonfirmasi bahaya (evh).
-  SELECT e.dl AS dl, h.proses AS kel, e.d AS d, toUInt8(0) AS stop, \'H\' AS j, \'\' AS tx
+  SELECT e.dl AS dl, h.proses AS kel, e.d AS d
   FROM evh e JOIN hira h ON h.hid = e.hid
   WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)
 ),
--- Volume per minggu (modal Baseline): jumlah laporan & teks aktivitas berbeda dari OBS / OAK.
-kw AS (
-  SELECT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, groupBitOr(toUInt8(1 + 16 * stop)) AS bit,
-         countIf(j = \'OBSERVASI\') AS nob, countIf(j = \'OBSERVASI AREA KRITIS\') AS nok,
-         uniqExactIf(tx, j = \'OBSERVASI\') AS io, uniqExactIf(tx, j = \'OBSERVASI AREA KRITIS\') AS ik
-  FROM kev WHERE d >= wk_awal GROUP BY dl, kel, wi
-),
-kh AS (
-  SELECT dl, kel, dateDiff(\'day\', h0, d) AS di, groupBitOr(toUInt8(1 + 16 * stop)) AS bit
-  FROM kev WHERE d >= h0 GROUP BY dl, kel, di
-),
+kw AS (SELECT DISTINCT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi FROM kev WHERE d >= wk_awal),
+kh AS (SELECT DISTINCT dl, kel, dateDiff(\'day\', h0, d) AS di FROM kev WHERE d >= h0),
 kl AS (SELECT dl, kel, max(d) AS last FROM kev GROUP BY dl, kel),
-kwa AS (
-  SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w,
-         arrayStringConcat(groupArrayIf(concat(toString(wi), \':\', toString(nob), \':\', toString(nok), \':\', toString(io), \':\', toString(ik)), nob + nok > 0), \',\') AS v
-  FROM kw GROUP BY dl, kel
-),
-kha AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM kh GROUP BY dl, kel)
-SELECT toString(l.dl) AS dl, l.kel AS kel, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h, toString(l.last) AS last, ifNull(a.v, \'\') AS v
+kwa AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(wi), \':1\')), \',\') AS w FROM kw GROUP BY dl, kel),
+kha AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(di), \':1\')), \',\') AS h FROM kh GROUP BY dl, kel)
+SELECT toString(l.dl) AS dl, l.kel AS kel, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h, toString(l.last) AS last
 FROM kl l LEFT JOIN kwa a ON a.dl = l.dl AND a.kel = l.kel LEFT JOIN kha b ON b.dl = l.dl AND b.kel = l.kel
 UNION ALL
-SELECT toString(dl), \'\', \'\', \'\', toString(max(d)), \'\' FROM sap GROUP BY dl';
+SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
     }
 
     /**
      * Beranda PJA — bukti SPESIFIK per (detail lokasi, bahaya baseline), dijalankan per site:
-     * label Hazard/Inspeksi yang cocok ke bahaya dan butir checklist OAK.
+     * label Hazard/Inspeksi (M09), jenis kegiatan OBS (M11), dan "aktivitas / sub" OAK (M12) yang dipetakan ke baris (CTE evr).
      * Bit: 2 = teridentifikasi spesifik, 4 = belum closed (status saat ini bukan CLOSED/DONE; REJECT terbuka),
      * 8 = berulang (≥ ambang laporan berlabel sama di detail lokasi itu dalam minggu yang sama),
-     * 32 = butir checklist tidak sesuai (informasi, bukan gap),
-     * 64 (harian) = insiden pada hari itu yang root cause-nya terpetakan ke bahaya ini.
+     * 16 = OAK Stop Pekerjaan pada OAK yang labelnya dipetakan ke baris ini,
+     * 32 = (tidak dipakai lagi) butir checklist OAK Tidak Sesuai, 64 (harian) = insiden yang root cause-nya terpetakan ke bahaya ini.
+     * v = volume per minggu "wi:obs:oak:ketidaksesuaian:item obs:item oak:item label" (laporan yang menangkap
+     * baris ini; item = label OBS / OAK / Hazard berbeda).
      */
     public function berandaSpesifik(): string
     {
         $ulang = (int) $this->cfg['beranda']['ambang_berulang'];
+        $wi = 'intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7)';
 
         return $this->prelude().$this->berandaDasarCte().$this->rootCauseCte().',
 lw AS (SELECT dl, k, sk, toStartOfWeek(d, 0) AS ws, sum(n) AS nl FROM sh GROUP BY dl, k, sk, ws),
@@ -331,36 +314,43 @@ sxw AS (
   JOIN lw l ON l.dl = e.dl AND l.k = e.k AND l.sk = e.sk AND l.ws = e.ws
   GROUP BY e.dl, e.hid, e.d
 ),
-dx AS (SELECT dl, hid, d, ts FROM evd WHERE (dl, hid) IN (SELECT dl, hid FROM basek)),
+dx AS (SELECT dl, hid, d, ts, stop FROM evd WHERE (dl, hid) IN (SELECT dl, hid FROM basek)),
 ix AS (
   SELECT DISTINCT r.dl AS dl, m.hid AS hid, r.tgl AS d FROM rci r JOIN mar m ON m.k = r.k AND m.sk = r.sk
   WHERE r.tgl >= h0 AND r.tgl <= t_end AND (r.dl, m.hid) IN (SELECT dl, hid FROM basek)
 ),
 sw AS (
   SELECT dl, hid, wi, groupBitOr(bit) AS bit FROM (
-    SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi,
-           toUInt8(2 + 4 * op + 8 * ul) AS bit FROM sxw WHERE d >= wk_awal
+    SELECT dl, hid, '.$wi.' AS wi, toUInt8(2 + 4 * op + 8 * ul) AS bit FROM sxw WHERE d >= wk_awal
     UNION ALL
-    SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7), toUInt8(2 + 32 * ts) FROM dx WHERE d >= wk_awal
+    SELECT dl, hid, '.$wi.', toUInt8(2 + 16 * stop + 32 * ts) FROM dx WHERE d >= wk_awal
   ) GROUP BY dl, hid, wi
 ),
 shd AS (
   SELECT dl, hid, di, groupBitOr(bit) AS bit FROM (
     SELECT dl, hid, dateDiff(\'day\', h0, d) AS di, toUInt8(2 + 4 * op + 8 * ul) AS bit FROM sxw WHERE d >= h0
     UNION ALL
-    SELECT dl, hid, dateDiff(\'day\', h0, d), toUInt8(2 + 32 * ts) FROM dx WHERE d >= h0
+    SELECT dl, hid, dateDiff(\'day\', h0, d), toUInt8(2 + 16 * stop + 32 * ts) FROM dx WHERE d >= h0
     UNION ALL
     SELECT dl, hid, dateDiff(\'day\', h0, d), toUInt8(64) FROM ix
   ) GROUP BY dl, hid, di
 ),
 swa AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w FROM sw GROUP BY dl, hid),
--- Volume per minggu (modal Baseline): laporan Hazard/Inspeksi terpetakan & label (ketidaksesuaian / sub) berbeda.
+-- Volume per minggu (modal Baseline): laporan yang menangkap bahaya ini & item penangkapnya.
 svw AS (
-  SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, sum(n) AS nh, uniqExact(k, sk) AS ih
-  FROM evh WHERE d >= wk_awal GROUP BY dl, hid, wi
+  SELECT dl, hid, wi, sum(nob) AS nob, sum(nok) AS nok, sum(nh) AS nh, sum(io) AS io, sum(ik) AS ik, sum(ih) AS ih FROM (
+    SELECT dl, hid, '.$wi.' AS wi, toUInt64(0) AS nob, toUInt64(0) AS nok, toUInt64(sum(n)) AS nh,
+           toUInt64(0) AS io, toUInt64(0) AS ik, toUInt64(uniqExact(k, sk)) AS ih
+    FROM evh WHERE d >= wk_awal GROUP BY dl, hid, wi
+    UNION ALL
+    SELECT dl, hid, '.$wi.' AS wi, toUInt64(countIf(src = \'obs\')), toUInt64(countIf(src = \'oak\')), toUInt64(0),
+           toUInt64(uniqExactIf(item, src = \'obs\')), toUInt64(uniqExactIf(item, src = \'oak\')), toUInt64(0)
+    FROM evr WHERE d >= wk_awal AND (dl, hid) IN (SELECT dl, hid FROM basek) GROUP BY dl, hid, wi
+  ) GROUP BY dl, hid, wi
 ),
 sva AS (
-  SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(nh), \':\', toString(ih))), \',\') AS v
+  SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(nob), \':\', toString(nok), \':\', toString(nh),
+         \':\', toString(io), \':\', toString(ik), \':\', toString(ih))), \',\') AS v
   FROM svw GROUP BY dl, hid
 ),
 sha AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM shd GROUP BY dl, hid),
@@ -682,7 +672,7 @@ GROUP BY pl.pja_id, d.dl';
      *           tanggal terakhir <= tanggal akhir data)
      *   pjadl : PJA per detail lokasi = PJA lokasinya di obds.aaj_lokasi_dan_pja (M07/M08), id = m_pja
      *   ma    : label Hazard/Inspeksi → baris (M09);  mb : teks aktivitas OBS/OAK → baris (M11/M12)
-     *   md    : (kosong) butir checklist OAK tidak dipakai — OAK hanya dari ch_rfid_sap_cuti_all_site
+     *   evr   : bukti OBS / OAK per laporan × baris lewat label persis M11/M12 (butir checklist OAK tidak dipakai)
      *   base  : baseline = tiap detail lokasi × baris grupnya (M05). Bukti di luar grup tidak dihitung
      *           (gerbang irisan: kandidat dari isi laporan ∩ baris grup lokasi laporan).
      */
@@ -820,9 +810,10 @@ labx AS (
 ma AS (
   SELECT k, sk, arrayJoin(rs) AS hid FROM (SELECT l.k AS k, l.sk AS sk, m.rs AS rs FROM labx l JOIN m9x m ON m.kc = l.kc)
 ),
--- Teks aktivitas OBS / "aktivitas / sub" OAK: kelompok aktivitas (M02) dan pasangan baris persis (M11/M12).
+-- Teks aktivitas OBS (jenis kegiatan) / "aktivitas / sub" OAK: kelompok aktivitas (M02) dan pasangan baris persis
+-- (M11/M12, kunci = DrmMaster::normTeks: huruf + angka saja, "Risk Intervention Center" = "Langsung").
 okx AS (
-  SELECT tx, CRC32('.$this->norm('tx').') AS kc, ifNull(nullIf(arrayFirst(r -> match(tx, r.2), pb).1, \'\'), \'K0\') AS kel
+  SELECT tx, CRC32('.self::normTeksSql('tx').') AS kc, ifNull(nullIf(arrayFirst(r -> match(tx, r.2), pb).1, \'\'), \'K0\') AS kel
   FROM (SELECT DISTINCT tx FROM sap WHERE j IN ('.$obsOak.') AND trim(tx) NOT IN (\'\', \'/\'))
 ),
 mb AS (
@@ -840,13 +831,19 @@ evo AS (
 base AS (
   SELECT dl, arrayJoin(rs) AS hid, toUInt8(0) AS via_bukti FROM (SELECT d.dl AS dl, g.rs AS rs FROM dl d JOIN mgx g ON g.gid = d.gid)
 ),
--- Semua data OAK diambil dari ch_rfid_sap_cuti_all_site (keputusan user 17 Nov 2026): aktivitas → kelompok dan
--- OAK Stop. Tabel itu tidak memuat butir checklist (objek / detail objek / Sesuai-Tidak Sesuai), sedangkan
--- obds.oak_register / oak_detail_object berhenti tersinkron 28 Okt 2026, jadi bukti spesifik dari checklist
--- tidak dipakai: md (butir → baris) dan evd (bukti spesifik per DL × baris × hari) sengaja kosong, dengan
--- tipe kolom yang sama supaya CTE pemakainya tetap berjalan. OBS juga tidak menandai bahaya spesifik.
-md AS (SELECT toInt64(0) AS aid, toInt64(0) AS did, toUInt32(0) AS hid WHERE 0),
-evd AS (SELECT toInt64(0) AS dl, toUInt32(0) AS hid, toDate(\'1970-01-01\') AS d, toUInt8(0) AS ts WHERE 0),
+-- OBS / OAK menangkap BARIS HIRA lewat label persis di master (dokumentasi Risk Matrix 5x5, keputusan user 17 Nov 2026):
+--   OBS : jenis kegiatan (`aktivitas  OBS`)          → baris M11
+--   OAK : "aktivitas / sub aktivitas" OAK            → baris M12; hasil OAK "Stop" = gap
+-- Satu laporan hanya menandai baris yang dipetakan ke labelnya (bukan seluruh kelompok aktivitas). Item = label (CRC).
+evr AS (
+  SELECT s.dl AS dl, m.hid AS hid, s.d AS d, if(s.j = \'OBSERVASI\', \'obs\', \'oak\') AS src, toInt64(k.kc) AS item,
+         toUInt8(0) AS ts, toUInt8(s.stop) AS stop
+  FROM sap s
+  JOIN okx k ON k.tx = s.tx
+  JOIN (SELECT kc, arrayJoin(rs) AS hid FROM mox) m ON m.kc = k.kc
+  WHERE s.j IN ('.$obsOak.') AND NOT s.na AND (s.dl, m.hid) IN (SELECT dl, hid FROM base)
+),
+evd AS (SELECT dl, hid, d, max(ts) AS ts, max(stop) AS stop FROM evr GROUP BY dl, hid, d),
 -- Baris yang punya jalur identifikasi SAP di master (label M09, teks OBS/OAK M11/M12, atau tema M16).
 -- Hanya penanda status X (tanpa jalur identifikasi); baseline tidak difilter.
 petakan AS (
@@ -881,6 +878,12 @@ umum_a AS (
   SELECT DISTINCT CRC32(concat('.$this->norm('site').', \'|\', '.$this->norm('lokasi').')) AS lk, CRC32('.$this->norm('nama_pja').') AS nk
   FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\'
 )';
+    }
+
+    /** Ekspresi SQL kunci label OBS / OAK — pasangan DrmMaster::normTeks() (huruf + angka saja, alias Langsung). */
+    public static function normTeksSql(string $expr): string
+    {
+        return 'replaceRegexpAll(replaceRegexpAll(lowerUTF8(ifNull('.$expr.', \'\')), \'risk\\\\s*intervention\\\\s*center\', \'langsung\'), \'[^0-9a-z]+\', \'\')';
     }
 
     /** Ekspresi SQL teks ternormalisasi (huruf kecil, spasi rapat) — pasangan DrmMaster::norm(). */

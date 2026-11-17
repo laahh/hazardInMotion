@@ -156,6 +156,8 @@
   .dr-item-daftar li { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 13px 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafbfc; }
   .dr-item-daftar li span { font-size: 14px; color: #1f2937; }
   .dr-item-daftar li small { color: #6b7280; white-space: nowrap; font-size: 12px; }
+  .dr-tanda.biru { background: #e0ecff; color: #1d4ed8; }
+  .dr-item-contoh { margin-top: 6px; font-size: 12px; color: #6b7280; font-style: italic; line-height: 1.45; }
   .dr-item-daftar mark { background: #fef3c7; color: inherit; padding: 0 2px; border-radius: 3px; }
   @media (max-width: 640px) { .dr-item-daftar li { flex-direction: column; align-items: flex-start; gap: 4px; } }
   .dr-sap-ringkas { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 10px; font-size: 12.5px; }

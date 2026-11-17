@@ -9,15 +9,16 @@ use Carbon\CarbonImmutable;
  *
  * Bukti datang dari dua query per site (lihat DrmSql::berandaKelompok / berandaSpesifik) dalam bentuk
  * bit jarang "indeks:bit,...":
- *   kelompok (dl|kel): 1 = kelompok terdeteksi (Obs/OAK/label spesifik), 16 = OAK Stop Pekerjaan
+ *   kelompok (dl|kel): 1 = kelompok terdeteksi (label Hazard/Inspeksi spesifik)
  *   spesifik (dl|hid): 2 = teridentifikasi spesifik, 4 = belum closed (status kini bukan CLOSED/DONE),
  *                      8 = berulang (≥3 laporan label sama di detail lokasi dalam minggu itu),
+ *                      16 = OAK Stop Pekerjaan pada OAK yang labelnya (M12) dipetakan ke baris ini,
  *                      32 = butir checklist OAK Tidak Sesuai (lookup 10187) — ikut dihitung gap,
  *                      64 = (harian) insiden yang root cause-nya terpetakan ke bahaya ini.
- * Status baris = BERMASALAH bila ada bit 4/8/32 atau OAK stop kelompok (gap = belum closed | berulang |
- * butir OAK Tidak Sesuai | OAK Stop); TERKONTROL bila terdeteksi tanpa masalah; selain itu TANPA LAPORAN.
- * Sumber deteksi per jenis laporan (17 Nov 2026): OAK = kelompok (nama aktivitas) + bahaya (butir checklist);
- * OBS = kelompok saja; Hazard/Inspeksi = bahaya (label M09) + kelompok bila labelnya spesifik di detail lokasi itu.
+ * Status baris = BERMASALAH bila ada bit 4/8/16/32 (gap = belum closed | berulang | OAK Stop | butir OAK Tidak
+ * Sesuai); TERKONTROL bila terdeteksi tanpa masalah; selain itu TANPA LAPORAN. Bit 16 kelompok (snapshot lama) tetap dibaca.
+ * Sumber deteksi per jenis laporan (17 Nov 2026, dokumentasi Risk Matrix 5x5): label persis di master — Hazard/Inspeksi
+ * M09 (+ kelompok bila labelnya spesifik), OBS jenis kegiatan M11, OAK aktivitas / sub M12. Bit 32 tidak diisi lagi.
  *
  * Logika yang sama dipakai JS halaman PJA (pja.blade.php → fungsi statusBit); ubah keduanya bersamaan.
  */
@@ -64,11 +65,11 @@ class DrmBeranda
 
     /**
      * Volume laporan per minggu untuk modal Baseline (diisi oleh indeks, tidak masuk berkas PJA):
-     *   k["dl|kel"] = "wi:obs:oak:item obs:item oak,..."   s["dl|hid"] = "wi:ketidaksesuaian:item label,..."
+     *   ["dl|hid"] = "wi:obs:oak:ketidaksesuaian:item obs:item oak:item label,..." — laporan yang menangkap bahaya ini.
      *
-     * @var array{k: array<string, string>, s: array<string, string>}
+     * @var array<string, string>
      */
-    private array $vol = ['k' => [], 's' => []];
+    private array $vol = [];
 
     /** @param array<string, mixed> $cfg */
     public function __construct(private readonly array $cfg, private readonly CarbonImmutable $sampai)
@@ -107,8 +108,8 @@ class DrmBeranda
     /** Status satu baris dari bit kelompok (K) dan bit spesifik (S): ['ok'|'bm'|'none', bit masalah]. */
     public static function status(int $k, int $s): array
     {
-        // Gap: belum closed | berulang | butir checklist OAK Tidak Sesuai (lookup 10187) | OAK Stop Pekerjaan.
-        $masalah = ($s & (self::BELUM_CLOSED | self::BERULANG | self::TIDAK_SESUAI)) | ($k & self::OAK_STOP);
+        // Gap: belum closed | berulang | OAK Stop Pekerjaan | butir checklist OAK Tidak Sesuai (lookup 10187).
+        $masalah = ($s & (self::BELUM_CLOSED | self::BERULANG | self::OAK_STOP | self::TIDAK_SESUAI)) | ($k & self::OAK_STOP);
         if ($masalah) {
             return ['bm', $masalah];
         }
@@ -138,22 +139,19 @@ class DrmBeranda
     public function indeks(array $kelompok, array $spesifik): array
     {
         $kd = $dlast = $sp = [];
-        $this->vol = ['k' => [], 's' => []];
+        $this->vol = [];
         foreach ($kelompok as $r) {
             $last = (string) $r['last'];
             if ((string) $r['kel'] === '') {
                 $dlast[(string) $r['dl']] = $last;
             } else {
                 $kd[$r['dl'].'|'.$r['kel']] = [(string) $r['w'], (string) $r['h'], $last];
-                if ((string) ($r['v'] ?? '') !== '') {
-                    $this->vol['k'][$r['dl'].'|'.$r['kel']] = (string) $r['v'];
-                }
             }
         }
         foreach ($spesifik as $r) {
             $sp[$r['dl'].'|'.$r['hid']] = [(string) $r['w'], (string) $r['h']];
             if ((string) ($r['v'] ?? '') !== '') {
-                $this->vol['s'][$r['dl'].'|'.$r['hid']] = (string) $r['v'];
+                $this->vol[$r['dl'].'|'.$r['hid']] = (string) $r['v'];
             }
         }
 
@@ -339,7 +337,7 @@ class DrmBeranda
         $umum = array_map(fn ($l) => array_flip($l), (array) $berkasBeranda['umum']);
         $unik = $unikGrup = $kgIdx = $kgTot = [];
         $u4 = $dlW = array_fill(0, $nW, []);
-        $kwCache = $kvCache = [];
+        $kwCache = [];
 
         foreach ($dlIds as $d) {
             $grp = (string) ($this->grupDl[$d] ?? '');
@@ -362,13 +360,9 @@ class DrmBeranda
                 $unikGrup[$kgu]['inc'] += $nInc;
                 if ($volume) {
                     // [obs, oak, ketidaksesuaian, item obs, item oak, item label] per minggu, dijumlah antar detail lokasi.
-                    $kv = $kvCache[$d.'|'.$kel] ??= self::uraiVol($this->vol['k'][$d.'|'.$kel] ?? '', [0, 1, 3, 4]);
-                    $sv = self::uraiVol($this->vol['s'][$d.'|'.$hid] ?? '', [2, 5]);
-                    foreach ([$kv, $sv] as $sumber) {
-                        foreach ($sumber as $i => $n) {
-                            $unik[$ku]['v'][$i] = self::jumlahVol($unik[$ku]['v'][$i] ?? null, $n);
-                            $unikGrup[$kgu]['v'][$i] = self::jumlahVol($unikGrup[$kgu]['v'][$i] ?? null, $n);
-                        }
+                    foreach (self::uraiVol($this->vol[$d.'|'.$hid] ?? '') as $i => $n) {
+                        $unik[$ku]['v'][$i] = self::jumlahVol($unik[$ku]['v'][$i] ?? null, $n);
+                        $unikGrup[$kgu]['v'][$i] = self::jumlahVol($unikGrup[$kgu]['v'][$i] ?? null, $n);
                     }
                 }
                 $ok = [];
@@ -401,7 +395,7 @@ class DrmBeranda
      *   g: [grup, kel, hid, level, inc, tr, kode, gap, vol]    — per grup lokasi (tab Group Lokasi)
      * gap = satu digit hex per minggu dari bit masalah >> 2 (1 belum closed, 2 berulang, 4 OAK Stop, 8 butir tidak sesuai).
      * vol = "wi:obs:oak:ketidaksesuaian:item obs:item oak:item label,..." (minggu tanpa laporan tidak ditulis);
-     *       angka dijumlah antar detail lokasi, item = teks aktivitas / label berbeda per detail lokasi.
+     *       angka dijumlah antar detail lokasi, item = tema OBS / detail objek OAK / label berbeda per detail lokasi.
      *
      * @return array{u: list<list<int|string>>, g: list<list<int|string>>}
      */
@@ -433,21 +427,16 @@ class DrmBeranda
     }
 
     /**
-     * "wi:a:b,..." → [wi => vektor 6 angka], angka ke-j ditaruh di posisi $posisi[j].
+     * "wi:obs:oak:ket:item obs:item oak:item label,..." → [wi => vektor 6 angka].
      *
-     * @param  list<int>  $posisi
      * @return array<int, list<int>>
      */
-    private static function uraiVol(string $jarang, array $posisi): array
+    private static function uraiVol(string $jarang): array
     {
         $hasil = [];
         foreach ($jarang === '' ? [] : explode(',', $jarang) as $p) {
             $x = explode(':', $p);
-            $v = [0, 0, 0, 0, 0, 0];
-            foreach ($posisi as $j => $pos) {
-                $v[$pos] = (int) ($x[$j + 1] ?? 0);
-            }
-            $hasil[(int) $x[0]] = $v;
+            $hasil[(int) $x[0]] = array_map(fn (int $j) => (int) ($x[$j] ?? 0), range(1, 6));
         }
 
         return $hasil;
