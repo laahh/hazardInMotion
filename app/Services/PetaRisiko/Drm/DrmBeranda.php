@@ -62,6 +62,14 @@ class DrmBeranda
     /** @var array<string, true> "dl|hid" yang terkait insiden 12 bulan terakhir (diisi oleh denganInsiden) */
     private array $insidenPasangan = [];
 
+    /**
+     * Volume laporan per minggu untuk modal Baseline (diisi oleh indeks, tidak masuk berkas PJA):
+     *   k["dl|kel"] = "wi:obs:oak:item obs:item oak,..."   s["dl|hid"] = "wi:ketidaksesuaian:item label,..."
+     *
+     * @var array{k: array<string, string>, s: array<string, string>}
+     */
+    private array $vol = ['k' => [], 's' => []];
+
     /** @param array<string, mixed> $cfg */
     public function __construct(private readonly array $cfg, private readonly CarbonImmutable $sampai)
     {
@@ -130,16 +138,23 @@ class DrmBeranda
     public function indeks(array $kelompok, array $spesifik): array
     {
         $kd = $dlast = $sp = [];
+        $this->vol = ['k' => [], 's' => []];
         foreach ($kelompok as $r) {
             $last = (string) $r['last'];
             if ((string) $r['kel'] === '') {
                 $dlast[(string) $r['dl']] = $last;
             } else {
                 $kd[$r['dl'].'|'.$r['kel']] = [(string) $r['w'], (string) $r['h'], $last];
+                if ((string) ($r['v'] ?? '') !== '') {
+                    $this->vol['k'][$r['dl'].'|'.$r['kel']] = (string) $r['v'];
+                }
             }
         }
         foreach ($spesifik as $r) {
             $sp[$r['dl'].'|'.$r['hid']] = [(string) $r['w'], (string) $r['h']];
+            if ((string) ($r['v'] ?? '') !== '') {
+                $this->vol['s'][$r['dl'].'|'.$r['hid']] = (string) $r['v'];
+            }
         }
 
         return ['kd' => $kd, 'sp' => $sp, 'dlast' => $dlast];
@@ -249,7 +264,7 @@ class DrmBeranda
     public function ringkasMgmt(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, array $insiden, bool $pita = false, bool $rincian = false): array
     {
         $nW = (int) $this->cfg['beranda']['minggu'];
-        [$unik, $kgTot, $u4, $unikGrup, $dlW] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW);
+        [$unik, $kgTot, $u4, $unikGrup, $dlW] = $this->statusBaris($dlIds, $hidPerDl, $hira, $berkasBeranda, $nW, $rincian);
 
         $w = $kelGap = $kelW = $grpW = $gk = $akt = $gka = $mx = array_fill(0, $nW, []);
         $kelTot = [];
@@ -317,14 +332,14 @@ class DrmBeranda
      * @return array{0: array<string, array{lv: string, kel: string, w: list<array{0: int, 1: int, 2: int, 3: int}>}>, 1: array<string, array<int, int>>, 2: list<array<string, array<int, int>>>}
      *   [baris ketat (n, ok, bermasalah, bit masalah per minggu), kgTot, u4]
      */
-    private function statusBaris(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, int $nW): array
+    private function statusBaris(array $dlIds, array $hidPerDl, array $hira, array $berkasBeranda, int $nW, bool $volume = false): array
     {
         $kd = (array) $berkasBeranda['kd'];
         $sp = (array) $berkasBeranda['sp'];
         $umum = array_map(fn ($l) => array_flip($l), (array) $berkasBeranda['umum']);
         $unik = $unikGrup = $kgIdx = $kgTot = [];
         $u4 = $dlW = array_fill(0, $nW, []);
-        $kwCache = [];
+        $kwCache = $kvCache = [];
 
         foreach ($dlIds as $d) {
             $grp = (string) ($this->grupDl[$d] ?? '');
@@ -343,6 +358,17 @@ class DrmBeranda
                 $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'hid' => (string) $hid, 'inc' => false, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
                 if (isset($this->insidenPasangan[$d.'|'.$hid])) {
                     $unik[$ku]['inc'] = $unikGrup[$kgu]['inc'] = true;
+                }
+                if ($volume) {
+                    // [obs, oak, ketidaksesuaian, item obs, item oak, item label] per minggu, dijumlah antar detail lokasi.
+                    $kv = $kvCache[$d.'|'.$kel] ??= self::uraiVol($this->vol['k'][$d.'|'.$kel] ?? '', [0, 1, 3, 4]);
+                    $sv = self::uraiVol($this->vol['s'][$d.'|'.$hid] ?? '', [2, 5]);
+                    foreach ([$kv, $sv] as $sumber) {
+                        foreach ($sumber as $i => $n) {
+                            $unik[$ku]['v'][$i] = self::jumlahVol($unik[$ku]['v'][$i] ?? null, $n);
+                            $unikGrup[$kgu]['v'][$i] = self::jumlahVol($unikGrup[$kgu]['v'][$i] ?? null, $n);
+                        }
+                    }
                 }
                 $ok = [];
                 for ($i = 0; $i < $nW; $i++) {
@@ -370,14 +396,23 @@ class DrmBeranda
      * Baris gabungan per status mingguan untuk modal kartu KPI. Kode minggu (indeks 0 = minggu berjalan):
      * K = teridentifikasi & terkontrol, G = ada gap, T = tidak teridentifikasi. inc = terkait insiden 12 bulan
      * (laten bila T), tr = residual HIRA lebih rendah dari risiko awal (turun kategori bila K).
-     *   u: [kel, hid, level, inc, tr, kode]          — baseline unik (Overview / Kelompok Aktivitas / Semua PJA)
-     *   g: [grup, kel, hid, level, inc, tr, kode]    — per grup lokasi (tab Group Lokasi)
+     *   u: [kel, hid, level, inc, tr, kode, gap, vol]          — baseline unik (Overview / Kelompok Aktivitas / Semua PJA)
+     *   g: [grup, kel, hid, level, inc, tr, kode, gap, vol]    — per grup lokasi (tab Group Lokasi)
+     * gap = satu digit hex per minggu dari bit masalah >> 2 (1 belum closed, 2 berulang, 4 OAK Stop, 8 butir tidak sesuai).
+     * vol = "wi:obs:oak:ketidaksesuaian:item obs:item oak:item label,..." (minggu tanpa laporan tidak ditulis);
+     *       angka dijumlah antar detail lokasi, item = teks aktivitas / label berbeda per detail lokasi.
      *
      * @return array{u: list<list<int|string>>, g: list<list<int|string>>}
      */
     private static function rincianBaris(array $unik, array $unikGrup, array $hira): array
     {
         $kode = fn (array $w) => implode('', array_map(fn ($st) => $st[2] > 0 ? 'G' : ($st[1] > 0 ? 'K' : 'T'), $w));
+        $gap = fn (array $w) => implode('', array_map(fn ($st) => dechex(($st[3] >> 2) & 0xF), $w));
+        $vol = function (array $v): string {
+            ksort($v);
+
+            return implode(',', array_map(fn ($i, $n) => $i.':'.implode(':', $n), array_keys($v), $v));
+        };
         $turun = function (string $hid) use ($hira): int {
             $h = $hira[$hid] ?? [];
             $n2 = self::LEVEL[(string) ($h['n2'] ?? '')] ?? 0;
@@ -387,13 +422,40 @@ class DrmBeranda
         $u = $g = [];
         foreach ($unik as $ku => $x) {
             $hid = substr($ku, strpos($ku, '|') + 1);
-            $u[] = [$x['kel'], $hid, $x['lv'], (int) $x['inc'], $turun($hid), $kode($x['w'])];
+            $u[] = [$x['kel'], $hid, $x['lv'], (int) $x['inc'], $turun($hid), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
         }
         foreach ($unikGrup as $x) {
-            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], (int) $x['inc'], $turun($x['hid']), $kode($x['w'])];
+            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], (int) $x['inc'], $turun($x['hid']), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
         }
 
         return ['u' => $u, 'g' => $g];
+    }
+
+    /**
+     * "wi:a:b,..." → [wi => vektor 6 angka], angka ke-j ditaruh di posisi $posisi[j].
+     *
+     * @param  list<int>  $posisi
+     * @return array<int, list<int>>
+     */
+    private static function uraiVol(string $jarang, array $posisi): array
+    {
+        $hasil = [];
+        foreach ($jarang === '' ? [] : explode(',', $jarang) as $p) {
+            $x = explode(':', $p);
+            $v = [0, 0, 0, 0, 0, 0];
+            foreach ($posisi as $j => $pos) {
+                $v[$pos] = (int) ($x[$j + 1] ?? 0);
+            }
+            $hasil[(int) $x[0]] = $v;
+        }
+
+        return $hasil;
+    }
+
+    /** @param list<int>|null $a */
+    private static function jumlahVol(?array $a, array $b): array
+    {
+        return $a === null ? $b : array_map(fn ($x, $y) => $x + $y, $a, $b);
     }
 
     /** Tambah satu detail lokasi ke status baris ketat [n DL, n terkontrol, n bermasalah, bit]. */

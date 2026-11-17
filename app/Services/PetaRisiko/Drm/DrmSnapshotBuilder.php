@@ -310,11 +310,11 @@ class DrmSnapshotBuilder
         // Kategori ringkasan unik memakai pita cakupan detail lokasi (lihat DrmBeranda::nilai).
         $hasil['ALL']['pita'] = [DrmBeranda::PITA_ATAS, DrmBeranda::PITA_BAWAH];
 
-        // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi].
+        // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi, risiko residual].
         $teks = [];
         foreach (array_keys($hidDipakai) as $hid) {
             $h = $hira[$hid] ?? [];
-            $teks[$hid] = [(string) ($h['an'] ?? ''), (string) ($h['sn'] ?? ''), (string) ($h['bn'] ?? ''), (string) ($h['p'] ?? '')];
+            $teks[$hid] = [(string) ($h['an'] ?? ''), (string) ($h['sn'] ?? ''), (string) ($h['bn'] ?? ''), (string) ($h['p'] ?? ''), (string) ($h['n2'] ?? '')];
         }
 
         return [$hasil, ['minggu' => $b->minggu(), 'teks' => (object) $teks, 'lingkup' => $lingkup]];

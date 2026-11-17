@@ -382,14 +382,16 @@
   }
 
   let modalBaris = [];
+  /** "wi:obs:oak:ket:iobs:ioak:iket,..." → { wi: [6 angka] } */
+  const uraiVol = (v) => Object.fromEntries((v || '').split(',').filter(Boolean).map((p) => { const x = p.split(':').map(Number); return [x[0], x.slice(1)]; }));
   /** Baris rincian untuk cakupan & filter aktif (tab, site, grup, kelompok, level, minggu) — sama dengan angka kartu. */
   function barisModal(R, kat) {
     const L = R.lingkup[state.site];
     if (!L) return null;
     const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
     const daftar = state.tab === 'grup'
-      ? L.g.filter((x) => x[0] === state.grup).map(([, kel, hid, lv, inc, tr, kode]) => ({ kel, hid, lv, inc, tr, kode }))
-      : L.u.map(([kel, hid, lv, inc, tr, kode]) => ({ kel, hid, lv, inc, tr, kode }));
+      ? L.g.filter((x) => x[0] === state.grup).map(([, kel, hid, lv, inc, tr, kode, gap, vol]) => ({ kel, hid, lv, inc, tr, kode, gap, vol }))
+      : L.u.map(([kel, hid, lv, inc, tr, kode, gap, vol]) => ({ kel, hid, lv, inc, tr, kode, gap, vol }));
     const f = KAT_MODAL[kat][3];
     return daftar.filter((b) => (state.tab !== 'proses' || b.kel === state.proses) && (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
   }
@@ -403,6 +405,7 @@
     d.querySelector('#dr-modal-ket').textContent = `${cakupan} · ${wKode(state.w)} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}. ${ket}`;
     d.querySelector('#dr-modal-q').value = '';
     d.querySelector('#dr-modal-n').textContent = '';
+    d.classList.add('lebar');
     d.querySelector('#dr-modal-isi').innerHTML = '<div class="pr-empty">Memuat daftar…</div>';
     if (!d.open) d.showModal();
     try {
@@ -425,9 +428,14 @@
     kelompok: ['#a05a00', 'OBS/OAK · aktivitas → kelompok'],
   };
 
+  const STATUS_SAP = { K: 'Teridentifikasi - Terkontrol', G: 'Teridentifikasi - Ada Gap', T: 'Tidak Teridentifikasi' };
+  const GAP_BIT = { closed: 1, ulang: 2, stop: 4 };
+
   /**
-   * Tabel modal: Aktivitas HIRA → Bahaya-risiko → SAP. Dikelompokkan per kelompok aktivitas; tombol SAP membuka
-   * laporan SAP minggu terpilih yang menjadi bukti baris itu (dimuat langsung dari ClickHouse).
+   * Tabel modal (gaya DRM 2.1 lama): Aktivitas · Sub aktivitas · Bahaya-risiko · Risiko baseline · Status SAP · Risiko akhir ·
+   * Gap1–4 · Item sumber (Obs / OAK / Ketidaksesuaian) · Volume, semuanya untuk minggu terpilih. Risiko akhir = residual HIRA
+   * bila terkontrol, selain itu tetap risiko baseline. Item = teks aktivitas / label berbeda per detail lokasi (dijumlah antar DL);
+   * link item membuka laporan SAP baris itu (dimuat langsung dari ClickHouse).
    */
   function isiModal() {
     const d = dialogModal(), R = d._rincian;
@@ -435,40 +443,57 @@
     const q = d.querySelector('#dr-modal-q').value.trim().toLowerCase();
     const namaKel = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]);
     const urutLv = { Significant: 0, High: 1, Medium: 2, Low: 3 };
-    const baris = modalBaris.map((b) => ({ ...b, t: R.teks[b.hid] || ['', '', '', ''], kn: namaKel[b.kel] || b.kel }))
-      .filter((b) => !q || `${b.kn} ${b.t.join(' ')}`.toLowerCase().includes(q))
-      .sort((a, b) => a.kn.localeCompare(b.kn) || a.t[0].localeCompare(b.t[0]) || (urutLv[a.lv] ?? 9) - (urutLv[b.lv] ?? 9) || a.t[2].localeCompare(b.t[2]));
+    const baris = modalBaris.map((b) => ({ ...b, t: R.teks[b.hid] || ['', '', '', '', ''], kn: namaKel[b.kel] || b.kel }))
+      .filter((b) => !q || `${b.kn} ${b.t.slice(0, 4).join(' ')}`.toLowerCase().includes(q))
+      .sort((a, b) => a.kn.localeCompare(b.kn) || a.t[0].localeCompare(b.t[0]) || a.t[1].localeCompare(b.t[1]) || (urutLv[a.lv] ?? 9) - (urutLv[b.lv] ?? 9) || a.t[2].localeCompare(b.t[2]));
     d.querySelector('#dr-modal-n').textContent = `${DR.fmt(baris.length)} baris${q ? ` (dari ${DR.fmt(modalBaris.length)})` : ''}`;
     if (!baris.length) { d.querySelector('#dr-modal-isi').innerHTML = `<div class="pr-empty">${q ? 'Tidak ada yang cocok dengan pencarian.' : 'Tidak ada baris di kategori ini.'}</div>`; return; }
-    const NW = R.minggu.length;
-    const jejak = (kode) => {
-      let h = '';
-      for (let i = NW - 1; i >= 0; i--) {
-        const [c, t] = KODE_MODAL[kode[i] || 'T'];
-        h += `<i style="background:${c}" class="${i === state.w ? 'sel' : ''}" title="${wKode(i)}: ${t}"></i>`;
-      }
-      return `<span class="dr-jejak">${h}</span>`;
-    };
+    const adaVol = baris.some((b) => b.gap !== undefined);
+    const NK = 16;
+    const gapSel = (ya, na) => (ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
+    const item = (n, i) => (n > 0 ? `<button type="button" class="dr-item" data-i="${i}" aria-expanded="false">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
+    const angka = (n) => (n > 0 ? DR.fmt(n) : '<span class="dr-nol">0</span>');
     const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
     let kel = '', html = '';
     baris.forEach((b, i) => {
       if (b.kel !== kel) {
         kel = b.kel;
-        html += `<tr class="dr-modal-grp"><td colspan="5">${DR.esc(b.kn)} <span>${DR.fmt(jumlahKel[kel])} bahaya</span></td></tr>`;
+        html += `<tr class="dr-modal-grp"><td colspan="${NK}">${DR.esc(b.kn)} <span>${DR.fmt(jumlahKel[kel])} bahaya</span></td></tr>`;
       }
+      const kode = b.kode[state.w] || 'T';
+      const m = parseInt((b.gap || '')[state.w] || '0', 16);
+      const [nObs, nOak, nKet, iObs, iOak, iKet] = uraiVol(b.vol)[state.w] || [0, 0, 0, 0, 0, 0];
+      const akhir = kode === 'K' && b.t[4] ? b.t[4] : b.lv;
       const tanda = [b.inc ? '<span class="dr-tanda ungu">insiden 12 bln</span>' : '', b.tr ? '<span class="dr-tanda hijau">residual lebih rendah</span>' : ''].join('');
+      const T = kode === 'T';
       html += `<tr class="dr-modal-baris" data-i="${i}">
-        <td>${DR.esc(b.t[0] || '-')}${b.t[1] ? `<small>${DR.esc(b.t[1])}</small>` : ''}</td>
-        <td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${b.t[3] ? `<small>${DR.esc(b.t[3])}</small>` : ''}${tanda}</td>
-        <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
-        <td>${jejak(b.kode)}</td>
-        <td class="r"><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> SAP</button></td></tr>
-        <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="5"></td></tr>`;
+        <td class="akt">${DR.esc(b.t[0] || '-')}</td>
+        <td class="akt">${DR.esc(b.t[1] || '-')}</td>
+        <td class="bhy"${b.t[3] ? ` title="${DR.esc(b.t[3])}"` : ''}>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}${tanda ? `<div>${tanda}</div>` : ''}</td>
+        <td class="c"><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
+        <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span></td>
+        <td class="c"><span class="dr-lv lv-${DR.esc(akhir)}">${DR.esc(akhir || '-')}</span></td>
+        <td class="c">${gapSel(T, false)}</td>
+        <td class="c">${gapSel(m & GAP_BIT.closed, T)}</td>
+        <td class="c">${gapSel(m & GAP_BIT.ulang, T)}</td>
+        <td class="c">${gapSel(m & GAP_BIT.stop, T || nOak === 0)}</td>
+        <td class="c">${item(iObs, i)}</td>
+        <td class="c">${item(iOak, i)}</td>
+        <td class="c">${item(iKet, i)}</td>
+        <td class="n">${angka(nObs)}</td>
+        <td class="n">${angka(nOak)}</td>
+        <td class="n">${angka(nKet)}</td></tr>
+        <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="${NK}"></td></tr>`;
     });
     const isi = d.querySelector('#dr-modal-isi');
-    isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl"><thead><tr><th>Aktivitas HIRA</th><th>Bahaya-risiko</th><th>Risiko awal</th>
-      <th>Status ${NW} minggu <small>(lama → baru)</small></th><th class="r">Laporan SAP ${wKode(state.w)}</th></tr></thead><tbody>${html}</tbody></table>`;
-    isi.querySelectorAll('.dr-sap-btn').forEach((btn) => btn.addEventListener('click', () => bukaSapBahaya(baris[+btn.dataset.i], btn)));
+    const wk = wKode(state.w);
+    isi.innerHTML = (adaVol ? '' : '<p class="dr-mute" style="margin:10px 0 0;font-size:12px">Snapshot ini belum memuat gap & volume per baris. Jalankan <code>php artisan peta-risiko:sync</code>.</p>')
+      + `<table class="pr-tbl dr-tbl dr-modal-tbl dr-bl-tbl"><thead><tr>
+      <th>Aktivitas</th><th>Sub Aktivitas</th><th>Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
+      <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
+      <th class="c">Item Sumber Observasi</th><th class="c">Item Sumber OAK</th><th class="c">Item Sumber Ketidaksesuaian</th>
+      <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th></tr></thead><tbody>${html}</tbody></table>`;
+    isi.querySelectorAll('.dr-item').forEach((btn) => btn.addEventListener('click', () => bukaSapBahaya(baris[+btn.dataset.i], btn)));
   }
 
   /** Buka / tutup daftar SAP satu baris di modal. */

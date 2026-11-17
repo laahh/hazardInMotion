@@ -117,6 +117,24 @@
   .dr-sap-btn .material-symbols-outlined { font-size: 16px; }
   .dr-sap-btn:hover, .dr-sap-btn.on { background: #eef1fd; border-color: #3952bc; }
   .dr-modal-sap > td { background: #fafbfc; padding: 12px 14px 14px !important; }
+  /* Tabel Baseline lebar (gaya DRM 2.1 lama): status, risiko akhir, 4 gap, item sumber, volume. */
+  .dr-modal.lebar { width: min(1480px, calc(100vw - 32px)); }
+  .dr-bl-tbl { min-width: 1360px; }
+  .dr-bl-tbl thead th { font-size: 10.5px; line-height: 1.25; vertical-align: bottom; white-space: normal; }
+  .dr-bl-tbl td { vertical-align: top; }
+  .dr-bl-tbl td.c, .dr-bl-tbl th.c { text-align: center; }
+  .dr-bl-tbl td.n, .dr-bl-tbl th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .dr-bl-tbl .akt { min-width: 150px; max-width: 220px; } .dr-bl-tbl .bhy { min-width: 180px; max-width: 280px; }
+  .dr-st { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+  .dr-st.K { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+  .dr-st.G { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+  .dr-st.T { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .dr-gap { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; background: #f3f4f6; color: #8a8d90; white-space: nowrap; }
+  .dr-gap.ya { background: #fdecee; color: #b91c1c; text-decoration: underline; }
+  .dr-gap.na { background: transparent; color: #b0b3b6; font-style: italic; font-weight: 500; }
+  .dr-item { border: 0; background: none; padding: 0; color: #1d4ed8; text-decoration: underline; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .dr-item:hover { color: #1e3a8a; }
+  .dr-nol { color: #b0b3b6; }
   .dr-sap-ringkas { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 10px; font-size: 12.5px; }
   .dr-sap-tbl { min-width: 880px; font-size: 12px; }
   .dr-sap-tbl td small { display: block; color: #8a8d90; font-size: 11px; margin-top: 2px; }

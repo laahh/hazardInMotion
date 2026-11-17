@@ -276,19 +276,22 @@ bk AS (SELECT DISTINCT b.dl AS dl, h.proses AS kel FROM basek b JOIN hira h ON h
 -- Deteksi keluarga (spec dlEntB): kelompok aktivitas (M02) dari teks aktivitas OBS / "aktivitas / sub"
 -- OAK yang dilaporkan di detail lokasi itu (tanpa "tidak ada aktivitas"); OAK Stop ikut ditandai.
 kev AS (
-  SELECT s.dl AS dl, k.kel AS kel, s.d AS d, toUInt8(s.stop) AS stop
+  SELECT s.dl AS dl, k.kel AS kel, s.d AS d, toUInt8(s.stop) AS stop, s.j AS j, s.tx AS tx
   FROM sap s JOIN okx k ON k.tx = s.tx
   WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND NOT s.na
     AND (s.dl, k.kel) IN (SELECT dl, kel FROM bk)
   UNION ALL
   -- Hazard/Inspeksi: aktivitas diturunkan dari lokasi. Label SPESIFIK (bahaya kandidatnya di grup lokasi DL hanya
   -- dari ≤ N kelompok, CTE spes) ikut menandai kelompok itu terdeteksi; label umum hanya mengonfirmasi bahaya (evh).
-  SELECT e.dl AS dl, h.proses AS kel, e.d AS d, toUInt8(0) AS stop
+  SELECT e.dl AS dl, h.proses AS kel, e.d AS d, toUInt8(0) AS stop, \'H\' AS j, \'\' AS tx
   FROM evh e JOIN hira h ON h.hid = e.hid
   WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)
 ),
+-- Volume per minggu (modal Baseline): jumlah laporan & teks aktivitas berbeda dari OBS / OAK.
 kw AS (
-  SELECT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, groupBitOr(toUInt8(1 + 16 * stop)) AS bit
+  SELECT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, groupBitOr(toUInt8(1 + 16 * stop)) AS bit,
+         countIf(j = \'OBSERVASI\') AS nob, countIf(j = \'OBSERVASI AREA KRITIS\') AS nok,
+         uniqExactIf(tx, j = \'OBSERVASI\') AS io, uniqExactIf(tx, j = \'OBSERVASI AREA KRITIS\') AS ik
   FROM kev WHERE d >= wk_awal GROUP BY dl, kel, wi
 ),
 kh AS (
@@ -296,12 +299,16 @@ kh AS (
   FROM kev WHERE d >= h0 GROUP BY dl, kel, di
 ),
 kl AS (SELECT dl, kel, max(d) AS last FROM kev GROUP BY dl, kel),
-kwa AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w FROM kw GROUP BY dl, kel),
+kwa AS (
+  SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w,
+         arrayStringConcat(groupArrayIf(concat(toString(wi), \':\', toString(nob), \':\', toString(nok), \':\', toString(io), \':\', toString(ik)), nob + nok > 0), \',\') AS v
+  FROM kw GROUP BY dl, kel
+),
 kha AS (SELECT dl, kel, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM kh GROUP BY dl, kel)
-SELECT toString(l.dl) AS dl, l.kel AS kel, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h, toString(l.last) AS last
+SELECT toString(l.dl) AS dl, l.kel AS kel, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h, toString(l.last) AS last, ifNull(a.v, \'\') AS v
 FROM kl l LEFT JOIN kwa a ON a.dl = l.dl AND a.kel = l.kel LEFT JOIN kha b ON b.dl = l.dl AND b.kel = l.kel
 UNION ALL
-SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
+SELECT toString(dl), \'\', \'\', \'\', toString(max(d)), \'\' FROM sap GROUP BY dl';
     }
 
     /**
@@ -347,10 +354,20 @@ shd AS (
   ) GROUP BY dl, hid, di
 ),
 swa AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w FROM sw GROUP BY dl, hid),
+-- Volume per minggu (modal Baseline): laporan Hazard/Inspeksi terpetakan & label (ketidaksesuaian / sub) berbeda.
+svw AS (
+  SELECT dl, hid, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, sum(n) AS nh, uniqExact(k, sk) AS ih
+  FROM evh WHERE d >= wk_awal GROUP BY dl, hid, wi
+),
+sva AS (
+  SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(nh), \':\', toString(ih))), \',\') AS v
+  FROM svw GROUP BY dl, hid
+),
 sha AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM shd GROUP BY dl, hid),
 kunci AS (SELECT dl, hid FROM swa UNION DISTINCT SELECT dl, hid FROM sha)
-SELECT toString(k.dl) AS dl, toString(k.hid) AS hid, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h
-FROM kunci k LEFT JOIN swa a ON a.dl = k.dl AND a.hid = k.hid LEFT JOIN sha b ON b.dl = k.dl AND b.hid = k.hid';
+SELECT toString(k.dl) AS dl, toString(k.hid) AS hid, ifNull(a.w, \'\') AS w, ifNull(b.h, \'\') AS h, ifNull(c.v, \'\') AS v
+FROM kunci k LEFT JOIN swa a ON a.dl = k.dl AND a.hid = k.hid LEFT JOIN sha b ON b.dl = k.dl AND b.hid = k.hid
+LEFT JOIN sva c ON c.dl = k.dl AND c.hid = k.hid';
     }
 
     /**
