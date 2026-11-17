@@ -847,7 +847,7 @@ oakr AS (
          toUInt8(ifNull(r.id_conclusion, 0) = '.(int) $c['oak_checklist']['stop'].') AS stop,
          CRC32('.self::normTeksSql('concat(ifNull(a.name, \'\'), \' / \', ifNull(s.name, \'\'))').') AS kl,
          CRC32('.self::normTeksSql('ifNull(a.name, \'\')').') AS ka
-  FROM bcbeats.oak_register r
+  FROM '.self::tabelOak($c, 'register').' r
   LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity GROUP BY id) a ON a.id = toInt64(r.id_oak_activity)
   LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_sub_activity GROUP BY id) s ON s.id = toInt64(r.id_oak_sub_activity)
   WHERE r.submit_date >= t_open AND r.submit_date < t_end + 1 AND toInt64(r.id_location) IN (SELECT dl FROM dl0)
@@ -859,7 +859,7 @@ oke AS (
 ),
 ojt AS (
   SELECT toInt64(id_oak_register) AS rid, toInt64(id_detail_object) AS did, toInt64(id_suitability) AS sid
-  FROM bcbeats.oak_detail_object
+  FROM '.self::tabelOak($c, 'detail').'
   WHERE id_suitability IN ('.(int) $c['oak_checklist']['sesuai'].', '.(int) $c['oak_checklist']['tidak_sesuai'].')
     AND toInt64(id_oak_register) IN (SELECT rid FROM oke)
 ),
@@ -924,6 +924,19 @@ umum_a AS (
   SELECT DISTINCT CRC32(concat('.$this->norm('site').', \'|\', '.$this->norm('lokasi').')) AS lk, CRC32('.$this->norm('nama_pja').') AS nk
   FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\'
 )';
+    }
+
+    /**
+     * Nama tabel transaksi OAK dari config `oak_tabel` ('register' / 'detail'), divalidasi "database.tabel".
+     *
+     * @param  array<string, mixed>  $cfg
+     */
+    public static function tabelOak(array $cfg, string $jenis): string
+    {
+        $bawaan = ['register' => 'bcbeats.oak_register', 'detail' => 'bcbeats.oak_detail_object'][$jenis];
+        $nama = (string) ($cfg['oak_tabel'][$jenis] ?? $bawaan);
+
+        return preg_match('/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/', $nama) === 1 ? $nama : $bawaan;
     }
 
     /** Ekspresi SQL kunci label OBS / OAK — pasangan DrmMaster::normTeks() (huruf + angka saja, alias Langsung). */

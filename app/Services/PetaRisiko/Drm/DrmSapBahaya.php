@@ -268,14 +268,14 @@ class DrmSapBahaya
            CRC32('.DrmSql::normTeksSql('concat(ifNull(a.name, \'\'), \' / \', ifNull(s.name, \'\'))').') AS kl,
            CRC32('.DrmSql::normTeksSql('ifNull(a.name, \'\')').') AS ka,
            toUInt8(ifNull(x.id_conclusion, 0) = '.(int) $c['stop'].') AS stop
-    FROM (SELECT * FROM bcbeats.oak_register '.$saring.') x
+    FROM (SELECT * FROM '.DrmSql::tabelOak($p['cfg'], 'register').' '.$saring.') x
     LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity GROUP BY id) a ON a.id = toInt64(x.id_oak_activity)
     LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_sub_activity GROUP BY id) s ON s.id = toInt64(x.id_oak_sub_activity)
   ) r
   JOIN (
     SELECT toInt64(id_oak_register) AS rid, toInt64(id_detail_object) AS did, toInt64(id_suitability) AS sid, trim(ifNull(tx_suitability, \'\')) AS catatan
-    FROM bcbeats.oak_detail_object
-    WHERE id_suitability IN ('.(int) $c['sesuai'].', '.$ts.') AND toInt64(id_oak_register) IN (SELECT toInt64(id) FROM bcbeats.oak_register '.$saring.')
+    FROM '.DrmSql::tabelOak($p['cfg'], 'detail').'
+    WHERE id_suitability IN ('.(int) $c['sesuai'].', '.$ts.') AND toInt64(id_oak_register) IN (SELECT toInt64(id) FROM '.DrmSql::tabelOak($p['cfg'], 'register').' '.$saring.')
   ) j ON j.rid = r.rid
   JOIN obds.m_oak_detail_objek AS dt FINAL ON dt.id = j.did
   JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = dt.id_objek_pengamatan_observe

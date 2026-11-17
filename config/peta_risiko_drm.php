@@ -64,6 +64,16 @@ return [
     'oak_checklist' => ['sesuai' => 10186, 'tidak_sesuai' => 10187, 'stop' => 19502],
 
     /*
+    | Tabel transaksi OAK di ClickHouse (koneksi clickhouse_obds). Bawaan bcbeats (tersinkron harian); user koneksi
+    | butuh GRANT SELECT ON bcbeats.oak_register / bcbeats.oak_detail_object. Bisa dialihkan lewat .env, mis. ke
+    | obds.oak_register / obds.oak_detail_object (salinan lama, berhenti 28 Okt 2026) sementara hak akses diurus.
+    */
+    'oak_tabel' => [
+        'register' => env('PETA_RISIKO_OAK_REGISTER', 'bcbeats.oak_register'),
+        'detail' => env('PETA_RISIKO_OAK_DETAIL', 'bcbeats.oak_detail_object'),
+    ],
+
+    /*
     | Label OBS (M11) / OAK (M12) → baris HIRA. false = persis master (dokumentasi Risk Matrix 5x5, baseline tetap:
     | OBS 826 baris, OAK 93 baris). true = label juga menandai baris lain dengan aktivitas + sub aktivitas yang sama.
     */
