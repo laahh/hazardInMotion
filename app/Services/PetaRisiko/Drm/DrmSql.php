@@ -939,6 +939,40 @@ umum_a AS (
         return preg_match('/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/', $nama) === 1 ? $nama : $bawaan;
     }
 
+    /**
+     * Pastikan tabel OAK di config bisa dibaca user koneksi. Bila ditolak (mis. belum ada GRANT SELECT ON bcbeats.*),
+     * pakai salinan obds.oak_register / obds.oak_detail_object supaya sync & modal tetap jalan. Hasil cek di-cache 1 jam.
+     *
+     * @param  array<string, mixed>  $cfg
+     * @return array{0: array<string, mixed>, 1: string|null}  [cfg efektif, pesan peringatan bila dialihkan]
+     */
+    public static function cfgAksesOak(\App\Services\SportEvaluation\RfidClickHouseClient $ch, array $cfg): array
+    {
+        $tabel = [self::tabelOak($cfg, 'register'), self::tabelOak($cfg, 'detail')];
+        $cadangan = ['obds.oak_register', 'obds.oak_detail_object'];
+        if ($tabel === $cadangan) {
+            return [$cfg, null];
+        }
+        $bisa = \Illuminate\Support\Facades\Cache::remember('peta-risiko:akses-oak:'.md5(implode('|', $tabel)), 3600, function () use ($ch, $tabel) {
+            try {
+                foreach ($tabel as $t) {
+                    $ch->select('SELECT 1 FROM '.$t.' LIMIT 1', 30);
+                }
+
+                return true;
+            } catch (\Throwable $e) {
+                return str_contains($e->getMessage(), 'ACCESS_DENIED') || str_contains($e->getMessage(), 'Not enough privileges') ? false : true;
+            }
+        });
+        if ($bisa) {
+            return [$cfg, null];
+        }
+        $cfg['oak_tabel'] = ['register' => $cadangan[0], 'detail' => $cadangan[1]];
+
+        return [$cfg, 'Akses SELECT ke '.implode(' / ', $tabel).' ditolak; OAK memakai salinan '.implode(' / ', $cadangan)
+            .' (berhenti 28 Okt 2026). Minta admin: GRANT SELECT ON '.$tabel[0].' TO <user>; GRANT SELECT ON '.$tabel[1].' TO <user>;'];
+    }
+
     /** Ekspresi SQL kunci label OBS / OAK — pasangan DrmMaster::normTeks() (huruf + angka saja, alias Langsung). */
     public static function normTeksSql(string $expr): string
     {

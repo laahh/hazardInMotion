@@ -51,6 +51,7 @@ class DrmSapBahaya
         $master = DrmMaster::muat();
         $m = $master->data;
         $cfg = $master->cfgEfektif((array) config('peta_risiko_drm'));
+        $cfg = DrmSql::cfgAksesOak($this->ch, $cfg)[0];
 
         $dari = CarbonImmutable::parse($minggu[$w] ?? $minggu[0]);
         $sampai = min($dari->addDays(6), CarbonImmutable::parse($sampaiData));

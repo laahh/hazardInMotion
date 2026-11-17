@@ -57,6 +57,11 @@ class DrmSnapshotBuilder
         $master = DrmMaster::muat();
         // Kelompok aktivitas + regex dan tema + regex dari tabel master database bila sudah dikoreksi.
         $cfg = $master->cfgEfektif((array) config('peta_risiko_drm'));
+        // Tabel OAK (bcbeats) tidak terbaca user koneksi → pakai salinan obds, dengan peringatan di log sync.
+        [$cfg, $peringatanOak] = DrmSql::cfgAksesOak($this->ch, $cfg);
+        if ($peringatanOak !== null) {
+            ($this->log)('PERINGATAN: '.$peringatanOak);
+        }
         $sql = new DrmSql($cfg, $sampai, $master->literal($cfg));
 
         $d = [
@@ -98,6 +103,11 @@ class DrmSnapshotBuilder
     {
         $master = DrmMaster::muat();
         $cfg = $master->cfgEfektif((array) config('peta_risiko_drm'));
+        // Tabel OAK (bcbeats) tidak terbaca user koneksi → pakai salinan obds, dengan peringatan di log sync.
+        [$cfg, $peringatanOak] = DrmSql::cfgAksesOak($this->ch, $cfg);
+        if ($peringatanOak !== null) {
+            ($this->log)('PERINGATAN: '.$peringatanOak);
+        }
         $sql = new DrmSql($cfg, $sampai, $master->literal($cfg));
         $site = $this->ch->select($sql->daftarSite())[0]['site'] ?? null;
         $s = $sql->untukSite($site);
