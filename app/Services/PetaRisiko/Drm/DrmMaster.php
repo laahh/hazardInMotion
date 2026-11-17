@@ -193,6 +193,33 @@ final class DrmMaster
     }
 
     /**
+     * Aktivitas OAK → baris HIRA dari kurasi config `oak_aktivitas_hira` (aktivitas OAK → daftar aktivitas HIRA).
+     * Laporan OAK beraktivitas itu (sub apa pun) menandai semua baris HIRA beraktivitas di daftar, di samping label M12.
+     *
+     * @param  array<string, mixed>  $cfg
+     * @return list<array{teks: string, crc: int, ri: list<int>}>
+     */
+    public function labelOakAktivitas(array $cfg): array
+    {
+        $perAkt = [];
+        foreach ($this->data['baris'] as $b) {
+            $perAkt[self::normTeks((string) $b['aktivitas'])][] = (int) $b['ri'];
+        }
+        $hasil = [];
+        foreach ((array) ($cfg['oak_aktivitas_hira'] ?? []) as $oak => $daftar) {
+            $ri = [];
+            foreach ((array) $daftar as $h) {
+                array_push($ri, ...($perAkt[self::normTeks((string) $h)] ?? []));
+            }
+            if ($ri !== []) {
+                $hasil[] = ['teks' => (string) $oak, 'crc' => self::crcTeks((string) $oak), 'ri' => array_values(array_unique($ri))];
+            }
+        }
+
+        return $hasil;
+    }
+
+    /**
      * Label OBS (M11) / OAK (M12) beserta baris yang ditandainya. Bawaan = persis seperti master (dokumentasi Risk Matrix
      * 5x5: satu label → baris yang dipetakan). Bila config `label_obs_oak_per_aktivitas` = true, baris diperluas ke semua
      * baris dengan aktivitas (id M03) + sub aktivitas yang sama (contoh: OBS "Coal crushing" master → ri 180 ikut
@@ -386,6 +413,8 @@ final class DrmMaster
             'm6' => self::json('['.implode(',', $m6).']', 'Array(Tuple(UInt32, UInt32))'),
             'm9' => self::json(self::petaLarik($m9), self::TIPE_PETA),
             'mo' => self::json(self::petaLarik($mo), self::TIPE_PETA),
+            // mk : [(crc aktivitas OAK, [ri])] — kurasi aktivitas OAK → aktivitas HIRA (labelOakAktivitas).
+            'mk' => self::json(self::petaLarik(array_column(array_map(fn ($t) => [$t['crc'], $t['ri']], $this->labelOakAktivitas($cfg)), 1, 0)), self::TIPE_PETA),
             'mt' => self::json(self::petaLarik($this->temaBaris($cfg['tema_checklist'])), self::TIPE_PETA),
             'gn' => '['.implode(',', array_map(fn ($n) => "'".str_replace(['\\', "'"], ['\\\\', "\\'"], $n)."'", $namaGrup)).']',
         ];

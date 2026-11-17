@@ -707,8 +707,7 @@ class DrmSnapshotBuilder
      * @return list<array<string, mixed>>
      */
     /**
-     * Jumlah label master per baris: OBS / OAK diperluas ke aktivitas + sub aktivitas yang sama (sama dengan sync),
-     * Hazard = label M09 yang dipetakan langsung.
+     * Jumlah label master per baris: OBS (M11) / OAK (M12 + kurasi aktivitas OAK) / Hazard (M09), sama dengan sync.
      *
      * @return array{obs: array<int, int>, oak: array<int, int>, ket: array<int, int>}
      */
@@ -728,6 +727,12 @@ class DrmSnapshotBuilder
         foreach ((array) ($master->data['label'] ?? []) as $l) {
             foreach ($l['ri'] as $r) {
                 $hasil['ket'][(int) $r] = ($hasil['ket'][(int) $r] ?? 0) + 1;
+            }
+        }
+        // OAK juga lewat kurasi aktivitas OAK → aktivitas HIRA (satu entri per aktivitas OAK).
+        foreach ($master->labelOakAktivitas($master->cfgEfektif((array) config('peta_risiko_drm'))) as $t) {
+            foreach ($t['ri'] as $r) {
+                $hasil['oak'][$r] = ($hasil['oak'][$r] ?? 0) + 1;
             }
         }
 

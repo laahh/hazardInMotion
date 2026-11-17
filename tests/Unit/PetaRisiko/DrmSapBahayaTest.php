@@ -36,7 +36,7 @@ class DrmSapBahayaTest extends TestCase
         $item = $this->teks([101], [202], 'item');
 
         $this->assertStringContainsString('FROM obds.ch_rfid_sap_cuti_all_site', $item);
-        $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (101)) OR (jenis = 'OBSERVASI AREA KRITIS' AND kc IN (202))", $item);
+        $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (101)) OR (jenis = 'OBSERVASI AREA KRITIS' AND (kc IN (202) OR ka IN (0)))", $item);
         $this->assertStringContainsString("'risk\\\\s*intervention\\\\s*center', 'langsung'), '[^0-9a-z]+', '')) AS kc", $item);
         $this->assertStringContainsString('`id detail lokasi` IN (11,22)', $item);
         $this->assertStringContainsString('countIf(stop = 1) AS nstop', $item);
@@ -45,6 +45,26 @@ class DrmSapBahayaTest extends TestCase
 
         // Tanpa label di master untuk satu jenis → jenis itu tidak bisa menangkap.
         $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (0))", $this->teks([], [202], 'laporan'));
+    }
+
+    public function test_oak_juga_lewat_kurasi_aktivitas_oak_ke_aktivitas_hira(): void
+    {
+        $sql = $this->panggil('sqlTeks', [[11], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'),
+            [], [202], ['DELETED'], ['tidak ada aktivitas'], 'laporan', [303]]);
+        $this->assertStringContainsString('(kc IN (202) OR ka IN (303))', $sql);
+
+        $akt = $this->panggil('sqlTeks', [[11], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'),
+            [], [], ['DELETED'], ['tidak ada aktivitas'], 'item_akt', [303]]);
+        $this->assertStringContainsString('GROUP BY ka', $akt);
+
+        // Kurasi: OAK "Dumping" → semua baris beraktivitas HIRA Dumping material OB / Soil Dumping.
+        $master = DrmMaster::dariArray(['baris' => [
+            ['ri' => 1, 'aid' => 1, 'aktivitas' => 'Dumping material OB', 'sub' => 'a', 'bahaya' => 'x', 'kb' => 'High', 'umum' => false, 'idh' => []],
+            ['ri' => 2, 'aid' => 2, 'aktivitas' => 'Soil Dumping', 'sub' => 'b', 'bahaya' => 'y', 'kb' => 'High', 'umum' => false, 'idh' => []],
+            ['ri' => 3, 'aid' => 3, 'aktivitas' => 'Workshop', 'sub' => 'c', 'bahaya' => 'z', 'kb' => 'High', 'umum' => false, 'idh' => []],
+        ]]);
+        $hasil = $master->labelOakAktivitas(['oak_aktivitas_hira' => ['Dumping' => ['dumping  material ob', 'Soil Dumping', 'Tidak Ada']]]);
+        $this->assertSame([['teks' => 'Dumping', 'crc' => DrmMaster::crcTeks('Dumping'), 'ri' => [1, 2]]], $hasil);
     }
 
     public function test_hazard_hanya_label_dari_ch_rfid(): void

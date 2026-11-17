@@ -70,6 +70,154 @@ return [
     'label_obs_oak_per_aktivitas' => false,
 
     /*
+    | Aktivitas OAK → aktivitas HIRA (kurasi 17 Nov 2026, melengkapi M12 yang hanya 79 label / 93 baris).
+    | Laporan OAK dengan aktivitas di kiri (sub aktivitas apa pun) menandai SEMUA baris HIRA beraktivitas di kanan,
+    | di samping label M12. Nama dicocokkan tanpa beda huruf besar / spasi / tanda baca (DrmMaster::normTeks).
+    | Tidak dipetakan: "Trial CCV ENV BMO1", "[Trial] Survey" (uji coba).
+    */
+    'oak_aktivitas_hira' => [
+        'Pengoperasian Kendaraan dan Unit, termasuk Hauling OB & Coal' => [
+            'Coal Hauling', 'Hauling Coal', 'Hauling material', 'Hauling OB', 'Hauling Soil', 'Driving',
+            'Pengoperasian kendaraan dan unit', 'Pengoperasian Unit & Kendaraan', 'Pengoperasian Unit dan Kendaraan',
+            'Pengoperasian unit ke luar site atau jalan negara', 'Pengoperasian WT & FT', 'Penggunaan kendaraan di malam hari',
+            'Penggunaan kendaraan saat hujan', 'Parkir', 'Transportasi', 'Mobilisasi A2B', 'Rental A2B', 'Penggunaan ICC',
+            'Pengunaan ICC di dalam unit',
+        ],
+        'Perbaikan, Perawatan & Fabrikasi Unit/Fasilitas Tambang' => [
+            'Aktivitas Perbaikan dan Pemeliharaan Unit dan Kendaraan', 'Servis dan perbaikan', 'Pit Service', 'Workshop',
+            'Pekerjaan Workshop', 'Indoor Maintenance', 'Outdoor Maintenance', 'Machining/ Fabrikasi', 'Operasional Maintenance',
+            'Repair & Maintenance Execution', 'Maintenance Improvement', 'Perawatan', 'Pemeliharaan', 'Pencucian unit',
+            'Mengikat Hose dengan menggunakan kawat (fitting)', 'Pekerjaan Mekanikal', 'Mengoperasikan Forklift',
+        ],
+        'Dumping' => [
+            'Dumping material OB', 'Dumping Material OB', 'Dumping OB', 'Soil Dumping', 'Dumping Material Lunak di Channel Dump',
+            'Dumping lumpur', 'Dumping material lumpur lunak', 'Dumping di ROM', 'Coal Dumping', 'Dumping batubara ke hopper',
+            'Dumping Coal ke Hoper', 'Penimbunan material lumpur', 'Counter Weight', 'Bund Wall',
+            'Pengawasan Area Penimbunan Menggunakan Alat Bantu Teropong',
+        ],
+        'Loading' => [
+            'Coal Loading', 'Loading Over Burden (OB)', 'Loading Material Spoil', 'Loading menggunakan DT',
+            'Loading batubara dengan Dozer/loader',
+            'Loading batubara ke  Drown Hopper atau Reclaimer Truck Loading Conveyor menggunakan Dozer, Excavator dan WA',
+            'Loading batubara ke unit DT/SDT Menggunakan Truck Loading Conveyor (TLC), Silo Dan Wheel Loader (WA)',
+            'Melakukan loading material Lumpur', 'Melakukan loading material Lunak (Rawa/ Disposal)',
+            'Loading Lumpur Cair Menggunakan Excavator (Dragflow)',
+            'Loading Soil / Overburden di atas lobang galian bawah tanah / Terowongan',
+            'Loading/hauling lumpur/fine coal / material reject dari area fixed plant dibuang ke disposal/penumpukan sementara',
+            'Pemuatan material lunak', 'Persiapan Loading Material Lunak', 'OB Removal', 'Soil Removal', 'Coal Getting',
+            'Feeding ke DDH menggunakan wheel loader',
+        ],
+        'Pengelolaan Tools' => [
+            'Penggunaan Tools', 'Pekerjaan hand Tools', 'Inspeksi Tools', 'Perawatan Alat', 'Penambahan Peralatan',
+        ],
+        'Hauling Road Maintenance' => [
+            'Perawatan jalan hauling / Hauling Road Maintenance (HRM)', 'Pembuatan & Perawatan Jalan', 'Jalan', 'Road Construction',
+            'Pekerjaan Pembangunan Jalan dengan Double Chipseal', 'Penyiraman', 'Pekerjaan Perkerasan',
+            'Pekerjaan dan Maintenance Rambu Jalan', 'Pekerjaan Landscape Tanggul Jalan', 'Pembuatan  Akses Jalan Menuju lokasi pemboran',
+        ],
+        'Bekerja di Dekat Air' => [
+            'Kolam', 'Dewatering', 'Mine Dewatering', 'Pekerjaan Pengeringan / Dewatering', 'Pumping', 'Pompa Tambang',
+            'Intake Pump (WMP, Tunnel, Jetty, chemical)', 'Pekerjaan di Jetty / dekat sungai', 'Pembersihan settling pond',
+            'Pembersihan WMP', 'IPAL dan Pit Void Utilization', 'Pemantauan dan pengelolaan kualitas air WMP',
+            'Pemantauan dan pengawasan pengelolaan Air', 'Pemantauan dan pengawasan pengelolan Air', 'Operasional WTP',
+            'Pengambilan Contoh Uji sampel  Air Sungai + Biota', 'Mengoperasikan Mesin Tempel',
+        ],
+        'Bekerja di Area Coal Processing Plant' => [
+            'Coal crushing', 'Crushed coal feeding & dozing', 'Pekerjaan  Fixed Plant', 'Bekerja di area fixed plant dalam kondisi unit running',
+            'Buka tutup hopper, tes beban Belt Conveyor dll',
+            'Cleaning batubara di Area Tunnel & Wingwall Reclaimer Truck Loading Conveyor',
+            'Cleaning lantai, setting bukaan hopper, maintenance dibawah transfer dll',
+            'Hand picking / pengambilan dilusi, bone coal, kontaminan dari primary / secondary crusher',
+            'Pemecahan batubara oversize atau boulder OB/dilusi di primary/secondary crusher', 'Rehandling batubara ke crusher',
+            'Rehandling ke crusher', 'Coal stocking', 'Maintenance stockpile', 'Maintenance stockpile / ROM', 'Pembersihan fine coal / plant',
+            'Pembersihan settling pond / fine coal di area fixed plant (Crusher/BLC) menggunakan Excavator',
+            'Pembersihan belt dengan air, water spraying untuk mengurangi debu', 'Sampling batubara manual di atas belt / BLC',
+            'Sampling batubara manual di ROM', 'Sampling', 'Penimbangan batubara', 'Penimbangan DT muatan batubara / DT Kosongan',
+            'Inspeksi Area CPP', 'Pencarian metal kontaminan', 'Loading dengan Belt Conveyor', 'Trimming', 'Pengoperasian Dust Spraying',
+        ],
+        'Pengisian Bahan Bakar Cair (Refueling)' => [
+            'BAHAN BAKAR CAIR', 'FUEL MANAGEMENT SYSTEM', 'Aktivitas P2H & Pengisian fuel', 'Aktivitas Pembersihan Dispenser',
+            'pengisian BBC', 'Pengisian Tangki Solar', 'Transfer fuel dari Fuel Trusk ke Fuel Tank', 'Pengelolaan Oil Trap',
+        ],
+        'Bekerja dengan Panas' => [
+            'Pengelasan', 'Gerinda menggunakan gerinda duduk (portable)', 'Gerinda menggunakan gerinda tangan',
+            'Gouging/arc welding with air pressure (memotong/membuang bekas las-lasan/motong plate dengan menggunkan angin bertekanan)',
+            'Membengkokkan atau membentuk plate/pipa dengan menggunakan oxt dan acetylene)', 'Memotong Material/plat menggunakan Oksigen dan Acyteline',
+            'Pemotongan', 'Pengelasan arm blade Bulldozer', 'Pengelasan blade Bulldozer', 'Pengelasan Bucket unit Excavator',
+            'Pengelasan handrill pada unit Excavator, Wheel Loader, Fuel Truck, Water Truck', 'Pengelasan material/plat menggunakan miller',
+            'Pengelasan Vessel Unit Dump Truck', 'Pengelasan(Repair) Body Skin Vessel unit Trailer', 'Pekerjaan Pengelasan Tangki Fuel',
+            'Pekerjaan Pengelasan Tangki Water Truck',
+        ],
+        'Pengangkutan Karyawan' => [
+            'Pengangkutan karyawan', 'Penggunaan Transportasi Darat (Kendaraan Ringan & BUS)', 'Transportasi darat dari / ke Head Office',
+            'Penggunaan angkutan umum', 'Transportasi air dari/ke Dermaga Head Office',
+        ],
+        'Barging Batubara di Jetty' => [
+            'Loading Barge', 'After Loading Barge', 'Sandar di Jetty', 'Lepas Sandar Tongkang dari Jetty / Cast Off',
+            'Shifting Tongkang di Jetty', 'Loading dengan Belt Conveyor / Coal Barging', 'Mooring dan unmooring barge', 'Towing Barges',
+            'Barge Cleaning', 'Draught Survey Barge', 'Perawatan Jetty Dolphin', 'Beaching Point', 'Aktifitas Beaching Point',
+        ],
+        'Persimpangan' => [
+            'Jalan', 'Pengoperasian kendaraan dan unit', 'Pengoperasian Unit & Kendaraan', 'Pengoperasian Unit dan Kendaraan',
+        ],
+        'Bekerja di Dekat Tebing' => [
+            'Melakukan Pekerjaan dekat Lereng', 'Aspek Geoteknik', 'Sloping', 'Overlayer',
+        ],
+        'Mobilisasi Unit Drilling Machine (DM) dan Pengeboran Peledakan' => [
+            'Kegiatan Pemboran', 'Pengeboran', 'Pengeboran untuk peledakan', 'Mobilisasi Mesin Bor', 'Memarkir unit bor', 'Mengganti mata bor',
+            'Persiapan pemboran', 'Pra Pengeboran', 'Kegiatan Pasca Pemboran', 'Pengamanan Area pengeboran',
+        ],
+        'Pemompaan Tyre' => [
+            'Assembling tyre', 'Inspektion Tyre', 'Pemasangan tyre LV di luar workshop', 'Pemasangan tyre LV di Workshop',
+            'Pengoperasian tyre changer', 'Pengoperasian/penggunaan tire inflator', 'Remove & Instal tyre',
+            'Remove & Instal tyre di Jalan Hauling', 'Tyre Management',
+        ],
+        'Shift Change' => ['Shift Change', 'Hot Shift change'],
+        'Pengangkatan & Pengangkutan Unit/Material' => [
+            'Pengangkatan', 'Lifting & Support', 'Mobilisasi dan Demobilisasi', 'Mobilisasi-demobilisasi', 'Towing Loader',
+            'Pengangkutan & Pembuangan Pipa Bekas', 'pembongkaran tower',
+            'Pembongkaran bahan kimia di Lokasi Pengguna menggunakan heavy equipment (forklift/crane)',
+            'Mobilisasi sarana pendukung ( tower lamp, pos pengawas, toilet )',
+        ],
+        'Peledakan dan Pasca Peledakan' => [
+            'Blasting', 'Aktifitas Peledakan Tidur', 'Desain Peledakan', 'Pengecekan pasca peledakan', 'Pengecekan rangkaian akhir',
+            'Perangkaian', 'Pengawasan Blasting',
+            'Memasang demarkasi dan rambu area blasting disekitar area drilling dan pengisian bahan peledak',
+            'Pengisian Bahan Peledak ke Lubang Ledak / Priming',
+            'Pengisian handak curah ke lubang ledak oleh truck handak/MMU ( Charging )',
+        ],
+        'Loading Unloading Transhipment' => [
+            'Loading OGV', 'Pre Loading', 'Pre Loading OGV', 'Pre Loading bunker/ water', 'Post Loading OGV',
+            'Mooring  dan UnmooringBarge at Loader/OGV', 'Mooring/ Unmooring LCT to Loader', 'Draught Survey Vessel',
+            'Berkunjung Transhipment Point', 'Inspeksi transhipment point', 'Loading & Unloading di Pelabuhan',
+            'Bongkar-Muat Agregat Diatas Tongkang', 'Patroli, Inspeksi, Observasi Alat Transportasi Air',
+        ],
+        'Jalan Tambang' => [
+            'Jalan', 'Penyiraman', 'Pekerjaan dan Maintenance Rambu Jalan', 'Pembuatan & Perawatan Jalan',
+        ],
+        'Transportasi & Penanganan Bahan Peledak (Handak)' => [
+            'Pengangkutan Bahan Peledak', 'Pengoperasian Truck Handak', 'Penanganan Handak di Lokasi peledakan', 'Pencampuran Handak',
+            'Pengeluaran Handak', 'Penyimpanan handak', 'Pembongkaran bahan peledak di gudang handak',
+            'Pengaturan  Ruangan Dan Persyaratan Teknis Gudang Bahan Peledak', 'Loading AN ke MMU',
+            'Loading Emulsi / Watergel / Watergel Dengan MMU', 'Pengisian AN ke MMU', 'Bongkar muat AN di pelabuhan',
+        ],
+        'Eksplorasi' => [
+            'Aktifitas Survey', 'Survey', 'Aktivitas Lapangan', 'Mapping Geology', 'Pemetaan Geologi', 'Logging Geofisika',
+            'Pengukuran Geolistrik', 'Pengukuran Georadar', 'Pengukuran Seismik', 'Penandaan/pembuatan titik', 'Kegiatan Hidrologi',
+            'Survey lokasi terkait dengan verifikasi proses perijinan',
+        ],
+        'Bekerja di Ketinggian' => ['Bekerja di ketinggian'],
+        'Pekerjaan Listrik' => [
+            'Kelistrikan', 'Pekerjaan Kelistrikan', 'Pekerjaan Elektrikal', 'Electrical Equipment', 'Power House', 'Power Plant',
+            'Sub Distribution Panel (SDP)', 'PAP Oli Transformator', 'Pengoperasian Unit Genset', 'Instalasi CCTV',
+            'Maintenance CCTV area tambang', 'Pekerjaan Mekanikal, Elektrikal & Plumbing',
+        ],
+        'Pengoperasian Slurry Pump di Sump' => ['Pumping', 'Pompa Tambang', 'Mine Dewatering', 'Dewatering'],
+        'Inspeksi Geoteknik' => ['Aspek Geoteknik', 'Kegiatan Monitoring Slope Stabilty Radar', 'Pit Monitoring'],
+        'Bekerja di Underland' => ['Loading Soil / Overburden di atas lobang galian bawah tanah / Terowongan'],
+    ],
+
+    /*
     | Label Hazard/Inspeksi disebut SPESIFIK bila di satu detail lokasi hanya cocok ke bahaya dari
     | ≤ N aktivitas HIRA: aktivitas itu ikut ditandai terdeteksi (seperti Observasi). Label UMUM
     | (APD, sampah, berdebu …) cocok ke banyak aktivitas, jadi hanya mengonfirmasi bahaya yang cocok.

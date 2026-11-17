@@ -59,7 +59,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
 
         $terpotong = count($rows) > self::MAKS_BARIS;
         $rows = array_slice($rows, 0, self::MAKS_BARIS);
-        [$petaLabel, $petaTeks, $barisGrup, $bahaya] = $this->petaMaster($grup);
+        [$petaLabel, $petaTeks, $barisGrup, $bahaya, $petaOakAkt] = $this->petaMaster($grup);
 
         $laporan = [];
         $ringkas = ['total' => 0, 'lolos' => 0, 'luar_grup' => 0, 'tak_terpetakan' => 0, 'belum_closed' => 0, 'oak_stop' => 0];
@@ -72,7 +72,9 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
             };
             $kandidat = $hazard
                 ? ($petaLabel[DrmMaster::crc(DrmMaster::norm((string) $r['k']).' / '.DrmMaster::norm((string) $r['sk']))] ?? [])
-                : ($petaTeks[DrmMaster::crcTeks($teks)] ?? []);
+                : array_values(array_unique([...($petaTeks[DrmMaster::crcTeks($teks)] ?? []),
+                    // OAK juga lewat kurasi aktivitas OAK → aktivitas HIRA (config oak_aktivitas_hira).
+                    ...($r['jenis'] === 'OBSERVASI AREA KRITIS' ? ($petaOakAkt[DrmMaster::crcTeks((string) $r['oak'])] ?? []) : [])]));
             $lolos = array_values(array_filter($kandidat, fn ($ri) => isset($barisGrup[$ri])));
             $pemetaan = $lolos !== [] ? 'lolos' : ($kandidat !== [] ? 'luar_grup' : 'tak_terpetakan');
             $belum = $hazard && ! in_array(strtoupper((string) $r['status']), self::STATUS_SELESAI, true);
@@ -104,8 +106,8 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
     }
 
     /**
-     * @return array{0: array<int, list<int>>, 1: array<int, list<int>>, 2: array<int, true>, 3: array<int, string>}
-     *   [crc label → ri, crc teks OBS/OAK → ri, ri di grup lokasi, ri → "aktivitas: bahaya"]
+     * @return array{0: array<int, list<int>>, 1: array<int, list<int>>, 2: array<int, true>, 3: array<int, string>, 4: array<int, list<int>>}
+     *   [crc label → ri, crc teks OBS/OAK → ri, ri di grup lokasi, ri → "aktivitas: bahaya", crc aktivitas OAK → ri]
      */
     private function petaMaster(string $grup): array
     {
@@ -118,6 +120,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
         foreach ([...$master->labelTeksAktivitas('obs'), ...$master->labelTeksAktivitas('oak')] as $t) {
             $teks[$t['crc']] = array_values(array_unique([...($teks[$t['crc']] ?? []), ...$t['ri']]));
         }
+        $oakAkt = array_column($master->labelOakAktivitas($master->cfgEfektif((array) config('peta_risiko_drm'))), 'ri', 'crc');
         $gid = array_search($grup, $m['grup'], true);
         $barisGrup = $gid === false ? [] : array_fill_keys($m['grupBaris'][$gid] ?? [], true);
         $bahaya = [];
@@ -125,6 +128,6 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
             $bahaya[$b['ri']] = $b['aktivitas'].': '.$b['bahaya'];
         }
 
-        return [$label, $teks, $barisGrup, $bahaya];
+        return [$label, $teks, $barisGrup, $bahaya, $oakAkt];
     }
 }

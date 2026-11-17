@@ -34,7 +34,7 @@ class DrmSapBahaya
      */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v5:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v6:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
     }
@@ -85,8 +85,12 @@ class DrmSapBahaya
         $teksOak = $teks($master->labelTeksAktivitas('oak'));
         $labelObs = array_keys($teksObs);
         $labelOak = array_keys($teksOak);
+        // Kurasi aktivitas OAK → aktivitas HIRA (config oak_aktivitas_hira): aktivitas OAK yang menandai baris ini.
+        $teksOakAkt = array_map(fn (string $a) => 'Aktivitas OAK: '.$a.' (semua sub aktivitas)', $teks($master->labelOakAktivitas($cfg)));
+        $labelOakAkt = array_keys($teksOakAkt);
 
-        return compact('dari', 'sampai', 'dl', 'labelBahaya', 'cfg', 'labelObs', 'labelOak', 'teksBahaya', 'teksObs', 'teksOak');
+        return compact('dari', 'sampai', 'dl', 'labelBahaya', 'cfg', 'labelObs', 'labelOak', 'teksBahaya', 'teksObs', 'teksOak',
+            'labelOakAkt', 'teksOakAkt');
     }
 
     /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
@@ -109,9 +113,9 @@ class DrmSapBahaya
         foreach ($labelBahaya === [] ? [] : $this->ch->select($this->sqlHazard($dlIds, $dari, $sampai, $labelBahaya, $buang), 60) as $r) {
             $baris[] = [...$r, 'cara' => 'label'];
         }
-        // OBS / OAK: label persis M11 / M12.
-        if ($p['labelObs'] !== [] || $p['labelOak'] !== []) {
-            foreach ($this->ch->select($this->sqlTeks($dlIds, $dari, $sampai, $p['labelObs'], $p['labelOak'], $buang, (array) $cfg['obs_tanpa_aktivitas'], 'laporan'), 60) as $r) {
+        // OBS / OAK: label persis M11 / M12, OAK juga lewat kurasi aktivitas OAK.
+        if ($p['labelObs'] !== [] || $p['labelOak'] !== [] || $p['labelOakAkt'] !== []) {
+            foreach ($this->ch->select($this->sqlTeks($dlIds, $dari, $sampai, $p['labelObs'], $p['labelOak'], $buang, (array) $cfg['obs_tanpa_aktivitas'], 'laporan', $p['labelOakAkt']), 60) as $r) {
                 $baris[] = [...$r, 'cara' => $r['jenis'] === 'OBSERVASI' ? 'obs' : 'oak'];
             }
         }
@@ -174,33 +178,37 @@ class DrmSapBahaya
      */
     public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v6:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v7:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber) {
             $p = $this->persiapan($hid, $kel, $site, $grup, $w);
             $teks = match ($sumber) {
                 'ket' => $p['teksBahaya'], 'oak' => $p['teksOak'], default => $p['teksObs'],
             };
+            $teksAkt = $sumber === 'oak' ? $p['teksOakAkt'] : [];
             $label = array_keys($teks);
             $dlIds = array_keys($p['dl']);
-            $laporan = [];
+            $laporan = $laporanAkt = [];
+            $buang = (array) $p['cfg']['status_buang'];
+            $tanpa = (array) $p['cfg']['obs_tanpa_aktivitas'];
             if ($dlIds !== [] && $label !== []) {
-                $buang = (array) $p['cfg']['status_buang'];
                 $sql = $sumber === 'ket'
                     ? $this->sqlItemLabel($dlIds, $p['dari'], $p['sampai'], $label, $buang)
-                    : $this->sqlTeks($dlIds, $p['dari'], $p['sampai'], $sumber === 'obs' ? $label : [], $sumber === 'oak' ? $label : [],
-                        $buang, (array) $p['cfg']['obs_tanpa_aktivitas'], 'item');
+                    : $this->sqlTeks($dlIds, $p['dari'], $p['sampai'], $sumber === 'obs' ? $label : [], $sumber === 'oak' ? $label : [], $buang, $tanpa, 'item');
                 $laporan = array_column($this->ch->select($sql, 60), null, 'kc');
             }
+            if ($dlIds !== [] && $teksAkt !== []) {
+                $laporanAkt = array_column($this->ch->select($this->sqlTeks($dlIds, $p['dari'], $p['sampai'], [], [], $buang, $tanpa, 'item_akt', array_keys($teksAkt)), 60), null, 'ka');
+            }
             $item = [];
-            foreach ($teks as $crc => $isi) {
-                $r = $laporan[$crc] ?? [];
+            foreach ($teks + $teksAkt as $crc => $isi) {
+                $r = isset($teksAkt[$crc]) ? ($laporanAkt[$crc] ?? []) : ($laporan[$crc] ?? []);
                 $item[] = ['isi' => (string) $isi, 'n' => (int) ($r['n'] ?? 0), 'ndl' => (int) ($r['ndl'] ?? 0), 'nstop' => (int) ($r['nstop'] ?? 0)];
             }
             usort($item, fn ($a, $b) => $b['n'] <=> $a['n'] ?: strcmp($a['isi'], $b['isi']));
 
             return ['sumber' => $sumber, 'dari' => $p['dari']->toDateString(), 'sampai' => $p['sampai']->toDateString(),
-                'ndl' => count($p['dl']), 'nlabel' => count($teks), 'item' => $item];
+                'ndl' => count($p['dl']), 'nlabel' => count($teks) + count($teksAkt), 'item' => $item];
         });
     }
 
@@ -211,8 +219,10 @@ class DrmSapBahaya
      * @param  list<int>  $dl
      * @param  list<int>  $obs  CRC label OBS (M11) baris ini
      * @param  list<int>  $oak  CRC label OAK (M12) baris ini
+     * @param  list<int>  $oakAkt  CRC aktivitas OAK (kurasi oak_aktivitas_hira) yang menandai baris ini
+     *   mode 'item_akt' = per aktivitas OAK (ka)
      */
-    private function sqlTeks(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $obs, array $oak, array $buang, array $tanpaAktivitas, string $mode): string
+    private function sqlTeks(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $obs, array $oak, array $buang, array $tanpaAktivitas, string $mode, array $oakAkt = []): string
     {
         $q = [RfidClickHouseClient::class, 'quote'];
         $daftar = fn (array $a) => $a === [] ? '0' : implode(',', array_map('intval', $a));
@@ -221,6 +231,7 @@ class DrmSapBahaya
          if(jenis_data = \'OBSERVASI\', trim(ifNull(`aktivitas  OBS`, \'\')),
             concat(trim(ifNull(`aktivitas pekerjaan OAK`, \'\')), \' / \', trim(ifNull(`sub aktivitas pekerjaan OAK`, \'\')))) AS isi,
          CRC32('.DrmSql::normTeksSql('isi').') AS kc,
+         CRC32('.DrmSql::normTeksSql('trim(ifNull(`aktivitas pekerjaan OAK`, \'\'))').') AS ka,
          multiSearchAny(lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'), \' \', ifNull(tindakan, \'\'))),
                         ['.implode(', ', array_map($q, $tanpaAktivitas ?: ['-'])).']) AS na,
          toUInt8(jenis_data = \'OBSERVASI AREA KRITIS\' AND positionCaseInsensitive(ifNull(`hasil OAK`, \'\'), \'stop\') > 0) AS stop,
@@ -231,8 +242,12 @@ class DrmSapBahaya
     AND `date time` >= toDate('.$q($dari->toDateString()).') AND `date time` < toDate('.$q($sampai->toDateString()).') + 1
     AND jenis_data IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
     AND ifNull(status, \'\') NOT IN ('.implode(', ', array_map($q, $buang ?: ['-'])).')';
-        $saring = 'NOT na AND ((jenis = \'OBSERVASI\' AND kc IN ('.$daftar($obs).')) OR (jenis = \'OBSERVASI AREA KRITIS\' AND kc IN ('.$daftar($oak).')))';
+        $saring = 'NOT na AND ((jenis = \'OBSERVASI\' AND kc IN ('.$daftar($obs).')) OR (jenis = \'OBSERVASI AREA KRITIS\' AND (kc IN ('.$daftar($oak).') OR ka IN ('.$daftar($oakAkt).'))))';
 
+        if ($mode === 'item_akt') {
+            return 'SELECT ka, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
+FROM ('.$dasar.') WHERE '.$saring.' GROUP BY ka LIMIT 100';
+        }
         if ($mode === 'item') {
             return 'SELECT kc, any(isi) AS isi, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
 FROM ('.$dasar.') WHERE '.$saring.' GROUP BY kc ORDER BY n DESC, isi LIMIT 500';

@@ -152,7 +152,10 @@ class DrmBerandaTest extends TestCase
 
         $spe = $sql->berandaSpesifik();
         // OBS / OAK: label persis M11 / M12 (dokumentasi Risk Matrix 5x5), bukan checklist / tema / kelompok.
-        $this->assertStringContainsString('JOIN (SELECT kc, arrayJoin(rs) AS hid FROM mox) m ON m.kc = k.kc', $spe);
+        $this->assertStringContainsString('LEFT JOIN mox m ON m.kc = k.kc', $spe);
+        // OAK juga lewat kurasi aktivitas OAK → aktivitas HIRA (mkx), digabung tanpa duplikat.
+        $this->assertStringContainsString('LEFT JOIN mkx a ON a.ka = k.ka', $spe);
+        $this->assertStringContainsString("ARRAY JOIN arrayDistinct(arrayConcat(m.rs, if(s.j = 'OBSERVASI AREA KRITIS', a.rs,", $spe);
         $this->assertStringContainsString("CRC32(replaceRegexpAll(replaceRegexpAll(lowerUTF8(ifNull(tx, '')), 'risk\\\\s*intervention\\\\s*center', 'langsung'), '[^0-9a-z]+', '')) AS kc", $spe);
         $this->assertStringNotContainsString('bcbeats.', $spe);
         $this->assertStringNotContainsString('obds.m_oak_detail_objek', $spe);

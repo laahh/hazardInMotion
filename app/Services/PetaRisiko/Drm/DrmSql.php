@@ -707,6 +707,7 @@ WITH
   '.$m['m6'].' AS m6,
   '.$m['m9'].' AS m9,
   '.$m['mo'].' AS mo,
+  '.($m['mk'] ?? 'CAST([], \'Array(Tuple(UInt32, Array(UInt32)))\')').' AS mk,
   '.$m['mt'].' AS mt,
 mh0 AS (
   SELECT toUInt32(x.1) AS hid, arrayMap(i -> toInt64(i), x.2) AS idh, toUInt32(x.3) AS bc, toUInt32(x.4) AS aid,
@@ -716,6 +717,7 @@ mh0 AS (
 mgx AS (SELECT toUInt32(x.1) AS gid, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mg) AS x)),
 m9x AS (SELECT toUInt32(x.1) AS kc, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(m9) AS x)),
 mox AS (SELECT toUInt32(x.1) AS kc, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mo) AS x)),
+mkx AS (SELECT toUInt32(x.1) AS ka, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mk) AS x)),
 mtx AS (SELECT toUInt64(x.1) AS tema, arrayJoin(arrayMap(r -> toUInt32(r), x.2)) AS hid FROM (SELECT arrayJoin(mt) AS x)),
 hraw AS (
   SELECT h.id_hira_master AS idh,
@@ -814,7 +816,8 @@ ma AS (
 -- Teks aktivitas OBS (jenis kegiatan) / "aktivitas / sub" OAK: kelompok aktivitas (M02) dan pasangan baris persis
 -- (M11/M12, kunci = DrmMaster::normTeks: huruf + angka saja, "Risk Intervention Center" = "Langsung").
 okx AS (
-  SELECT tx, CRC32('.self::normTeksSql('tx').') AS kc, ifNull(nullIf(arrayFirst(r -> match(tx, r.2), pb).1, \'\'), \'K0\') AS kel
+  SELECT tx, CRC32('.self::normTeksSql('tx').') AS kc, ifNull(nullIf(arrayFirst(r -> match(tx, r.2), pb).1, \'\'), \'K0\') AS kel,
+         CRC32('.self::normTeksSql('splitByString(\' / \', tx)[1]').') AS ka
   FROM (SELECT DISTINCT tx FROM sap WHERE j IN ('.$obsOak.') AND trim(tx) NOT IN (\'\', \'/\'))
 ),
 mb AS (
@@ -836,20 +839,24 @@ base AS (
 --   OBS : jenis kegiatan (`aktivitas  OBS`)          → baris M11
 --   OAK : "aktivitas / sub aktivitas" OAK            → baris M12; hasil OAK "Stop" = gap
 -- Satu laporan hanya menandai baris yang dipetakan ke labelnya (bukan seluruh kelompok aktivitas). Item = label (CRC).
+-- OAK juga lewat kurasi aktivitas OAK → aktivitas HIRA (mkx, config oak_aktivitas_hira). Baris dari label M12 dan dari
+-- aktivitas digabung tanpa duplikat, jadi satu laporan dihitung sekali per baris.
 evr AS (
-  SELECT s.dl AS dl, m.hid AS hid, s.d AS d, if(s.j = \'OBSERVASI\', \'obs\', \'oak\') AS src, toInt64(k.kc) AS item,
+  SELECT s.dl AS dl, hid, s.d AS d, if(s.j = \'OBSERVASI\', \'obs\', \'oak\') AS src, toInt64(k.kc) AS item,
          toUInt8(0) AS ts, toUInt8(s.stop) AS stop
   FROM sap s
   JOIN okx k ON k.tx = s.tx
-  JOIN (SELECT kc, arrayJoin(rs) AS hid FROM mox) m ON m.kc = k.kc
-  WHERE s.j IN ('.$obsOak.') AND NOT s.na AND (s.dl, m.hid) IN (SELECT dl, hid FROM base)
+  LEFT JOIN mox m ON m.kc = k.kc
+  LEFT JOIN mkx a ON a.ka = k.ka
+  ARRAY JOIN arrayDistinct(arrayConcat(m.rs, if(s.j = \'OBSERVASI AREA KRITIS\', a.rs, CAST([], \'Array(UInt32)\')))) AS hid
+  WHERE s.j IN ('.$obsOak.') AND NOT s.na AND (s.dl, hid) IN (SELECT dl, hid FROM base)
 ),
 evd AS (SELECT dl, hid, d, max(ts) AS ts, max(stop) AS stop FROM evr GROUP BY dl, hid, d),
 -- Baris yang punya jalur identifikasi SAP di master (label M09, teks OBS/OAK M11/M12, atau tema M16).
 -- Hanya penanda status X (tanpa jalur identifikasi); baseline tidak difilter.
 petakan AS (
   SELECT hid FROM mh0
-  WHERE hid IN (SELECT arrayJoin(rs) FROM m9x) OR hid IN (SELECT arrayJoin(rs) FROM mox) OR hid IN (SELECT hid FROM mtx)
+  WHERE hid IN (SELECT arrayJoin(rs) FROM m9x) OR hid IN (SELECT arrayJoin(rs) FROM mox) OR hid IN (SELECT arrayJoin(rs) FROM mkx) OR hid IN (SELECT hid FROM mtx)
 ),
 -- Teks bahaya HIRA untuk pencocokan insiden / root cause (tema + kata kunci).
 hbx AS (
