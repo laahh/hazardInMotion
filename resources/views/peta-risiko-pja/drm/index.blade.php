@@ -450,9 +450,10 @@
     if (!baris.length) { d.querySelector('#dr-modal-isi').innerHTML = `<div class="pr-empty">${q ? 'Tidak ada yang cocok dengan pencarian.' : 'Tidak ada baris di kategori ini.'}</div>`; return; }
     const adaVol = baris.some((b) => b.gap !== undefined);
     const NK = 16;
-    const gapSel = (ya, na) => (ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
-    const item = (n, i) => (n > 0 ? `<button type="button" class="dr-item" data-i="${i}" aria-expanded="false">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
-    const angka = (n) => (n > 0 ? DR.fmt(n) : '<span class="dr-nol">0</span>');
+    const strip = '<span class="dr-nol" title="Belum ada di snapshot">–</span>';
+    const gapSel = (ya, na, perluData = true) => (perluData && !adaVol ? strip : ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
+    const item = (n, i) => (!adaVol ? strip : n > 0 ? `<button type="button" class="dr-item" data-i="${i}" aria-expanded="false">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
+    const angka = (n) => (!adaVol ? strip : n > 0 ? DR.fmt(n) : '<span class="dr-nol">0</span>');
     const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
     let kel = '', html = '';
     baris.forEach((b, i) => {
@@ -473,7 +474,7 @@
         <td class="c"><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
         <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span></td>
         <td class="c"><span class="dr-lv lv-${DR.esc(akhir)}">${DR.esc(akhir || '-')}</span></td>
-        <td class="c">${gapSel(T, false)}</td>
+        <td class="c">${gapSel(T, false, false)}</td>
         <td class="c">${gapSel(m & GAP_BIT.closed, T)}</td>
         <td class="c">${gapSel(m & GAP_BIT.ulang, T)}</td>
         <td class="c">${gapSel(m & GAP_BIT.stop, T || nOak === 0)}</td>
@@ -487,8 +488,8 @@
     });
     const isi = d.querySelector('#dr-modal-isi');
     const wk = wKode(state.w);
-    isi.innerHTML = (adaVol ? '' : '<p class="dr-mute" style="margin:10px 0 0;font-size:12px">Snapshot ini belum memuat gap & volume per baris. Jalankan <code>php artisan peta-risiko:sync</code>.</p>')
-      + `<table class="pr-tbl dr-tbl dr-modal-tbl dr-bl-tbl"><thead><tr>
+    d.querySelector('#dr-modal-n').innerHTML += adaVol ? '' : ' · <b style="color:#b42318">Snapshot belum memuat gap &amp; volume per baris — jalankan <code>php artisan peta-risiko:sync</code></b>';
+    isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-bl-tbl"><thead><tr>
       <th>Aktivitas</th><th>Sub Aktivitas</th><th>Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
       <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
       <th class="c">Item Sumber Observasi</th><th class="c">Item Sumber OAK</th><th class="c">Item Sumber Ketidaksesuaian</th>
