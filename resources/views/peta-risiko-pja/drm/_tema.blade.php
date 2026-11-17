@@ -131,6 +131,10 @@
   .dr-st.T { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
   .dr-gap { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; background: #f3f4f6; color: #8a8d90; white-space: nowrap; }
   .dr-gap.ya { background: #fdecee; color: #b91c1c; text-decoration: underline; }
+  .dr-st-tbl td { vertical-align: top; }
+  .dr-st-tbl td .dr-sap-btn { margin-top: 6px; }
+  .dr-sap-ada { display: inline-block; font-weight: 700; color: #166534; white-space: nowrap; }
+  .dr-sap-tidak { display: inline-block; font-weight: 700; color: #b42318; white-space: nowrap; }
   .dr-gap.ya-ungu { background: #f1e8fa; color: #7e3fb3; }
   .dr-bl-tbl { min-width: 1500px; }
   .dr-gap.na { background: transparent; color: #b0b3b6; font-style: italic; font-weight: 500; }
