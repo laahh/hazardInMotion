@@ -71,6 +71,14 @@
   @media (max-width: 1280px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 760px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 480px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: 1fr; } }
+  /* Baseline + 5 kartu status (angka) dalam satu baris. */
+  body.tp .br-kpis.br-kpis-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+  body.tp .br-kpis-6 .br-kpi { padding: 18px 16px 16px; }
+  body.tp .br-kpis-6 .br-kpi b { font-size: 30px; }
+  body.tp .br-kpis-6 .br-kpi small { padding-right: 44px; line-height: 1.35; }
+  @media (max-width: 1440px) { body.tp .br-kpis.br-kpis-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { body.tp .br-kpis.br-kpis-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { body.tp .br-kpis.br-kpis-6 { grid-template-columns: 1fr; } }
   /* Kartu status (angka, garis warna di kiri) — gaya dashboard DRM 2.1 lama. */
   body.tp .tp-stat-sub { font-size: 12.5px; color: #595c5e; margin: 0 0 10px; }
   body.tp .tp-stat-sub b { color: #2c2f31; }

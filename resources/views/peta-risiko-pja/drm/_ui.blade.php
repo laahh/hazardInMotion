@@ -22,11 +22,19 @@
   .dr-kpi span { display: block; margin-top: 5px; font-size: 13px; color: var(--mute); line-height: 1.3; }
 
   .dr-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-  .dr-mx { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 13px; }
-  .dr-mx th { background: var(--navy); color: #fff; font: 700 12px/1.2 "Plus Jakarta Sans", sans-serif; padding: 8px 6px; border-radius: 4px; }
-  .dr-mx td { text-align: center; padding: 9px 4px; border-radius: 4px; font: 800 15px/1 "Plus Jakarta Sans", sans-serif; }
-  .dr-mx .z0 { background: #E2F3E5; color: #16712C; } .dr-mx .z1 { background: #FFF2C2; color: #8A6400; }
-  .dr-mx .z2 { background: #FFDDBF; color: #A64B00; } .dr-mx .z3 { background: #FAD0D6; color: #A10C24; }
+  /* Matriks 5x5: kepala abu-abu netral, sel zona warna lembut, nol diredam supaya angka terisi menonjol. */
+  .dr-mx { width: 100%; border-collapse: separate; border-spacing: 4px; font-size: 13px; table-layout: fixed; }
+  .dr-mx th { background: #f3f4f6; color: #4b5563; font: 600 11.5px/1.25 "Plus Jakarta Sans", sans-serif; padding: 9px 8px; border-radius: 8px; letter-spacing: .01em; }
+  .dr-mx thead th { text-align: center; }
+  .dr-mx tbody th { text-align: left; background: #fff; border: 1px solid #e5e7eb; color: #374151; }
+  .dr-mx thead th.dr-mx-sudut { background: transparent; color: #9ca3af; font-weight: 500; font-size: 10.5px; text-align: left; line-height: 1.3; }
+  .dr-mx td { text-align: center; padding: 11px 4px; border-radius: 8px; font: 700 15px/1 "Plus Jakarta Sans", sans-serif; font-variant-numeric: tabular-nums;
+    transition: transform .15s ease, box-shadow .15s ease; }
+  .dr-mx td:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(20, 26, 34, .10); }
+  .dr-mx .z0 { background: #eef8f0; color: #15803d; } .dr-mx .z1 { background: #fef8e1; color: #92650a; }
+  .dr-mx .z2 { background: #fff0e3; color: #b45309; } .dr-mx .z3 { background: #fdecee; color: #b91c1c; }
+  .dr-mx td.nol { color: #c4c8cc; font-weight: 500; }
+  @media (prefers-reduced-motion: reduce) { .dr-mx td { transition: none; } .dr-mx td:hover { transform: none; } }
   .dr-mx h4, .dr-h4 { margin: 0 0 8px; font: 700 14px/1.2 "Plus Jakarta Sans", sans-serif; }
 
   .dr-comp { display: flex; height: 10px; border-radius: 2px; overflow: hidden; background: var(--track); min-width: 120px; }
@@ -112,8 +120,8 @@
     zona(i, j) { return this.ZONA[i][j]; },
     matriks(judul, m, meta) {
       const head = meta.konsekuensi.map((k) => `<th>${k}</th>`).join('');
-      const rows = meta.kekerapan.map((k, i) => `<tr><th>${k}</th>${m[i].map((v, j) => `<td class="z${this.zona(i, j)}">${this.fmt(v)}</td>`).join('')}</tr>`).join('');
-      return `<div><h4 class="dr-h4">${judul}</h4><table class="dr-mx"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      const rows = meta.kekerapan.map((k, i) => `<tr><th scope="row">${k}</th>${m[i].map((v, j) => `<td class="z${this.zona(i, j)}${v ? '' : ' nol'}" title="${k} × ${meta.konsekuensi[j]}: ${this.fmt(v)}">${this.fmt(v)}</td>`).join('')}</tr>`).join('');
+      return `<div><h4 class="dr-h4">${judul}</h4><table class="dr-mx"><thead><tr><th class="dr-mx-sudut">Kemungkinan ↓<br>Konsekuensi →</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
     },
     kpiCards(kpi) {
       const f = kpi.final || {};

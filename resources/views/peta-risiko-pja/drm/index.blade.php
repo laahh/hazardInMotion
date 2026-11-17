@@ -295,7 +295,8 @@
 
   /** Ikon kartu KPI (gaya template dashboard-peer): kunci kategori → [ikon Material, latar, warna]. */
   const IKON_KPI = { t: ['inventory_2', 'rgba(57,82,188,.1)', '#3952bc'], full: ['verified', '#dcfce7', '#16a34a'], part: ['rule', '#fef3c7', '#b45309'],
-    gapo: ['report', '#ffedd5', '#c2410c'], none: ['visibility_off', '#fde7d4', '#c2410c'] };
+    gapo: ['report', '#ffedd5', '#c2410c'], none: ['visibility_off', '#fde4e4', '#b42318'],
+    laten: ['history', '#f1e8fa', '#7e3fb3'], turun: ['trending_down', '#dcfce7', '#16a34a'] };
   const ikonKpi = (k) => { const [i, b, c] = IKON_KPI[k] || IKON_KPI.t; return `<span class="tp-ikon" style="--ib:${b};--ic:${c}" aria-hidden="true"><span class="material-symbols-outlined">${i}</span></span>`; };
 
   /**
@@ -320,17 +321,24 @@
     // Snapshot dihitung sebelum kolom status ada: kartu tetap berbentuk angka, isinya "–" sampai sync ulang.
     const ada = M.beranda.kolomMgmt.includes('idk');
     const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
-    const beda = (a, b) => (V0 ? ` · ${a - b >= 0 ? '+' : '−'}${DR.fmt(Math.abs(a - b))} vs minggu lalu` : '');
-    const kartu = (warna, k, label, ket) => `<div class="tp-stat" style="--c:${warna}" title="${DR.esc(ket)}${ada ? beda(V[k], V0 ? V0[k] : 0) : ''}">
-      <b>${ada ? DR.fmt(V[k]) : '–'}</b><span>${label}</span></div>`;
+    // Selisih jumlah vs minggu lalu; naikBaik = kenaikan berarti membaik (hijau).
+    const beda = (k, naikBaik) => {
+      if (!ada || !V0) return '';
+      const d = V[k] - V0[k];
+      if (!d) return 'sama dengan minggu lalu';
+      const baik = (d > 0) === naikBaik;
+      return `<span style="color:${baik ? 'var(--green-d)' : '#c0262d'}">${d > 0 ? '▲' : '▼'} ${DR.fmt(Math.abs(d))}</span> vs minggu lalu`;
+    };
+    const kartu = (warna, ik, k, label, ket, naikBaik) => `<div class="br-kpi" style="--ac:${warna};--kc:${warna}" title="${DR.esc(ket)}">${ikonKpi(ik)}
+      <small>${label}</small><b>${ada ? DR.fmt(V[k]) : '–'}</b><em>${beda(k, naikBaik) || '&nbsp;'}</em></div>`;
     const catatanSync = ada ? '' : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot ini dihitung sebelum kartu status ditambahkan. Jalankan <code>php artisan peta-risiko:sync</code> untuk mengisi angkanya.</p>';
-    return `<p class="tp-stat-sub">Baseline · ${judul}: <b>${DR.fmt(V.t)}</b> ${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</p>
-      <div class="tp-stats">
-        ${kartu('#1a7f37', 'idk', 'Teridentifikasi &amp; Terkontrol', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun')}
-        ${kartu('#a07a00', 'idg', 'Teridentifikasi - Ada Gap', 'Bermasalah di minimal satu detail lokasi: belum closed, berulang, atau OAK Stop')}
-        ${kartu('#b42318', 'tid', 'Tidak Teridentifikasi (Open Risk)', 'Tidak ada laporan SAP di semua detail lokasinya')}
-        ${kartu('#7e3fb3', 'laten', 'Risiko Laten (pernah incident, kini blind spot SAP)', 'Tidak teridentifikasi, tetapi terkait insiden 12 bulan terakhir di salah satu detail lokasinya')}
-        ${kartu('#1a7f37', 'turun', 'Risiko Turun Kategori (Berhasil Dikontrol)', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal')}
+    return `<div class="br-kpis br-kpis-6">
+        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</em></div>
+        ${kartu('#1a7f37', 'full', 'idk', 'Teridentifikasi &amp; Terkontrol', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun', true)}
+        ${kartu('#a07a00', 'part', 'idg', 'Teridentifikasi - Ada Gap', 'Bermasalah di minimal satu detail lokasi: belum closed, berulang, atau OAK Stop', false)}
+        ${kartu('#b42318', 'none', 'tid', 'Tidak Teridentifikasi (Open Risk)', 'Tidak ada laporan SAP di semua detail lokasinya', false)}
+        ${kartu('#7e3fb3', 'laten', 'laten', 'Risiko Laten (pernah incident, kini blind spot SAP)', 'Tidak teridentifikasi, tetapi terkait insiden 12 bulan terakhir di salah satu detail lokasinya', false)}
+        ${kartu('#1a7f37', 'turun', 'turun', 'Risiko Turun Kategori (Berhasil Dikontrol)', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal', true)}
       </div>${catatanSync}`;
   }
 
