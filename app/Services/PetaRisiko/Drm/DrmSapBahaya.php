@@ -40,8 +40,13 @@ class DrmSapBahaya
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
     }
 
-    /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
-    private function hitung(int $hid, string $kel, string $site, string $grup, int $w): array
+    /**
+     * Minggu, detail lokasi cakupan (gerbang M05), label Hazard, dan pola kelompok untuk satu baris.
+     *
+     * @return array{dari: CarbonImmutable, sampai: CarbonImmutable, dl: array<int, array{0: string, 1: string, 2: string, 3: string}>,
+     *   labelBahaya: list<int>, labelSpesifik: array<string, list<int>>, pola: array<string, string>, cfg: array<string, mixed>}
+     */
+    private function persiapan(int $hid, string $kel, string $site, string $grup, int $w): array
     {
         ['dl' => $kamusDl, 'minggu' => $minggu, 'sampai' => $sampaiData] = $this->kamus();
         $master = DrmMaster::muat();
@@ -50,9 +55,6 @@ class DrmSapBahaya
 
         $dari = CarbonImmutable::parse($minggu[$w] ?? $minggu[0]);
         $sampai = min($dari->addDays(6), CarbonImmutable::parse($sampaiData));
-        $kosong = ['dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(), 'ndl' => 0, 'laporan' => [],
-            'ringkas' => ['total' => 0, 'label' => 0, 'label_kelompok' => 0, 'kelompok' => 0,
-                'belum_closed' => 0, 'berulang' => 0, 'oak_stop' => 0], 'terpotong' => false];
 
         // Detail lokasi cakupan yang grup lokasinya memuat baris ini (gerbang M05).
         $namaGrup = array_map('strval', $m['grup']);
@@ -68,12 +70,25 @@ class DrmSapBahaya
                 $dl[(int) $id] = [$s, $lokasi, $detlok, $g];
             }
         }
+        [$labelBahaya, $labelSpesifik] = $dl === [] ? [[], []]
+            : $this->labelHazard($master, $cfg, $hid, $kel, array_intersect_key($grupMemuat, array_flip(array_column($dl, 3))));
+        $pola = array_filter(array_map(fn (array $p) => (string) ($p[2] ?? ''), (array) $cfg['proses_bisnis']));
+
+        return compact('dari', 'sampai', 'dl', 'labelBahaya', 'labelSpesifik', 'pola', 'cfg');
+    }
+
+    /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
+    private function hitung(int $hid, string $kel, string $site, string $grup, int $w): array
+    {
+        ['dari' => $dari, 'sampai' => $sampai, 'dl' => $dl, 'labelBahaya' => $labelBahaya, 'labelSpesifik' => $labelSpesifik,
+            'pola' => $pola, 'cfg' => $cfg] = $this->persiapan($hid, $kel, $site, $grup, $w);
+        $kosong = ['dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(), 'ndl' => 0, 'laporan' => [],
+            'ringkas' => ['total' => 0, 'label' => 0, 'label_kelompok' => 0, 'kelompok' => 0,
+                'belum_closed' => 0, 'berulang' => 0, 'oak_stop' => 0], 'terpotong' => false];
         if ($dl === []) {
             return $kosong;
         }
 
-        [$labelBahaya, $labelSpesifik] = $this->labelHazard($master, $cfg, $hid, $kel, array_intersect_key($grupMemuat, array_flip(array_column($dl, 3))));
-        $pola = array_filter(array_map(fn (array $p) => (string) ($p[2] ?? ''), (array) $cfg['proses_bisnis']));
         $semuaLabel = array_values(array_unique([...$labelBahaya, ...array_merge([], ...array_values($labelSpesifik))]));
 
         $sap = $this->ch->select($this->sql(array_keys($dl), $dari, $sampai, $semuaLabel, $pola, $kel, (array) $cfg['status_buang'], (array) $cfg['obs_tanpa_aktivitas']), 60);
@@ -133,6 +148,80 @@ class DrmSapBahaya
         }
 
         return [...$kosong, 'ndl' => count($dl), 'laporan' => $laporan, 'ringkas' => $ringkas, 'terpotong' => $terpotong];
+    }
+
+    /**
+     * Item sumber (modal Baseline): kunci yang membuat SAP tertangkap ke baris HIRA ini pada satu minggu, bukan isi laporan.
+     *   obs / oak : teks aktivitas OBS / "aktivitas / sub aktivitas" OAK yang regex kelompok M02-nya (pola pertama yang
+     *               cocok) = kelompok aktivitas baris ini; kunci = potongan teks yang cocok dengan pola itu.
+     *   ket       : label "ketidaksesuaian / sub ketidaksesuaian" Hazard / Inspeksi yang di master M09 memetakan ke
+     *               bahaya-risiko ini.
+     * n = jumlah laporan, ndl = detail lokasi berbeda. Item di kolom snapshot dihitung per detail lokasi (label sama di
+     * 2 DL = 2 item), sedangkan daftar ini item berbeda di semua DL cakupan.
+     *
+     * @return array{sumber: string, dari: string, sampai: string, ndl: int, pola: string, item: list<array{isi: string, kunci: string, n: int, ndl: int}>}
+     */
+    public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber): array
+    {
+        $kunci = sprintf('peta-risiko:sap-item:v1:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
+
+        return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber) {
+            ['dari' => $dari, 'sampai' => $sampai, 'dl' => $dl, 'labelBahaya' => $label, 'pola' => $pola, 'cfg' => $cfg]
+                = $this->persiapan($hid, $kel, $site, $grup, $w);
+            $hasil = ['sumber' => $sumber, 'dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(),
+                'ndl' => count($dl), 'pola' => (string) ($pola[$kel] ?? ''), 'item' => []];
+            if ($dl === [] || ($sumber === 'ket' ? $label === [] : ! isset($pola[$kel]))) {
+                return $hasil;
+            }
+            $rows = $this->ch->select($this->sqlItem(array_keys($dl), $dari, $sampai, $sumber, $label, $pola, $kel,
+                (array) $cfg['status_buang'], (array) $cfg['obs_tanpa_aktivitas']), 60);
+            $hasil['item'] = array_map(fn (array $r) => ['isi' => (string) $r['isi'], 'kunci' => (string) $r['kunci'],
+                'n' => (int) $r['n'], 'ndl' => (int) $r['ndl']], $rows);
+
+            return $hasil;
+        });
+    }
+
+    /**
+     * @param  list<int>  $dl
+     * @param  list<int>  $label  CRC label "k / sk" ternormalisasi yang memetakan ke bahaya ini
+     * @param  array<string, string>  $pola  kode kelompok → regex M02 (urutan config)
+     */
+    private function sqlItem(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, string $sumber, array $label, array $pola, string $kel, array $buang, array $tanpaAktivitas): string
+    {
+        $q = [RfidClickHouseClient::class, 'quote'];
+        $norm = fn (string $x) => "trimBoth(replaceRegexpAll(lowerUTF8(ifNull({$x}, '')), '\\\\s+', ' '))";
+        $daftar = fn (array $a) => $a === [] ? '0' : implode(',', array_map('intval', $a));
+        $saring = 'WHERE `id detail lokasi` IN ('.$daftar($dl).')
+    AND `date time` >= toDate('.$q($dari->toDateString()).') AND `date time` < toDate('.$q($sampai->toDateString()).') + 1
+    AND ifNull(status, \'\') NOT IN ('.implode(', ', array_map($q, $buang ?: ['-'])).')';
+
+        if ($sumber === 'ket') {
+            return 'SELECT concat(trim(ifNull(ketidaksesuaian, \'\')), \' / \', trim(ifNull(subketidaksesuaian, \'\'))) AS isi, \'\' AS kunci,
+       count() AS n, uniqExact(`id detail lokasi`) AS ndl
+FROM obds.ch_rfid_sap_cuti_all_site
+'.$saring.'
+    AND jenis_data IN (\'HAZARD\', \'INSPEKSI\')
+    AND CRC32(concat('.$norm('ketidaksesuaian').', \' / \', '.$norm('subketidaksesuaian').')) IN ('.$daftar($label).')
+GROUP BY isi ORDER BY n DESC, isi LIMIT 500';
+        }
+
+        $obs = $sumber === 'obs';
+        $tx = $obs ? 'lower(ifNull(`aktivitas  OBS`, \'\'))'
+            : 'lower(concat(ifNull(`aktivitas pekerjaan OAK`, \'\'), \' / \', ifNull(`sub aktivitas pekerjaan OAK`, \'\')))';
+        $asli = $obs ? 'trim(ifNull(`aktivitas  OBS`, \'\'))'
+            : 'concat(trim(ifNull(`aktivitas pekerjaan OAK`, \'\')), \' / \', trim(ifNull(`sub aktivitas pekerjaan OAK`, \'\')))';
+
+        return 'SELECT any(asli) AS isi, any(extract(tx, '.$q('(?i)('.$pola[$kel].')').')) AS kunci, count() AS n, uniqExact(dl) AS ndl FROM (
+  SELECT '.$tx.' AS tx, '.$asli.' AS asli, `id detail lokasi` AS dl,
+         multiSearchAny(lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'), \' \', ifNull(tindakan, \'\'))),
+                        ['.implode(', ', array_map($q, $tanpaAktivitas ?: ['-'])).']) AS na
+  FROM obds.ch_rfid_sap_cuti_all_site
+  '.$saring.'
+    AND jenis_data = '.$q($obs ? 'OBSERVASI' : 'OBSERVASI AREA KRITIS').'
+)
+WHERE NOT na AND trim(tx) NOT IN (\'\', \'/\') AND arrayFirst(r -> match(tx, r.2), '.$this->pb($pola).').1 = '.$q($kel).'
+GROUP BY tx ORDER BY n DESC, isi LIMIT 500';
     }
 
     /**

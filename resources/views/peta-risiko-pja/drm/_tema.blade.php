@@ -135,6 +135,23 @@
   .dr-item { border: 0; background: none; padding: 0; color: #1d4ed8; text-decoration: underline; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
   .dr-item:hover { color: #1e3a8a; }
   .dr-nol { color: #b0b3b6; }
+  /* Modal item sumber (cara SAP tertangkap ke baris HIRA). */
+  .dr-item-modal { width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 0; border-radius: 14px; overflow: hidden; box-shadow: 0 24px 60px rgba(15, 23, 42, .3); }
+  .dr-item-modal[open] { display: flex; flex-direction: column; }
+  .dr-item-modal::backdrop { background: rgba(15, 23, 42, .35); }
+  .dr-item-kepala { display: flex; gap: 16px; justify-content: space-between; align-items: center; padding: 16px 22px; background: #1f4e79; color: #fff; }
+  .dr-item-kepala h3 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
+  .dr-item-tutup { border: 0; background: transparent; color: #fff; cursor: pointer; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; flex: none; }
+  .dr-item-tutup:hover { background: rgba(255, 255, 255, .15); }
+  .dr-item-isi { overflow: auto; padding: 18px 22px 22px; font-size: 13px; }
+  .dr-item-cara { margin: 0 0 6px; line-height: 1.5; color: #3f4346; }
+  .dr-item-cara code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 12px; word-break: break-word; }
+  .dr-item-daftar { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .dr-item-daftar li { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 13px 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafbfc; }
+  .dr-item-daftar li span { font-size: 14px; color: #1f2937; }
+  .dr-item-daftar li small { color: #6b7280; white-space: nowrap; font-size: 12px; }
+  .dr-item-daftar mark { background: #fef3c7; color: inherit; padding: 0 2px; border-radius: 3px; }
+  @media (max-width: 640px) { .dr-item-daftar li { flex-direction: column; align-items: flex-start; gap: 4px; } }
   .dr-sap-ringkas { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 10px; font-size: 12.5px; }
   .dr-sap-tbl { min-width: 880px; font-size: 12px; }
   .dr-sap-tbl td small { display: block; color: #8a8d90; font-size: 11px; margin-top: 2px; }

@@ -421,13 +421,6 @@
   }
 
   const URL_SAP_BAHAYA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.bahaya.sap', ['hid' => '__HID__'])) }};
-  // Cara laporan mengidentifikasi baris (aturan per jenis laporan): bahaya langsung, atau kelompok aktivitasnya.
-  const CARA_SAP = {
-    label: ['#1a7f37', 'Hazard/Inspeksi · label → bahaya'],
-    label_kelompok: ['#8a6a00', 'Hazard/Inspeksi · label spesifik → kelompok'],
-    kelompok: ['#a05a00', 'OBS/OAK · aktivitas → kelompok'],
-  };
-
   const STATUS_SAP = { K: 'Teridentifikasi - Terkontrol', G: 'Teridentifikasi - Ada Gap', T: 'Tidak Teridentifikasi' };
   const GAP_BIT = { closed: 1, ulang: 2, stop: 4 };
 
@@ -452,7 +445,7 @@
     const NK = 16;
     const strip = '<span class="dr-nol" title="Belum ada di snapshot">–</span>';
     const gapSel = (ya, na, perluData = true) => (perluData && !adaVol ? strip : ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
-    const item = (n, i) => (!adaVol ? strip : n > 0 ? `<button type="button" class="dr-item" data-i="${i}" aria-expanded="false">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
+    const item = (n, i, sumber) => (!adaVol ? strip : n > 0 ? `<button type="button" class="dr-item" data-i="${i}" data-sumber="${sumber}">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
     const angka = (n) => (!adaVol ? strip : n > 0 ? DR.fmt(n) : '<span class="dr-nol">0</span>');
     const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
     let kel = '', html = '';
@@ -478,13 +471,12 @@
         <td class="c">${gapSel(m & GAP_BIT.closed, T)}</td>
         <td class="c">${gapSel(m & GAP_BIT.ulang, T)}</td>
         <td class="c">${gapSel(m & GAP_BIT.stop, T || nOak === 0)}</td>
-        <td class="c">${item(iObs, i)}</td>
-        <td class="c">${item(iOak, i)}</td>
-        <td class="c">${item(iKet, i)}</td>
+        <td class="c">${item(iObs, i, 'obs')}</td>
+        <td class="c">${item(iOak, i, 'oak')}</td>
+        <td class="c">${item(iKet, i, 'ket')}</td>
         <td class="n">${angka(nObs)}</td>
         <td class="n">${angka(nOak)}</td>
-        <td class="n">${angka(nKet)}</td></tr>
-        <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="${NK}"></td></tr>`;
+        <td class="n">${angka(nKet)}</td></tr>`;
     });
     const isi = d.querySelector('#dr-modal-isi');
     const wk = wKode(state.w);
@@ -494,50 +486,64 @@
       <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
       <th class="c">Item Sumber Observasi</th><th class="c">Item Sumber OAK</th><th class="c">Item Sumber Ketidaksesuaian</th>
       <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th></tr></thead><tbody>${html}</tbody></table>`;
-    isi.querySelectorAll('.dr-item').forEach((btn) => btn.addEventListener('click', () => bukaSapBahaya(baris[+btn.dataset.i], btn)));
+    isi.querySelectorAll('.dr-item').forEach((btn) => btn.addEventListener('click', () => bukaItem(baris[+btn.dataset.i], btn.dataset.sumber)));
   }
 
-  /** Buka / tutup daftar SAP satu baris di modal. */
-  async function bukaSapBahaya(b, btn) {
-    const tr = btn.closest('tbody').querySelector(`tr.dr-modal-sap[data-i="${btn.dataset.i}"]`), td = tr.firstElementChild;
-    const buka = tr.hidden;
-    tr.hidden = !buka;
-    btn.setAttribute('aria-expanded', String(buka));
-    btn.classList.toggle('on', buka);
-    if (!buka || td.dataset.dimuat) return;
-    td.innerHTML = '<span class="dr-mute">Memuat laporan SAP dari ClickHouse…</span>';
-    const qs = new URLSearchParams({ kel: b.kel, site: state.site, w: String(state.w), ...(state.tab === 'grup' ? { grup: state.grup } : {}) });
+  /**
+   * Modal item sumber: BAGAIMANA SAP tertangkap ke baris HIRA (kunci penangkapnya), bukan isi laporan.
+   * OBS / OAK = teks aktivitas yang masuk kelompok aktivitas baris ini lewat pola kata kunci kelompok (M02);
+   * Ketidaksesuaian = label ketidaksesuaian / sub ketidaksesuaian Hazard/Inspeksi yang dipetakan ke bahaya ini (M09).
+   */
+  const SUMBER_ITEM = {
+    obs: ['Observasi', 'Teks aktivitas OBS yang masuk kelompok aktivitas', 'kelompok'],
+    oak: ['OAK', 'Teks "aktivitas / sub aktivitas" OAK yang masuk kelompok aktivitas', 'kelompok'],
+    ket: ['Ketidaksesuaian/Sub Ketidaksesuaian', 'Label ketidaksesuaian / sub ketidaksesuaian Hazard & Inspeksi yang di master pemetaan (M09) terhubung ke bahaya-risiko ini', 'bahaya'],
+  };
+  function dialogItem() {
+    let d = document.getElementById('dr-item-modal');
+    if (d) return d;
+    d = document.createElement('dialog');
+    d.id = 'dr-item-modal';
+    d.className = 'dr-item-modal';
+    d.setAttribute('aria-labelledby', 'dr-item-judul');
+    d.innerHTML = `<div class="dr-item-kepala"><h3 id="dr-item-judul"></h3>
+        <button type="button" class="dr-item-tutup" aria-label="Tutup"><span class="material-symbols-outlined">close</span></button></div>
+      <div class="dr-item-isi" id="dr-item-isi"></div>`;
+    document.body.appendChild(d);
+    d.querySelector('.dr-item-tutup').addEventListener('click', () => d.close());
+    d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+    return d;
+  }
+  const tebal = (teks, kunci) => {
+    const t = DR.esc(teks);
+    if (!kunci) return t;
+    const i = teks.toLowerCase().indexOf(kunci.toLowerCase());
+    return i < 0 ? t : `${DR.esc(teks.slice(0, i))}<mark>${DR.esc(teks.slice(i, i + kunci.length))}</mark>${DR.esc(teks.slice(i + kunci.length))}`;
+  };
+  async function bukaItem(b, sumber) {
+    const [nama, aturan, ke] = SUMBER_ITEM[sumber];
+    const d = dialogItem(), isi = d.querySelector('#dr-item-isi');
+    d.querySelector('#dr-item-judul').textContent = `Item Sumber - ${nama} ( ${b.t[0] || '-'} / ${b.t[2] || '-'} )`;
+    isi.innerHTML = '<div class="dr-mute">Memuat item dari ClickHouse…</div>';
+    if (!d.open) d.showModal();
+    const qs = new URLSearchParams({ kel: b.kel, site: state.site, w: String(state.w), sumber, ...(state.tab === 'grup' ? { grup: state.grup } : {}) });
     try {
       const r = await fetch(`${URL_SAP_BAHAYA.replace('__HID__', encodeURIComponent(b.hid))}?${qs}`, { headers: { Accept: 'application/json' } });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.pesan || data.message || `HTTP ${r.status}`);
-      td.innerHTML = isiSapBahaya(data);
-      td.dataset.dimuat = '1';
+      const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
+      const cara = ke === 'kelompok'
+        ? `${aturan} <b>${DR.esc(b.kn)}</b> (aktivitas HIRA baris ini). Kata kunci kelompok: <code>${DR.esc(data.pola || '-')}</code>. Bagian teks yang cocok ditandai.`
+        : `${aturan}.`;
+      const daftar = (data.item || []).map((x) => `<li><span>${tebal(x.isi || '-', x.kunci)}</span>
+          <small>${DR.fmt(x.n)} laporan · ${DR.fmt(x.ndl)} detail lokasi</small></li>`).join('');
+      isi.innerHTML = `<p class="dr-item-cara"><b>Cara tertangkap:</b> ${cara}</p>
+        <p class="dr-mute" style="margin:0 0 10px;font-size:12px">${wKode(state.w)} · ${periode} · ${DR.fmt((data.item || []).length)} item berbeda di ${DR.fmt(data.ndl)} detail lokasi cakupan</p>
+        ${sumber === 'oak' ? '<p class="dr-mute" style="margin:0 0 10px;font-size:12px">Butir checklist OAK (objek / detail objek) belum bisa dipakai: tabel checklist berhenti tersinkron sejak 28 Okt 2026, jadi OAK ditangkap dari aktivitas / sub aktivitasnya.</p>' : ''}
+        ${daftar ? `<ul class="dr-item-daftar">${daftar}</ul>` : '<div class="dr-mute">Tidak ada item pada minggu ini.</div>'}`;
     } catch (e) {
-      td.innerHTML = `<span class="dr-mute">Laporan SAP gagal dimuat: ${DR.esc(e.message)}</span>`;
+      isi.innerHTML = `<div class="dr-mute">Item gagal dimuat: ${DR.esc(e.message)}</div>`;
     }
-  }
-
-  function isiSapBahaya(data) {
-    const R = data.ringkas || {}, L = data.laporan || [];
-    const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
-    if (!L.length) return `<span class="dr-mute">Tidak ada laporan SAP yang memetakan ke bahaya ini di ${DR.fmt(data.ndl)} detail lokasi cakupan pada ${periode}.</span>`;
-    const ringkas = `<div class="dr-sap-ringkas"><b>${DR.fmt(R.total)} laporan · ${periode} · ${DR.fmt(data.ndl)} detail lokasi</b>
-      ${Object.entries(CARA_SAP).map(([k, [c, t]]) => R[k] ? `<span style="color:${c}">● ${DR.fmt(R[k])} ${t}</span>` : '').join('')}
-      <span>belum closed ${DR.fmt(R.belum_closed)} · berulang ${DR.fmt(R.berulang)} · OAK Stop ${DR.fmt(R.oak_stop)}</span></div>`;
-    const baris = L.map((x) => {
-      const [c, t] = CARA_SAP[x.cara] || ['#8a8d90', x.cara];
-      const bendera = [x.belum_closed ? '<span class="dr-tanda merah">Belum closed</span>' : '', x.berulang ? '<span class="dr-tanda merah">Berulang</span>' : '',
-        x.oak_stop ? '<span class="dr-tanda merah">OAK Stop</span>' : ''].join('');
-      return `<tr><td style="white-space:nowrap">${DR.esc(x.waktu)}<small>${DR.esc(x.jenis)}</small></td>
-        <td>${DR.esc(x.lokasi)}</td>
-        <td><b>${DR.esc(x.isi || '-')}</b>${x.deskripsi ? `<small>${DR.esc(x.deskripsi)}</small>` : ''}</td>
-        <td>${DR.esc(x.status || x.hasil_oak || '-')}${bendera ? `<br>${bendera}` : ''}</td>
-        <td><span style="color:${c};font-weight:600">● ${t}</span></td>
-        <td class="dr-mute">${DR.esc(x.pelapor)}</td></tr>`;
-    }).join('');
-    return ringkas + `<div class="dr-scroll"><table class="pr-tbl dr-tbl dr-sap-tbl"><thead><tr><th>Waktu</th><th>Detail lokasi</th><th>Isi laporan</th><th>Status</th><th>Cara terpetakan</th><th>Pelapor</th></tr></thead><tbody>${baris}</tbody></table></div>`
-      + (data.terpotong ? '<div class="dr-mute" style="font-size:12px;margin-top:6px">Ditampilkan 300 laporan terbaru.</div>' : '');
   }
 
   // Klik / Enter / Spasi pada kartu KPI membuka modal (delegasi: kartu dirender ulang tiap filter berubah).

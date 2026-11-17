@@ -97,9 +97,15 @@ class PetaRisikoDrmController extends Controller
             'site' => ['required', 'string', 'max:60'],
             'grup' => ['nullable', 'string', 'max:120'],
             'w' => ['nullable', 'integer', 'min:0', 'max:52'],
+            // Diisi = daftar item sumber (cara SAP tertangkap ke baris ini), bukan daftar laporan.
+            'sumber' => ['nullable', 'string', 'in:obs,oak,ket'],
         ]);
 
         try {
+            if (! empty($v['sumber'])) {
+                return response()->json($sap->item((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0), $v['sumber']));
+            }
+
             return response()->json($sap->ambil((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0)));
         } catch (\Throwable $e) {
             report($e);

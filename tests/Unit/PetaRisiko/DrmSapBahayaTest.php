@@ -43,6 +43,25 @@ class DrmSapBahayaTest extends TestCase
         $this->assertStringContainsString("kc IN (0), 'hazard'", $sql);
     }
 
+    public function test_item_sumber_mengelompokkan_kunci_penangkap_bukan_laporan(): void
+    {
+        $arg = fn (string $sumber) => [[11], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'), $sumber, [123],
+            ['K10' => 'maintenance', 'K13' => 'jalan|road'], 'K13', ['DELETED'], ['tidak ada aktivitas']];
+
+        $obs = $this->panggil('sqlItem', $arg('obs'));
+        $this->assertStringContainsString("jenis_data = 'OBSERVASI'", $obs);
+        $this->assertStringContainsString("any(extract(tx, '(?i)(jalan|road)')) AS kunci", $obs);
+        $this->assertStringContainsString("arrayFirst(r -> match(tx, r.2), [('K10', '(?i)maintenance'), ('K13', '(?i)jalan|road')]).1 = 'K13'", $obs);
+        $this->assertStringContainsString('GROUP BY tx', $obs);
+
+        $this->assertStringContainsString("jenis_data = 'OBSERVASI AREA KRITIS'", $this->panggil('sqlItem', $arg('oak')));
+
+        $ket = $this->panggil('sqlItem', $arg('ket'));
+        $this->assertStringContainsString("jenis_data IN ('HAZARD', 'INSPEKSI')", $ket);
+        $this->assertStringContainsString(')) IN (123)', $ket);
+        $this->assertStringContainsString('GROUP BY isi', $ket);
+    }
+
     public function test_semua_laporan_hanya_dari_ch_rfid_sap(): void
     {
         $sql = $this->sql(['K13' => 'jalan'], 'K13');
