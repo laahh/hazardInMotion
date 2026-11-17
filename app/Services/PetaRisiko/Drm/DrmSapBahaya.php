@@ -34,7 +34,7 @@ class DrmSapBahaya
      */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v7:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v8:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
     }
@@ -72,7 +72,7 @@ class DrmSapBahaya
         }
         // Label Hazard / Inspeksi (M09, CRC "k / sk" ternormalisasi) yang dipetakan ke baris ini.
         $teksBahaya = [];
-        foreach ($m['label'] as $l) {
+        foreach ($master->labelHazard($cfg) as $l) {
             if (in_array($hid, $l['ri'], true)) {
                 $teksBahaya[DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']))] = trim($l['k']).' / '.trim($l['sk']);
             }
@@ -89,18 +89,8 @@ class DrmSapBahaya
         // Kurasi aktivitas OAK → aktivitas HIRA (config oak_aktivitas_hira): aktivitas OAK yang menandai baris ini.
         $teksOakAkt = array_map(fn (string $a) => 'Aktivitas OAK: '.$a.' (semua sub aktivitas)', $teks($master->labelOakAktivitas($cfg)));
         $labelOakAkt = array_keys($teksOakAkt);
-        // Tema (M16) yang barisnya memuat bahaya ini → [nama, regex teks butir checklist (M15)].
-        $temaBaris = Cache::remember('peta-risiko:tema-baris:'.(int) @filemtime($this->repo->pathMeta()), 3600,
-            fn () => $master->temaBaris((array) $cfg['tema_checklist']));
-        $tema = [];
-        foreach ($temaBaris as $id => $riList) {
-            if (in_array($hid, $riList, true) && isset($cfg['tema_checklist'][$id])) {
-                $tema[] = [(string) $cfg['tema_checklist'][$id][0], (string) $cfg['tema_checklist'][$id][1]];
-            }
-        }
-
         return compact('dari', 'sampai', 'dl', 'labelBahaya', 'cfg', 'labelObs', 'labelOak', 'teksBahaya', 'teksObs', 'teksOak',
-            'labelOakAkt', 'teksOakAkt', 'tema');
+            'labelOakAkt', 'teksOakAkt');
     }
 
     /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
@@ -129,15 +119,13 @@ class DrmSapBahaya
                 $baris[] = [...$r, 'cara' => 'obs'];
             }
         }
-        // OAK (bcbeats): berlaku lewat label M12 / kurasi aktivitas, tertangkap lewat butir checklist bertema sama.
-        if (($p['labelOak'] !== [] || $p['labelOakAkt'] !== []) && $p['tema'] !== []) {
-            foreach ($this->ch->select($this->sqlOakButir($p, $dlIds, 'laporan'), 60) as $r) {
+        // OAK (bcbeats): label persis M12 per baris (+ kurasi aktivitas OAK hanya bila disetujui di config).
+        if ($p['labelOak'] !== [] || $p['labelOakAkt'] !== []) {
+            foreach ($this->ch->select($this->sqlOakLabel($p, $dlIds, 'laporan'), 60) as $r) {
                 $baris[] = ['cara' => 'oak', 'jenis' => 'OBSERVASI AREA KRITIS', 'waktu' => $r['waktu'], 'dl' => $r['dl'],
-                    'isi' => trim($r['akt'].' / '.$r['sub'], ' /'),
-                    'deskripsi' => 'Butir checklist: '.implode(' · ', (array) $r['butir'])
-                        .(((array) $r['catatan']) !== [] ? ' — Tidak sesuai: '.implode(' · ', (array) $r['catatan']) : ''),
+                    'isi' => trim($r['akt'].' / '.$r['sub'], ' /'), 'deskripsi' => '',
                     'status' => (int) $r['stop'] === 1 ? 'Stop Pekerjaan' : 'Pekerjaan Dilanjutkan', 'hasil_oak' => '',
-                    'stop' => (int) $r['stop'], 'ts' => (int) $r['ts'], 'pelapor' => ''];
+                    'stop' => (int) $r['stop'], 'ts' => 0, 'pelapor' => ''];
             }
         }
         usort($baris, fn ($a, $b) => strcmp((string) $b['waktu'], (string) $a['waktu']));
@@ -201,7 +189,7 @@ class DrmSapBahaya
      */
     public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v8:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v9:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber) {
             $p = $this->persiapan($hid, $kel, $site, $grup, $w);
@@ -222,14 +210,13 @@ class DrmSapBahaya
             }
             $item = [];
             if ($sumber === 'oak') {
-                // OAK: n = laporan yang berlaku lewat entri ini DAN tertangkap butir checklist bertema baris ini.
-                $baris = ($dlIds !== [] && ($teks + $teksAkt) !== [] && $p['tema'] !== []) ? $this->ch->select($this->sqlOakButir($p, $dlIds, 'item'), 60) : [];
+                // OAK: n = laporan yang labelnya (M12) / aktivitasnya (kurasi disetujui) cocok dengan entri ini.
+                $baris = ($dlIds !== [] && ($teks + $teksAkt) !== []) ? $this->ch->select($this->sqlOakLabel($p, $dlIds, 'item'), 60) : [];
                 foreach ($teks + $teksAkt as $crc => $isi) {
                     $kolom = isset($teksAkt[$crc]) ? 'ka' : 'kl';
                     $cocok = array_filter($baris, fn ($r) => (int) $r[$kolom] === (int) $crc);
                     $item[] = ['isi' => (string) $isi, 'n' => array_sum(array_column($cocok, 'n')), 'ndl' => array_sum(array_column($cocok, 'ndl')),
-                        'nstop' => array_sum(array_column($cocok, 'nstop')), 'nts' => array_sum(array_column($cocok, 'nts')),
-                        'butir' => array_values(array_slice(array_unique(array_merge([], ...array_map(fn ($r) => (array) $r['butir'], $cocok))), 0, 5))];
+                        'nstop' => array_sum(array_column($cocok, 'nstop'))];
                 }
             }
             foreach ($sumber === 'oak' ? [] : $teks as $crc => $isi) {
@@ -239,61 +226,44 @@ class DrmSapBahaya
             usort($item, fn ($a, $b) => $b['n'] <=> $a['n'] ?: strcmp($a['isi'], $b['isi']));
 
             return ['sumber' => $sumber, 'dari' => $p['dari']->toDateString(), 'sampai' => $p['sampai']->toDateString(),
-                'ndl' => count($p['dl']), 'nlabel' => count($teks) + count($teksAkt), 'item' => $item,
-                'tema' => $sumber === 'oak' ? array_column($p['tema'], 0) : []];
+                'ndl' => count($p['dl']), 'nlabel' => count($teks) + count($teksAkt), 'item' => $item];
         });
     }
 
     /**
-     * OAK (bcbeats) yang menangkap baris ini — aturan gabungan, sama dengan sync (DrmSql, CTE oakr/oke/okb):
-     * laporan BERLAKU bila label "aktivitas / sub" (kl) ada di M12 baris ini atau aktivitasnya (ka) ada di kurasi
-     * aktivitas OAK baris ini, dan TERTANGKAP bila ada butir checklist yang dijawab Sesuai / Tidak Sesuai yang bertema
-     * sama dengan baris ini ($tema = regex M15 tema-tema baris ini). mode 'laporan' = per OAK, 'item' = per (kl, ka).
+     * OAK (bcbeats) yang menangkap baris ini — sama dengan sync (CTE oakr/oke): label "aktivitas / sub" (kl) ada di
+     * M12 baris ini, atau aktivitasnya (ka) ada di kurasi aktivitas OAK yang disetujui (config oak_aktivitas_hira).
+     * mode 'laporan' = per OAK, 'item' = per (kl, ka).
      *
      * @param  array<string, mixed>  $p  hasil persiapan
      * @param  list<int>  $dl
      */
-    private function sqlOakButir(array $p, array $dl, string $mode): string
+    private function sqlOakLabel(array $p, array $dl, string $mode): string
     {
         $q = [RfidClickHouseClient::class, 'quote'];
         $c = $p['cfg']['oak_checklist'];
-        $ts = (int) $c['tidak_sesuai'];
         $daftar = fn (array $a) => $a === [] ? '0' : implode(',', array_map('intval', $a));
-        $saring = 'WHERE toInt64(id_location) IN ('.$daftar($dl).')
-      AND submit_date >= toDate('.$q($p['dari']->toDateString()).') AND submit_date < toDate('.$q($p['sampai']->toDateString()).') + 1';
 
-        $dasar = 'SELECT r.rid AS rid, r.waktu AS waktu, r.dl AS dl, r.akt AS akt, r.sub AS sub, r.kl AS kl, r.ka AS ka, r.stop AS stop,
-         j.sid AS sid, j.catatan AS catatan, concat(o.name, \' › \', dt.name) AS butir
+        $dasar = 'SELECT toInt64(x.id) AS rid, toString(x.submit_date) AS waktu, toString(x.id_location) AS dl,
+         ifNull(a.name, \'\') AS akt, ifNull(s.name, \'\') AS sub,
+         CRC32('.DrmSql::normTeksSql('concat(ifNull(a.name, \'\'), \' / \', ifNull(s.name, \'\'))').') AS kl,
+         CRC32('.DrmSql::normTeksSql('ifNull(a.name, \'\')').') AS ka,
+         toUInt8(ifNull(x.id_conclusion, 0) = '.(int) $c['stop'].') AS stop
   FROM (
-    SELECT toInt64(x.id) AS rid, toString(x.submit_date) AS waktu, toString(x.id_location) AS dl, ifNull(a.name, \'\') AS akt, ifNull(s.name, \'\') AS sub,
-           CRC32('.DrmSql::normTeksSql('concat(ifNull(a.name, \'\'), \' / \', ifNull(s.name, \'\'))').') AS kl,
-           CRC32('.DrmSql::normTeksSql('ifNull(a.name, \'\')').') AS ka,
-           toUInt8(ifNull(x.id_conclusion, 0) = '.(int) $c['stop'].') AS stop
-    FROM (SELECT * FROM '.DrmSql::tabelOak($p['cfg'], 'register').' '.$saring.') x
-    LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity GROUP BY id) a ON a.id = toInt64(x.id_oak_activity)
-    LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_sub_activity GROUP BY id) s ON s.id = toInt64(x.id_oak_sub_activity)
-  ) r
-  JOIN (
-    SELECT toInt64(id_oak_register) AS rid, toInt64(id_detail_object) AS did, toInt64(id_suitability) AS sid, trim(ifNull(tx_suitability, \'\')) AS catatan
-    FROM '.DrmSql::tabelOak($p['cfg'], 'detail').'
-    WHERE id_suitability IN ('.(int) $c['sesuai'].', '.$ts.') AND toInt64(id_oak_register) IN (SELECT toInt64(id) FROM '.DrmSql::tabelOak($p['cfg'], 'register').' '.$saring.')
-  ) j ON j.rid = r.rid
-  JOIN obds.m_oak_detail_objek AS dt FINAL ON dt.id = j.did
-  JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = dt.id_objek_pengamatan_observe
-  WHERE (r.kl IN ('.$daftar($p['labelOak']).') OR r.ka IN ('.$daftar($p['labelOakAkt']).'))
-    AND multiMatchAny(concat(\' \', lower(concat(o.name, \' \', dt.name)), \' \'), tr)';
+    SELECT * FROM '.DrmSql::tabelOak($p['cfg'], 'register').'
+    WHERE toInt64(id_location) IN ('.$daftar($dl).')
+      AND submit_date >= toDate('.$q($p['dari']->toDateString()).') AND submit_date < toDate('.$q($p['sampai']->toDateString()).') + 1
+  ) x
+  LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity GROUP BY id) a ON a.id = toInt64(x.id_oak_activity)
+  LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_sub_activity GROUP BY id) s ON s.id = toInt64(x.id_oak_sub_activity)';
+        $saring = 'WHERE kl IN ('.$daftar($p['labelOak']).') OR ka IN ('.$daftar($p['labelOakAkt']).')';
 
-        $with = 'WITH ['.implode(', ', array_map($q, array_column($p['tema'], 1))).'] AS tr ';
         if ($mode === 'item') {
-            return $with.'SELECT kl, ka, uniqExact(rid) AS n, uniqExact(dl) AS ndl, uniqExactIf(rid, sid = '.$ts.') AS nts,
-       uniqExactIf(rid, stop = 1) AS nstop, topK(5)(butir) AS butir
-FROM ('.$dasar.') GROUP BY kl, ka LIMIT 500';
+            return 'SELECT kl, ka, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
+FROM ('.$dasar.') '.$saring.' GROUP BY kl, ka LIMIT 500';
         }
 
-        return $with.'SELECT rid, any(waktu) AS waktu, any(dl) AS dl, any(akt) AS akt, any(sub) AS sub, max(stop) AS stop,
-       countIf(sid = '.$ts.') AS ts, arraySlice(groupUniqArray(butir), 1, 5) AS butir,
-       arraySlice(groupUniqArrayIf(catatan, sid = '.$ts.' AND catatan != \'\'), 1, 3) AS catatan
-FROM ('.$dasar.') GROUP BY rid ORDER BY waktu DESC LIMIT '.(self::MAKS_BARIS + 1);
+        return 'SELECT * FROM ('.$dasar.') '.$saring.' ORDER BY waktu DESC LIMIT '.(self::MAKS_BARIS + 1);
     }
 
     /**

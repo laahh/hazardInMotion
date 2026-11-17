@@ -67,22 +67,33 @@ class DrmSapBahayaTest extends TestCase
         $this->assertSame([['teks' => 'Dumping', 'crc' => DrmMaster::crcTeks('Dumping'), 'ri' => [1, 2]]], $hasil);
     }
 
-    public function test_oak_berlaku_lewat_label_atau_aktivitas_dan_tertangkap_lewat_butir_bertema(): void
+    public function test_oak_hanya_lewat_label_m12_per_baris_tanpa_tema_butir(): void
     {
         $p = ['dari' => CarbonImmutable::parse('2026-11-08'), 'sampai' => CarbonImmutable::parse('2026-11-14'), 'cfg' => config('peta_risiko_drm'),
-            'labelOak' => [202], 'labelOakAkt' => [303], 'tema' => [['Longsor/retakan/dumping', 'dumping|longsor']]];
-        $item = $this->panggil('sqlOakButir', [$p, [11], 'item']);
+            'labelOak' => [202], 'labelOakAkt' => []];
+        $item = $this->panggil('sqlOakLabel', [$p, [11], 'item']);
 
-        $this->assertStringContainsString("WITH ['dumping|longsor'] AS tr", $item);
         $this->assertStringContainsString('FROM bcbeats.oak_register', $item);
-        $this->assertStringContainsString('WHERE (r.kl IN (202) OR r.ka IN (303))', $item);
-        $this->assertStringContainsString("multiMatchAny(concat(' ', lower(concat(o.name, ' ', dt.name)), ' '), tr)", $item);
-        $this->assertStringContainsString('WHERE id_suitability IN (10186, 10187)', $item);
+        $this->assertStringContainsString('WHERE kl IN (202) OR ka IN (0)', $item);
         $this->assertStringContainsString('GROUP BY kl, ka', $item);
+        $this->assertStringNotContainsString('oak_detail_object', $item);
+        $this->assertStringNotContainsString('multiMatchAny', $item);
+        $this->assertStringContainsString('toUInt8(ifNull(x.id_conclusion, 0) = 19502) AS stop', $this->panggil('sqlOakLabel', [$p, [11], 'laporan']));
 
-        $laporan = $this->panggil('sqlOakButir', [$p, [11], 'laporan']);
-        $this->assertStringContainsString('toUInt8(ifNull(x.id_conclusion, 0) = 19502) AS stop', $laporan);
-        $this->assertStringContainsString('GROUP BY rid', $laporan);
+        // Kurasi aktivitas OAK yang dihitung bawaannya kosong (jangan dipaksakan); draf hanya sebagai usulan.
+        $this->assertSame([], config('peta_risiko_drm.oak_aktivitas_hira'));
+        $this->assertNotEmpty(config('peta_risiko_drm.oak_aktivitas_hira_usulan'));
+    }
+
+    public function test_label_m09_dari_sumber_yang_dikecualikan_tidak_dihitung(): void
+    {
+        $master = DrmMaster::dariArray(['label' => [
+            ['k' => 'A', 'sk' => 'a', 'ri' => [1], 'sumber' => 'HIRA-SAP v31 (Master A, terpilih)'],
+            ['k' => 'B', 'sk' => 'b', 'ri' => [2], 'sumber' => 'Pemetaan label baru (label)'],
+        ]]);
+
+        $this->assertSame(['A'], array_column($master->labelHazard(['m09_sumber_dikecualikan' => ['Pemetaan label baru (label)']]), 'k'));
+        $this->assertCount(2, $master->labelHazard(['m09_sumber_dikecualikan' => []]));
     }
 
     public function test_hazard_hanya_label_dari_ch_rfid(): void

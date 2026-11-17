@@ -734,7 +734,7 @@ class DrmSnapshotBuilder
                 }
             }
         }
-        foreach ((array) ($master->data['label'] ?? []) as $l) {
+        foreach ($master->labelHazard($master->cfgEfektif((array) config('peta_risiko_drm'))) as $l) {
             foreach ($l['ri'] as $r) {
                 $hasil['ket'][(int) $r] = ($hasil['ket'][(int) $r] ?? 0) + 1;
             }

@@ -114,7 +114,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
         $master = DrmMaster::muat();
         $m = $master->data;
         $label = $teks = [];
-        foreach ($m['label'] as $l) {
+        foreach ($master->labelHazard($master->cfgEfektif((array) config('peta_risiko_drm'))) as $l) {
             $label[DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']))] = $l['ri'];
         }
         foreach ([...$master->labelTeksAktivitas('obs'), ...$master->labelTeksAktivitas('oak')] as $t) {

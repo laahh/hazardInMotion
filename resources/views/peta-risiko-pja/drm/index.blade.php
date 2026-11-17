@@ -427,7 +427,7 @@
   const CARA_SAP = {
     label: ['#1a7f37', 'Hazard/Inspeksi · label → bahaya'],
     obs: ['#7e3fb3', 'OBS · jenis kegiatan → baris (M11)'],
-    oak: ['#1d4ed8', 'OAK · aktivitas / sub (M12 + kurasi) + butir checklist bertema sama → baris'],
+    oak: ['#1d4ed8', 'OAK · aktivitas / sub → baris (M12)'],
   };
   const STATUS_SAP = { K: 'Teridentifikasi - Terkontrol', G: 'Teridentifikasi - Ada Gap', T: 'Tidak Teridentifikasi' };
   const GAP_BIT = { closed: 1, ulang: 2, stop: 4 };
@@ -565,7 +565,7 @@
    */
   const SUMBER_ITEM = {
     obs: ['Observasi', 'Jenis kegiatan OBS yang di master pemetaan (M11) dipetakan ke baris HIRA ini'],
-    oak: ['OAK', 'Laporan OAK berlaku bila aktivitas / sub aktivitasnya ada di master (M12) atau di kurasi aktivitas OAK untuk baris ini, dan baru tertangkap bila ada butir checklist yang dijawab (Sesuai / Tidak Sesuai) bertema sama dengan bahaya-risiko ini. Butir Tidak Sesuai dan Stop Pekerjaan = gap'],
+    oak: ['OAK', 'Aktivitas / sub aktivitas OAK yang di master pemetaan (M12) dipetakan ke baris HIRA ini ("Risk Intervention Center" disamakan dengan "Langsung"). Gap = Stop Pekerjaan'],
     ket: ['Ketidaksesuaian/Sub Ketidaksesuaian', 'Label ketidaksesuaian / sub ketidaksesuaian Hazard & Inspeksi yang di master pemetaan (M09) dipetakan ke baris HIRA ini'],
   };
   function dialogItem() {
@@ -597,14 +597,12 @@
       const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
       const dilapor = (data.item || []).filter((x) => x.n > 0).length;
       const nLabel = `<p class="dr-item-cara" style="margin-top:4px"><b>${DR.fmt(data.nlabel || 0)} label</b> di master mapping terhubung ke baris ini (baseline tetap, tidak bergantung laporan)${data.nlabel ? '' : ' — belum ada label untuk sumber ini'}.</p>`;
-      const chip = (t) => `<span class="dr-tanda biru">${DR.esc(t)}</span>`;
-      const temaOak = sumber === 'oak' ? `<p class="dr-item-cara" style="margin-top:4px"><b>Tema bahaya ini:</b> ${(data.tema || []).length ? data.tema.map(chip).join('') : '<span class="dr-mute">belum ada tema — butir checklist tidak bisa menangkap baris ini</span>'}</p>` : '';
       const daftar = (data.item || []).map((x) => {
         const sub = x.n > 0 ? [`${DR.fmt(x.n)} laporan · ${DR.fmt(x.ndl)} detail lokasi`, x.nts ? `<b style="color:#b91c1c">${DR.fmt(x.nts)} Tidak Sesuai</b>` : '', x.nstop ? `<b style="color:#b91c1c">${DR.fmt(x.nstop)} Stop Pekerjaan</b>` : ''].filter(Boolean).join(' · ') : '<span class="dr-nol">tidak ada laporan minggu ini</span>';
         const butir = (x.butir || []).length ? `<div class="dr-item-contoh">Butir checklist yang menangkap:<br>${x.butir.map((c) => `• ${DR.esc(c)}`).join('<br>')}</div>` : '';
         return `<li><div><span>${DR.esc(x.isi || '-')}</span>${butir}</div><small>${sub}</small></li>`;
       }).join('');
-      isi.innerHTML = `<p class="dr-item-cara"><b>Cara tertangkap:</b> ${aturan}.</p>${nLabel}${temaOak}
+      isi.innerHTML = `<p class="dr-item-cara"><b>Cara tertangkap:</b> ${aturan}.</p>${nLabel}
         <p class="dr-mute" style="margin:0 0 10px;font-size:12px">${wKode(state.w)} · ${periode} · ${DR.fmt(dilapor)} dari ${DR.fmt(data.nlabel || 0)} label dilaporkan di ${DR.fmt(data.ndl)} detail lokasi cakupan</p>
         ${daftar ? `<ul class="dr-item-daftar">${daftar}</ul>` : '<div class="dr-mute">Tidak ada item pada minggu ini.</div>'}`;
     } catch (e) {
