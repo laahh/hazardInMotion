@@ -20,7 +20,8 @@ class DrmBerandaTest extends TestCase
         // OAK stop di kelompok membuat semua baris kelompok bermasalah walau ada deteksi.
         $this->assertSame(['bm', DrmBeranda::OAK_STOP], DrmBeranda::status(DrmBeranda::DETEKSI | DrmBeranda::OAK_STOP, 0));
         $this->assertSame(['bm', DrmBeranda::BELUM_CLOSED | DrmBeranda::BERULANG], DrmBeranda::status(DrmBeranda::DETEKSI, 2 | 4 | 8));
-        $this->assertSame(['ok', 0], DrmBeranda::status(0, 2 | 32));
+        // Butir checklist OAK Tidak Sesuai (lookup 10187) = gap.
+        $this->assertSame(['bm', DrmBeranda::TIDAK_SESUAI], DrmBeranda::status(0, 2 | 32));
         // Bit insiden (harian) bukan masalah dan bukan deteksi.
         $this->assertSame(['none', 0], DrmBeranda::status(0, DrmBeranda::INSIDEN));
     }
@@ -144,8 +145,17 @@ class DrmBerandaTest extends TestCase
         $this->assertStringContainsString("AND t.Site = 'LMO'", $kel);
         // Deteksi keluarga dari kelompok aktivitas teks OBS/OAK (spec dlEntB).
         $this->assertStringContainsString('FROM sap s JOIN okx k ON k.tx = s.tx', $kel);
+        // Hazard/Inspeksi berlabel spesifik ikut menandai kelompok aktivitasnya (aktivitas diturunkan dari lokasi).
+        $this->assertStringContainsString('WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)', $kel);
+        $this->assertStringContainsString('HAVING uniqExact(h.proses) <= 2', $kel);
 
         $spe = $sql->berandaSpesifik();
+        // OBS tidak menandai bahaya spesifik; OAK hanya dari ch_rfid_sap_cuti_all_site (tanpa checklist oak_register).
+        $this->assertStringNotContainsString('evt AS (', $spe);
+        $this->assertStringNotContainsString('FROM obds.oak_register', $spe);
+        $this->assertStringNotContainsString('FROM obds.oak_detail_object', $spe);
+        $this->assertStringNotContainsString('obds.m_oak_', $spe);
+        $this->assertStringContainsString('evd AS (SELECT toInt64(0) AS dl', $spe);
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
         $this->assertStringContainsString('max(toUInt8(l.nl >= 3)) AS ul', $spe);
         $this->assertStringContainsString('max(toUInt8(e.cd IS NULL)) AS op', $spe);

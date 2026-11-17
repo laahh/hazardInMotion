@@ -418,7 +418,12 @@
   }
 
   const URL_SAP_BAHAYA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.bahaya.sap', ['hid' => '__HID__'])) }};
-  const CARA_SAP = { label: ['#1a7f37', 'Label Hazard/Inspeksi (M09)'], teks: ['#1f5fbf', 'Teks aktivitas OBS/OAK (M11/M12)'], kelompok: ['#8a6a00', 'Kelompok aktivitas (M02)'] };
+  // Cara laporan mengidentifikasi baris (aturan per jenis laporan): bahaya langsung, atau kelompok aktivitasnya.
+  const CARA_SAP = {
+    label: ['#1a7f37', 'Hazard/Inspeksi · label → bahaya'],
+    label_kelompok: ['#8a6a00', 'Hazard/Inspeksi · label spesifik → kelompok'],
+    kelompok: ['#a05a00', 'OBS/OAK · aktivitas → kelompok'],
+  };
 
   /**
    * Tabel modal: Aktivitas HIRA → Bahaya-risiko → SAP. Dikelompokkan per kelompok aktivitas; tombol SAP membuka

@@ -7,14 +7,16 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Laporan SAP yang menjadi bukti satu baris "kelompok aktivitas × bahaya-risiko" pada satu minggu kalender,
- * untuk modal kartu KPI. Aturan pemetaannya sama dengan sync (DrmSql):
- *   spesifik label : Hazard / Inspeksi dengan label ketidaksesuaian / sub (M09) yang memetakan ke baris ini
- *   spesifik teks  : Observasi / OAK dengan teks aktivitas (M11 / M12) yang memetakan ke baris ini
- *   kelompok       : Observasi / OAK dengan teks aktivitas yang (regex M02, kelompok pertama yang cocok)
- *                    masuk kelompok aktivitas baris ini — bukti tingkat kelompok
- * Hanya detail lokasi yang grup lokasinya memuat baris ini (gerbang M05) dan berada di cakupan (site / grup).
- * Status selesai = CLOSED / DONE (REJECT dihitung belum closed); BUKAN TEMUAN dan DELETED dibuang.
+ * Bukti SAP satu baris "kelompok aktivitas × bahaya-risiko" pada satu minggu kalender, untuk modal kartu KPI.
+ * Aturan per jenis laporan sama dengan sync (DrmSql, 17 Nov 2026):
+ *   label          : Hazard / Inspeksi berlabel (M09) yang memetakan ke bahaya ini            → bahaya
+ *   label_kelompok : Hazard / Inspeksi berlabel SPESIFIK di detail lokasi itu (bahaya kandidatnya di grup
+ *                    lokasi hanya dari ≤ N kelompok) yang kelompoknya = kelompok baris ini   → kelompok
+ *   kelompok       : Observasi / OAK yang teks aktivitasnya (regex M02, pola pertama yang cocok) masuk
+ *                    kelompok baris ini                                                         → kelompok
+ * Semua laporan dari obds.ch_rfid_sap_cuti_all_site. Butir checklist OAK tidak dipakai (tabel itu tidak
+ * memuatnya; oak_register / oak_detail_object berhenti tersinkron 28 Okt 2026). OBS tidak menandai bahaya spesifik. Hanya detail lokasi cakupan (site / grup) yang grup lokasinya memuat
+ * bahaya ini (gerbang M05). Selesai = CLOSED / DONE (REJECT terbuka); BUKAN TEMUAN dan DELETED dibuang.
  */
 class DrmSapBahaya
 {
@@ -33,7 +35,7 @@ class DrmSapBahaya
      */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v2:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
     }
@@ -49,13 +51,15 @@ class DrmSapBahaya
         $dari = CarbonImmutable::parse($minggu[$w] ?? $minggu[0]);
         $sampai = min($dari->addDays(6), CarbonImmutable::parse($sampaiData));
         $kosong = ['dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(), 'ndl' => 0, 'laporan' => [],
-            'ringkas' => ['total' => 0, 'label' => 0, 'teks' => 0, 'kelompok' => 0, 'belum_closed' => 0, 'berulang' => 0, 'oak_stop' => 0], 'terpotong' => false];
+            'ringkas' => ['total' => 0, 'label' => 0, 'label_kelompok' => 0, 'kelompok' => 0,
+                'belum_closed' => 0, 'berulang' => 0, 'oak_stop' => 0], 'terpotong' => false];
 
         // Detail lokasi cakupan yang grup lokasinya memuat baris ini (gerbang M05).
+        $namaGrup = array_map('strval', $m['grup']);
         $grupMemuat = [];
         foreach ($m['grupBaris'] as $gid => $riList) {
             if (in_array($hid, $riList, true)) {
-                $grupMemuat[(string) ($m['grup'][$gid] ?? '')] = true;
+                $grupMemuat[$namaGrup[$gid] ?? ''] = (int) $gid;
             }
         }
         $dl = [];
@@ -68,27 +72,31 @@ class DrmSapBahaya
             return $kosong;
         }
 
-        $label = $teks = [];
-        foreach ($m['label'] as $l) {
-            if (in_array($hid, $l['ri'], true)) {
-                $label[] = DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']));
-            }
-        }
-        foreach ([...$m['obs'], ...$m['oak']] as $t) {
-            if (in_array($hid, $t['ri'], true)) {
-                $teks[] = DrmMaster::crc($t['teks']);
-            }
-        }
+        [$labelBahaya, $labelSpesifik] = $this->labelHazard($master, $cfg, $hid, $kel, array_intersect_key($grupMemuat, array_flip(array_column($dl, 3))));
         $pola = array_filter(array_map(fn (array $p) => (string) ($p[2] ?? ''), (array) $cfg['proses_bisnis']));
+        $semuaLabel = array_values(array_unique([...$labelBahaya, ...array_merge([], ...array_values($labelSpesifik))]));
 
-        $rows = $this->ch->select($this->sql(array_keys($dl), $dari, $sampai, $label, $teks, $pola, $kel, (array) $cfg['status_buang'], (array) $cfg['obs_tanpa_aktivitas']), 60);
-        $terpotong = count($rows) > self::MAKS_BARIS;
-        $rows = array_slice($rows, 0, self::MAKS_BARIS);
+        $sap = $this->ch->select($this->sql(array_keys($dl), $dari, $sampai, $semuaLabel, $pola, $kel, (array) $cfg['status_buang'], (array) $cfg['obs_tanpa_aktivitas']), 60);
 
-        // Berulang = ≥ ambang laporan dengan label sama di satu detail lokasi dalam minggu itu.
+        // Hazard: "label" bila label memetakan ke bahaya ini; selain itu "label_kelompok" bila label spesifik di grup DL itu.
+        $isiLabel = array_flip($labelBahaya);
+        $baris = [];
+        foreach ($sap as $r) {
+            if ($r['cara'] === 'hazard') {
+                $g = $dl[(int) $r['dl']][3] ?? '';
+                $r['cara'] = isset($isiLabel[(int) $r['kc']]) ? 'label' : (in_array((int) $r['kc'], $labelSpesifik[$g] ?? [], true) ? 'label_kelompok' : '');
+            }
+            if ($r['cara'] !== '') {
+                $baris[] = $r;
+            }
+        }
+        $terpotong = count($baris) > self::MAKS_BARIS;
+        $baris = array_slice($baris, 0, self::MAKS_BARIS);
+
+        // Berulang = ≥ ambang laporan dengan label sama di satu detail lokasi dalam minggu itu (hanya label bahaya ini).
         $ambang = (int) $cfg['ambang_berulang'];
         $jumlahLabel = [];
-        foreach ($rows as $r) {
+        foreach ($baris as $r) {
             if ($r['cara'] === 'label') {
                 $jumlahLabel[$r['dl'].'|'.$r['isi']] = ($jumlahLabel[$r['dl'].'|'.$r['isi']] ?? 0) + 1;
             }
@@ -96,11 +104,11 @@ class DrmSapBahaya
 
         $laporan = [];
         $ringkas = $kosong['ringkas'];
-        foreach ($rows as $r) {
+        foreach ($baris as $r) {
             $hazard = in_array($r['jenis'], ['HAZARD', 'INSPEKSI'], true);
             $belum = $hazard && ! in_array(strtoupper((string) $r['status']), self::STATUS_SELESAI, true);
             $ulang = $r['cara'] === 'label' && ($jumlahLabel[$r['dl'].'|'.$r['isi']] ?? 0) >= $ambang;
-            $stop = (int) $r['stop'] === 1;
+            $stop = (int) ($r['stop'] ?? 0) === 1;
             [$s, $lokasi, $detlok] = $dl[(int) $r['dl']] ?? ['', '', ''];
 
             $ringkas['total']++;
@@ -116,8 +124,8 @@ class DrmSapBahaya
                 'isi' => (string) $r['isi'],
                 'deskripsi' => (string) $r['deskripsi'],
                 'status' => (string) $r['status'],
-                'hasil_oak' => (string) $r['hasil_oak'],
-                'pelapor' => (string) $r['pelapor'],
+                'hasil_oak' => (string) ($r['hasil_oak'] ?? ''),
+                'pelapor' => (string) ($r['pelapor'] ?? ''),
                 'belum_closed' => $belum,
                 'berulang' => $ulang,
                 'oak_stop' => $stop,
@@ -128,19 +136,65 @@ class DrmSapBahaya
     }
 
     /**
+     * Label Hazard / Inspeksi (CRC "k / sk" ternormalisasi): [label yang memetakan ke bahaya ini,
+     * grup → label SPESIFIK di grup itu yang kelompok kandidatnya memuat kelompok baris ini].
+     *
+     * @param  array<string, int>  $grup  nama grup → id grup (grup DL cakupan yang memuat bahaya ini)
+     * @return array{0: list<int>, 1: array<string, list<int>>}
+     */
+    private function labelHazard(DrmMaster $master, array $cfg, int $hid, string $kel, array $grup): array
+    {
+        $m = $master->data;
+        $kelRi = $master->kelompokBaris((array) $cfg['proses_bisnis']);
+        $maks = (int) $cfg['hazard_spesifik_maks_aktivitas'];
+        $riGrup = array_map(fn (int $gid) => array_flip($m['grupBaris'][$gid] ?? []), $grup);
+
+        $bahaya = [];
+        $spesifik = array_fill_keys(array_keys($grup), []);
+        foreach ($m['label'] as $l) {
+            $crc = DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']));
+            if (in_array($hid, $l['ri'], true)) {
+                $bahaya[] = $crc;
+            }
+            foreach ($riGrup as $g => $ri) {
+                // Kandidat = baris label ∩ baris grup (sama dengan evh ⋈ basek lalu spes di DrmSql).
+                $kels = [];
+                foreach ($l['ri'] as $r) {
+                    if (isset($ri[$r])) {
+                        $kels[$kelRi[$r] ?? 'K0'] = true;
+                    }
+                }
+                if ($kels !== [] && count($kels) <= $maks && isset($kels[$kel])) {
+                    $spesifik[$g][] = $crc;
+                }
+            }
+        }
+
+        return [array_values(array_unique($bahaya)), $spesifik];
+    }
+
+    /** @param array<string, string> $pola kode kelompok → regex M02 (urutan config) */
+    private function pb(array $pola): string
+    {
+        $q = [RfidClickHouseClient::class, 'quote'];
+
+        return '['.implode(', ', array_map(fn ($k, $p) => '('.$q((string) $k).', '.$q('(?i)'.$p).')', array_keys($pola), $pola)).']';
+    }
+
+    /**
+     * Laporan SAP (Hazard / Inspeksi / Observasi / OAK). cara: 'hazard' (kandidat label, dipilah di PHP) | 'kelompok'.
+     *
      * @param  list<int>  $dl
-     * @param  list<int>  $label  CRC label "k / sk" ternormalisasi
-     * @param  list<int>  $teks  CRC teks aktivitas OBS / "aktivitas / sub" OAK ternormalisasi
+     * @param  list<int>  $label  CRC label "k / sk" ternormalisasi (bahaya ini + label spesifik sekelompok)
      * @param  array<string, string>  $pola  kode kelompok → regex M02 (urutan config)
      */
-    private function sql(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $label, array $teks, array $pola, string $kel, array $buang, array $tanpaAktivitas): string
+    private function sql(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $label, array $pola, string $kel, array $buang, array $tanpaAktivitas): string
     {
         $q = [RfidClickHouseClient::class, 'quote'];
         $norm = fn (string $x) => "trimBoth(replaceRegexpAll(lowerUTF8(ifNull({$x}, '')), '\\\\s+', ' '))";
         $daftar = fn (array $a) => $a === [] ? '0' : implode(',', array_map('intval', $a));
         // Kelompok teks = regex PERTAMA yang cocok (sama dengan okx / arrayFirst di DrmSql), bukan sekadar cocok.
-        $pb = '['.implode(', ', array_map(fn ($k, $p) => '('.$q((string) $k).', '.$q('(?i)'.$p).')', array_keys($pola), $pola)).']';
-        $kelompok = ! isset($pola[$kel]) ? '0' : 'NOT na AND arrayFirst(r -> match(tx, r.2), '.$pb.').1 = '.$q($kel);
+        $kelompok = ! isset($pola[$kel]) ? '0' : 'NOT na AND arrayFirst(r -> match(tx, r.2), '.$this->pb($pola).').1 = '.$q($kel);
 
         return '
 SELECT * FROM (
@@ -151,8 +205,8 @@ SELECT * FROM (
          multiSearchAny(lower(concat(ifNull(deskripsi, \'\'), \' \', ifNull(`umpan_balik  OBS`, \'\'), \' \', ifNull(tindakan, \'\'))),
                         ['.implode(', ', array_map($q, $tanpaAktivitas ?: ['-'])).']) AS na,
          if(jenis_data IN (\'HAZARD\', \'INSPEKSI\'), concat(trim(ifNull(ketidaksesuaian, \'\')), \' / \', trim(ifNull(subketidaksesuaian, \'\'))), tx) AS isi,
-         multiIf(jenis_data IN (\'HAZARD\', \'INSPEKSI\') AND CRC32(concat('.$norm('ketidaksesuaian').', \' / \', '.$norm('subketidaksesuaian').')) IN ('.$daftar($label).'), \'label\',
-                 jenis_data NOT IN (\'HAZARD\', \'INSPEKSI\') AND CRC32(trimBoth(replaceRegexpAll(tx, \'\\\\s+\', \' \'))) IN ('.$daftar($teks).'), \'teks\',
+         CRC32(concat('.$norm('ketidaksesuaian').', \' / \', '.$norm('subketidaksesuaian').')) AS kc,
+         multiIf(jenis_data IN (\'HAZARD\', \'INSPEKSI\') AND kc IN ('.$daftar($label).'), \'hazard\',
                  jenis_data NOT IN (\'HAZARD\', \'INSPEKSI\') AND trim(tx) NOT IN (\'\', \'/\') AND '.$kelompok.', \'kelompok\', \'\') AS cara,
          toUInt8(jenis_data = \'OBSERVASI AREA KRITIS\' AND positionCaseInsensitive(ifNull(`hasil OAK`, \'\'), \'stop\') > 0) AS stop,
          ifNull(`hasil OAK`, \'\') AS hasil_oak, ifNull(status, \'\') AS status,

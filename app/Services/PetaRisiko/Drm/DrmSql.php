@@ -252,13 +252,8 @@ mapb AS (
   SELECT h.hid AS hid, count() AS n, arraySlice(groupUniqArray(m.tx), 1, 10) AS contoh
   FROM mb m JOIN hira h ON h.a = m.a AND h.s = m.s GROUP BY hid
 ),
-mapd AS (
-  SELECT m.hid AS hid, count() AS n, arraySlice(groupUniqArray(substring(concat(o.name, \' › \', d.name), 1, 160)), 1, 10) AS contoh
-  FROM md m
-  JOIN obds.m_oak_detail_objek AS d FINAL ON toInt64(d.id) = m.did
-  JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = d.id_objek_pengamatan_observe
-  GROUP BY m.hid
-)
+-- Butir checklist OAK tidak dipakai (lihat md di prelude): kolom Master D dibiarkan kosong.
+mapd AS (SELECT toUInt32(0) AS hid, toUInt64(0) AS n, CAST([], \'Array(String)\') AS contoh WHERE 0)
 SELECT toString(h.hid) AS hid, ifNull(a.n, 0) AS n_a, a.contoh AS label_a, ifNull(b.n, 0) AS n_b, b.contoh AS teks_b,
        ifNull(dd.n, 0) AS n_d, dd.contoh AS butir_d
 FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid LEFT JOIN mapd dd ON dd.hid = h.hid';
@@ -285,6 +280,12 @@ kev AS (
   FROM sap s JOIN okx k ON k.tx = s.tx
   WHERE s.j IN (\'OBSERVASI\', \'OBSERVASI AREA KRITIS\') AND NOT s.na
     AND (s.dl, k.kel) IN (SELECT dl, kel FROM bk)
+  UNION ALL
+  -- Hazard/Inspeksi: aktivitas diturunkan dari lokasi. Label SPESIFIK (bahaya kandidatnya di grup lokasi DL hanya
+  -- dari ≤ N kelompok, CTE spes) ikut menandai kelompok itu terdeteksi; label umum hanya mengonfirmasi bahaya (evh).
+  SELECT e.dl AS dl, h.proses AS kel, e.d AS d, toUInt8(0) AS stop
+  FROM evh e JOIN hira h ON h.hid = e.hid
+  WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)
 ),
 kw AS (
   SELECT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi, groupBitOr(toUInt8(1 + 16 * stop)) AS bit
@@ -664,8 +665,7 @@ GROUP BY pl.pja_id, d.dl';
      *           tanggal terakhir <= tanggal akhir data)
      *   pjadl : PJA per detail lokasi = PJA lokasinya di obds.aaj_lokasi_dan_pja (M07/M08), id = m_pja
      *   ma    : label Hazard/Inspeksi → baris (M09);  mb : teks aktivitas OBS/OAK → baris (M11/M12)
-     *   md    : butir checklist OAK → baris lewat tema (M15/M16) + kelompok aktivitas sama / bahaya umum
-     *   evt   : teks OBS → baris lewat tema yang sama
+     *   md    : (kosong) butir checklist OAK tidak dipakai — OAK hanya dari ch_rfid_sap_cuti_all_site
      *   base  : baseline = tiap detail lokasi × baris grupnya (M05). Bukti di luar grup tidak dihitung
      *           (gerbang irisan: kandidat dari isi laporan ∩ baris grup lokasi laporan).
      */
@@ -823,61 +823,13 @@ evo AS (
 base AS (
   SELECT dl, arrayJoin(rs) AS hid, toUInt8(0) AS via_bukti FROM (SELECT d.dl AS dl, g.rs AS rs FROM dl d JOIN mgx g ON g.gid = d.gid)
 ),
--- Butir checklist OAK yang diisi dalam rentang data. Checklist versi baru tidak mengikat objek ke
--- aktivitas di master (id_act_observe kosong), jadi aktivitasnya diambil dari register (id_oak_activity).
-oakr AS (
-  SELECT toInt64(id) AS rid, toInt64(id_location) AS dl, toDate(submit_date) AS d, toInt64(id_oak_activity) AS aid
-  FROM obds.oak_register
-  WHERE submit_date >= t_open AND submit_date < t_end + 1 AND toInt64(id_location) IN (SELECT dl FROM dl0)
-),
-oj AS (
-  SELECT r.dl AS dl, r.d AS d, r.aid AS aid, o.did AS did, o.sid AS sid
-  FROM (
-    SELECT toInt64(id_oak_register) AS rid, toInt64(id_detail_object) AS did, toInt64(id_suitability) AS sid
-    FROM obds.oak_detail_object
-    WHERE id_suitability IN ('.(int) $c['oak_checklist']['sesuai'].', '.(int) $c['oak_checklist']['tidak_sesuai'].')
-      AND toInt64(id_oak_register) IN (SELECT rid FROM oakr)
-  ) AS o
-  JOIN oakr r ON r.rid = o.rid
-),
-okk AS (
-  SELECT toInt64(id) AS aid, ifNull(nullIf(arrayFirst(r -> match(lower(name), r.2), pb).1, \'\'), \'K0\') AS kel
-  FROM obds.m_oak_activity FINAL
-),
-itx AS (
-  SELECT p.aid AS aid, p.did AS did, multiMatchAllIndices(concat(\' \', lower(concat(o.name, \' \', d.name)), \' \'), tc) AS tm
-  FROM (SELECT DISTINCT aid, did FROM oj) AS p
-  JOIN obds.m_oak_detail_objek AS d FINAL ON d.id = p.did
-  JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = d.id_objek_pengamatan_observe
-),
--- M16: butir → baris lewat tema; baris diidentifikasi bila kelompok aktivitas OAK = kelompok baris, atau bahaya umum.
-md AS (
-  SELECT DISTINCT i.aid AS aid, i.did AS did, r.hid AS hid
-  FROM (SELECT aid, did, arrayJoin(tm) AS tema FROM itx) i
-  JOIN mtx r ON r.tema = i.tema
-  JOIN okk k ON k.aid = i.aid
-  JOIN mh0 h ON h.hid = r.hid
-  WHERE h.kel = k.kel OR h.umum = 1
-),
--- Teks OBS → baris lewat tema yang sama (kelompok = kelompok teks aktivitas OBS), hanya baris baseline.
-evt AS (
-  SELECT s.dl AS dl, r.hid AS hid, s.d AS d
-  FROM (SELECT dl, d, tx, arrayJoin(tm) AS tema FROM sap WHERE j = \'OBSERVASI\' AND NOT na AND notEmpty(tm)) s
-  JOIN okx k ON k.tx = s.tx
-  JOIN mtx r ON r.tema = s.tema
-  JOIN mh0 h ON h.hid = r.hid
-  WHERE (h.kel = k.kel OR h.umum = 1) AND (s.dl, r.hid) IN (SELECT dl, hid FROM base)
-  GROUP BY s.dl, r.hid, s.d
-),
--- Bukti spesifik per (detail lokasi, baris, hari) dari checklist OAK + teks OBS; ts = butir tidak sesuai (informasi).
-evd AS (
-  SELECT dl, hid, d, max(ts) AS ts FROM (
-    SELECT j.dl AS dl, m.hid AS hid, j.d AS d, toUInt8(j.sid = '.(int) $c['oak_checklist']['tidak_sesuai'].') AS ts
-    FROM oj j JOIN md m ON m.aid = j.aid AND m.did = j.did
-    UNION ALL
-    SELECT dl, hid, d, toUInt8(0) FROM evt
-  ) GROUP BY dl, hid, d
-),
+-- Semua data OAK diambil dari ch_rfid_sap_cuti_all_site (keputusan user 17 Nov 2026): aktivitas → kelompok dan
+-- OAK Stop. Tabel itu tidak memuat butir checklist (objek / detail objek / Sesuai-Tidak Sesuai), sedangkan
+-- obds.oak_register / oak_detail_object berhenti tersinkron 28 Okt 2026, jadi bukti spesifik dari checklist
+-- tidak dipakai: md (butir → baris) dan evd (bukti spesifik per DL × baris × hari) sengaja kosong, dengan
+-- tipe kolom yang sama supaya CTE pemakainya tetap berjalan. OBS juga tidak menandai bahaya spesifik.
+md AS (SELECT toInt64(0) AS aid, toInt64(0) AS did, toUInt32(0) AS hid WHERE 0),
+evd AS (SELECT toInt64(0) AS dl, toUInt32(0) AS hid, toDate(\'1970-01-01\') AS d, toUInt8(0) AS ts WHERE 0),
 -- Baris yang punya jalur identifikasi SAP di master (label M09, teks OBS/OAK M11/M12, atau tema M16).
 -- Hanya penanda status X (tanpa jalur identifikasi); baseline tidak difilter.
 petakan AS (
