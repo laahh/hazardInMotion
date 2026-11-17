@@ -317,11 +317,13 @@
    * Snapshot tanpa kolom status (sebelum 17 Nov 2026) memakai kartu persen lama.
    */
   function kartu4(V, V0, judul) {
-    if (!M.beranda.kolomMgmt.includes('idk')) return kartuPersen(V, V0, judul);
+    // Snapshot dihitung sebelum kolom status ada: kartu tetap berbentuk angka, isinya "–" sampai sync ulang.
+    const ada = M.beranda.kolomMgmt.includes('idk');
     const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
     const beda = (a, b) => (V0 ? ` · ${a - b >= 0 ? '+' : '−'}${DR.fmt(Math.abs(a - b))} vs minggu lalu` : '');
-    const kartu = (warna, k, label, ket) => `<div class="tp-stat" style="--c:${warna}" title="${DR.esc(ket)}${beda(V[k], V0 ? V0[k] : 0)}">
-      <b>${DR.fmt(V[k])}</b><span>${label}</span></div>`;
+    const kartu = (warna, k, label, ket) => `<div class="tp-stat" style="--c:${warna}" title="${DR.esc(ket)}${ada ? beda(V[k], V0 ? V0[k] : 0) : ''}">
+      <b>${ada ? DR.fmt(V[k]) : '–'}</b><span>${label}</span></div>`;
+    const catatanSync = ada ? '' : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot ini dihitung sebelum kartu status ditambahkan. Jalankan <code>php artisan peta-risiko:sync</code> untuk mengisi angkanya.</p>';
     return `<p class="tp-stat-sub">Baseline · ${judul}: <b>${DR.fmt(V.t)}</b> ${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</p>
       <div class="tp-stats">
         ${kartu('#1a7f37', 'idk', 'Teridentifikasi &amp; Terkontrol', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun')}
@@ -329,20 +331,7 @@
         ${kartu('#b42318', 'tid', 'Tidak Teridentifikasi (Open Risk)', 'Tidak ada laporan SAP di semua detail lokasinya')}
         ${kartu('#7e3fb3', 'laten', 'Risiko Laten (pernah incident, kini blind spot SAP)', 'Tidak teridentifikasi, tetapi terkait insiden 12 bulan terakhir di salah satu detail lokasinya')}
         ${kartu('#1a7f37', 'turun', 'Risiko Turun Kategori (Berhasil Dikontrol)', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal')}
-      </div>`;
-  }
-
-  function kartuPersen(V, V0, judul) {
-    const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null, L = LBL();
-    const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(a)}<small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
-    const satuan = R ? 'kelompok aktivitas × bahaya-risiko unik (tidak dipetakan ke PJA / detail lokasi)' : 'jumlah baris tingkat PJA';
-    return `<div class="br-kpis br-kpis-5">
-        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</em></div>
-        ${kartu(W.ok, 'var(--green-d)', L.full, 'full', true)}
-        ${kartu(W.part, '#9A7300', L.part, 'part', false)}
-        ${kartu(W.bm, W.bm, L.gapo, 'gapo', false)}
-        ${kartu(W.none, W.bm, L.none, 'none', false)}
-      </div>`;
+      </div>${catatanSync}`;
   }
 
   function renderCakupan() {
