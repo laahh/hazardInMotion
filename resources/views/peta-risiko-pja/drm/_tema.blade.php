@@ -125,6 +125,13 @@
   .dr-bl-tbl td.c, .dr-bl-tbl th.c { text-align: center; }
   .dr-bl-tbl td.n, .dr-bl-tbl th.n { text-align: right; font-variant-numeric: tabular-nums; }
   .dr-bl-tbl .akt { min-width: 150px; max-width: 220px; } .dr-bl-tbl .bhy { min-width: 180px; max-width: 280px; }
+  /* Aktivitas · Sub · Bahaya dibekukan di kiri saat tabel digeser ke kanan. */
+  .dr-bl-tbl .k1, .dr-bl-tbl .k2, .dr-bl-tbl .k3 { position: sticky; background: #fff; z-index: 1; }
+  .dr-bl-tbl thead .k1, .dr-bl-tbl thead .k2, .dr-bl-tbl thead .k3 { z-index: 3; }
+  .dr-bl-tbl .k1 { left: 0; width: 160px; min-width: 160px; max-width: 160px; }
+  .dr-bl-tbl .k2 { left: 160px; width: 160px; min-width: 160px; max-width: 160px; }
+  .dr-bl-tbl .k3 { left: 320px; width: 240px; min-width: 240px; max-width: 240px; box-shadow: 6px 0 8px -6px rgba(15, 23, 42, .18); }
+  .dr-grp-tempel { position: sticky; left: 12px; }
   .dr-st { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
   .dr-st.K { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
   .dr-st.G { background: #fef9c3; color: #854d0e; border-color: #fde68a; }

@@ -426,7 +426,6 @@
   // Cara laporan mengidentifikasi baris (aturan per jenis laporan): bahaya langsung, atau kelompok aktivitasnya.
   const CARA_SAP = {
     label: ['#1a7f37', 'Hazard/Inspeksi · label → bahaya'],
-    label_kelompok: ['#8a6a00', 'Hazard/Inspeksi · label spesifik → kelompok'],
     obs: ['#7e3fb3', 'OBS · jenis kegiatan → baris (M11)'],
     oak: ['#1d4ed8', 'OAK · aktivitas / sub → baris (M12)'],
   };
@@ -515,7 +514,7 @@
     baris.forEach((b, i) => {
       if (b.kel !== kel) {
         kel = b.kel;
-        html += `<tr class="dr-modal-grp"><td colspan="${NK}">${DR.esc(b.kn)} <span>${DR.fmt(jumlahKel[kel])} bahaya</span></td></tr>`;
+        html += `<tr class="dr-modal-grp"><td colspan="${NK}"><span class="dr-grp-tempel">${DR.esc(b.kn)} <span>${DR.fmt(jumlahKel[kel])} bahaya</span></span></td></tr>`;
       }
       const kode = b.kode[state.w] || 'T';
       const m = parseInt((b.gap || '')[state.w] || '0', 16);
@@ -526,9 +525,9 @@
       const insiden = +b.inc > 0 ? `<span class="dr-gap ya-ungu" title="Insiden 12 bulan terakhir yang root cause-nya terpetakan ke bahaya ini">Ya (${DR.fmt(+b.inc)})</span>` : '<span class="dr-gap">Tidak</span>';
       const T = kode === 'T';
       html += `<tr class="dr-modal-baris" data-i="${i}">
-        <td class="akt">${DR.esc(b.t[0] || '-')}</td>
-        <td class="akt">${DR.esc(b.t[1] || '-')}</td>
-        <td class="bhy"${b.t[3] ? ` title="${DR.esc(b.t[3])}"` : ''}>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}${tanda ? `<div>${tanda}</div>` : ''}</td>
+        <td class="akt k1">${DR.esc(b.t[0] || '-')}</td>
+        <td class="akt k2">${DR.esc(b.t[1] || '-')}</td>
+        <td class="bhy k3"${b.t[3] ? ` title="${DR.esc(b.t[3])}"` : ''}>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}${tanda ? `<div>${tanda}</div>` : ''}</td>
         <td class="c"><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
         <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span></td>
         <td class="c"><span class="dr-lv lv-${DR.esc(akhir)}">${DR.esc(akhir || '-')}</span></td>
@@ -549,7 +548,7 @@
     const wk = wKode(state.w);
     d.querySelector('#dr-modal-n').innerHTML += adaVol ? '' : ' · <b style="color:#b42318">Snapshot belum memuat gap &amp; volume per baris — jalankan <code>php artisan peta-risiko:sync</code></b>';
     isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-bl-tbl"><thead><tr>
-      <th>Aktivitas</th><th>Sub Aktivitas</th><th>Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
+      <th class="k1">Aktivitas</th><th class="k2">Sub Aktivitas</th><th class="k3">Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
       <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
       <th class="c">Item Sumber Observasi</th><th class="c">Item Sumber OAK</th><th class="c">Item Sumber Ketidaksesuaian</th>
       <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th><th class="n">Vol. Total</th><th class="c">Pernah Incident? <small>(12 bln)</small></th></tr></thead><tbody>${html}</tbody></table>`;

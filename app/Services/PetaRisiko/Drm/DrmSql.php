@@ -263,9 +263,8 @@ FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid 
 
     /**
      * Beranda PJA — bukti tingkat KELOMPOK aktivitas per (detail lokasi, kelompok), dijalankan per site.
-     * Kelompok terdeteksi hanya oleh label Hazard/Inspeksi SPESIFIK (cocok ke ≤ N kelompok di detail lokasi itu).
-     * OBS / OAK tidak lagi menandai seluruh kelompok (17 Nov 2026): keduanya menangkap bahaya lewat objek /
-     * butir checklist (berandaSpesifik, CTE evr).
+     * Sejak 17 Nov 2026 (dokumentasi Risk Matrix 5x5) tidak ada sumber yang menandai seluruh kelompok: CTE kev kosong,
+     * hasilnya hanya baris kel = '' (laporan terakhir per detail lokasi). Identifikasi sepenuhnya di berandaSpesifik.
      * w / h: daftar jarang "indeks:bit" per minggu (0 = minggu berjalan) / per hari (0 = hari pertama strip).
      * Bit: 1 = terdeteksi. last = laporan terakhir (rentang data).
      * Baris kel = '' berisi laporan SAP terakhir apa pun di detail lokasi itu.
@@ -273,13 +272,10 @@ FROM hira h LEFT JOIN mapa a ON a.hid = h.hid LEFT JOIN mapb b ON b.hid = h.hid 
     public function berandaKelompok(): string
     {
         return $this->prelude().$this->berandaDasarCte().',
--- Hazard/Inspeksi: aktivitas diturunkan dari lokasi. Label SPESIFIK (bahaya kandidatnya di grup lokasi DL hanya
--- dari ≤ N kelompok, CTE spes) menandai kelompok itu terdeteksi; label umum hanya mengonfirmasi bahaya (evh).
-kev AS (
-  SELECT e.dl AS dl, h.proses AS kel, e.d AS d
-  FROM evh e JOIN hira h ON h.hid = e.hid
-  WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)
-),
+-- Tidak ada lagi deteksi tingkat kelompok (dokumentasi Risk Matrix 5x5, 17 Nov 2026): baris hanya teridentifikasi
+-- oleh laporan yang labelnya dipetakan ke baris itu (M09 / M11 / M12, berandaSpesifik). vTot = 0 → tidak teridentifikasi.
+-- kev dibiarkan kosong (tipe kolom tetap) supaya bentuk hasil query sama.
+kev AS (SELECT toInt64(0) AS dl, \'\' AS kel, toDate(\'1970-01-01\') AS d WHERE 0),
 kw AS (SELECT DISTINCT dl, kel, intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7) AS wi FROM kev WHERE d >= wk_awal),
 kh AS (SELECT DISTINCT dl, kel, dateDiff(\'day\', h0, d) AS di FROM kev WHERE d >= h0),
 kl AS (SELECT dl, kel, max(d) AS last FROM kev GROUP BY dl, kel),
@@ -338,19 +334,24 @@ shd AS (
 swa AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(bit))), \',\') AS w FROM sw GROUP BY dl, hid),
 -- Volume per minggu (modal Baseline): laporan yang menangkap bahaya ini & item penangkapnya.
 svw AS (
-  SELECT dl, hid, wi, sum(nob) AS nob, sum(nok) AS nok, sum(nh) AS nh, sum(io) AS io, sum(ik) AS ik, sum(ih) AS ih FROM (
+  SELECT dl, hid, wi, sum(nob) AS nob, sum(nok) AS nok, sum(nh) AS nh,
+         groupUniqArrayArray(io) AS io, groupUniqArrayArray(ik) AS ik, groupUniqArrayArray(ih) AS ih FROM (
     SELECT dl, hid, '.$wi.' AS wi, toUInt64(0) AS nob, toUInt64(0) AS nok, toUInt64(sum(n)) AS nh,
-           toUInt64(0) AS io, toUInt64(0) AS ik, toUInt64(uniqExact(k, sk)) AS ih
+           CAST([], \'Array(UInt64)\') AS io, CAST([], \'Array(UInt64)\') AS ik,
+           arrayMap(x -> toUInt64(x), groupUniqArray(CRC32(concat(k, \' / \', sk)))) AS ih
     FROM evh WHERE d >= wk_awal GROUP BY dl, hid, wi
     UNION ALL
     SELECT dl, hid, '.$wi.' AS wi, toUInt64(countIf(src = \'obs\')), toUInt64(countIf(src = \'oak\')), toUInt64(0),
-           toUInt64(uniqExactIf(item, src = \'obs\')), toUInt64(uniqExactIf(item, src = \'oak\')), toUInt64(0)
+           arrayMap(x -> toUInt64(x), groupUniqArrayIf(item, src = \'obs\')), arrayMap(x -> toUInt64(x), groupUniqArrayIf(item, src = \'oak\')),
+           CAST([], \'Array(UInt64)\')
     FROM evr WHERE d >= wk_awal AND (dl, hid) IN (SELECT dl, hid FROM basek) GROUP BY dl, hid, wi
   ) GROUP BY dl, hid, wi
 ),
+-- Item = ID label (CRC) dipisah titik, supaya PHP menghitung label BERBEDA lintas detail lokasi (bukan dijumlah per DL).
 sva AS (
   SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(wi), \':\', toString(nob), \':\', toString(nok), \':\', toString(nh),
-         \':\', toString(io), \':\', toString(ik), \':\', toString(ih))), \',\') AS v
+         \':\', arrayStringConcat(arrayMap(x -> toString(x), io), \'.\'), \':\', arrayStringConcat(arrayMap(x -> toString(x), ik), \'.\'),
+         \':\', arrayStringConcat(arrayMap(x -> toString(x), ih), \'.\'))), \',\') AS v
   FROM svw GROUP BY dl, hid
 ),
 sha AS (SELECT dl, hid, arrayStringConcat(groupArray(concat(toString(di), \':\', toString(bit))), \',\') AS h FROM shd GROUP BY dl, hid),

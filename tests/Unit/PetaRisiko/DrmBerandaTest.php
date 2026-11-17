@@ -147,9 +147,8 @@ class DrmBerandaTest extends TestCase
         $this->assertStringContainsString("AND t.Site = 'LMO'", $kel);
         // OBS/OAK tidak lagi menandai seluruh kelompok aktivitas (17 Nov 2026).
         $this->assertStringNotContainsString('FROM sap s JOIN okx k ON k.tx = s.tx', $kel);
-        // Hazard/Inspeksi berlabel spesifik ikut menandai kelompok aktivitasnya (aktivitas diturunkan dari lokasi).
-        $this->assertStringContainsString('WHERE (e.dl, e.k, e.sk) IN (SELECT dl, k, sk FROM spes)', $kel);
-        $this->assertStringContainsString('HAVING uniqExact(h.proses) <= 2', $kel);
+        // Tidak ada sumber yang menandai seluruh kelompok (dokumentasi Risk Matrix 5x5): kev kosong.
+        $this->assertStringContainsString("kev AS (SELECT toInt64(0) AS dl, '' AS kel, toDate('1970-01-01') AS d WHERE 0)", $kel);
 
         $spe = $sql->berandaSpesifik();
         // OBS / OAK: label persis M11 / M12 (dokumentasi Risk Matrix 5x5), bukan checklist / tema / kelompok.
@@ -227,8 +226,8 @@ class DrmBerandaTest extends TestCase
         // DL 1 minggu 0: label belum closed + berulang (bit 2|4|8); OBS 3 laporan (2 tema), OAK 1 (1 butir), 4 Hazard (2 label).
         // DL 2: OBS 2 laporan minggu 0; minggu 1 OAK Stop (bit 2|16) dari 1 OAK.
         $idx = $b->indeks([], [
-            ['dl' => '1', 'hid' => 'h1', 'w' => '0:14', 'h' => '', 'v' => '0:3:1:4:2:1:2'],
-            ['dl' => '2', 'hid' => 'h1', 'w' => '0:2,1:18', 'h' => '', 'v' => '0:2:0:0:1:0:0,1:0:1:0:0:1:0'],
+            ['dl' => '1', 'hid' => 'h1', 'w' => '0:14', 'h' => '', 'v' => '0:3:1:4:11.12:21:31.32'],
+            ['dl' => '2', 'hid' => 'h1', 'w' => '0:2,1:18', 'h' => '', 'v' => '0:2:0:0:11::,1:0:1:0::21:'],
         ]);
         $pasangan = ['1' => ['h1'], '2' => ['h1']];
         $dl = ['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Pit']];
@@ -237,8 +236,9 @@ class DrmBerandaTest extends TestCase
 
         // gap hex per minggu: minggu 0 = belum closed (1) + berulang (2) = 3, minggu 1 = OAK Stop (4).
         $this->assertSame('34', substr($r['u'][0][6], 0, 2));
-        // vol "wi:obs:oak:ket:item obs:item oak:item label", dijumlah antar DL.
-        $this->assertSame('0:5:1:4:3:1:2,1:0:1:0:0:1:0', $r['u'][0][7]);
+        // vol "wi:obs:oak:ket:item obs:item oak:item label": laporan dijumlah antar DL, item = label BERBEDA
+        // (label OBS 11 ada di DL 1 dan DL 2 → tetap 1 item, bukan 2).
+        $this->assertSame('0:5:1:4:2:1:2,1:0:1:0:0:1:0', $r['u'][0][7]);
         $this->assertSame($r['u'][0][7], $r['g'][0][8]);
         // Berkas PJA tidak ikut membawa volume.
         $this->assertCount(2, ((array) $berkas['sp'])['1|h1']);

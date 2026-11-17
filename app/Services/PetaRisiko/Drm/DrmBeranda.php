@@ -395,7 +395,7 @@ class DrmBeranda
      *   g: [grup, kel, hid, level, inc, tr, kode, gap, vol]    — per grup lokasi (tab Group Lokasi)
      * gap = satu digit hex per minggu dari bit masalah >> 2 (1 belum closed, 2 berulang, 4 OAK Stop, 8 butir tidak sesuai).
      * vol = "wi:obs:oak:ketidaksesuaian:item obs:item oak:item label,..." (minggu tanpa laporan tidak ditulis);
-     *       angka dijumlah antar detail lokasi, item = tema OBS / detail objek OAK / label berbeda per detail lokasi.
+     *       laporan dijumlah antar detail lokasi; item = label OBS (M11) / OAK (M12) / Hazard (M09) BERBEDA di semua DL.
      *
      * @return array{u: list<list<int|string>>, g: list<list<int|string>>}
      */
@@ -406,7 +406,9 @@ class DrmBeranda
         $vol = function (array $v): string {
             ksort($v);
 
-            return implode(',', array_map(fn ($i, $n) => $i.':'.implode(':', $n), array_keys($v), $v));
+            // [laporan obs, oak, ket, item obs, item oak, item label] — item = jumlah label berbeda.
+            return implode(',', array_map(fn ($i, $n) => $i.':'.implode(':', [$n[0], $n[1], $n[2], count($n[3]), count($n[4]), count($n[5])]),
+                array_keys($v), $v));
         };
         $turun = function (string $hid) use ($hira): int {
             $h = $hira[$hid] ?? [];
@@ -427,25 +429,28 @@ class DrmBeranda
     }
 
     /**
-     * "wi:obs:oak:ket:item obs:item oak:item label,..." → [wi => vektor 6 angka].
+     * "wi:obs:oak:ket:id.id:id:id.id,..." → [wi => [obs, oak, ket, {id label OBS}, {id label OAK}, {id label Hazard}]].
+     * Tiga angka pertama = jumlah laporan; tiga sisanya himpunan ID label (CRC) supaya item dihitung sebagai label
+     * BERBEDA lintas detail lokasi, bukan dijumlah per detail lokasi.
      *
-     * @return array<int, list<int>>
+     * @return array<int, array{0: int, 1: int, 2: int, 3: array<string, true>, 4: array<string, true>, 5: array<string, true>}>
      */
     private static function uraiVol(string $jarang): array
     {
         $hasil = [];
+        $himpunan = fn (string $x) => $x === '' ? [] : array_fill_keys(explode('.', $x), true);
         foreach ($jarang === '' ? [] : explode(',', $jarang) as $p) {
-            $x = explode(':', $p);
-            $hasil[(int) $x[0]] = array_map(fn (int $j) => (int) ($x[$j] ?? 0), range(1, 6));
+            $x = explode(':', $p) + array_fill(0, 7, '');
+            $hasil[(int) $x[0]] = [(int) $x[1], (int) $x[2], (int) $x[3], $himpunan($x[4]), $himpunan($x[5]), $himpunan($x[6])];
         }
 
         return $hasil;
     }
 
-    /** @param list<int>|null $a */
+    /** Gabung volume dua detail lokasi: jumlah laporan dijumlah, himpunan label digabung. */
     private static function jumlahVol(?array $a, array $b): array
     {
-        return $a === null ? $b : array_map(fn ($x, $y) => $x + $y, $a, $b);
+        return $a === null ? $b : [$a[0] + $b[0], $a[1] + $b[1], $a[2] + $b[2], $a[3] + $b[3], $a[4] + $b[4], $a[5] + $b[5]];
     }
 
     /** Tambah satu detail lokasi ke status baris ketat [n DL, n terkontrol, n bermasalah, bit]. */
