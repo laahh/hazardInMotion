@@ -67,57 +67,22 @@ class DrmSapBahayaTest extends TestCase
         $this->assertSame([['teks' => 'Dumping', 'crc' => DrmMaster::crcTeks('Dumping'), 'ri' => [1, 2]]], $hasil);
     }
 
-    public function test_oak_hanya_lewat_label_m12_per_baris_tanpa_tema_butir(): void
+    public function test_oak_berlaku_lewat_label_atau_aktivitas_dan_tertangkap_lewat_butir_bertema(): void
     {
         $p = ['dari' => CarbonImmutable::parse('2026-11-08'), 'sampai' => CarbonImmutable::parse('2026-11-14'), 'cfg' => config('peta_risiko_drm'),
-            'labelOak' => [202], 'labelOakAkt' => []];
-        $item = $this->panggil('sqlOakLabel', [$p, [11], 'item']);
+            'labelOak' => [202], 'labelOakAkt' => [303], 'tema' => [['Longsor/retakan/dumping', 'dumping|longsor']]];
+        $item = $this->panggil('sqlOakButir', [$p, [11], 'item']);
 
+        $this->assertStringContainsString("WITH ['dumping|longsor'] AS tr", $item);
         $this->assertStringContainsString('FROM bcbeats.oak_register', $item);
-        $this->assertStringContainsString('WHERE kl IN (202) OR ka IN (0)', $item);
+        $this->assertStringContainsString('WHERE (r.kl IN (202) OR r.ka IN (303))', $item);
+        $this->assertStringContainsString("multiMatchAny(concat(' ', lower(concat(o.name, ' ', dt.name)), ' '), tr)", $item);
+        $this->assertStringContainsString('WHERE id_suitability IN (10186, 10187)', $item);
         $this->assertStringContainsString('GROUP BY kl, ka', $item);
-        $this->assertStringNotContainsString('oak_detail_object', $item);
-        $this->assertStringNotContainsString('multiMatchAny', $item);
-        $this->assertStringContainsString('toUInt8(ifNull(x.id_conclusion, 0) = 19502) AS stop', $this->panggil('sqlOakLabel', [$p, [11], 'laporan']));
 
-        // Kurasi aktivitas OAK yang dihitung bawaannya kosong (jangan dipaksakan); draf hanya sebagai usulan.
-        $this->assertSame([], config('peta_risiko_drm.oak_aktivitas_hira'));
-        $this->assertNotEmpty(config('peta_risiko_drm.oak_aktivitas_hira_usulan'));
-    }
-
-    public function test_oak_nama_aktivitas_sama_dengan_checklist_oak(): void
-    {
-        // Penanda [CCV …], awalan "Langsung -" / "Risk Intervention Center -", nbsp, dan tanda baca diabaikan.
-        $this->assertSame('penimbanganbatubara', DrmMaster::kunciNamaOak('[CCV CPP] Penimbangan Batubara'));
-        $this->assertSame(DrmMaster::kunciNamaOak('Penimbangan batubara'), DrmMaster::kunciNamaOak('[CCV CPP] Penimbangan Batubara'));
-        $this->assertSame('pengantarankaryawanmuatan', DrmMaster::kunciNamaOak('[Trial PAMA GMO] Risk Intervention Center - Pengantaran Karyawan (Muatan)'));
-        $this->assertSame('bekerjadiketinggian', DrmMaster::kunciNamaOak(' [CCV] Bekerja di Ketinggian'));
-
-        $master = DrmMaster::dariArray(['baris' => [
-            ['ri' => 1, 'aid' => 1, 'aktivitas' => 'Workshop', 'sub' => 'a', 'bahaya' => 'x', 'kb' => 'High', 'umum' => false, 'idh' => []],
-            ['ri' => 2, 'aid' => 1, 'aktivitas' => 'Workshop', 'sub' => 'b', 'bahaya' => 'y', 'kb' => 'High', 'umum' => false, 'idh' => []],
-            ['ri' => 3, 'aid' => 2, 'aktivitas' => 'Jalan', 'sub' => 'c', 'bahaya' => 'z', 'kb' => 'High', 'umum' => false, 'idh' => []],
-        ]]);
-        $peta = $master->barisPerNamaAktivitas(['oak_nama_sama_kecuali' => ['Jalan']]);
-        $this->assertSame([1, 2], $peta[crc32('workshop')]);
-        $this->assertArrayNotHasKey(crc32('jalan'), $peta); // nama sama, makna beda → dikecualikan
-
-        $p = ['dari' => CarbonImmutable::parse('2026-11-08'), 'sampai' => CarbonImmutable::parse('2026-11-14'), 'cfg' => config('peta_risiko_drm'),
-            'labelOak' => [], 'labelOakAkt' => [], 'labelOakNama' => [crc32('workshop')]];
-        $sql = $this->panggil('sqlOakLabel', [$p, [11], 'item']);
-        $this->assertStringContainsString('OR kn IN ('.crc32('workshop').') OR ks IN ('.crc32('workshop').')', $sql);
-        $this->assertStringContainsString('GROUP BY kl, ka, kn, ks', $sql);
-    }
-
-    public function test_label_m09_dari_sumber_yang_dikecualikan_tidak_dihitung(): void
-    {
-        $master = DrmMaster::dariArray(['label' => [
-            ['k' => 'A', 'sk' => 'a', 'ri' => [1], 'sumber' => 'HIRA-SAP v31 (Master A, terpilih)'],
-            ['k' => 'B', 'sk' => 'b', 'ri' => [2], 'sumber' => 'Pemetaan label baru (label)'],
-        ]]);
-
-        $this->assertSame(['A'], array_column($master->labelHazard(['m09_sumber_dikecualikan' => ['Pemetaan label baru (label)']]), 'k'));
-        $this->assertCount(2, $master->labelHazard(['m09_sumber_dikecualikan' => []]));
+        $laporan = $this->panggil('sqlOakButir', [$p, [11], 'laporan']);
+        $this->assertStringContainsString('toUInt8(ifNull(x.id_conclusion, 0) = 19502) AS stop', $laporan);
+        $this->assertStringContainsString('GROUP BY rid', $laporan);
     }
 
     public function test_hazard_hanya_label_dari_ch_rfid(): void

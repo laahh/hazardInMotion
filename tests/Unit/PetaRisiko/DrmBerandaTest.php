@@ -154,15 +154,12 @@ class DrmBerandaTest extends TestCase
         // OBS / OAK: label persis M11 / M12 (dokumentasi Risk Matrix 5x5), bukan checklist / tema / kelompok.
         // OBS: label persis M11 dari ch_rfid.
         $this->assertStringContainsString("WHERE s.j = 'OBSERVASI' AND NOT s.na", $spe);
-        // OAK: label persis M12 per baris (bcbeats), tanpa tebakan tema butir checklist; Tidak Sesuai bukan gap (bawaan).
+        // OAK (gabungan): berlaku = label M12 ∪ kurasi aktivitas (mkx), tertangkap = butir checklist bertema sama (bcbeats).
         $this->assertStringContainsString('FROM bcbeats.oak_register r', $spe);
         $this->assertStringContainsString('FROM oakr o LEFT JOIN mox m ON m.kc = o.kl LEFT JOIN mkx a ON a.ka = o.ka', $spe);
-        $this->assertStringContainsString(' AS mn,', $spe);
-        $this->assertStringContainsString('ARRAY JOIN e.el AS hid', $spe);
-        // Aturan "nama sama": nama aktivitas / sub OAK = nama aktivitas HIRA (mnx).
-        $this->assertStringContainsString('LEFT JOIN mnx n1 ON n1.kn = o.kn LEFT JOIN mnx n2 ON n2.kn = o.ks', $spe);
-        $this->assertStringNotContainsString('JOIN mtx t ON t.tema = i.tema', $spe);
-        $this->assertStringContainsString('okts AS (SELECT toInt64(0) AS rid WHERE 0)', $spe);
+        $this->assertStringContainsString('FROM bcbeats.oak_detail_object', $spe);
+        $this->assertStringContainsString('JOIN mtx t ON t.tema = i.tema', $spe);
+        $this->assertStringContainsString('WHERE has(e.el, b.hid)', $spe);
         $this->assertStringContainsString('toUInt8(2 + 16 * stop + 32 * ts)', $spe);
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
         $this->assertStringContainsString('max(toUInt8(l.nl >= 3)) AS ul', $spe);

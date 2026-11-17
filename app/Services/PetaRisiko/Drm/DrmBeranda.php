@@ -12,14 +12,14 @@ use Carbon\CarbonImmutable;
  *   kelompok (dl|kel): 1 = kelompok terdeteksi (label Hazard/Inspeksi spesifik)
  *   spesifik (dl|hid): 2 = teridentifikasi spesifik, 4 = belum closed (status kini bukan CLOSED/DONE),
  *                      8 = berulang (≥3 laporan label sama di detail lokasi dalam minggu itu),
- *                      16 = OAK Stop Pekerjaan pada OAK yang labelnya (M12) dipetakan ke baris ini,
+ *                      16 = OAK Stop Pekerjaan pada OAK yang menangkap baris ini (aktivitas / sub + butir checklist),
  *                      32 = butir checklist OAK Tidak Sesuai (lookup 10187) — ikut dihitung gap,
  *                      64 = (harian) insiden yang root cause-nya terpetakan ke bahaya ini.
  * Status baris = BERMASALAH bila ada bit 4/8/16/32 (gap = belum closed | berulang | OAK Stop | butir OAK Tidak
  * Sesuai); TERKONTROL bila terdeteksi tanpa masalah; selain itu TANPA LAPORAN. Bit 16 kelompok (snapshot lama) tetap dibaca.
  * Sumber deteksi per jenis laporan (17 Nov 2026, dokumentasi Risk Matrix 5x5): label persis di master — Hazard/Inspeksi
- * M09 (tanpa sumber yang dikecualikan), OBS jenis kegiatan M11, OAK aktivitas / sub M12 (bcbeats) — semuanya label
- * persis per baris, tanpa tebakan. Bit 16 = Stop Pekerjaan; bit 32 hanya bila config oak_tidak_sesuai_gap = true.
+ * M09, OBS jenis kegiatan M11; OAK (bcbeats) berlaku lewat aktivitas / sub M12 + kurasi aktivitas OAK dan tertangkap
+ * lewat butir checklist bertema sama (bit 32 = butir Tidak Sesuai, bit 16 = Stop Pekerjaan).
  *
  * Logika yang sama dipakai JS halaman PJA (pja.blade.php → fungsi statusBit); ubah keduanya bersamaan.
  */

@@ -80,42 +80,12 @@ return [
     'label_obs_oak_per_aktivitas' => false,
 
     /*
-    | Aktivitas OAK → aktivitas HIRA yang IKUT DIHITUNG di samping label M12. Sengaja KOSONG (keputusan user 17 Nov 2026):
-    | mapping harus spesifik per baris (aktivitas – sub – bahaya), jangan dipaksakan. Tautan tingkat aktivitas membuat
-    | satu OAK menutup semua bahaya di aktivitas itu (mis. OAK Refueling → semua bahaya "Pembersihan Dispenser").
-    | Format: 'aktivitas OAK' => ['aktivitas HIRA', ...]. Isi hanya untuk tautan yang sudah disetujui pemilik mapping.
+    | Aktivitas OAK → aktivitas HIRA (kurasi 17 Nov 2026, melengkapi M12 yang hanya 79 label / 93 baris).
+    | Laporan OAK dengan aktivitas di kiri (sub aktivitas apa pun) menandai SEMUA baris HIRA beraktivitas di kanan,
+    | di samping label M12. Nama dicocokkan tanpa beda huruf besar / spasi / tanda baca (DrmMaster::normTeks).
+    | Tidak dipetakan: "Trial CCV ENV BMO1", "[Trial] Survey" (uji coba).
     */
-    'oak_aktivitas_hira' => [],
-
-    /*
-    | Aturan "nama sama" (17 Nov 2026): laporan OAK menandai baris HIRA yang NAMA AKTIVITAS-nya sama persis dengan
-    | aktivitas atau sub aktivitas checklist OAK (setelah membuang [CCV] / [Trial …], "Langsung - ", "Risk Intervention
-    | Center - ", tanda baca). Contoh: HIRA "Workshop" ← OAK Perbaikan… / Workshop; HIRA "Bekerja di ketinggian" ← OAK
-    | Bekerja di Ketinggian. Hanya kesamaan nama aktivitas; sub generik ("Pemasangan", "Pengangkutan") tidak dipakai.
-    | `oak_nama_sama_kecuali` = aktivitas HIRA yang namanya sama tetapi maknanya beda.
-    */
-    'oak_nama_sama' => true,
-    'oak_nama_sama_kecuali' => ['Jalan'], // OAK "Shift Change / Jalan" = shift change di lokasi jalan, bukan aktivitas jalan
-
-    /*
-    | Butir Tidak Sesuai pada OAK ikut gap baris. false (bawaan): tanpa mapping butir checklist → bahaya per baris,
-    | butir Tidak Sesuai tidak bisa dipastikan menyangkut bahaya baris itu; gap OAK cukup Stop Pekerjaan (dokumentasi).
-    */
-    'oak_tidak_sesuai_gap' => false,
-
-    /*
-    | Label Hazard (M09) yang TIDAK dihitung, menurut kolom sumber di workbook master. "Pemetaan label baru (label)"
-    | (250 label) tidak ada di dokumentasi Risk Matrix 5x5 dan 33% pasangannya tak berkaitan dengan barisnya (audit
-    | 17 Nov 2026), jadi dikeluarkan. Kosongkan array untuk memakai semua label M09.
-    */
-    'm09_sumber_dikecualikan' => ['Pemetaan label baru (label)'],
-
-    /*
-    | USULAN (TIDAK DIHITUNG) — draf kurasi aktivitas OAK → aktivitas HIRA dari 17 Nov 2026, bahan awal pemilik mapping.
-    | Terlalu longgar untuk dipakai langsung (tingkat aktivitas, bukan per bahaya). Pindahkan tautan yang disetujui ke
-    | `oak_aktivitas_hira`, atau lebih baik jadikan label M12 per baris di Master mapping.
-    */
-    'oak_aktivitas_hira_usulan' => [
+    'oak_aktivitas_hira' => [
         'Pengoperasian Kendaraan dan Unit, termasuk Hauling OB & Coal' => [
             'Coal Hauling', 'Hauling Coal', 'Hauling material', 'Hauling OB', 'Hauling Soil', 'Driving',
             'Pengoperasian kendaraan dan unit', 'Pengoperasian Unit & Kendaraan', 'Pengoperasian Unit dan Kendaraan',
