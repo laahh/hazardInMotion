@@ -76,6 +76,7 @@ class DrmSnapshotBuilder
             'bearc' => $this->ambil('BeARC mingguan', $sql->bearc()),
             'coverage' => $this->ambil('coverage', $sql->coverage()),
             'mapping' => $this->ambil('mapping SAP per bahaya (Excel)', $sql->mappingBahaya()),
+            'namaOak' => $this->ambil('nama aktivitas / sub checklist OAK', $sql->namaOak()),
             'brc' => $this->ambil('beranda: insiden & root cause', $sql->berandaInsiden()),
             'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [], 'pasangan' => [], 'bkel' => [], 'bspe' => [],
         ];
@@ -114,7 +115,7 @@ class DrmSnapshotBuilder
         $daftar = [
             'baseline HIRA' => $sql->hira(), 'detail lokasi' => $sql->detailLokasi(), 'master PJA' => $sql->pja(),
             'matriks per cakupan' => $sql->matriksCakupan(), 'insiden' => $sql->insiden(), 'personil PJA' => $sql->personil(),
-            'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(), 'mapping SAP per bahaya' => $sql->mappingBahaya(),
+            'BeARC mingguan' => $sql->bearc(), 'coverage' => $sql->coverage(), 'mapping SAP per bahaya' => $sql->mappingBahaya(), 'nama OAK' => $sql->namaOak(),
             "aktivitas × detail lokasi ({$site})" => $s->aktivitasDetailLokasi(), "bahaya sorot ({$site})" => $s->bahayaSorot(),
             "temuan open ({$site})" => $s->temuanOpen(), "status per bahaya ({$site})" => $s->statusPerBahaya(), "pasangan baseline ({$site})" => $s->pasanganBaseline(),
             'beranda: insiden & root cause' => $sql->berandaInsiden(),
@@ -249,7 +250,7 @@ class DrmSnapshotBuilder
             }
         }
 
-        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null);
+        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null, array_column($d['namaOak'] ?? [], 'kn'));
 
         return [
             'minggu' => $b->minggu(),
@@ -286,7 +287,7 @@ class DrmSnapshotBuilder
      * @param  array<string, mixed>  $idx
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, mixed>}  [ringkasan, rincian baris per status]
      */
-    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null): array
+    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null, array $namaOak = []): array
     {
         $cakupan = ['ALL' => []];
         foreach ($dl as $id => $d) {
@@ -324,7 +325,7 @@ class DrmSnapshotBuilder
         // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi, risiko residual,
         //   jumlah label OBS (M11), OAK (M12), Hazard (M09) di master yang menandai baris ini]. Jumlah label = MAPPING,
         //   tidak bergantung pada ada / tidaknya laporan (kolom Item Sumber di modal Baseline).
-        $nLabel = $this->jumlahLabelPerBaris($master);
+        $nLabel = $this->jumlahLabelPerBaris($master, $namaOak);
         $teks = [];
         foreach (array_keys($hidDipakai) as $hid) {
             $h = $hira[$hid] ?? [];
@@ -721,7 +722,7 @@ class DrmSnapshotBuilder
      *
      * @return array{obs: array<int, int>, oak: array<int, int>, ket: array<int, int>}
      */
-    private function jumlahLabelPerBaris(?DrmMaster $master): array
+    private function jumlahLabelPerBaris(?DrmMaster $master, array $namaOak = []): array
     {
         $hasil = ['obs' => [], 'oak' => [], 'ket' => []];
         if ($master === null) {
@@ -737,6 +738,18 @@ class DrmSnapshotBuilder
         foreach ($master->labelHazard($master->cfgEfektif((array) config('peta_risiko_drm'))) as $l) {
             foreach ($l['ri'] as $r) {
                 $hasil['ket'][(int) $r] = ($hasil['ket'][(int) $r] ?? 0) + 1;
+            }
+        }
+        // OAK "nama sama": aktivitas HIRA yang namanya sama dengan aktivitas / sub checklist OAK aktif (satu entri).
+        $cfgEf = $master->cfgEfektif((array) config('peta_risiko_drm'));
+        if (! empty($cfgEf['oak_nama_sama'])) {
+            $ada = array_flip(array_map('intval', $namaOak));
+            foreach ($master->barisPerNamaAktivitas($cfgEf) as $crc => $ris) {
+                if (isset($ada[(int) $crc])) {
+                    foreach ($ris as $r) {
+                        $hasil['oak'][$r] = ($hasil['oak'][$r] ?? 0) + 1;
+                    }
+                }
             }
         }
         // OAK juga lewat kurasi aktivitas OAK → aktivitas HIRA (satu entri per aktivitas OAK).

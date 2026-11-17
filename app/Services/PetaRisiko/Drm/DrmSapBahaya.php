@@ -34,7 +34,7 @@ class DrmSapBahaya
      */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v8:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v9:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
     }
@@ -89,8 +89,21 @@ class DrmSapBahaya
         // Kurasi aktivitas OAK → aktivitas HIRA (config oak_aktivitas_hira): aktivitas OAK yang menandai baris ini.
         $teksOakAkt = array_map(fn (string $a) => 'Aktivitas OAK: '.$a.' (semua sub aktivitas)', $teks($master->labelOakAktivitas($cfg)));
         $labelOakAkt = array_keys($teksOakAkt);
+        // Aturan "nama sama": nama aktivitas HIRA baris ini = nama aktivitas / sub checklist OAK aktif (sama dengan sync).
+        $teksOakNama = [];
+        if (! empty($cfg['oak_nama_sama'])) {
+            $kunci = DrmMaster::kunciNamaOak((string) ($master->barisPerRi()[$hid]['aktivitas'] ?? ''));
+            $crc = $kunci === '' ? null : crc32($kunci);
+            if ($crc !== null && isset($master->barisPerNamaAktivitas($cfg)[$crc])) {
+                $nama = $this->namaOak()[$crc] ?? null;
+                if ($nama !== null) {
+                    $teksOakNama[$crc] = 'Nama aktivitas sama dengan checklist OAK: "'.trim($nama).'"';
+                }
+            }
+        }
+        $labelOakNama = array_keys($teksOakNama);
         return compact('dari', 'sampai', 'dl', 'labelBahaya', 'cfg', 'labelObs', 'labelOak', 'teksBahaya', 'teksObs', 'teksOak',
-            'labelOakAkt', 'teksOakAkt');
+            'labelOakAkt', 'teksOakAkt', 'labelOakNama', 'teksOakNama');
     }
 
     /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
@@ -120,7 +133,7 @@ class DrmSapBahaya
             }
         }
         // OAK (bcbeats): label persis M12 per baris (+ kurasi aktivitas OAK hanya bila disetujui di config).
-        if ($p['labelOak'] !== [] || $p['labelOakAkt'] !== []) {
+        if ($p['labelOak'] !== [] || $p['labelOakAkt'] !== [] || $p['labelOakNama'] !== []) {
             foreach ($this->ch->select($this->sqlOakLabel($p, $dlIds, 'laporan'), 60) as $r) {
                 $baris[] = ['cara' => 'oak', 'jenis' => 'OBSERVASI AREA KRITIS', 'waktu' => $r['waktu'], 'dl' => $r['dl'],
                     'isi' => trim($r['akt'].' / '.$r['sub'], ' /'), 'deskripsi' => '',
@@ -189,7 +202,7 @@ class DrmSapBahaya
      */
     public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v9:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v10:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber) {
             $p = $this->persiapan($hid, $kel, $site, $grup, $w);
@@ -197,6 +210,7 @@ class DrmSapBahaya
                 'ket' => $p['teksBahaya'], 'oak' => $p['teksOak'], default => $p['teksObs'],
             };
             $teksAkt = $sumber === 'oak' ? $p['teksOakAkt'] : [];
+            $teksNama = $sumber === 'oak' ? $p['teksOakNama'] : [];
             $label = array_keys($teks);
             $dlIds = array_keys($p['dl']);
             $laporan = [];
@@ -211,10 +225,10 @@ class DrmSapBahaya
             $item = [];
             if ($sumber === 'oak') {
                 // OAK: n = laporan yang labelnya (M12) / aktivitasnya (kurasi disetujui) cocok dengan entri ini.
-                $baris = ($dlIds !== [] && ($teks + $teksAkt) !== []) ? $this->ch->select($this->sqlOakLabel($p, $dlIds, 'item'), 60) : [];
-                foreach ($teks + $teksAkt as $crc => $isi) {
-                    $kolom = isset($teksAkt[$crc]) ? 'ka' : 'kl';
-                    $cocok = array_filter($baris, fn ($r) => (int) $r[$kolom] === (int) $crc);
+                $baris = ($dlIds !== [] && ($teks + $teksAkt + $teksNama) !== []) ? $this->ch->select($this->sqlOakLabel($p, $dlIds, 'item'), 60) : [];
+                $entri = array_map(fn ($t) => [$t, ['kl']], $teks) + array_map(fn ($t) => [$t, ['ka']], $teksAkt) + array_map(fn ($t) => [$t, ['kn', 'ks']], $teksNama);
+                foreach ($entri as $crc => [$isi, $kolom]) {
+                    $cocok = array_filter($baris, fn ($r) => array_filter($kolom, fn ($k) => (int) $r[$k] === (int) $crc) !== []);
                     $item[] = ['isi' => (string) $isi, 'n' => array_sum(array_column($cocok, 'n')), 'ndl' => array_sum(array_column($cocok, 'ndl')),
                         'nstop' => array_sum(array_column($cocok, 'nstop'))];
                 }
@@ -226,7 +240,7 @@ class DrmSapBahaya
             usort($item, fn ($a, $b) => $b['n'] <=> $a['n'] ?: strcmp($a['isi'], $b['isi']));
 
             return ['sumber' => $sumber, 'dari' => $p['dari']->toDateString(), 'sampai' => $p['sampai']->toDateString(),
-                'ndl' => count($p['dl']), 'nlabel' => count($teks) + count($teksAkt), 'item' => $item];
+                'ndl' => count($p['dl']), 'nlabel' => count($teks) + count($teksAkt) + count($teksNama), 'item' => $item];
         });
     }
 
@@ -248,6 +262,7 @@ class DrmSapBahaya
          ifNull(a.name, \'\') AS akt, ifNull(s.name, \'\') AS sub,
          CRC32('.DrmSql::normTeksSql('concat(ifNull(a.name, \'\'), \' / \', ifNull(s.name, \'\'))').') AS kl,
          CRC32('.DrmSql::normTeksSql('ifNull(a.name, \'\')').') AS ka,
+         CRC32('.DrmSql::namaOakSql('a.name').') AS kn, CRC32('.DrmSql::namaOakSql('s.name').') AS ks,
          toUInt8(ifNull(x.id_conclusion, 0) = '.(int) $c['stop'].') AS stop
   FROM (
     SELECT * FROM '.DrmSql::tabelOak($p['cfg'], 'register').'
@@ -256,11 +271,12 @@ class DrmSapBahaya
   ) x
   LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity GROUP BY id) a ON a.id = toInt64(x.id_oak_activity)
   LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_sub_activity GROUP BY id) s ON s.id = toInt64(x.id_oak_sub_activity)';
-        $saring = 'WHERE kl IN ('.$daftar($p['labelOak']).') OR ka IN ('.$daftar($p['labelOakAkt']).')';
+        $nama = $daftar($p['labelOakNama'] ?? []);
+        $saring = 'WHERE kl IN ('.$daftar($p['labelOak']).') OR ka IN ('.$daftar($p['labelOakAkt']).') OR kn IN ('.$nama.') OR ks IN ('.$nama.')';
 
         if ($mode === 'item') {
-            return 'SELECT kl, ka, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
-FROM ('.$dasar.') '.$saring.' GROUP BY kl, ka LIMIT 500';
+            return 'SELECT kl, ka, kn, ks, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
+FROM ('.$dasar.') '.$saring.' GROUP BY kl, ka, kn, ks LIMIT 1000';
         }
 
         return 'SELECT * FROM ('.$dasar.') '.$saring.' ORDER BY waktu DESC LIMIT '.(self::MAKS_BARIS + 1);
@@ -357,6 +373,21 @@ FROM obds.ch_rfid_sap_cuti_all_site
 '.$this->saringHazard($dl, $dari, $sampai, $buang).'
     AND kc IN ('.implode(',', array_map('intval', $label)).')
 GROUP BY kc ORDER BY n DESC LIMIT 500';
+    }
+
+    /**
+     * Nama aktivitas / sub checklist OAK aktif per kunci (aturan "nama sama"), di-cache per versi snapshot.
+     *
+     * @return array<int, string>  crc kunci nama → nama asli
+     */
+    private function namaOak(): array
+    {
+        $ambil = fn () => array_column(array_map(fn ($r) => [(int) $r['kn'], (string) $r['nama']], $this->ch->select(DrmSql::namaOak(), 30)), 1, 0);
+        try {
+            return Cache::remember('peta-risiko:nama-oak:'.(int) @filemtime($this->repo->pathMeta()), 3600, $ambil);
+        } catch (\Throwable) {
+            return $ambil();
+        }
     }
 
     /**

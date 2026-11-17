@@ -157,7 +157,10 @@ class DrmBerandaTest extends TestCase
         // OAK: label persis M12 per baris (bcbeats), tanpa tebakan tema butir checklist; Tidak Sesuai bukan gap (bawaan).
         $this->assertStringContainsString('FROM bcbeats.oak_register r', $spe);
         $this->assertStringContainsString('FROM oakr o LEFT JOIN mox m ON m.kc = o.kl LEFT JOIN mkx a ON a.ka = o.ka', $spe);
+        $this->assertStringContainsString(' AS mn,', $spe);
         $this->assertStringContainsString('ARRAY JOIN e.el AS hid', $spe);
+        // Aturan "nama sama": nama aktivitas / sub OAK = nama aktivitas HIRA (mnx).
+        $this->assertStringContainsString('LEFT JOIN mnx n1 ON n1.kn = o.kn LEFT JOIN mnx n2 ON n2.kn = o.ks', $spe);
         $this->assertStringNotContainsString('JOIN mtx t ON t.tema = i.tema', $spe);
         $this->assertStringContainsString('okts AS (SELECT toInt64(0) AS rid WHERE 0)', $spe);
         $this->assertStringContainsString('toUInt8(2 + 16 * stop + 32 * ts)', $spe);

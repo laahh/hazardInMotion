@@ -88,6 +88,16 @@ return [
     'oak_aktivitas_hira' => [],
 
     /*
+    | Aturan "nama sama" (17 Nov 2026): laporan OAK menandai baris HIRA yang NAMA AKTIVITAS-nya sama persis dengan
+    | aktivitas atau sub aktivitas checklist OAK (setelah membuang [CCV] / [Trial …], "Langsung - ", "Risk Intervention
+    | Center - ", tanda baca). Contoh: HIRA "Workshop" ← OAK Perbaikan… / Workshop; HIRA "Bekerja di ketinggian" ← OAK
+    | Bekerja di Ketinggian. Hanya kesamaan nama aktivitas; sub generik ("Pemasangan", "Pengangkutan") tidak dipakai.
+    | `oak_nama_sama_kecuali` = aktivitas HIRA yang namanya sama tetapi maknanya beda.
+    */
+    'oak_nama_sama' => true,
+    'oak_nama_sama_kecuali' => ['Jalan'], // OAK "Shift Change / Jalan" = shift change di lokasi jalan, bukan aktivitas jalan
+
+    /*
     | Butir Tidak Sesuai pada OAK ikut gap baris. false (bawaan): tanpa mapping butir checklist → bahaya per baris,
     | butir Tidak Sesuai tidak bisa dipastikan menyangkut bahaya baris itu; gap OAK cukup Stop Pekerjaan (dokumentasi).
     */

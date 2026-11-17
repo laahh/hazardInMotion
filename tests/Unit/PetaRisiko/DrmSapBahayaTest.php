@@ -85,6 +85,30 @@ class DrmSapBahayaTest extends TestCase
         $this->assertNotEmpty(config('peta_risiko_drm.oak_aktivitas_hira_usulan'));
     }
 
+    public function test_oak_nama_aktivitas_sama_dengan_checklist_oak(): void
+    {
+        // Penanda [CCV …], awalan "Langsung -" / "Risk Intervention Center -", nbsp, dan tanda baca diabaikan.
+        $this->assertSame('penimbanganbatubara', DrmMaster::kunciNamaOak('[CCV CPP] Penimbangan Batubara'));
+        $this->assertSame(DrmMaster::kunciNamaOak('Penimbangan batubara'), DrmMaster::kunciNamaOak('[CCV CPP] Penimbangan Batubara'));
+        $this->assertSame('pengantarankaryawanmuatan', DrmMaster::kunciNamaOak('[Trial PAMA GMO] Risk Intervention Center - Pengantaran Karyawan (Muatan)'));
+        $this->assertSame('bekerjadiketinggian', DrmMaster::kunciNamaOak(' [CCV] Bekerja di Ketinggian'));
+
+        $master = DrmMaster::dariArray(['baris' => [
+            ['ri' => 1, 'aid' => 1, 'aktivitas' => 'Workshop', 'sub' => 'a', 'bahaya' => 'x', 'kb' => 'High', 'umum' => false, 'idh' => []],
+            ['ri' => 2, 'aid' => 1, 'aktivitas' => 'Workshop', 'sub' => 'b', 'bahaya' => 'y', 'kb' => 'High', 'umum' => false, 'idh' => []],
+            ['ri' => 3, 'aid' => 2, 'aktivitas' => 'Jalan', 'sub' => 'c', 'bahaya' => 'z', 'kb' => 'High', 'umum' => false, 'idh' => []],
+        ]]);
+        $peta = $master->barisPerNamaAktivitas(['oak_nama_sama_kecuali' => ['Jalan']]);
+        $this->assertSame([1, 2], $peta[crc32('workshop')]);
+        $this->assertArrayNotHasKey(crc32('jalan'), $peta); // nama sama, makna beda → dikecualikan
+
+        $p = ['dari' => CarbonImmutable::parse('2026-11-08'), 'sampai' => CarbonImmutable::parse('2026-11-14'), 'cfg' => config('peta_risiko_drm'),
+            'labelOak' => [], 'labelOakAkt' => [], 'labelOakNama' => [crc32('workshop')]];
+        $sql = $this->panggil('sqlOakLabel', [$p, [11], 'item']);
+        $this->assertStringContainsString('OR kn IN ('.crc32('workshop').') OR ks IN ('.crc32('workshop').')', $sql);
+        $this->assertStringContainsString('GROUP BY kl, ka, kn, ks', $sql);
+    }
+
     public function test_label_m09_dari_sumber_yang_dikecualikan_tidak_dihitung(): void
     {
         $master = DrmMaster::dariArray(['label' => [

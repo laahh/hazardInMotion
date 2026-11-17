@@ -708,6 +708,7 @@ WITH
   '.$m['m9'].' AS m9,
   '.$m['mo'].' AS mo,
   '.($m['mk'] ?? 'CAST([], \'Array(Tuple(UInt32, Array(UInt32)))\')').' AS mk,
+  '.($m['mn'] ?? 'CAST([], \'Array(Tuple(UInt32, Array(UInt32)))\')').' AS mn,
   '.$m['mt'].' AS mt,
 mh0 AS (
   SELECT toUInt32(x.1) AS hid, arrayMap(i -> toInt64(i), x.2) AS idh, toUInt32(x.3) AS bc, toUInt32(x.4) AS aid,
@@ -718,6 +719,7 @@ mgx AS (SELECT toUInt32(x.1) AS gid, arrayMap(r -> toUInt32(r), x.2) AS rs FROM 
 m9x AS (SELECT toUInt32(x.1) AS kc, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(m9) AS x)),
 mox AS (SELECT toUInt32(x.1) AS kc, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mo) AS x)),
 mkx AS (SELECT toUInt32(x.1) AS ka, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mk) AS x)),
+mnx AS (SELECT toUInt32(x.1) AS kn, arrayMap(r -> toUInt32(r), x.2) AS rs FROM (SELECT arrayJoin(mn) AS x)),
 mtx AS (SELECT toUInt64(x.1) AS tema, arrayJoin(arrayMap(r -> toUInt32(r), x.2)) AS hid FROM (SELECT arrayJoin(mt) AS x)),
 hraw AS (
   SELECT h.id_hira_master AS idh,
@@ -839,23 +841,27 @@ base AS (
 -- 17 Nov 2026: mapping spesifik per aktivitas – sub – bahaya, jangan dipaksakan):
 --   OBS : jenis kegiatan (`aktivitas  OBS`, ch_rfid) → baris M11.
 --   OAK : "aktivitas / sub aktivitas" (bcbeats.oak_register, ber-ID, nama dari master OAK obds) → baris M12, plus
---         kurasi aktivitas OAK hanya bila config oak_aktivitas_hira diisi (bawaan kosong). Gap = Stop Pekerjaan;
+--         baris HIRA yang nama aktivitasnya SAMA dengan aktivitas / sub OAK (mnx, config oak_nama_sama), kurasi
+--         aktivitas OAK hanya bila config oak_aktivitas_hira diisi (bawaan kosong). Gap = Stop Pekerjaan;
 --         butir Tidak Sesuai hanya bila config oak_tidak_sesuai_gap = true.
 --   Item = label.
 oakr AS (
   SELECT toInt64(r.id) AS rid, toInt64(r.id_location) AS dl, toDate(r.submit_date) AS d,
          toUInt8(ifNull(r.id_conclusion, 0) = '.(int) $c['oak_checklist']['stop'].') AS stop,
          CRC32('.self::normTeksSql('concat(ifNull(a.name, \'\'), \' / \', ifNull(s.name, \'\'))').') AS kl,
-         CRC32('.self::normTeksSql('ifNull(a.name, \'\')').') AS ka
+         CRC32('.self::normTeksSql('ifNull(a.name, \'\')').') AS ka,
+         CRC32('.self::namaOakSql('a.name').') AS kn, CRC32('.self::namaOakSql('s.name').') AS ks
   FROM '.self::tabelOak($c, 'register').' r
   LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity GROUP BY id) a ON a.id = toInt64(r.id_oak_activity)
   LEFT JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_sub_activity GROUP BY id) s ON s.id = toInt64(r.id_oak_sub_activity)
   WHERE r.submit_date >= t_open AND r.submit_date < t_end + 1 AND toInt64(r.id_location) IN (SELECT dl FROM dl0)
 ),
 oke AS (
-  SELECT o.rid AS rid, o.dl AS dl, o.d AS d, o.stop AS stop, o.kl AS kl, arrayDistinct(arrayConcat(m.rs, a.rs)) AS el
+  SELECT o.rid AS rid, o.dl AS dl, o.d AS d, o.stop AS stop, o.kl AS kl,
+         arrayDistinct(arrayConcat(m.rs, a.rs, n1.rs, n2.rs)) AS el
   FROM oakr o LEFT JOIN mox m ON m.kc = o.kl LEFT JOIN mkx a ON a.ka = o.ka
-  WHERE notEmpty(arrayConcat(m.rs, a.rs))
+  LEFT JOIN mnx n1 ON n1.kn = o.kn LEFT JOIN mnx n2 ON n2.kn = o.ks
+  WHERE notEmpty(arrayConcat(m.rs, a.rs, n1.rs, n2.rs))
 ),
 '.(! empty($c['oak_tidak_sesuai_gap']) ? 'okts AS (
   SELECT DISTINCT toInt64(id_oak_register) AS rid FROM '.self::tabelOak($c, 'detail').'
@@ -963,6 +969,26 @@ umum_a AS (
 
         return [$cfg, 'Akses SELECT ke '.implode(' / ', $tabel).' ditolak; OAK memakai salinan '.implode(' / ', $cadangan)
             .' (berhenti 28 Okt 2026). Minta admin: GRANT SELECT ON '.$tabel[0].' TO <user>; GRANT SELECT ON '.$tabel[1].' TO <user>;'];
+    }
+
+    /** Kunci nama aktivitas & sub aktivitas checklist OAK yang aktif (aturan "nama sama"), untuk hitungan label master. */
+    public static function namaOak(): string
+    {
+        return 'SELECT toString(CRC32(k)) AS kn, any(n) AS nama FROM (
+  SELECT '.self::namaOakSql('name').' AS k, name AS n FROM obds.m_oak_activity FINAL WHERE toString(is_active) = \'1\'
+  UNION ALL
+  SELECT '.self::namaOakSql('name').', name FROM obds.m_oak_sub_activity FINAL WHERE toString(is_active) = \'1\'
+) WHERE k != \'\' GROUP BY k';
+    }
+
+    /** Ekspresi SQL kunci nama aktivitas OAK — pasangan DrmMaster::kunciNamaOak() (aturan "nama sama" HIRA ↔ OAK). */
+    public static function namaOakSql(string $expr): string
+    {
+        $t = <<<'SQL'
+replaceRegexpAll(replaceRegexpAll(replaceRegexpOne(replaceRegexpAll(replaceAll(lowerUTF8(ifNull(%s, '')), '\xC2\xA0', ' '), '\\[[^\\]]*\\]', ' '), '^\\s*(langsung|risk intervention center)\\s*-\\s*', ' '), '\\bccv\\b', ' '), '[^0-9a-z]+', '')
+SQL;
+
+        return sprintf($t, $expr);
     }
 
     /** Ekspresi SQL kunci label OBS / OAK — pasangan DrmMaster::normTeks() (huruf + angka saja, alias Langsung). */
