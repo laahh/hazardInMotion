@@ -57,7 +57,7 @@ class DrmSapBahayaTest extends TestCase
         $this->assertStringContainsString("toDate('2026-11-14') + 1", $sql);
 
         $item = $this->panggil('sqlItemLabel', [[11], CarbonImmutable::parse('2026-11-08'), CarbonImmutable::parse('2026-11-14'), [123], ['DELETED']]);
-        $this->assertStringContainsString(')) IN (123)', $item);
-        $this->assertStringContainsString('GROUP BY isi', $item);
+        $this->assertStringContainsString('AND kc IN (123)', $item);
+        $this->assertStringContainsString('GROUP BY kc', $item);
     }
 }

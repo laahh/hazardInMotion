@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Cache;
  * Bukti SAP satu baris "kelompok aktivitas × bahaya-risiko" pada satu minggu kalender, untuk modal kartu KPI.
  * Aturan per jenis laporan sama dengan sync (DrmSql, 17 Nov 2026):
  *   label          : Hazard / Inspeksi yang "ketidaksesuaian / sub"-nya = label M09 yang dipetakan ke baris ini → baris
- *   obs            : OBS yang jenis kegiatannya = label M11 yang dipetakan ke baris ini                   → baris
- *   oak            : OAK yang "aktivitas / sub aktivitas"-nya = label M12 yang dipetakan ke baris ini       → baris
+ *   obs            : OBS yang jenis kegiatannya = label M11 yang dipetakan ke baris ini, atau ke baris lain dengan
+ *                    aktivitas + sub aktivitas yang sama                                                    → aktivitas
+ *   oak            : OAK yang "aktivitas / sub aktivitas"-nya = label M12, dengan perluasan yang sama        → aktivitas
  * Label OBS / OAK dicocokkan dengan kunci DrmMaster::normTeks (huruf + angka, "Risk Intervention Center" = "Langsung"),
  * mengikuti dokumentasi Risk Matrix 5x5. Semua laporan dari obds.ch_rfid_sap_cuti_all_site. Hanya detail lokasi
  * cakupan (site / grup) yang grup lokasinya memuat bahaya ini (gerbang M05). Selesai = CLOSED / DONE (REJECT terbuka); BUKAN TEMUAN dan DELETED dibuang.
@@ -33,7 +34,7 @@ class DrmSapBahaya
      */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v4:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v5:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
     }
@@ -69,21 +70,23 @@ class DrmSapBahaya
             }
         }
         // Label Hazard / Inspeksi (M09, CRC "k / sk" ternormalisasi) yang dipetakan ke baris ini.
-        $labelBahaya = [];
+        $teksBahaya = [];
         foreach ($m['label'] as $l) {
             if (in_array($hid, $l['ri'], true)) {
-                $labelBahaya[] = DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']));
+                $teksBahaya[DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']))] = trim($l['k']).' / '.trim($l['sk']);
             }
         }
-        $labelBahaya = array_values(array_unique($labelBahaya));
+        $labelBahaya = array_keys($teksBahaya);
 
-        // Label OBS (jenis kegiatan, M11) / OAK ("aktivitas / sub", M12) yang dipetakan ke baris ini.
-        $teks = fn (array $daftar) => array_values(array_unique(array_map(fn (array $t) => DrmMaster::crcTeks((string) $t['teks']),
-            array_filter($daftar, fn (array $t) => in_array($hid, $t['ri'], true)))));
-        $labelObs = $teks((array) ($m['obs'] ?? []));
-        $labelOak = $teks((array) ($m['oak'] ?? []));
+        // Label OBS (jenis kegiatan, M11) / OAK ("aktivitas / sub", M12) yang menandai baris ini: dipetakan ke baris ini
+        // atau ke baris lain dengan aktivitas + sub aktivitas yang sama (DrmMaster::labelTeksAktivitas, sama dengan sync).
+        $teks = fn (array $daftar) => array_column(array_filter($daftar, fn (array $t) => in_array($hid, $t['ri'], true)), 'teks', 'crc');
+        $teksObs = $teks($master->labelTeksAktivitas('obs'));
+        $teksOak = $teks($master->labelTeksAktivitas('oak'));
+        $labelObs = array_keys($teksObs);
+        $labelOak = array_keys($teksOak);
 
-        return compact('dari', 'sampai', 'dl', 'labelBahaya', 'cfg', 'labelObs', 'labelOak');
+        return compact('dari', 'sampai', 'dl', 'labelBahaya', 'cfg', 'labelObs', 'labelOak', 'teksBahaya', 'teksObs', 'teksOak');
     }
 
     /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
@@ -159,40 +162,45 @@ class DrmSapBahaya
     }
 
     /**
-     * Item sumber (modal Baseline): label yang membuat SAP tertangkap ke baris HIRA ini pada satu minggu, bukan isi laporan.
-     *   obs : jenis kegiatan OBS yang di master M11 dipetakan ke baris ini
-     *   oak : "aktivitas / sub aktivitas" OAK yang di master M12 dipetakan ke baris ini (nstop = laporan Stop Pekerjaan)
-     *   ket : label "ketidaksesuaian / sub ketidaksesuaian" Hazard / Inspeksi yang di master M09 dipetakan ke baris ini
-     * n = jumlah laporan, ndl = detail lokasi berbeda. Item di kolom snapshot dihitung per detail lokasi, sedangkan
-     * daftar ini item berbeda di semua DL cakupan.
+     * Item sumber (modal Baseline) = MAPPING baris ini di master HIRA ↔ SAP, tidak bergantung pada laporan: semua label
+     * yang menandai baris, masing-masing dengan jumlah laporan pada minggu terpilih (boleh 0).
+     *   obs : jenis kegiatan OBS (M11) yang dipetakan ke baris ini / ke baris lain dengan aktivitas + sub yang sama
+     *   oak : "aktivitas / sub aktivitas (checklist)" OAK (M12), perluasan sama (nstop = laporan Stop Pekerjaan)
+     *   ket : label "ketidaksesuaian / sub ketidaksesuaian" Hazard / Inspeksi (M09) yang dipetakan ke baris ini
+     * n = jumlah laporan, ndl = detail lokasi berbeda (detail lokasi cakupan yang grupnya memuat baris ini).
      *
      * @return array{sumber: string, dari: string, sampai: string, ndl: int, nlabel: int,
      *   item: list<array{isi: string, n: int, ndl: int, nstop: int}>}
      */
     public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v4:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v6:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber) {
             $p = $this->persiapan($hid, $kel, $site, $grup, $w);
-            $label = match ($sumber) {
-                'ket' => $p['labelBahaya'], 'oak' => $p['labelOak'], default => $p['labelObs'],
+            $teks = match ($sumber) {
+                'ket' => $p['teksBahaya'], 'oak' => $p['teksOak'], default => $p['teksObs'],
             };
-            $hasil = ['sumber' => $sumber, 'dari' => $p['dari']->toDateString(), 'sampai' => $p['sampai']->toDateString(),
-                'ndl' => count($p['dl']), 'nlabel' => count($label), 'item' => []];
+            $label = array_keys($teks);
             $dlIds = array_keys($p['dl']);
-            if ($dlIds === [] || $label === []) {
-                return $hasil;
+            $laporan = [];
+            if ($dlIds !== [] && $label !== []) {
+                $buang = (array) $p['cfg']['status_buang'];
+                $sql = $sumber === 'ket'
+                    ? $this->sqlItemLabel($dlIds, $p['dari'], $p['sampai'], $label, $buang)
+                    : $this->sqlTeks($dlIds, $p['dari'], $p['sampai'], $sumber === 'obs' ? $label : [], $sumber === 'oak' ? $label : [],
+                        $buang, (array) $p['cfg']['obs_tanpa_aktivitas'], 'item');
+                $laporan = array_column($this->ch->select($sql, 60), null, 'kc');
             }
-            $buang = (array) $p['cfg']['status_buang'];
-            $sql = $sumber === 'ket'
-                ? $this->sqlItemLabel($dlIds, $p['dari'], $p['sampai'], $label, $buang)
-                : $this->sqlTeks($dlIds, $p['dari'], $p['sampai'], $sumber === 'obs' ? $label : [], $sumber === 'oak' ? $label : [],
-                    $buang, (array) $p['cfg']['obs_tanpa_aktivitas'], 'item');
-            $hasil['item'] = array_map(fn (array $r) => ['isi' => (string) $r['isi'], 'n' => (int) $r['n'], 'ndl' => (int) $r['ndl'],
-                'nstop' => (int) ($r['nstop'] ?? 0)], $this->ch->select($sql, 60));
+            $item = [];
+            foreach ($teks as $crc => $isi) {
+                $r = $laporan[$crc] ?? [];
+                $item[] = ['isi' => (string) $isi, 'n' => (int) ($r['n'] ?? 0), 'ndl' => (int) ($r['ndl'] ?? 0), 'nstop' => (int) ($r['nstop'] ?? 0)];
+            }
+            usort($item, fn ($a, $b) => $b['n'] <=> $a['n'] ?: strcmp($a['isi'], $b['isi']));
 
-            return $hasil;
+            return ['sumber' => $sumber, 'dari' => $p['dari']->toDateString(), 'sampai' => $p['sampai']->toDateString(),
+                'ndl' => count($p['dl']), 'nlabel' => count($teks), 'item' => $item];
         });
     }
 
@@ -226,7 +234,7 @@ class DrmSapBahaya
         $saring = 'NOT na AND ((jenis = \'OBSERVASI\' AND kc IN ('.$daftar($obs).')) OR (jenis = \'OBSERVASI AREA KRITIS\' AND kc IN ('.$daftar($oak).')))';
 
         if ($mode === 'item') {
-            return 'SELECT any(isi) AS isi, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
+            return 'SELECT kc, any(isi) AS isi, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
 FROM ('.$dasar.') WHERE '.$saring.' GROUP BY kc ORDER BY n DESC, isi LIMIT 500';
         }
 
@@ -274,12 +282,12 @@ LIMIT '.(self::MAKS_BARIS + 1);
     /** @param list<int> $dl  @param list<int> $label */
     private function sqlItemLabel(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $label, array $buang): string
     {
-        return 'SELECT concat(trim(ifNull(ketidaksesuaian, \'\')), \' / \', trim(ifNull(subketidaksesuaian, \'\'))) AS isi,
+        return 'SELECT '.$this->crcLabel().' AS kc, any(concat(trim(ifNull(ketidaksesuaian, \'\')), \' / \', trim(ifNull(subketidaksesuaian, \'\')))) AS isi,
        count() AS n, uniqExact(`id detail lokasi`) AS ndl
 FROM obds.ch_rfid_sap_cuti_all_site
 '.$this->saringHazard($dl, $dari, $sampai, $buang).'
-    AND '.$this->crcLabel().' IN ('.implode(',', array_map('intval', $label)).')
-GROUP BY isi ORDER BY n DESC, isi LIMIT 500';
+    AND kc IN ('.implode(',', array_map('intval', $label)).')
+GROUP BY kc ORDER BY n DESC LIMIT 500';
     }
 
     /**

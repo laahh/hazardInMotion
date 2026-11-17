@@ -64,6 +64,12 @@ return [
     'oak_checklist' => ['sesuai' => 10186, 'tidak_sesuai' => 10187, 'stop' => 19502],
 
     /*
+    | Label OBS (M11) / OAK (M12) → baris HIRA. false = persis master (dokumentasi Risk Matrix 5x5, baseline tetap:
+    | OBS 826 baris, OAK 93 baris). true = label juga menandai baris lain dengan aktivitas + sub aktivitas yang sama.
+    */
+    'label_obs_oak_per_aktivitas' => false,
+
+    /*
     | Label Hazard/Inspeksi disebut SPESIFIK bila di satu detail lokasi hanya cocok ke bahaya dari
     | ≤ N aktivitas HIRA: aktivitas itu ikut ditandai terdeteksi (seperti Observasi). Label UMUM
     | (APD, sampah, berdebu …) cocok ke banyak aktivitas, jadi hanya mengonfirmasi bahaya yang cocok.

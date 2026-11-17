@@ -238,7 +238,7 @@ class DrmSnapshotBuilder
             }
         }
 
-        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx);
+        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null);
 
         return [
             'minggu' => $b->minggu(),
@@ -275,7 +275,7 @@ class DrmSnapshotBuilder
      * @param  array<string, mixed>  $idx
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, mixed>}  [ringkasan, rincian baris per status]
      */
-    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx): array
+    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null): array
     {
         $cakupan = ['ALL' => []];
         foreach ($dl as $id => $d) {
@@ -310,11 +310,15 @@ class DrmSnapshotBuilder
         // Kategori ringkasan unik memakai pita cakupan detail lokasi (lihat DrmBeranda::nilai).
         $hasil['ALL']['pita'] = [DrmBeranda::PITA_ATAS, DrmBeranda::PITA_BAWAH];
 
-        // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi, risiko residual].
+        // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi, risiko residual,
+        //   jumlah label OBS (M11), OAK (M12), Hazard (M09) di master yang menandai baris ini]. Jumlah label = MAPPING,
+        //   tidak bergantung pada ada / tidaknya laporan (kolom Item Sumber di modal Baseline).
+        $nLabel = $this->jumlahLabelPerBaris($master);
         $teks = [];
         foreach (array_keys($hidDipakai) as $hid) {
             $h = $hira[$hid] ?? [];
-            $teks[$hid] = [(string) ($h['an'] ?? ''), (string) ($h['sn'] ?? ''), (string) ($h['bn'] ?? ''), (string) ($h['p'] ?? ''), (string) ($h['n2'] ?? '')];
+            $teks[$hid] = [(string) ($h['an'] ?? ''), (string) ($h['sn'] ?? ''), (string) ($h['bn'] ?? ''), (string) ($h['p'] ?? ''), (string) ($h['n2'] ?? ''),
+                $nLabel['obs'][$hid] ?? 0, $nLabel['oak'][$hid] ?? 0, $nLabel['ket'][$hid] ?? 0];
         }
 
         return [$hasil, ['minggu' => $b->minggu(), 'teks' => (object) $teks, 'lingkup' => $lingkup]];
@@ -701,6 +705,34 @@ class DrmSnapshotBuilder
      * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
+    /**
+     * Jumlah label master per baris: OBS / OAK diperluas ke aktivitas + sub aktivitas yang sama (sama dengan sync),
+     * Hazard = label M09 yang dipetakan langsung.
+     *
+     * @return array{obs: array<int, int>, oak: array<int, int>, ket: array<int, int>}
+     */
+    private function jumlahLabelPerBaris(?DrmMaster $master): array
+    {
+        $hasil = ['obs' => [], 'oak' => [], 'ket' => []];
+        if ($master === null) {
+            return $hasil;
+        }
+        foreach (['obs', 'oak'] as $jenis) {
+            foreach ($master->labelTeksAktivitas($jenis) as $t) {
+                foreach ($t['ri'] as $r) {
+                    $hasil[$jenis][$r] = ($hasil[$jenis][$r] ?? 0) + 1;
+                }
+            }
+        }
+        foreach ((array) ($master->data['label'] ?? []) as $l) {
+            foreach ($l['ri'] as $r) {
+                $hasil['ket'][(int) $r] = ($hasil['ket'][(int) $r] ?? 0) + 1;
+            }
+        }
+
+        return $hasil;
+    }
+
     private function teksMaster(array $rows, DrmMaster $master): array
     {
         $baris = $master->barisPerRi();

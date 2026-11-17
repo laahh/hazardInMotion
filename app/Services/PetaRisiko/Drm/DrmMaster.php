@@ -192,6 +192,38 @@ final class DrmMaster
         return crc32(self::normTeks($s));
     }
 
+    /**
+     * Label OBS (M11) / OAK (M12) beserta baris yang ditandainya. Bawaan = persis seperti master (dokumentasi Risk Matrix
+     * 5x5: satu label → baris yang dipetakan). Bila config `label_obs_oak_per_aktivitas` = true, baris diperluas ke semua
+     * baris dengan aktivitas (id M03) + sub aktivitas yang sama (contoh: OBS "Coal crushing" master → ri 180 ikut
+     * menandai ri 175–180). Dipakai bersama oleh sync (literal mo), modal SAP, dan rincian detail lokasi.
+     *
+     * @param  'obs'|'oak'  $jenis
+     * @return list<array{teks: string, crc: int, ri: list<int>}>
+     */
+    public function labelTeksAktivitas(string $jenis): array
+    {
+        if (! config('peta_risiko_drm.label_obs_oak_per_aktivitas', false)) {
+            return array_map(fn (array $t) => ['teks' => (string) $t['teks'], 'crc' => self::crcTeks((string) $t['teks']),
+                'ri' => array_values(array_unique(array_map('intval', $t['ri'])))], (array) ($this->data[$jenis] ?? []));
+        }
+        $kunci = fn (array $b) => $b['aid'].'|'.self::norm((string) $b['sub']);
+        $saudara = $perRi = [];
+        foreach ($this->data['baris'] as $b) {
+            $saudara[$kunci($b)][] = (int) $b['ri'];
+            $perRi[(int) $b['ri']] = $kunci($b);
+        }
+
+        return array_map(function (array $t) use ($saudara, $perRi) {
+            $ri = [];
+            foreach ($t['ri'] as $r) {
+                array_push($ri, ...($saudara[$perRi[(int) $r] ?? ''] ?? [(int) $r]));
+            }
+
+            return ['teks' => (string) $t['teks'], 'crc' => self::crcTeks((string) $t['teks']), 'ri' => array_values(array_unique($ri))];
+        }, (array) ($this->data[$jenis] ?? []));
+    }
+
     /** Kunci lokasi: CRC32("site|lokasi" ternormalisasi), sama dengan dl.lk di DrmSql. */
     public static function crcLokasi(string $site, string $lokasi): int
     {
@@ -336,9 +368,9 @@ final class DrmMaster
         }
 
         $mo = [];
-        foreach ([...$this->data['obs'], ...$this->data['oak']] as $t) {
-            $c = self::crcTeks($t['teks']);
-            $mo[$c] = array_values(array_unique([...($mo[$c] ?? []), ...$t['ri']]));
+        // Label OBS / OAK → baris, diperluas ke aktivitas + sub aktivitas yang sama (labelTeksAktivitas).
+        foreach ([...$this->labelTeksAktivitas('obs'), ...$this->labelTeksAktivitas('oak')] as $t) {
+            $mo[$t['crc']] = array_values(array_unique([...($mo[$t['crc']] ?? []), ...$t['ri']]));
         }
 
         $gn = [];

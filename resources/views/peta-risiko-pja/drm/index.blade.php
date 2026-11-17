@@ -507,7 +507,9 @@
     const NK = 18;
     const strip = '<span class="dr-nol" title="Belum ada di snapshot">–</span>';
     const gapSel = (ya, na, perluData = true) => (perluData && !adaVol ? strip : ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
-    const item = (n, i, sumber) => (!adaVol ? strip : n > 0 ? `<button type="button" class="dr-item" data-i="${i}" data-sumber="${sumber}">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
+    // Item Sumber = MAPPING master HIRA ↔ SAP (jumlah label yang terhubung ke baris), tetap walau tidak ada laporan.
+    const adaMap = baris.some((b) => b.t.length > 5);
+    const item = (n, i, sumber) => (!adaMap ? strip : n > 0 ? `<button type="button" class="dr-item" data-i="${i}" data-sumber="${sumber}">${DR.fmt(n)} label</button>` : '<span class="dr-nol" title="Belum ada label di master mapping">0</span>');
     const angka = (n) => (!adaVol ? strip : n > 0 ? DR.fmt(n) : '<span class="dr-nol">0</span>');
     const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
     let kel = '', html = '';
@@ -518,7 +520,8 @@
       }
       const kode = b.kode[state.w] || 'T';
       const m = parseInt((b.gap || '')[state.w] || '0', 16);
-      const [nObs, nOak, nKet, iObs, iOak, iKet] = uraiVol(b.vol)[state.w] || [0, 0, 0, 0, 0, 0];
+      const [nObs, nOak, nKet] = uraiVol(b.vol)[state.w] || [0, 0, 0];
+      const [mObs, mOak, mKet] = [+(b.t[5] || 0), +(b.t[6] || 0), +(b.t[7] || 0)];
       const akhir = kode === 'K' && b.t[4] ? b.t[4] : b.lv;
       const tanda = b.tr ? '<span class="dr-tanda hijau">residual lebih rendah</span>' : '';
       // inc = jumlah insiden 12 bulan terkait (snapshot lama: 1 = ya tanpa jumlah).
@@ -535,9 +538,9 @@
         <td class="c">${gapSel(m & GAP_BIT.closed, T)}</td>
         <td class="c">${gapSel(m & GAP_BIT.ulang, T)}</td>
         <td class="c">${gapSel(m & GAP_BIT.stop, T || nOak === 0)}</td>
-        <td class="c">${item(iObs, i, 'obs')}</td>
-        <td class="c">${item(iOak, i, 'oak')}</td>
-        <td class="c">${item(iKet, i, 'ket')}</td>
+        <td class="c">${item(mObs, i, 'obs')}</td>
+        <td class="c">${item(mOak, i, 'oak')}</td>
+        <td class="c">${item(mKet, i, 'ket')}</td>
         <td class="n">${angka(nObs)}</td>
         <td class="n">${angka(nOak)}</td>
         <td class="n">${angka(nKet)}</td>
@@ -550,7 +553,7 @@
     isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-bl-tbl"><thead><tr>
       <th class="k1">Aktivitas</th><th class="k2">Sub Aktivitas</th><th class="k3">Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
       <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
-      <th class="c">Item Sumber Observasi</th><th class="c">Item Sumber OAK</th><th class="c">Item Sumber Ketidaksesuaian</th>
+      <th class="c">Item Sumber Observasi <small>(label master)</small></th><th class="c">Item Sumber OAK <small>(label master)</small></th><th class="c">Item Sumber Ketidaksesuaian <small>(label master)</small></th>
       <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th><th class="n">Vol. Total</th><th class="c">Pernah Incident? <small>(12 bln)</small></th></tr></thead><tbody>${html}</tbody></table>`;
     isi.querySelectorAll('.dr-item').forEach((btn) => btn.addEventListener('click', () => bukaItem(baris[+btn.dataset.i], btn.dataset.sumber)));
   }
@@ -592,13 +595,14 @@
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.pesan || data.message || `HTTP ${r.status}`);
       const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
-      const nLabel = `<p class="dr-item-cara" style="margin-top:4px">${DR.fmt(data.nlabel || 0)} label di master dipetakan ke baris ini${data.nlabel ? '' : ' — sumber ini tidak bisa menangkap baris ini'}.</p>`;
+      const dilapor = (data.item || []).filter((x) => x.n > 0).length;
+      const nLabel = `<p class="dr-item-cara" style="margin-top:4px"><b>${DR.fmt(data.nlabel || 0)} label</b> di master mapping terhubung ke baris ini (baseline tetap, tidak bergantung laporan)${data.nlabel ? '' : ' — belum ada label untuk sumber ini'}.</p>`;
       const daftar = (data.item || []).map((x) => {
-        const sub = [`${DR.fmt(x.n)} laporan · ${DR.fmt(x.ndl)} detail lokasi`, x.nstop ? `<b style="color:#b91c1c">${DR.fmt(x.nstop)} Stop Pekerjaan</b>` : ''].filter(Boolean).join(' · ');
+        const sub = x.n > 0 ? [`${DR.fmt(x.n)} laporan · ${DR.fmt(x.ndl)} detail lokasi`, x.nstop ? `<b style="color:#b91c1c">${DR.fmt(x.nstop)} Stop Pekerjaan</b>` : ''].filter(Boolean).join(' · ') : '<span class="dr-nol">tidak ada laporan minggu ini</span>';
         return `<li><div><span>${DR.esc(x.isi || '-')}</span></div><small>${sub}</small></li>`;
       }).join('');
       isi.innerHTML = `<p class="dr-item-cara"><b>Cara tertangkap:</b> ${aturan}.</p>${nLabel}
-        <p class="dr-mute" style="margin:0 0 10px;font-size:12px">${wKode(state.w)} · ${periode} · ${DR.fmt((data.item || []).length)} item berbeda di ${DR.fmt(data.ndl)} detail lokasi cakupan</p>
+        <p class="dr-mute" style="margin:0 0 10px;font-size:12px">${wKode(state.w)} · ${periode} · ${DR.fmt(dilapor)} dari ${DR.fmt(data.nlabel || 0)} label dilaporkan di ${DR.fmt(data.ndl)} detail lokasi cakupan</p>
         ${daftar ? `<ul class="dr-item-daftar">${daftar}</ul>` : '<div class="dr-mute">Tidak ada item pada minggu ini.</div>'}`;
     } catch (e) {
       isi.innerHTML = `<div class="dr-mute">Item gagal dimuat: ${DR.esc(e.message)}</div>`;

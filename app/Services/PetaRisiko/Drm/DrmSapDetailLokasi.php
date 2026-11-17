@@ -109,14 +109,14 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
      */
     private function petaMaster(string $grup): array
     {
-        $m = DrmMaster::muat()->data;
+        $master = DrmMaster::muat();
+        $m = $master->data;
         $label = $teks = [];
         foreach ($m['label'] as $l) {
             $label[DrmMaster::crc(DrmMaster::norm($l['k']).' / '.DrmMaster::norm($l['sk']))] = $l['ri'];
         }
-        foreach ([...$m['obs'], ...$m['oak']] as $t) {
-            $c = DrmMaster::crcTeks($t['teks']);
-            $teks[$c] = array_values(array_unique([...($teks[$c] ?? []), ...$t['ri']]));
+        foreach ([...$master->labelTeksAktivitas('obs'), ...$master->labelTeksAktivitas('oak')] as $t) {
+            $teks[$t['crc']] = array_values(array_unique([...($teks[$t['crc']] ?? []), ...$t['ri']]));
         }
         $gid = array_search($grup, $m['grup'], true);
         $barisGrup = $gid === false ? [] : array_fill_keys($m['grupBaris'][$gid] ?? [], true);
