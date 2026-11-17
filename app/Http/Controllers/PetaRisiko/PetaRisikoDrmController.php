@@ -4,6 +4,7 @@ namespace App\Http\Controllers\PetaRisiko;
 
 use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmRepository;
+use App\Services\PetaRisiko\Drm\DrmSapBahaya;
 use App\Services\PetaRisiko\Drm\DrmSapDetailLokasi;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -77,6 +78,29 @@ class PetaRisikoDrmController extends Controller
 
         try {
             return response()->json($sap->ambil((int) $dl, (string) $info[3], $dari, $sampai));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['pesan' => 'Laporan SAP tidak bisa dimuat dari ClickHouse saat ini. Coba lagi beberapa saat.'], 503);
+        }
+    }
+
+    /**
+     * Laporan SAP yang menjadi bukti satu baris kelompok aktivitas × bahaya-risiko pada minggu ke-w,
+     * di detail lokasi cakupan (site, grup lokasi). Dipanggil dari modal kartu KPI.
+     */
+    public function sapBahaya(Request $request, string $hid, DrmSapBahaya $sap): JsonResponse
+    {
+        abort_unless($this->repo->ada(), 404, 'Snapshot Peta Risiko belum dibuat.');
+        $v = $request->validate([
+            'kel' => ['required', 'string', 'regex:/^(K\d{1,2}|X)$/'],
+            'site' => ['required', 'string', 'max:60'],
+            'grup' => ['nullable', 'string', 'max:120'],
+            'w' => ['nullable', 'integer', 'min:0', 'max:52'],
+        ]);
+
+        try {
+            return response()->json($sap->ambil((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0)));
         } catch (\Throwable $e) {
             report($e);
 

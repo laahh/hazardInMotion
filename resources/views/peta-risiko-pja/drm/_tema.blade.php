@@ -111,6 +111,15 @@
   .dr-lv.lv-Medium { background: #fef8e1; color: #92650a; } .dr-lv.lv-Low { background: #eef8f0; color: #15803d; }
   .dr-tanda { display: inline-block; margin: 4px 6px 0 0; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
   .dr-tanda.ungu { background: #f1e8fa; color: #7e3fb3; } .dr-tanda.hijau { background: #dcfce7; color: #15803d; }
+  .dr-tanda.merah { background: #fdecee; color: #b91c1c; }
+  .dr-sap-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px; border: 1px solid #d9dce0; background: #fff;
+    font: 600 12px/1 Poppins, sans-serif; color: #3952bc; cursor: pointer; white-space: nowrap; }
+  .dr-sap-btn .material-symbols-outlined { font-size: 16px; }
+  .dr-sap-btn:hover, .dr-sap-btn.on { background: #eef1fd; border-color: #3952bc; }
+  .dr-modal-sap > td { background: #fafbfc; padding: 12px 14px 14px !important; }
+  .dr-sap-ringkas { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 10px; font-size: 12.5px; }
+  .dr-sap-tbl { min-width: 880px; font-size: 12px; }
+  .dr-sap-tbl td small { display: block; color: #8a8d90; font-size: 11px; margin-top: 2px; }
   @media (max-width: 640px) { .dr-modal-kepala, .dr-modal-alat, .dr-modal-isi { padding-left: 16px; padding-right: 16px; } }
   @media (prefers-reduced-motion: reduce) { body.tp .br-kpi-klik { transition: none; } body.tp .br-kpi-klik:hover { transform: none; } }
   /* Kartu status (angka, garis warna di kiri) — gaya dashboard DRM 2.1 lama. */
