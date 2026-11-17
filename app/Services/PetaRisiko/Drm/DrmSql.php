@@ -953,7 +953,7 @@ umum_a AS (
         if ($tabel === $cadangan) {
             return [$cfg, null];
         }
-        $bisa = \Illuminate\Support\Facades\Cache::remember('peta-risiko:akses-oak:'.md5(implode('|', $tabel)), 3600, function () use ($ch, $tabel) {
+        $cek = function () use ($ch, $tabel): bool {
             try {
                 foreach ($tabel as $t) {
                     $ch->select('SELECT 1 FROM '.$t.' LIMIT 1', 30);
@@ -961,9 +961,16 @@ umum_a AS (
 
                 return true;
             } catch (\Throwable $e) {
-                return str_contains($e->getMessage(), 'ACCESS_DENIED') || str_contains($e->getMessage(), 'Not enough privileges') ? false : true;
+                return ! (str_contains($e->getMessage(), 'ACCESS_DENIED') || str_contains($e->getMessage(), 'Not enough privileges'));
             }
-        });
+        };
+        // Cache hanya penghemat (modal web); bila storage cache tidak bisa ditulis (mis. artisan dijalankan user lain
+        // dari pemilik storage/framework/cache), cek langsung tanpa cache.
+        try {
+            $bisa = \Illuminate\Support\Facades\Cache::remember('peta-risiko:akses-oak:'.md5(implode('|', $tabel)), 3600, $cek);
+        } catch (\Throwable) {
+            $bisa = $cek();
+        }
         if ($bisa) {
             return [$cfg, null];
         }
