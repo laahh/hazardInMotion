@@ -208,7 +208,14 @@ class DrmSnapshotBuilder
      */
     private function beranda(array $d, CarbonImmutable $sampai, array $cfg, array $pjaBc, array &$berkas, array $hira, array $dl, array $pasanganPerDl): array
     {
-        $b = (new DrmBeranda($cfg, $sampai))->denganGrup($dl);
+        // Pasangan (DL, bahaya) yang terkait insiden 12 bulan terakhir → kartu "Risiko laten".
+        $insidenPasangan = [];
+        foreach ($d['sorot'] ?? [] as $r) {
+            if ((int) ($r['n_inc'] ?? 0) > 0) {
+                $insidenPasangan[$r['dl'].'|'.$r['hid']] = true;
+            }
+        }
+        $b = (new DrmBeranda($cfg, $sampai))->denganGrup($dl)->denganInsiden($insidenPasangan);
         $idx = $b->indeks($d['bkel'] ?? [], $d['bspe'] ?? []);
         $rcPerDl = $this->kelompok($d['brc'] ?? [], 'dl');
         $hidPerDl = array_map(fn (string $isi) => $isi === '' ? [] : array_map(fn ($p) => (string) strstr($p, ':', true), explode(',', $isi)), $pasanganPerDl);

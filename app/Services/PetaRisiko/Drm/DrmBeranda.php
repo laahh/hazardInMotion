@@ -36,7 +36,18 @@ class DrmBeranda
     public const INSIDEN = 64;
 
     /** Urutan angka per level di tabel perbandingan (satuan ketat): total, 4 kategori, baris dengan tiap jenis masalah. */
-    public const KOLOM_MGMT = ['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop', 'tidak_sesuai', 'cak'];
+    public const KOLOM_MGMT = ['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop', 'tidak_sesuai', 'cak',
+        'idk', 'idg', 'tid', 'turun', 'laten'];
+
+    /**
+     * Status gabungan antar detail lokasi untuk kartu KPI (gaya dashboard DRM 2.1 lama, G > K > T):
+     *   idk   = teridentifikasi & terkontrol (terdeteksi di ≥1 DL, tidak bermasalah di DL mana pun)
+     *   idg   = teridentifikasi, ada gap (bermasalah di ≥1 DL: belum closed / berulang / OAK Stop)
+     *   tid   = tidak teridentifikasi / open risk (tanpa laporan di semua DL)
+     *   turun = idk dan level risiko residual < risiko awal (berhasil dikontrol)
+     *   laten = tid dan pernah terkait insiden 12 bulan terakhir di salah satu DL (blind spot SAP)
+     */
+    private const LEVEL = ['Low' => 1, 'Medium' => 2, 'High' => 3, 'Significant' => 4];
 
     /** Batas pita cakupan (mode pita, ringkasan baseline unik): ≥80% DL terkontrol, 20–80%, >0–20%, 0%. */
     public const PITA_ATAS = 0.8;
@@ -45,6 +56,9 @@ class DrmBeranda
 
     /** @var array<string, string> detail lokasi → grup lokasi (diisi oleh denganGrup) */
     private array $grupDl = [];
+
+    /** @var array<string, true> "dl|hid" yang terkait insiden 12 bulan terakhir (diisi oleh denganInsiden) */
+    private array $insidenPasangan = [];
 
     /** @param array<string, mixed> $cfg */
     public function __construct(private readonly array $cfg, private readonly CarbonImmutable $sampai)
@@ -55,6 +69,14 @@ class DrmBeranda
     public function denganGrup(array $dl): self
     {
         $this->grupDl = array_map(fn ($r) => (string) ($r['grp'] ?? ''), $dl);
+
+        return $this;
+    }
+
+    /** @param array<string, true> $pasangan "dl|hid" yang terkait insiden 12 bulan terakhir */
+    public function denganInsiden(array $pasangan): self
+    {
+        $this->insidenPasangan = $pasangan;
 
         return $this;
     }
@@ -236,9 +258,10 @@ class DrmBeranda
             $selSisa = self::sel((string) ($h['k2'] ?? ''), (string) ($h['c2'] ?? ''));
             foreach ($x['w'] as $i => $st) {
                 [$kat, $cak] = self::nilai($st, $pita);
-                self::tambah($w[$i][$lv], $kat, $st[3], $cak);
-                self::tambah($kelW[$i][$lv][$kel], $kat, $st[3], $cak);
-                self::tambah($akt[$i][$lv][(string) ($h['a'] ?? '')], $kat, $st[3], $cak);
+                $ek = self::ekstra($st, $h, $x['inc']);
+                self::tambah($w[$i][$lv], $kat, $st[3], $cak, $ek);
+                self::tambah($kelW[$i][$lv][$kel], $kat, $st[3], $cak, $ek);
+                self::tambah($akt[$i][$lv][(string) ($h['a'] ?? '')], $kat, $st[3], $cak, $ek);
                 if ($kat !== 1) {
                     $kelGap[$i][$lv][$kel] = ($kelGap[$i][$lv][$kel] ?? 0) + 1;
                 }
@@ -254,9 +277,10 @@ class DrmBeranda
             $a = (string) ($hira[$x['hid']]['a'] ?? '');
             foreach ($x['w'] as $i => $st) {
                 [$kat, $cak] = self::nilai($st, $pita);
-                self::tambah($gka[$i][$x['lv']][$x['grp'].'|'.$a], $kat, $st[3], $cak);
-                self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3], $cak);
-                self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3], $cak);
+                $ek = self::ekstra($st, $hira[$x['hid']] ?? [], $x['inc']);
+                self::tambah($gka[$i][$x['lv']][$x['grp'].'|'.$a], $kat, $st[3], $cak, $ek);
+                self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3], $cak, $ek);
+                self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3], $cak, $ek);
             }
         }
 
@@ -310,8 +334,11 @@ class DrmBeranda
                 $sw = self::urai((string) ($sp[$d.'|'.$hid][0] ?? ''));
                 $ku = $kel.'|'.$hid;
                 $kgu = $grp.'|'.$ku;
-                $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
-                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'hid' => (string) $hid, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'inc' => false, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'hid' => (string) $hid, 'inc' => false, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                if (isset($this->insidenPasangan[$d.'|'.$hid])) {
+                    $unik[$ku]['inc'] = $unikGrup[$kgu]['inc'] = true;
+                }
                 $ok = [];
                 for ($i = 0; $i < $nW; $i++) {
                     [$st, $m] = self::status($kw[$i] ?? 0, $sw[$i] ?? 0);
@@ -368,10 +395,31 @@ class DrmBeranda
     }
 
     /** Tambah satu baris ketat ke vektor KOLOM_MGMT. */
-    private static function tambah(?array &$v, int $kat, int $m, int $cak = 0): void
+    /**
+     * [idk, idg, tid, turun, laten] satu baris gabungan dari [n DL, n terkontrol, n bermasalah, bit].
+     *
+     * @param  array<string, mixed>  $h  baris HIRA (n1 = risiko awal, n2 = residual)
+     * @return list<int>
+     */
+    private static function ekstra(array $st, array $h, bool $insiden): array
+    {
+        $gap = $st[2] > 0;
+        $k = ! $gap && $st[1] > 0;
+        $t = ! $gap && $st[1] === 0;
+        $turun = $k && (self::LEVEL[(string) ($h['n2'] ?? '')] ?? 0) > 0
+            && self::LEVEL[(string) $h['n2']] < (self::LEVEL[(string) ($h['n1'] ?? '')] ?? 0);
+
+        return [(int) $k, (int) $gap, (int) $t, (int) $turun, (int) ($t && $insiden)];
+    }
+
+    /** @param list<int> $ekstra [idk, idg, tid, turun, laten] (kosong untuk baris per detail lokasi) */
+    private static function tambah(?array &$v, int $kat, int $m, int $cak = 0, array $ekstra = []): void
     {
         $v ??= array_fill(0, count(self::KOLOM_MGMT), 0);
         $v[9] += $cak;
+        foreach ($ekstra as $i => $x) {
+            $v[10 + $i] += $x;
+        }
         $v[0]++;
         $v[$kat]++;
         $v[5] += (int) (bool) ($m & self::BELUM_CLOSED);

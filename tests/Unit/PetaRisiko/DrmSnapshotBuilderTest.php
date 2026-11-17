@@ -192,7 +192,7 @@ class DrmSnapshotBuilderTest extends TestCase
         $sql = $this->sql();
         $site = $sql->untukSite("LMO'x")->aktivitasDetailLokasi();
 
-        $this->assertStringContainsString("AND t.site = 'LMO\\'x'", $site);
+        $this->assertStringContainsString("AND t.Site = 'LMO\\'x'", $site);
         $this->assertStringNotContainsString('{ambang}', $site);
         $this->assertStringContainsString("toDate('2026-11-14') AS t_end", $site);
         $this->assertStringNotContainsString('AND t.site =', $sql->aktivitasDetailLokasi());

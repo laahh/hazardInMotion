@@ -71,6 +71,18 @@
   @media (max-width: 1280px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 760px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 480px) { body.tp .br-kpis.br-kpis-5 { grid-template-columns: 1fr; } }
+  /* Kartu status (angka, garis warna di kiri) — gaya dashboard DRM 2.1 lama. */
+  body.tp .tp-stat-sub { font-size: 12.5px; color: #595c5e; margin: 0 0 10px; }
+  body.tp .tp-stat-sub b { color: #2c2f31; }
+  body.tp .tp-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+  body.tp .tp-stat { background: #fff; border-radius: 12px; border-left: 5px solid var(--c); padding: 14px 18px 16px;
+    box-shadow: 0 1px 2px rgba(20, 26, 34, .06), 0 4px 14px rgba(20, 26, 34, .05); display: flex; flex-direction: column; gap: 4px; }
+  body.tp .tp-stat b { font: 800 28px/1.1 Poppins, sans-serif; color: var(--c); font-variant-numeric: tabular-nums; }
+  body.tp .tp-stat span { font-size: 12.5px; line-height: 1.35; color: #3f4346; }
+  body.tp .tp-stat em { font-style: normal; font-size: 11.5px; color: #8a8d90; }
+  @media (max-width: 1280px) { body.tp .tp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { body.tp .tp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 480px) { body.tp .tp-stats { grid-template-columns: 1fr; } }
   .tp-ikon { position: absolute; top: 18px; right: 18px; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--ib, rgba(57, 82, 188, .1)); color: var(--ic, var(--primary)); }
   .tp-ikon .material-symbols-outlined { font-size: 22px; }
 

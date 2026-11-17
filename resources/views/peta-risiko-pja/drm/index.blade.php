@@ -149,11 +149,6 @@
     </div>
     @include('peta-risiko-pja.drm._beranda-pja-isi', ['denganSub' => true])
   </div>
-
-  <div class="pr-foot">
-    <p>Baseline dan pemetaan HIRA ↔ SAP mengikuti master mapping DRM 2.1 (M01–M16, unduh lewat "Unduh Excel mapping"). Semua tab memakai status mingguan (Minggu–Sabtu), bahaya umum dikeluarkan. "Terkontrol" = terkontrol menurut catatan SAP, bukan bukti kondisi lapangan.</p>
-    <p>Tanpa laporan bukan berarti aman. Overview, Group Lokasi, dan Kelompok Aktivitas memakai baseline unik (kelompok aktivitas × bahaya, tidak dipetakan ke PJA); Identifikasi per periode dan Semua PJA menjumlahkan baris tingkat PJA (satu detail lokasi bisa dimiliki 2 PJA).</p>
-  </div>
 @endif
 @endsection
 
@@ -317,13 +312,32 @@
       kFull: `≥${atas}% DL`, kPart: `${bawah}–${atas}% DL`, kGapo: `<${bawah}% DL`, kNone: '0% DL' };
   }
 
+  /**
+   * Kartu KPI: angka (bukan persen) dengan status gabungan antar detail lokasi, gaya dashboard DRM 2.1 lama.
+   * Snapshot tanpa kolom status (sebelum 17 Nov 2026) memakai kartu persen lama.
+   */
   function kartu4(V, V0, judul) {
+    if (!M.beranda.kolomMgmt.includes('idk')) return kartuPersen(V, V0, judul);
+    const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
+    const beda = (a, b) => (V0 ? ` · ${a - b >= 0 ? '+' : '−'}${DR.fmt(Math.abs(a - b))} vs minggu lalu` : '');
+    const kartu = (warna, k, label, ket) => `<div class="tp-stat" style="--c:${warna}" title="${DR.esc(ket)}${beda(V[k], V0 ? V0[k] : 0)}">
+      <b>${DR.fmt(V[k])}</b><span>${label}</span></div>`;
+    return `<p class="tp-stat-sub">Baseline · ${judul}: <b>${DR.fmt(V.t)}</b> ${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</p>
+      <div class="tp-stats">
+        ${kartu('#1a7f37', 'idk', 'Teridentifikasi &amp; Terkontrol', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun')}
+        ${kartu('#a07a00', 'idg', 'Teridentifikasi - Ada Gap', 'Bermasalah di minimal satu detail lokasi: belum closed, berulang, atau OAK Stop')}
+        ${kartu('#b42318', 'tid', 'Tidak Teridentifikasi (Open Risk)', 'Tidak ada laporan SAP di semua detail lokasinya')}
+        ${kartu('#7e3fb3', 'laten', 'Risiko Laten (pernah incident, kini blind spot SAP)', 'Tidak teridentifikasi, tetapi terkait insiden 12 bulan terakhir di salah satu detail lokasinya')}
+        ${kartu('#1a7f37', 'turun', 'Risiko Turun Kategori (Berhasil Dikontrol)', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal')}
+      </div>`;
+  }
+
+  function kartuPersen(V, V0, judul) {
     const W = DR.BW, R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null, L = LBL();
-    const cakupan = pitaAktif() && V.t ? ` · rata-rata cakupan ${DR.pct(V.cak / 1000, V.t)} DL` : '';
     const kartu = (ac, kc, j, a, naikBaik) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(a)}<small>${j}</small><b>${pctI(V[a], V.t)}</b><em>${DR.fmt(V[a])} baris${V0 ? ' · ' + delta(V[a], V.t, V0[a], V0.t, naikBaik) + ' vs minggu lalu' : ''}</em></div>`;
     const satuan = R ? 'kelompok aktivitas × bahaya-risiko unik (tidak dipetakan ke PJA / detail lokasi)' : 'jumlah baris tingkat PJA';
     return `<div class="br-kpis br-kpis-5">
-        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}${cakupan} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'} · ${gapTxt(V)}</em></div>
+        <div class="br-kpi" style="--ac:var(--navy);--kc:var(--navy)" title="Satuan: ${satuan}">${ikonKpi('t')}<small>Baseline · ${judul}</small><b>${DR.fmt(V.t)}</b><em>${R ? 'kelompok aktivitas × bahaya-risiko unik' : 'baris tingkat PJA'}</em></div>
         ${kartu(W.ok, 'var(--green-d)', L.full, 'full', true)}
         ${kartu(W.part, '#9A7300', L.part, 'part', false)}
         ${kartu(W.bm, W.bm, L.gapo, 'gapo', false)}
@@ -645,13 +659,14 @@
   function renderW() { if (state.tab === 'periode') renderPeriode(); else renderPja(); }
 
   // ------------------------------------------------------------ Identifikasi per periode (satuan ketat per minggu)
-  const KOSONG = { t: 0, full: 0, part: 0, gapo: 0, none: 0, g2: 0, g3: 0, g4: 0, cak: 0 };
+  const KOSONG = { t: 0, full: 0, part: 0, gapo: 0, none: 0, g2: 0, g3: 0, g4: 0, cak: 0, idk: 0, idg: 0, tid: 0, turun: 0, laten: 0 };
 
   /** Vektor KOLOM_MGMT per level → komposisi untuk level risiko terpilih. */
   function vekDari(perLv) {
     const K = M.beranda.kolomMgmt, ix = Object.fromEntries(K.map((k, i) => [k, i])), c = Array(K.length).fill(0);
     lvAmbil(perLv).forEach((lv) => ((perLv || {})[lv] || []).forEach((v, i) => { c[i] += v; }));
-    return { t: c[ix.tot], full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop], cak: ix.cak === undefined ? 0 : c[ix.cak] };
+    return { t: c[ix.tot], full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop],
+      ...Object.fromEntries(['cak', 'idk', 'idg', 'tid', 'turun', 'laten'].map((k) => [k, ix[k] === undefined ? 0 : c[ix[k]]])) };
   }
   /** Komposisi satu PJA pada minggu w. */
   const vekPja = (p, w) => vekDari((p.w || [])[w]);

@@ -53,9 +53,18 @@ class DrmSql
     public function daftarSite(): string
     {
         return '
-SELECT site, count() AS n FROM obds.bep_vw_site_lokasi_detil_lokasi
-WHERE status_detil_lokasi = \'1\' AND status_lokasi = \'1\' AND status_site = \'1\' AND ifNull(site, \'\') != \'\'
+SELECT Site AS site, count() AS n FROM obds.lokasi_histori
+WHERE Date = '.$this->tanggalLokasi().' AND ifNull(Site, \'\') != \'\'
 GROUP BY site ORDER BY n DESC';
+    }
+
+    /**
+     * Tanggal snapshot obds.lokasi_histori yang dipakai: hari terakhir yang tersedia <= tanggal akhir data.
+     * Tabel ini menyimpan daftar detail lokasi AKTIF per hari, jadi DL nonaktif tidak ikut baseline.
+     */
+    private function tanggalLokasi(): string
+    {
+        return '(SELECT max(Date) FROM obds.lokasi_histori WHERE Date <= toDate('.$this->q($this->sampai->toDateString()).'))';
     }
 
     public function sampai(): CarbonImmutable
@@ -412,8 +421,8 @@ sh AS (
     {
         return ',
 rdl AS (
-  SELECT lower(trim(site)) AS s, lower(trim(lokasi)) AS l, lower(trim(Detil_Lokasi)) AS d, any(toInt64(id_detil_lokasi)) AS dl
-  FROM obds.bep_vw_site_lokasi_detil_lokasi GROUP BY s, l, d
+  SELECT lower(trim(Site)) AS s, lower(trim(Lokasi)) AS l, lower(trim(`Detil Lokasi`)) AS d, argMax(`Id Detil Lokasi`, Date) AS dl
+  FROM obds.lokasi_histori GROUP BY s, l, d
 ),
 rci AS (
   SELECT ifNull(r.No_Incident, \'\') AS no, toDate(parseDateTimeBestEffortUSOrNull(r.Tanggal_Kejadian)) AS tgl, x.dl AS dl,
@@ -508,8 +517,8 @@ WHERE st.status = \'G\' OR ifNull(i.n_inc, 0) > 0';
 
         return ',
 dlk AS (
-  SELECT lower(trim(site)) AS s, lower(trim(lokasi)) AS l, lower(trim(Detil_Lokasi)) AS d, any(toInt64(id_detil_lokasi)) AS dl
-  FROM obds.bep_vw_site_lokasi_detil_lokasi GROUP BY s, l, d
+  SELECT lower(trim(Site)) AS s, lower(trim(Lokasi)) AS l, lower(trim(`Detil Lokasi`)) AS d, argMax(`Id Detil Lokasi`, Date) AS dl
+  FROM obds.lokasi_histori GROUP BY s, l, d
 ),
 rc AS (
   SELECT No_Kecelakaan AS no,
@@ -651,7 +660,8 @@ GROUP BY pl.pja_id, d.dl';
      * Prelude bersama. Fondasi baseline dari master DRM 2.1 (DrmMaster::literal, teks = CRC32):
      *   mh0   : baris HIRA v31 (M01) + kelompok aktivitas (M02) + kategori bahaya
      *   hira  : mh0 + atribut risiko dari mv_hira_master (cocok id_hira_master + teks bahaya)
-     *   dl    : detail lokasi master (M06) dicocokkan ke bep_vw_site_lokasi_detil_lokasi lewat nama
+     *   dl    : detail lokasi master (M06) dicocokkan lewat nama ke obds.lokasi_histori (snapshot harian DL aktif,
+     *           tanggal terakhir <= tanggal akhir data)
      *   pjadl : PJA per detail lokasi = PJA lokasinya di obds.aaj_lokasi_dan_pja (M07/M08), id = m_pja
      *   ma    : label Hazard/Inspeksi → baris (M09);  mb : teks aktivitas OBS/OAK → baris (M11/M12)
      *   md    : butir checklist OAK → baris lewat tema (M15/M16) + kelompok aktivitas sama / bahaya umum
@@ -741,14 +751,14 @@ hira AS (
   FROM mh0 m LEFT JOIN hm x ON x.hid = m.hid LEFT JOIN hg g ON g.hid = m.hid
 ),
 dl0 AS (
-  SELECT toInt64(t.id_detil_lokasi) AS dl, any(t.site) AS site, any(toInt64(t.id_lokasi)) AS id_lok,
-         any(t.lokasi) AS lokasi, any(t.Detil_Lokasi) AS detlok,
-         any(CRC32(concat('.$this->norm('t.site').', \'|\', '.$this->norm('t.lokasi').', \'|\', '.$this->norm('t.Detil_Lokasi').'))) AS kd,
-         any(CRC32(concat('.$this->norm('t.site').', \'|\', '.$this->norm('t.lokasi').'))) AS lk
-  FROM obds.bep_vw_site_lokasi_detil_lokasi AS t
-  WHERE ifNull(t.site, \'\') != \'\''
-            // Kolom ditulis lengkap (t.site): tanpa itu ClickHouse membaca `site` di WHERE sebagai alias any(site).
-            .($this->site !== null ? ' AND t.site = '.$this->q($this->site) : '').'
+  SELECT t.`Id Detil Lokasi` AS dl, any(t.Site) AS site, any(toInt64(t.`Id Lokasi`)) AS id_lok,
+         any(t.Lokasi) AS lokasi, any(t.`Detil Lokasi`) AS detlok,
+         any(CRC32(concat('.$this->norm('t.Site').', \'|\', '.$this->norm('t.Lokasi').', \'|\', '.$this->norm('t.`Detil Lokasi`').'))) AS kd,
+         any(CRC32(concat('.$this->norm('t.Site').', \'|\', '.$this->norm('t.Lokasi').'))) AS lk
+  FROM obds.lokasi_histori AS t
+  WHERE t.Date = '.$this->tanggalLokasi().' AND ifNull(t.Site, \'\') != \'\''
+            // Kolom ditulis lengkap (t.Site): tanpa itu ClickHouse membaca `site` di WHERE sebagai alias any(site).
+            .($this->site !== null ? ' AND t.Site = '.$this->q($this->site) : '').'
   GROUP BY dl
   HAVING kd IN (SELECT toUInt32(x.1) FROM (SELECT arrayJoin(m6) AS x))
 ),

@@ -141,7 +141,7 @@ class DrmBerandaTest extends TestCase
 
         $kel = $sql->berandaKelompok();
         $this->assertStringContainsString('toStartOfWeek(t_end, 0) AS wk0', $kel);
-        $this->assertStringContainsString("AND t.site = 'LMO'", $kel);
+        $this->assertStringContainsString("AND t.Site = 'LMO'", $kel);
         // Deteksi keluarga dari kelompok aktivitas teks OBS/OAK (spec dlEntB).
         $this->assertStringContainsString('FROM sap s JOIN okx k ON k.tx = s.tx', $kel);
 
@@ -174,5 +174,27 @@ class DrmBerandaTest extends TestCase
         $this->assertSame(800, $pita['w'][0]['High'][9]);                            // cakupan 80% (per mil)
         // Minggu 1 tanpa deteksi: pita 4 (0%).
         $this->assertSame([1, 0, 0, 0, 1], array_slice($pita['w'][1]['High'], 0, 5));
+    }
+
+    public function test_kartu_status_terkontrol_gap_open_laten_turun(): void
+    {
+        $b = (new DrmBeranda(config('peta_risiko_drm'), CarbonImmutable::parse(self::SAMPAI)))
+            ->denganGrup(['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Pit']])
+            ->denganInsiden(['2|h3' => true]);
+        $hira = [
+            'h1' => ['a' => '7', 'bn' => 'Jalan licin', 'proses' => 'K13', 'n1' => 'High', 'n2' => 'Medium'],
+            'h3' => ['a' => '8', 'bn' => 'Longsor', 'proses' => 'K6', 'n1' => 'High', 'n2' => 'Low'],
+        ];
+        // Minggu 0: K13 terdeteksi di DL 1 saja (DL 2 tanpa laporan) → h1 terkontrol (≥1 DL, tanpa masalah) + turun kategori.
+        // K6 tidak terdeteksi di mana pun → h3 open risk; DL 2 punya insiden → laten.
+        $idx = $b->indeks([['dl' => '1', 'kel' => 'K13', 'w' => '0:1', 'h' => '', 'last' => '2026-11-14']], []);
+        $pasangan = ['1' => ['h1', 'h3'], '2' => ['h1', 'h3']];
+        $dl = ['1' => ['grp' => 'Pit'], '2' => ['grp' => 'Pit']];
+        $berkas = $b->berkas(['1', '2'], $pasangan, $hira, $dl, $idx, []);
+        $m = $b->ringkasMgmt(['1', '2'], $pasangan, $hira, $berkas, [], true);
+
+        // [idk, idg, tid, turun, laten]
+        $this->assertSame([1, 0, 1, 1, 1], array_slice($m['w'][0]['High'], 10, 5));
+        $this->assertSame([0, 0, 2, 0, 1], array_slice($m['w'][1]['High'], 10, 5));
     }
 }
