@@ -131,6 +131,8 @@
   .dr-st.T { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
   .dr-gap { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; background: #f3f4f6; color: #8a8d90; white-space: nowrap; }
   .dr-gap.ya { background: #fdecee; color: #b91c1c; text-decoration: underline; }
+  .dr-gap.ya-ungu { background: #f1e8fa; color: #7e3fb3; }
+  .dr-bl-tbl { min-width: 1500px; }
   .dr-gap.na { background: transparent; color: #b0b3b6; font-style: italic; font-weight: 500; }
   .dr-item { border: 0; background: none; padding: 0; color: #1d4ed8; text-decoration: underline; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
   .dr-item:hover { color: #1e3a8a; }

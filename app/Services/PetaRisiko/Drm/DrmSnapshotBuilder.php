@@ -216,7 +216,7 @@ class DrmSnapshotBuilder
         $insidenPasangan = [];
         foreach ($d['sorot'] ?? [] as $r) {
             if ((int) ($r['n_inc'] ?? 0) > 0) {
-                $insidenPasangan[$r['dl'].'|'.$r['hid']] = true;
+                $insidenPasangan[$r['dl'].'|'.$r['hid']] = (int) $r['n_inc'];
             }
         }
         $b = (new DrmBeranda($cfg, $sampai))->denganGrup($dl)->denganInsiden($insidenPasangan);

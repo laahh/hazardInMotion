@@ -59,7 +59,7 @@ class DrmBeranda
     /** @var array<string, string> detail lokasi → grup lokasi (diisi oleh denganGrup) */
     private array $grupDl = [];
 
-    /** @var array<string, true> "dl|hid" yang terkait insiden 12 bulan terakhir (diisi oleh denganInsiden) */
+    /** @var array<string, int|true> "dl|hid" → jumlah insiden 12 bulan terakhir yang terkait (diisi oleh denganInsiden) */
     private array $insidenPasangan = [];
 
     /**
@@ -83,7 +83,7 @@ class DrmBeranda
         return $this;
     }
 
-    /** @param array<string, true> $pasangan "dl|hid" yang terkait insiden 12 bulan terakhir */
+    /** @param array<string, int|true> $pasangan "dl|hid" → jumlah insiden 12 bulan terakhir yang terkait */
     public function denganInsiden(array $pasangan): self
     {
         $this->insidenPasangan = $pasangan;
@@ -276,7 +276,7 @@ class DrmBeranda
             $selSisa = self::sel((string) ($h['k2'] ?? ''), (string) ($h['c2'] ?? ''));
             foreach ($x['w'] as $i => $st) {
                 [$kat, $cak] = self::nilai($st, $pita);
-                $ek = self::ekstra($st, $h, $x['inc']);
+                $ek = self::ekstra($st, $h, $x['inc'] > 0);
                 self::tambah($w[$i][$lv], $kat, $st[3], $cak, $ek);
                 self::tambah($kelW[$i][$lv][$kel], $kat, $st[3], $cak, $ek);
                 self::tambah($akt[$i][$lv][(string) ($h['a'] ?? '')], $kat, $st[3], $cak, $ek);
@@ -295,7 +295,7 @@ class DrmBeranda
             $a = (string) ($hira[$x['hid']]['a'] ?? '');
             foreach ($x['w'] as $i => $st) {
                 [$kat, $cak] = self::nilai($st, $pita);
-                $ek = self::ekstra($st, $hira[$x['hid']] ?? [], $x['inc']);
+                $ek = self::ekstra($st, $hira[$x['hid']] ?? [], $x['inc'] > 0);
                 self::tambah($gka[$i][$x['lv']][$x['grp'].'|'.$a], $kat, $st[3], $cak, $ek);
                 self::tambah($grpW[$i][$x['lv']][$x['grp']], $kat, $st[3], $cak, $ek);
                 self::tambah($gk[$i][$x['lv']][$x['grp'].'|'.$x['kel']], $kat, $st[3], $cak, $ek);
@@ -354,11 +354,12 @@ class DrmBeranda
                 $sw = self::urai((string) ($sp[$d.'|'.$hid][0] ?? ''));
                 $ku = $kel.'|'.$hid;
                 $kgu = $grp.'|'.$ku;
-                $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'inc' => false, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
-                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'hid' => (string) $hid, 'inc' => false, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
-                if (isset($this->insidenPasangan[$d.'|'.$hid])) {
-                    $unik[$ku]['inc'] = $unikGrup[$kgu]['inc'] = true;
-                }
+                $unik[$ku] ??= ['lv' => $lv, 'kel' => $kel, 'inc' => 0, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                $unikGrup[$kgu] ??= ['lv' => $lv, 'grp' => $grp, 'kel' => $kel, 'hid' => (string) $hid, 'inc' => 0, 'w' => array_fill(0, $nW, [0, 0, 0, 0])];
+                // Jumlah insiden terkait, dijumlah antar detail lokasi (satu insiden hanya di satu DL).
+                $nInc = (int) ($this->insidenPasangan[$d.'|'.$hid] ?? 0);
+                $unik[$ku]['inc'] += $nInc;
+                $unikGrup[$kgu]['inc'] += $nInc;
                 if ($volume) {
                     // [obs, oak, ketidaksesuaian, item obs, item oak, item label] per minggu, dijumlah antar detail lokasi.
                     $kv = $kvCache[$d.'|'.$kel] ??= self::uraiVol($this->vol['k'][$d.'|'.$kel] ?? '', [0, 1, 3, 4]);
@@ -394,7 +395,7 @@ class DrmBeranda
 
     /**
      * Baris gabungan per status mingguan untuk modal kartu KPI. Kode minggu (indeks 0 = minggu berjalan):
-     * K = teridentifikasi & terkontrol, G = ada gap, T = tidak teridentifikasi. inc = terkait insiden 12 bulan
+     * K = teridentifikasi & terkontrol, G = ada gap, T = tidak teridentifikasi. inc = jumlah insiden 12 bulan terkait
      * (laten bila T), tr = residual HIRA lebih rendah dari risiko awal (turun kategori bila K).
      *   u: [kel, hid, level, inc, tr, kode, gap, vol]          — baseline unik (Overview / Kelompok Aktivitas / Semua PJA)
      *   g: [grup, kel, hid, level, inc, tr, kode, gap, vol]    — per grup lokasi (tab Group Lokasi)
@@ -422,10 +423,10 @@ class DrmBeranda
         $u = $g = [];
         foreach ($unik as $ku => $x) {
             $hid = substr($ku, strpos($ku, '|') + 1);
-            $u[] = [$x['kel'], $hid, $x['lv'], (int) $x['inc'], $turun($hid), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
+            $u[] = [$x['kel'], $hid, $x['lv'], $x['inc'], $turun($hid), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
         }
         foreach ($unikGrup as $x) {
-            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], (int) $x['inc'], $turun($x['hid']), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
+            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], $x['inc'], $turun($x['hid']), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
         }
 
         return ['u' => $u, 'g' => $g];

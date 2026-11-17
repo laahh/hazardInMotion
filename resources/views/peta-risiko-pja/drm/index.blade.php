@@ -442,7 +442,7 @@
     d.querySelector('#dr-modal-n').textContent = `${DR.fmt(baris.length)} baris${q ? ` (dari ${DR.fmt(modalBaris.length)})` : ''}`;
     if (!baris.length) { d.querySelector('#dr-modal-isi').innerHTML = `<div class="pr-empty">${q ? 'Tidak ada yang cocok dengan pencarian.' : 'Tidak ada baris di kategori ini.'}</div>`; return; }
     const adaVol = baris.some((b) => b.gap !== undefined);
-    const NK = 16;
+    const NK = 18;
     const strip = '<span class="dr-nol" title="Belum ada di snapshot">–</span>';
     const gapSel = (ya, na, perluData = true) => (perluData && !adaVol ? strip : ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
     const item = (n, i, sumber) => (!adaVol ? strip : n > 0 ? `<button type="button" class="dr-item" data-i="${i}" data-sumber="${sumber}">${DR.fmt(n)} item</button>` : '<span class="dr-nol">0</span>');
@@ -458,7 +458,9 @@
       const m = parseInt((b.gap || '')[state.w] || '0', 16);
       const [nObs, nOak, nKet, iObs, iOak, iKet] = uraiVol(b.vol)[state.w] || [0, 0, 0, 0, 0, 0];
       const akhir = kode === 'K' && b.t[4] ? b.t[4] : b.lv;
-      const tanda = [b.inc ? '<span class="dr-tanda ungu">insiden 12 bln</span>' : '', b.tr ? '<span class="dr-tanda hijau">residual lebih rendah</span>' : ''].join('');
+      const tanda = b.tr ? '<span class="dr-tanda hijau">residual lebih rendah</span>' : '';
+      // inc = jumlah insiden 12 bulan terkait (snapshot lama: 1 = ya tanpa jumlah).
+      const insiden = +b.inc > 0 ? `<span class="dr-gap ya-ungu" title="Insiden 12 bulan terakhir yang root cause-nya terpetakan ke bahaya ini">Ya (${DR.fmt(+b.inc)})</span>` : '<span class="dr-gap">Tidak</span>';
       const T = kode === 'T';
       html += `<tr class="dr-modal-baris" data-i="${i}">
         <td class="akt">${DR.esc(b.t[0] || '-')}</td>
@@ -476,7 +478,9 @@
         <td class="c">${item(iKet, i, 'ket')}</td>
         <td class="n">${angka(nObs)}</td>
         <td class="n">${angka(nOak)}</td>
-        <td class="n">${angka(nKet)}</td></tr>`;
+        <td class="n">${angka(nKet)}</td>
+        <td class="n"><b>${angka(nObs + nOak + nKet)}</b></td>
+        <td class="c">${insiden}</td></tr>`;
     });
     const isi = d.querySelector('#dr-modal-isi');
     const wk = wKode(state.w);
@@ -485,7 +489,7 @@
       <th>Aktivitas</th><th>Sub Aktivitas</th><th>Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
       <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
       <th class="c">Item Sumber Observasi</th><th class="c">Item Sumber OAK</th><th class="c">Item Sumber Ketidaksesuaian</th>
-      <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th></tr></thead><tbody>${html}</tbody></table>`;
+      <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th><th class="n">Vol. Total</th><th class="c">Pernah Incident? <small>(12 bln)</small></th></tr></thead><tbody>${html}</tbody></table>`;
     isi.querySelectorAll('.dr-item').forEach((btn) => btn.addEventListener('click', () => bukaItem(baris[+btn.dataset.i], btn.dataset.sumber)));
   }
 
