@@ -27,6 +27,13 @@ Route::prefix('peta-risiko-pja')
         });
 
         // Master mapping DRM 2.1 (koreksi baseline → PJA), berlaku pada sync berikutnya.
+        // Master per baris (Item Sumber OBS / OAK / Ketidaksesuaian per baris HIRA) — acuan utama, didaftarkan sebelum /{tabel}.
+        Route::prefix('master/baris')->name('master.baris.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoMasterBarisController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/{ri}/label', 'tambah')->whereNumber('ri')->middleware('throttle:120,1')->name('tambah');
+            Route::post('/label/{jenis}/{id}/hapus', 'hapus')->where(['jenis' => 'teks|label'])->whereNumber('id')->middleware('throttle:120,1')->name('hapus');
+        });
+
         Route::prefix('master')->name('master.')->controller(PetaRisikoMasterController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/log', 'log')->name('log');

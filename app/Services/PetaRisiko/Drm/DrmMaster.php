@@ -193,6 +193,21 @@ final class DrmMaster
     }
 
     /**
+     * Label Hazard / Inspeksi (M09) yang dihitung: semua label master kecuali yang kolom sumbernya ada di
+     * config `m09_sumber_dikecualikan` (mis. "Pemetaan label baru (label)", tidak ada di dokumentasi Risk Matrix 5x5).
+     *
+     * @param  array<string, mixed>  $cfg
+     * @return list<array{k: string, sk: string, ri: list<int>, sumber?: string}>
+     */
+    public function labelHazard(array $cfg): array
+    {
+        $buang = array_flip(array_map(fn ($s) => mb_strtolower(trim((string) $s)), (array) ($cfg['m09_sumber_dikecualikan'] ?? [])));
+
+        return array_values(array_filter((array) ($this->data['label'] ?? []),
+            fn (array $l) => ! isset($buang[mb_strtolower(trim((string) ($l['sumber'] ?? '')))])));
+    }
+
+    /**
      * Aktivitas OAK → baris HIRA dari kurasi config `oak_aktivitas_hira` (aktivitas OAK → daftar aktivitas HIRA).
      * Laporan OAK beraktivitas itu (sub apa pun) menandai semua baris HIRA beraktivitas di daftar, di samping label M12.
      *
@@ -278,12 +293,8 @@ final class DrmMaster
         if (! empty($this->data['tema'])) {
             $cfg['tema_checklist'] = $this->data['tema'];
         }
-        // Kurasi aktivitas OAK → aktivitas HIRA dari tabel drm_master_oak_aktivitas bila sudah diisi (bisa disesuaikan
-        // di /peta-risiko-pja/master); selain itu tetap dari config.
-        $oak = Master\DrmMasterDb::oakAktivitas();
-        if ($oak !== null) {
-            $cfg['oak_aktivitas_hira'] = $oak;
-        }
+        // Catatan: kurasi aktivitas OAK (tabel drm_master_oak_aktivitas / config oak_aktivitas_hira_usulan) TIDAK ikut
+        // perhitungan; hanya sumber untuk menurunkan label OAK per baris ke master (peta-risiko:master-db --turunkan-oak).
 
         return $cfg;
     }
@@ -396,12 +407,12 @@ final class DrmMaster
         }
 
         $m9 = [];
-        foreach ($this->data['label'] as $l) {
+        foreach ($this->labelHazard($cfg) as $l) {
             $m9[self::crc(self::norm($l['k']).' / '.self::norm($l['sk']))] = $l['ri'];
         }
 
         $mo = [];
-        // Label OBS / OAK → baris, diperluas ke aktivitas + sub aktivitas yang sama (labelTeksAktivitas).
+        // Label OBS (M11) / OAK (M12) → baris (labelTeksAktivitas; perluasan aktivitas hanya bila config menyalakannya).
         foreach ([...$this->labelTeksAktivitas('obs'), ...$this->labelTeksAktivitas('oak')] as $t) {
             $mo[$t['crc']] = array_values(array_unique([...($mo[$t['crc']] ?? []), ...$t['ri']]));
         }

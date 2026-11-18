@@ -236,6 +236,70 @@ final class DrmMasterDb
         return count($rows);
     }
 
+    /** Nilai kolom sumber untuk label OAK hasil penurunan kurasi aktivitas. */
+    public const SUMBER_TURUNAN_OAK = 'kurasi aktivitas OAK';
+
+    /**
+     * Turunkan kurasi aktivitas OAK → aktivitas HIRA menjadi label OAK EKSPLISIT per baris di drm_master_teks:
+     * tiap baris HIRA beraktivitas terkurasi mendapat label "aktivitas OAK / sub aktivitas" untuk setiap sub aktif
+     * aktivitas OAK itu. Label yang sudah ada (kunci DrmMaster::normTeks sama, baris sama) tidak diduplikasi; turunan
+     * lama (sumber = SUMBER_TURUNAN_OAK) diganti. Setelah itu label bisa dihapus satu per satu di editor per baris.
+     *
+     * @param  array<string, list<string>>  $kurasi  aktivitas OAK → [aktivitas HIRA]
+     * @param  array<string, list<string>>  $subPerAktivitas  aktivitas OAK → [sub aktivitas aktif] (master OAK)
+     * @return array{baris: int, label: int}  baris HIRA tersentuh, label baru
+     */
+    public function turunkanOak(array $kurasi, array $subPerAktivitas): array
+    {
+        if (! self::siap() || ! Schema::hasColumn('drm_master_teks', 'sumber')) {
+            throw new RuntimeException('Tabel master / kolom drm_master_teks.sumber belum dimigrasi (2026_11_18_110000_add_sumber_to_drm_master_teks_table).');
+        }
+        $riPerAkt = [];
+        foreach (DB::table('drm_master_baris')->where('aktif', true)->get(['ri', 'aktivitas']) as $b) {
+            $riPerAkt[DrmMaster::normTeks((string) $b->aktivitas)][] = (int) $b->ri;
+        }
+        $subNorm = [];
+        foreach ($subPerAktivitas as $akt => $subs) {
+            $subNorm[DrmMaster::normTeks((string) $akt)] = [(string) $akt, (array) $subs];
+        }
+        $ada = [];
+        foreach (DB::table('drm_master_teks')->where('jenis', 'OAK')->where(fn ($q) => $q->whereNull('sumber')->orWhere('sumber', '!=', self::SUMBER_TURUNAN_OAK))->get(['teks', 'ri']) as $t) {
+            $ada[DrmMaster::crcTeks((string) $t->teks).'|'.(int) $t->ri] = true;
+        }
+
+        $sekarang = now();
+        $rows = [];
+        $barisSentuh = [];
+        foreach ($kurasi as $oak => $daftarHira) {
+            [$namaOak, $subs] = $subNorm[DrmMaster::normTeks((string) $oak)] ?? [(string) $oak, []];
+            foreach ((array) $daftarHira as $hira) {
+                foreach ($riPerAkt[DrmMaster::normTeks((string) $hira)] ?? [] as $ri) {
+                    foreach ($subs as $sub) {
+                        $teks = trim($namaOak).' / '.trim((string) $sub);
+                        $kunci = DrmMaster::crcTeks($teks).'|'.$ri;
+                        if (isset($ada[$kunci])) {
+                            continue;
+                        }
+                        $ada[$kunci] = true;
+                        $barisSentuh[$ri] = true;
+                        $rows[] = ['jenis' => 'OAK', 'teks' => mb_substr($teks, 0, 500), 'ri' => $ri, 'sumber' => self::SUMBER_TURUNAN_OAK,
+                            'aktif' => true, 'created_at' => $sekarang, 'updated_at' => $sekarang];
+                    }
+                }
+            }
+        }
+        DB::transaction(function () use ($rows) {
+            DB::table('drm_master_teks')->where('jenis', 'OAK')->where('sumber', self::SUMBER_TURUNAN_OAK)->delete();
+            foreach (array_chunk($rows, self::PECAH) as $potong) {
+                DB::table('drm_master_teks')->insert($potong);
+            }
+        });
+        $hasil = ['baris' => count($barisSentuh), 'label' => count($rows)];
+        $this->catat('drm_master_teks', 'OAK:'.self::SUMBER_TURUNAN_OAK, 'isi', null, $hasil);
+
+        return $hasil;
+    }
+
     /**
      * @param  array<string, mixed>  $cfg
      * @return list<array<string, mixed>>
@@ -243,7 +307,8 @@ final class DrmMasterDb
     private function barisOakAktivitas(array $cfg, callable $cap): array
     {
         $rows = [];
-        foreach ((array) ($cfg['oak_aktivitas_hira'] ?? []) as $oak => $daftar) {
+        // Sumber: oak_aktivitas_hira bila diisi, selain itu draf oak_aktivitas_hira_usulan.
+        foreach ((array) (($cfg['oak_aktivitas_hira'] ?? []) ?: ($cfg['oak_aktivitas_hira_usulan'] ?? [])) as $oak => $daftar) {
             foreach (array_unique((array) $daftar) as $hira) {
                 $rows[] = $cap(['aktivitas_oak' => mb_substr((string) $oak, 0, 300), 'aktivitas_hira' => mb_substr((string) $hira, 0, 500), 'aktif' => true]);
             }

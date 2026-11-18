@@ -27,6 +27,7 @@ class DrmMasterOakAktivitasTest extends TestCase
         DB::setDefaultConnection('uji_drm');
         (require base_path('database/migrations/2026_11_17_100000_create_drm_master_tables.php'))->up();
         (require base_path('database/migrations/2026_11_18_100000_create_drm_master_oak_aktivitas_table.php'))->up();
+        (require base_path('database/migrations/2026_11_18_110000_add_sumber_to_drm_master_teks_table.php'))->up();
         DrmMasterDb::lupakanCacheOak();
     }
 
@@ -52,7 +53,8 @@ class DrmMasterOakAktivitasTest extends TestCase
         $n = app(DrmMasterDb::class)->isiOakAktivitas(['oak_aktivitas_hira' => ['Dumping' => ['Dumping OB', 'Soil Dumping'], 'Loading' => ['Coal Loading']]]);
         $this->assertSame(3, $n);
         $this->assertSame(['Dumping' => ['Dumping OB', 'Soil Dumping'], 'Loading' => ['Coal Loading']], DrmMasterDb::oakAktivitas());
-        $this->assertSame(['Dumping' => ['Dumping OB', 'Soil Dumping'], 'Loading' => ['Coal Loading']], $master->cfgEfektif($cfg)['oak_aktivitas_hira']);
+        // Kurasi TIDAK ikut perhitungan (hanya sumber penurunan label per baris).
+        $this->assertSame($cfg['oak_aktivitas_hira'], $master->cfgEfektif($cfg)['oak_aktivitas_hira']);
         $this->assertSame(1, DB::table('drm_master_log')->where('tabel', 'drm_master_oak_aktivitas')->count());
 
         // Tautan yang dinonaktifkan tidak dihitung.
@@ -62,5 +64,31 @@ class DrmMasterOakAktivitasTest extends TestCase
 
         // Tab editor muncul karena tabel sudah ada.
         $this->assertArrayHasKey('oak_aktivitas', DrmMasterSkema::semua());
+    }
+
+    public function test_kurasi_diturunkan_jadi_label_oak_per_baris_tanpa_duplikat(): void
+    {
+        $kini = now();
+        DB::table('drm_master_baris')->insert([
+            ['ri' => 1, 'aid' => 1, 'aktivitas' => 'Dumping OB', 'sub' => 'a', 'bahaya' => 'x', 'kb' => 'High', 'umum' => false, 'idh' => '', 'aktif' => true, 'created_at' => $kini, 'updated_at' => $kini],
+            ['ri' => 2, 'aid' => 1, 'aktivitas' => 'Dumping OB', 'sub' => 'b', 'bahaya' => 'y', 'kb' => 'High', 'umum' => false, 'idh' => '', 'aktif' => true, 'created_at' => $kini, 'updated_at' => $kini],
+            ['ri' => 3, 'aid' => 2, 'aktivitas' => 'Workshop', 'sub' => 'c', 'bahaya' => 'z', 'kb' => 'High', 'umum' => false, 'idh' => '', 'aktif' => true, 'created_at' => $kini, 'updated_at' => $kini],
+        ]);
+        // Label M12 asli yang sudah ada (alias "Risk Intervention Center" = "Langsung") tidak boleh diduplikasi.
+        DB::table('drm_master_teks')->insert(['jenis' => 'OAK', 'teks' => 'Dumping / Risk Intervention Center - Penimbunan (Dumping)', 'ri' => 1, 'aktif' => true, 'created_at' => $kini, 'updated_at' => $kini]);
+
+        $kurasi = ['Dumping' => ['Dumping OB']];
+        $sub = ['Dumping' => ['Langsung - Penimbunan (Dumping)', 'CCV Dumping di ROM']];
+        $db = app(DrmMasterDb::class);
+        $this->assertSame(['baris' => 2, 'label' => 3], $db->turunkanOak($kurasi, $sub));
+        $turunan = DB::table('drm_master_teks')->where('sumber', DrmMasterDb::SUMBER_TURUNAN_OAK)->orderBy('ri')->orderBy('teks')->get(['ri', 'teks'])
+            ->map(fn ($t) => $t->ri.':'.$t->teks)->all();
+        $this->assertSame(['1:Dumping / CCV Dumping di ROM', '2:Dumping / CCV Dumping di ROM', '2:Dumping / Langsung - Penimbunan (Dumping)'], $turunan);
+
+        // Dijalankan ulang: turunan lama diganti, tidak menumpuk; Workshop tidak tersentuh.
+        $db->turunkanOak($kurasi, $sub);
+        $this->assertSame(3, DB::table('drm_master_teks')->where('sumber', DrmMasterDb::SUMBER_TURUNAN_OAK)->count());
+        $this->assertSame(0, DB::table('drm_master_teks')->where('ri', 3)->count());
+        $this->assertSame(4, DB::table('drm_master_teks')->where('jenis', 'OAK')->count());
     }
 }

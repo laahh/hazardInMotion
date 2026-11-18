@@ -80,12 +80,32 @@ return [
     'label_obs_oak_per_aktivitas' => false,
 
     /*
-    | Aktivitas OAK → aktivitas HIRA (kurasi 17 Nov 2026, melengkapi M12 yang hanya 79 label / 93 baris).
-    | Laporan OAK dengan aktivitas di kiri (sub aktivitas apa pun) menandai SEMUA baris HIRA beraktivitas di kanan,
-    | di samping label M12. Nama dicocokkan tanpa beda huruf besar / spasi / tanda baca (DrmMaster::normTeks).
-    | Tidak dipetakan: "Trial CCV ENV BMO1", "[Trial] Survey" (uji coba).
+    | Aktivitas OAK → aktivitas HIRA yang IKUT DIHITUNG di samping label M12. Sengaja KOSONG (keputusan user 17 Nov 2026):
+    | mapping harus spesifik per baris (aktivitas – sub – bahaya), jangan dipaksakan. Tautan tingkat aktivitas membuat
+    | satu OAK menutup semua bahaya di aktivitas itu (mis. OAK Refueling → semua bahaya "Pembersihan Dispenser").
+    | Format: 'aktivitas OAK' => ['aktivitas HIRA', ...]. Isi hanya untuk tautan yang sudah disetujui pemilik mapping.
     */
-    'oak_aktivitas_hira' => [
+    'oak_aktivitas_hira' => [],
+
+    /*
+    | Butir Tidak Sesuai pada OAK ikut gap baris. false (bawaan): tanpa mapping butir checklist → bahaya per baris,
+    | butir Tidak Sesuai tidak bisa dipastikan menyangkut bahaya baris itu; gap OAK cukup Stop Pekerjaan (dokumentasi).
+    */
+    'oak_tidak_sesuai_gap' => false,
+
+    /*
+    | Label Hazard (M09) yang TIDAK dihitung, menurut kolom sumber di master. Bawaan kosong (18 Nov 2026): master per
+    | baris menjadi acuan utama dan label yang janggal dihapus langsung di editor master. Bisa diisi mis.
+    | ['Pemetaan label baru (label)'] (250 label, tidak ada di dokumentasi Risk Matrix; 33% pasangannya janggal).
+    */
+    'm09_sumber_dikecualikan' => [],
+
+    /*
+    | USULAN (TIDAK DIHITUNG) — draf kurasi aktivitas OAK → aktivitas HIRA dari 17 Nov 2026, bahan awal pemilik mapping.
+    | Terlalu longgar untuk dipakai langsung (tingkat aktivitas, bukan per bahaya). Pindahkan tautan yang disetujui ke
+    | `oak_aktivitas_hira`, atau lebih baik jadikan label M12 per baris di Master mapping.
+    */
+    'oak_aktivitas_hira_usulan' => [
         'Pengoperasian Kendaraan dan Unit, termasuk Hauling OB & Coal' => [
             'Coal Hauling', 'Hauling Coal', 'Hauling material', 'Hauling OB', 'Hauling Soil', 'Driving',
             'Pengoperasian kendaraan dan unit', 'Pengoperasian Unit & Kendaraan', 'Pengoperasian Unit dan Kendaraan',

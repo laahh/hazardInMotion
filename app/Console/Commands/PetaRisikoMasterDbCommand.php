@@ -15,7 +15,10 @@ use Throwable;
  *   --isi      isi/timpa semua tabel dari baseline awal: master.json (impor workbook) + regex config
  *              (kelompok aktivitas, tema, kurasi aktivitas OAK) + PJA per lokasi dari obds.aaj_lokasi_dan_pja (ClickHouse).
  *   --isi-oak  isi/timpa HANYA tabel kurasi aktivitas OAK → aktivitas HIRA (drm_master_oak_aktivitas) dari config
- *              oak_aktivitas_hira; tabel master lain tidak tersentuh.
+ *              oak_aktivitas_hira_usulan; tabel master lain tidak tersentuh.
+ *   --turunkan-oak  turunkan kurasi itu menjadi label OAK "aktivitas / sub aktivitas" per baris di drm_master_teks
+ *              (Item Sumber OAK master), memakai sub aktivitas aktif dari master OAK (ClickHouse). Kurasi sendiri
+ *              tidak dihitung sync; yang dihitung hanya label per baris.
  * Tanpa opsi: tampilkan status (jumlah baris per tabel, perubahan terakhir).
  * Setelah tabel terisi, peta-risiko:sync memakai database, bukan master.json.
  */
@@ -24,6 +27,7 @@ class PetaRisikoMasterDbCommand extends Command
     protected $signature = 'peta-risiko:master-db
         {--isi : Isi/timpa semua tabel master dari baseline awal (koreksi manual di database ikut tertimpa)}
         {--isi-oak : Isi/timpa hanya tabel kurasi aktivitas OAK → aktivitas HIRA dari config}
+        {--turunkan-oak : Turunkan kurasi aktivitas OAK menjadi label OAK per baris (Item Sumber OAK) di master}
         {--force : Lewati konfirmasi saat menimpa tabel yang sudah berisi}';
 
     protected $description = 'Status / pengisian awal tabel master mapping Peta Risiko PJA (drm_master_*)';
@@ -35,6 +39,9 @@ class PetaRisikoMasterDbCommand extends Command
     {
         if ($this->option('isi-oak')) {
             return $this->isiOak($db);
+        }
+        if ($this->option('turunkan-oak')) {
+            return $this->turunkanOak($db, $ch);
         }
         if (! DrmMasterDb::siap()) {
             $this->error('Tabel master belum ada. Jalankan migrasi 2026_11_17_100000_create_drm_master_tables lebih dulu.');
@@ -92,6 +99,42 @@ ORDER BY site, lokasi, pja', 120));
         }
         $this->info("Tabel kurasi aktivitas OAK terisi: {$n} pasangan aktivitas OAK → aktivitas HIRA.");
         $this->line('Sesuaikan di /peta-risiko-pja/master (tab "Aktivitas OAK → aktivitas HIRA"), lalu jalankan peta-risiko:sync.');
+
+        return self::SUCCESS;
+    }
+
+    private function turunkanOak(DrmMasterDb $db, RfidClickHouseClient $ch): int
+    {
+        if (! DrmMasterDb::terisi()) {
+            $this->error('Tabel master belum berisi. Jalankan peta-risiko:master-db --isi lebih dulu (master per baris = acuan utama).');
+
+            return self::FAILURE;
+        }
+        $cfg = (array) config('peta_risiko_drm');
+        $kurasi = DrmMasterDb::oakAktivitas() ?? (array) (($cfg['oak_aktivitas_hira'] ?? []) ?: ($cfg['oak_aktivitas_hira_usulan'] ?? []));
+        if ($kurasi === []) {
+            $this->warn('Tidak ada kurasi aktivitas OAK (tabel drm_master_oak_aktivitas kosong dan config usulan kosong).');
+
+            return self::SUCCESS;
+        }
+        try {
+            $this->line('Mengambil sub aktivitas aktif dari master OAK (obds.m_oak_activity / m_oak_sub_activity)…');
+            $subPerAkt = [];
+            foreach ($ch->select('
+SELECT a.name AS akt, s.name AS sub
+FROM (SELECT toInt64(id) AS id, any(name) AS name, any(id_act_observe) AS ida FROM obds.m_oak_sub_activity FINAL WHERE toString(is_active) = \'1\' GROUP BY id) s
+JOIN (SELECT toInt64(id) AS id, any(name) AS name FROM obds.m_oak_activity FINAL WHERE toString(is_active) = \'1\' GROUP BY id) a ON a.id = toInt64(s.ida)
+ORDER BY akt, sub', 120) as $r) {
+                $subPerAkt[(string) $r['akt']][] = (string) $r['sub'];
+            }
+            $hasil = $db->turunkanOak($kurasi, $subPerAkt);
+        } catch (Throwable $e) {
+            $this->error('Gagal: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+        $this->info("Label OAK turunan kurasi: {$hasil['label']} label di {$hasil['baris']} baris HIRA (sumber \"".DrmMasterDb::SUMBER_TURUNAN_OAK.'").');
+        $this->line('Periksa & hapus yang tidak sesuai di /peta-risiko-pja/master/baris, lalu jalankan peta-risiko:sync.');
 
         return self::SUCCESS;
     }

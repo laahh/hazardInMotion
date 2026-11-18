@@ -835,13 +835,13 @@ evo AS (
 base AS (
   SELECT dl, arrayJoin(rs) AS hid, toUInt8(0) AS via_bukti FROM (SELECT d.dl AS dl, g.rs AS rs FROM dl d JOIN mgx g ON g.gid = d.gid)
 ),
--- OBS / OAK menangkap BARIS HIRA (dokumentasi Risk Matrix 5x5 + keputusan user 17 Nov 2026, "gabungan nomor 3"):
---   OBS : jenis kegiatan (`aktivitas  OBS`, ch_rfid) → baris M11 (label persis). Item = label.
---   OAK : bcbeats.oak_register (ber-ID, tanpa duplikasi; nama aktivitas / sub dari master OAK obds):
---         1) BERLAKU  = baris dari label M12 "aktivitas / sub" ∪ kurasi aktivitas OAK → aktivitas HIRA (mkx);
---         2) TERTANGKAP = baris berlaku yang bertema sama (M16) dengan butir checklist yang dijawab Sesuai / Tidak Sesuai
---            (tema M15 dari teks objek + detail objek). Butir Tidak Sesuai dan kesimpulan Stop Pekerjaan = gap.
---         Item = label aktivitas / sub OAK.
+-- OBS / OAK menangkap BARIS HIRA lewat label persis per baris di master (dokumentasi Risk Matrix 5x5; keputusan user
+-- 17 Nov 2026: mapping spesifik per aktivitas – sub – bahaya, jangan dipaksakan):
+--   OBS : jenis kegiatan (`aktivitas  OBS`, ch_rfid) → baris M11.
+--   OAK : "aktivitas / sub aktivitas" (bcbeats.oak_register, ber-ID, nama dari master OAK obds) → baris M12, plus
+--         kurasi aktivitas OAK hanya bila config oak_aktivitas_hira diisi (bawaan kosong). Gap = Stop Pekerjaan;
+--         butir Tidak Sesuai hanya bila config oak_tidak_sesuai_gap = true.
+--   Item = label.
 oakr AS (
   SELECT toInt64(r.id) AS rid, toInt64(r.id_location) AS dl, toDate(r.submit_date) AS d,
          toUInt8(ifNull(r.id_conclusion, 0) = '.(int) $c['oak_checklist']['stop'].') AS stop,
@@ -857,26 +857,10 @@ oke AS (
   FROM oakr o LEFT JOIN mox m ON m.kc = o.kl LEFT JOIN mkx a ON a.ka = o.ka
   WHERE notEmpty(arrayConcat(m.rs, a.rs))
 ),
-ojt AS (
-  SELECT toInt64(id_oak_register) AS rid, toInt64(id_detail_object) AS did, toInt64(id_suitability) AS sid
-  FROM '.self::tabelOak($c, 'detail').'
-  WHERE id_suitability IN ('.(int) $c['oak_checklist']['sesuai'].', '.(int) $c['oak_checklist']['tidak_sesuai'].')
-    AND toInt64(id_oak_register) IN (SELECT rid FROM oke)
-),
-itx AS (
-  SELECT q.did AS did, multiMatchAllIndices(concat(\' \', lower(concat(o.name, \' \', dt.name)), \' \'), tc) AS tm
-  FROM (SELECT DISTINCT did FROM ojt) AS q
-  JOIN obds.m_oak_detail_objek AS dt FINAL ON dt.id = q.did
-  JOIN obds.m_oak_objek_pengamatan AS o FINAL ON o.id = dt.id_objek_pengamatan_observe
-),
--- Butir yang dijawab → baris bertema sama (kandidat), per laporan.
-okb AS (
-  SELECT j.rid AS rid, t.hid AS hid, max(toUInt8(j.sid = '.(int) $c['oak_checklist']['tidak_sesuai'].')) AS ts
-  FROM ojt j
-  JOIN (SELECT did, arrayJoin(tm) AS tema FROM itx) i ON i.did = j.did
-  JOIN mtx t ON t.tema = i.tema
-  GROUP BY j.rid, t.hid
-),
+'.(! empty($c['oak_tidak_sesuai_gap']) ? 'okts AS (
+  SELECT DISTINCT toInt64(id_oak_register) AS rid FROM '.self::tabelOak($c, 'detail').'
+  WHERE id_suitability = '.(int) $c['oak_checklist']['tidak_sesuai'].' AND toInt64(id_oak_register) IN (SELECT rid FROM oke)
+),' : 'okts AS (SELECT toInt64(0) AS rid WHERE 0),').'
 evr AS (
   SELECT s.dl AS dl, hid, s.d AS d, \'obs\' AS src, toInt64(k.kc) AS item, toUInt8(0) AS ts, toUInt8(0) AS stop
   FROM sap s
@@ -885,9 +869,10 @@ evr AS (
   ARRAY JOIN m.rs AS hid
   WHERE s.j = \'OBSERVASI\' AND NOT s.na AND (s.dl, hid) IN (SELECT dl, hid FROM base)
   UNION ALL
-  SELECT e.dl, b.hid, e.d, \'oak\', toInt64(e.kl), b.ts, e.stop
-  FROM oke e JOIN okb b ON b.rid = e.rid
-  WHERE has(e.el, b.hid) AND (e.dl, b.hid) IN (SELECT dl, hid FROM base)
+  SELECT e.dl, hid, e.d, \'oak\', toInt64(e.kl), toUInt8(e.rid IN (SELECT rid FROM okts)), e.stop
+  FROM oke e
+  ARRAY JOIN e.el AS hid
+  WHERE (e.dl, hid) IN (SELECT dl, hid FROM base)
 ),
 evd AS (SELECT dl, hid, d, max(ts) AS ts, max(stop) AS stop FROM evr GROUP BY dl, hid, d),
 -- Baris yang punya jalur identifikasi SAP di master (label M09, teks OBS/OAK M11/M12, atau tema M16).
