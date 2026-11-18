@@ -19,15 +19,10 @@
 @section('content')
 <style>
   .mb-banner { display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.5; }
-  .mb-banner.info { background: #eef1fd; color: #2b3a8f; border: 1px solid rgba(57, 82, 188, .2); }
   .mb-banner.warn { background: #fff7e6; color: #8a5300; border: 1px solid rgba(217, 119, 6, .25); }
   .mb-banner.ok { background: #e9f7ee; color: #146c34; border: 1px solid rgba(22, 163, 74, .25); }
   .mb-banner.err { background: #fdecef; color: #9b1c31; border: 1px solid rgba(200, 16, 46, .25); }
   .mb-banner code { background: rgba(0, 0, 0, .06); padding: 1px 6px; border-radius: 6px; }
-  .mb-ring { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .mb-ring div { background: #fff; border: 1px solid rgba(0, 0, 0, .08); border-radius: 14px; padding: 12px 14px; }
-  .mb-ring small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #595c5e; }
-  .mb-ring b { font-size: 22px; font-weight: 800; color: #2c2f31; }
   .mb-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 20px; border-bottom: 1px solid rgba(171, 173, 175, .2); }
   .mb-bar input[type=search] { flex: 1 1 280px; max-width: 420px; padding: 9px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #f8fafc; font-size: 13.5px; }
   .mb-bar select { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; }
@@ -60,7 +55,6 @@
   .mb-ubah { display: inline-block; margin-top: 6px; font-size: 11.5px; font-weight: 600; color: #3952bc; text-decoration: none; }
   .mb-ubah:hover { text-decoration: underline; }
   .mb-scroll { overflow-x: auto; }
-  @media (max-width: 760px) { .mb-ring { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 
 @if (session('pesan'))
@@ -84,19 +78,6 @@
     @endif
   </div></div>
 @else
-  <div class="mb-banner info"><span class="material-symbols-outlined">info</span><div>
-    @if ($modeKolom) Master satu tabel: label disimpan di kolom Item Sumber pada tabel baris HIRA (<code>drm_master_baris</code>); "Ubah baris" untuk mengubah aktivitas, sub aktivitas, bahaya, atau seluruh label sekaligus.
-    @else Label <b>kuning</b> = turunan kurasi aktivitas OAK (periksa, hapus yang tidak sesuai). Label <b>hijau</b> = ditambah manual. @endif
-    Label OAK ditulis <code>Aktivitas OAK / Sub aktivitas</code>; label OBS = jenis kegiatan observasi; huruf besar/kecil, spasi, dan tanda baca diabaikan saat dicocokkan.
-    @unless ($bolehUbah) Anda hanya bisa melihat; hubungi admin untuk menjadi editor. @endunless</div></div>
-
-  <div class="mb-ring">
-    <div><small>Baris HIRA aktif</small><b>{{ number_format($jumlah['baris'], 0, ',', '.') }}</b></div>
-    <div><small>Baris berlabel Observasi</small><b>{{ number_format($jumlah['OBS'], 0, ',', '.') }}</b></div>
-    <div><small>Baris berlabel OAK</small><b>{{ number_format($jumlah['OAK'], 0, ',', '.') }}</b></div>
-    <div><small>Baris berlabel Ketidaksesuaian</small><b>{{ number_format($jumlah['KET'], 0, ',', '.') }}</b></div>
-  </div>
-
   <div class="pr-card">
     <div class="mb-bar">
       <select id="mb-f-kb" aria-label="Risiko awal">

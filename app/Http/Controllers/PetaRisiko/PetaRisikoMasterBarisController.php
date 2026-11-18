@@ -62,9 +62,7 @@ final class PetaRisikoMasterBarisController extends Controller
         // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.
         return view('peta-risiko-pja.drm.master-baris', array_merge($data, [
             'terisi' => true,
-            'modeKolom' => $kolom,
             'rows' => $rows,
-            'jumlah' => $this->jumlah($kolom),
         ], $this->saran($kolom)));
     }
 
@@ -171,22 +169,6 @@ final class PetaRisikoMasterBarisController extends Controller
         }
 
         return $hasil;
-    }
-
-    /** @return array<string, int> */
-    private function jumlah(bool $kolom): array
-    {
-        $aktif = fn () => DB::table('drm_master_baris')->where('aktif', true);
-        if ($kolom) {
-            return ['baris' => $aktif()->count()] + array_map(fn ($k) => $aktif()->whereNotNull($k)->where($k, '!=', '')->count(), DrmMasterDb::KOLOM_LABEL);
-        }
-
-        return [
-            'baris' => $aktif()->count(),
-            'OBS' => DB::table('drm_master_teks')->where('aktif', true)->where('jenis', 'OBS')->distinct()->count('ri'),
-            'OAK' => DB::table('drm_master_teks')->where('aktif', true)->where('jenis', 'OAK')->distinct()->count('ri'),
-            'KET' => DB::table('drm_master_label')->where('aktif', true)->distinct()->count('ri'),
-        ];
     }
 
     /** Saran isian (datalist) dari label yang sudah ada. @return array<string, list<string>> */
