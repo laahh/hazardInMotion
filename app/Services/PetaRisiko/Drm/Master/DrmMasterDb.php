@@ -35,12 +35,19 @@ final class DrmMasterDb
 
     private const PECAH = 500;
 
+    /** Pesan error terakhir dari siap() (diagnosis halaman master bila pengecekan tabel gagal). */
+    public static ?string $errorSiap = null;
+
     /** Tabel sudah dimigrasi? */
     public static function siap(): bool
     {
         try {
+            self::$errorSiap = null;
+
             return Schema::hasTable(self::TABEL_UTAMA) && Schema::hasTable('drm_master_log');
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            self::$errorSiap = mb_substr($e->getMessage(), 0, 300);
+
             return false;
         }
     }

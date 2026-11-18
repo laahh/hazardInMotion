@@ -28,7 +28,16 @@ final class PetaRisikoMasterBarisController extends Controller
     {
         $siap = DrmMasterDb::siap();
         $data = ['siap' => $siap, 'terisi' => false, 'bolehUbah' => $this->bolehUbah($request), 'q' => trim((string) $request->query('q', '')),
-            'kb' => (string) $request->query('kb', ''), 'kosong' => (string) $request->query('kosong', '')];
+            'kb' => (string) $request->query('kb', ''), 'kosong' => (string) $request->query('kosong', ''),
+            // Untuk diagnosis "belum siap": database yang dibaca halaman ini (bukan host / kredensial).
+            'namaDb' => (string) DB::connection()->getDatabaseName(),
+            'diagnosis' => [
+                'error' => DrmMasterDb::$errorSiap,
+                'koneksi' => (string) config('database.default'),
+                'folder' => base_path(),
+                'server' => (string) gethostname(),
+                'configCache' => app()->configurationIsCached(),
+            ]];
         if (! $siap || ! DrmMasterDb::terisi()) {
             return view('peta-risiko-pja.drm.master-baris', $data);
         }

@@ -71,9 +71,17 @@
 
 @if (! $siap || ! $terisi)
   <div class="mb-banner warn"><span class="material-symbols-outlined">database</span><div>
-    <b>Master database belum siap.</b> Jalankan migrasi tabel master, lalu isi dari baseline awal:
-    <code>php artisan peta-risiko:master-db --isi</code>. Untuk menurunkan kurasi aktivitas OAK menjadi label per baris:
-    <code>php artisan peta-risiko:master-db --turunkan-oak</code>.</div></div>
+    <b>Master database belum siap</b> di database <code>{{ $namaDb }}</code>:
+    {{ $siap ? 'tabel master sudah ada tetapi masih kosong.' : 'tabel drm_master_* belum ada (belum dimigrasi).' }}
+    Pastikan perintah dijalankan pada aplikasi yang memakai database yang sama dengan halaman ini, lalu
+    {{ $siap ? '' : 'jalankan migrasi, ' }}isi dengan <code>php artisan peta-risiko:master-db --isi</code> dan
+    <code>php artisan peta-risiko:master-db --turunkan-oak</code>.
+    @if ($bolehUbah)
+      <br><small>Diagnosis proses web: server <code>{{ $diagnosis['server'] }}</code> · folder <code>{{ $diagnosis['folder'] }}</code> ·
+        koneksi <code>{{ $diagnosis['koneksi'] }}</code> · database <code>{{ $namaDb }}</code> · config cache {{ $diagnosis['configCache'] ? 'aktif' : 'tidak' }}
+        @if ($diagnosis['error'])· error: <code>{{ $diagnosis['error'] }}</code>@endif</small>
+    @endif
+  </div></div>
 @else
   <div class="mb-banner info"><span class="material-symbols-outlined">info</span><div>
     Label <b>kuning</b> = turunan kurasi aktivitas OAK (periksa, hapus yang tidak sesuai). Label <b>hijau</b> = ditambah manual.
