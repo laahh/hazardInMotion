@@ -6,7 +6,7 @@
   @if ($adaExcel)
     <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh Excel mapping</a>
   @endif
-  <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}"><span class="material-symbols-outlined" style="font-size:18px">hub</span> Peta korelasi</a>
+  <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}"><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Alur baseline</a>
   <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}"><span class="material-symbols-outlined" style="font-size:18px">tune</span> Master mapping</a>
   <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}"><span class="material-symbols-outlined" style="font-size:18px">history</span> Versi lama</a>
 @endsection
@@ -724,9 +724,15 @@
 
     $('#dr-tren-judul').innerHTML = `Komposisi per minggu · ${judul}`;
     $('#dr-tren-sum').innerHTML = `<span>${DR.fmt(V.t)} baris</span><span>${gapTxt(V)}</span>`;
-    $('#dr-tren').innerHTML = trenPeriode(P, vekTab, LBL());
-    const Lc = LBL();
-    $('#dr-legenda').innerHTML = `<div class="dr-legend">${[[DR.BW.ok, Lc.kFull], [DR.BW.part, Lc.kPart], [DR.BW.bm, Lc.kGapo], [DR.BW.none, Lc.kNone]].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
+    // 3 kategori kartu KPI; snapshot lama tanpa kolom status tetap memakai pita cakupan.
+    if (M.beranda.kolomMgmt.includes('idk')) {
+      $('#dr-tren').innerHTML = trenStatus(P, vekTab);
+      $('#dr-legenda').innerHTML = `<div class="dr-legend">${STATUS3.map(([, c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
+    } else {
+      $('#dr-tren').innerHTML = trenPeriode(P, vekTab, LBL());
+      const Lc = LBL();
+      $('#dr-legenda').innerHTML = `<div class="dr-legend">${[[DR.BW.ok, Lc.kFull], [DR.BW.part, Lc.kPart], [DR.BW.bm, Lc.kGapo], [DR.BW.none, Lc.kNone]].map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;
+    }
     document.querySelectorAll('#dr-tren .br-wc').forEach((c) => c.addEventListener('click', () => { state.w = +c.dataset.w; $('#dr-w').value = state.w; render(); }));
 
     const diGrup = state.tab === 'grup';
@@ -1138,6 +1144,31 @@
       ? 'Angka di dalam batang = porsi bahaya-risiko per pita cakupan. Angka di bawah = rata-rata porsi detail lokasi yang terkontrol.'
       : 'Angka di bawah batang = porsi baris terkontrol penuh.';
     return `<div class="br-wb">${col.join('')}</div><div class="dr-mute" style="font-size:12px;margin-top:6px">${ket}${wBerjalan(0) ? ' · * minggu berjalan, belum penuh' : ''}</div>`;
+  }
+
+  /**
+   * Komposisi per minggu dengan 3 kategori kartu KPI (status gabungan antar detail lokasi, G > K > T):
+   * Teridentifikasi & Terkontrol (idk), Teridentifikasi - Ada Gap (idg), Tidak Teridentifikasi / Open Risk (tid).
+   * idk + idg + tid = jumlah baris, jadi angkanya sama persis dengan kartu di atas.
+   */
+  const STATUS3 = [['idk', '#1a7f37', 'Teridentifikasi & Terkontrol', true], ['idg', '#d9a400', 'Teridentifikasi - Ada Gap', false], ['tid', '#b42318', 'Tidak Teridentifikasi (Open Risk)', true]];
+  function trenStatus(P, f) {
+    const NW = M.beranda.minggu.length, col = [];
+    const seg = (x, n, warna, gelap) => {
+      const p = 100 * x / n;
+      const teks = p >= 10 ? `<em style="color:${gelap ? '#fff' : '#3d2f00'}">${Math.round(p)}%</em>` : '';
+      return `<i style="height:${p.toFixed(1)}%;background:${warna}">${teks}</i>`;
+    };
+    for (let i = NW - 1; i >= 0; i--) {
+      const v = P.reduce((a, p) => tambahVek(a, f(p, i)), KOSONG), n = Math.max(1, v.t);
+      const label = DR.minggu(M.beranda.minggu[i], M.sampai, i, M.beranda.minggu[0]).label;
+      const rinci = STATUS3.map(([k, , nama]) => `${nama} ${DR.fmt(v[k])} (${pctI(v[k], v.t)})`).join(', ');
+      // Ditumpuk dari bawah: terkontrol, ada gap, tidak teridentifikasi (di atas).
+      col.push(`<div class="br-wc${i === state.w ? ' sel' : ''}" data-w="${i}" title="${DR.esc(label)}: ${DR.esc(rinci)} · ${DR.fmt(v.t)} baris">
+        <div class="stk">${[...STATUS3].reverse().map(([k, warna, , gelap]) => seg(v[k], n, warna, gelap)).join('')}</div>
+        <span>${wKode(i)}${wBerjalan(i) ? '*' : ''}</span><span class="br-wv">terkontrol ${pctI(v.idk, v.t)}</span></div>`);
+    }
+    return `<div class="br-wb">${col.join('')}</div><div class="dr-mute" style="font-size:12px;margin-top:6px">Angka di dalam batang = porsi bahaya-risiko per status SAP (sama dengan kartu di atas). Angka di bawah = porsi teridentifikasi &amp; terkontrol.${wBerjalan(0) ? ' · * minggu berjalan, belum penuh' : ''}</div>`;
   }
 
   function barisVek(v, v0) {

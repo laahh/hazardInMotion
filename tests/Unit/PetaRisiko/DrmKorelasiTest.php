@@ -9,7 +9,8 @@ use InvalidArgumentException;
 use Tests\TestCase;
 
 /**
- * Peta korelasi master DRM 2.1. SQLite memori di koneksi tersendiri (bukan database .env) + snapshot palsu (Storage::fake).
+ * Alur baseline (aktivitas → sub → bahaya → label SAP → grup → detail lokasi → PJA). SQLite memori di koneksi
+ * tersendiri (bukan database .env) + snapshot palsu (Storage::fake).
  */
 class DrmKorelasiTest extends TestCase
 {
@@ -42,36 +43,46 @@ class DrmKorelasiTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_graf_grup_memuat_dl_pja_aktivitas_dan_kelompok(): void
+    public function test_alur_aktivitas_dari_sub_bahaya_label_sampai_pja(): void
     {
-        $g = app(DrmKorelasi::class)->graf('grup', '20');
-        $kunci = array_column($g['node'], 'jenis', 'key');
+        $a = app(DrmKorelasi::class)->alur('aktivitas', '1');
+        $node = collect($a['node'])->keyBy('key');
+        $kolom = fn (string $k) => $node[$k]['kolom'];
 
-        $this->assertSame('g:20', $g['pusat']);
-        $this->assertSame('dl', $kunci['d:1']);
-        $this->assertSame('pja', $kunci['p:'.md5('PJA Workshop')]);
-        $this->assertSame('aktivitas', $kunci['a:1']);
-        $this->assertSame('kelompok', $kunci['k:K10']);
-        $this->assertContains(['from' => 'a:1', 'to' => 'k:K10'], $g['edge']);
-        $this->assertSame('2026-11-08', $g['minggu']);
-    }
-
-    public function test_graf_bahaya_menampilkan_label_dan_baris_lain_berlabel_sama(): void
-    {
-        $g = app(DrmKorelasi::class)->graf('bahaya', '1');
-        $node = collect($g['node'])->keyBy('key');
-
+        $this->assertSame('a:1', $a['pusat']);
+        $this->assertSame(['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja'], $a['kolom']);
+        // Dua sub aktivitas berbeda, dua bahaya, status SAP dari snapshot.
+        $this->assertSame(2, $node->where('jenis', 'sub')->count());
         $this->assertSame('K', $node['b:1']['status']);
-        $label = $node->firstWhere('jenis', 'ket');
-        $this->assertSame('Bahaya Mekanikal / Terjepit', $label['label']);
-        // ri 2 memakai label Ketidaksesuaian yang sama (beda huruf besar/spasi) → ikut tampil, status ada gap.
         $this->assertSame('G', $node['b:2']['status']);
-        $this->assertContains(['from' => 'b:2', 'to' => $label['key']], array_map(fn ($e) => strcmp($e['from'], $e['to']) < 0 ? $e : ['from' => $e['to'], 'to' => $e['from']], $g['edge']));
-        $this->assertTrue($node->contains('key', 'g:20'));
-        $this->assertTrue($node->contains('key', 'g:3'));
+        // Label Ketidaksesuaian yang sama (beda huruf/spasi) = satu simpul untuk kedua bahaya.
+        $this->assertSame(2, $node->where('jenis', 'ket')->count());
+        // Grup → detail lokasi → PJA.
+        $this->assertSame([0, 1, 2, 4, 5, 6], [$kolom('a:1'), $node->firstWhere('jenis', 'sub')['kolom'], $kolom('b:1'), $kolom('g:20'), $kolom('d:1'), $kolom('p:'.md5('PJA Workshop'))]);
+        // Semua relasi berarah kiri → kanan.
+        foreach ($a['edge'] as $e) {
+            $this->assertLessThan($node[$e['to']]['kolom'], $node[$e['from']]['kolom']);
+        }
+        $this->assertContains(['from' => 'g:20', 'to' => 'd:1'], $a['edge']);
+        $this->assertSame('2026-11-08', $a['minggu']);
     }
 
-    public function test_cari_lintas_jenis_dan_simpul_tidak_dikenal(): void
+    public function test_alur_label_dan_pja_dibaca_dari_arah_berbeda(): void
+    {
+        $svc = app(DrmKorelasi::class);
+
+        $label = $svc->alur('ket', 'BAHAYA MEKANIKAL / terjepit');
+        $node = collect($label['node']);
+        $this->assertSame(['b:1', 'b:2'], $node->where('jenis', 'bahaya')->pluck('key')->sort()->values()->all());
+        $this->assertTrue($node->contains('key', 'a:1'));
+
+        $pja = $svc->alur('pja', 'PJA Workshop');
+        $this->assertSame('p:'.md5('PJA Workshop'), $pja['pusat']);
+        $this->assertContains(['from' => 'd:1', 'to' => $pja['pusat']], $pja['edge']);
+        $this->assertContains(['from' => 'a:1', 'to' => 'g:20'], $pja['edge']);
+    }
+
+    public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void
     {
         $svc = app(DrmKorelasi::class);
         $jenis = array_column($svc->cari('terjepit'), 'jenis');
@@ -79,10 +90,11 @@ class DrmKorelasiTest extends TestCase
         $this->assertContains('bahaya', $jenis);
         $this->assertContains('ket', $jenis);
         $this->assertSame([], $svc->cari('x'));
-        $this->assertSame(['jenis' => 'grup', 'id' => '20'], $svc->pusatBawaan());
+        // Aktivitas dengan baris terbanyak.
+        $this->assertSame(['jenis' => 'aktivitas', 'id' => '1'], $svc->pusatBawaan());
 
         $this->expectException(InvalidArgumentException::class);
-        $svc->graf('grup', '999');
+        $svc->alur('grup', '999');
     }
 
     private function isi(): void
@@ -91,16 +103,16 @@ class DrmKorelasiTest extends TestCase
         DB::table('drm_master_grup')->insert([['gid' => 3, 'nama' => 'CPP / ROM', 'aktif' => true], ['gid' => 20, 'nama' => 'Workshop/Pit Stop', 'aktif' => true]]);
         DB::table('drm_master_aktivitas')->insert([['aid' => 1, 'aktivitas' => 'Perawatan unit', 'kelompok' => 'K10'], ['aid' => 2, 'aktivitas' => 'Fixed plant', 'kelompok' => 'K5']]);
         $baris = [
-            [1, 1, 'Terjepit roller', 'Bahaya Mekanikal / Terjepit'],
-            [2, 1, 'Terjepit pintu', "bahaya  mekanikal / TERJEPIT\nKebakaran / Api"],
-            [3, 2, 'Debu batubara', null],
+            [1, 1, 'Servis roller', 'Terjepit roller', "Bahaya Mekanikal / Terjepit"],
+            [2, 1, 'Ganti ban', 'Terjepit pintu', "bahaya  mekanikal / TERJEPIT\nKebakaran / Api"],
+            [3, 2, 'Fixed plant', 'Debu batubara', null],
         ];
-        foreach ($baris as [$ri, $aid, $bahaya, $ket]) {
-            DB::table('drm_master_baris')->insert(['ri' => $ri, 'aid' => $aid, 'aktivitas' => 'x', 'sub' => 'sub', 'bahaya' => $bahaya, 'kb' => 'High', 'aktif' => true,
+        foreach ($baris as [$ri, $aid, $sub, $bahaya, $ket]) {
+            DB::table('drm_master_baris')->insert(['ri' => $ri, 'aid' => $aid, 'aktivitas' => 'x', 'sub' => $sub, 'bahaya' => $bahaya, 'kb' => 'High', 'aktif' => true,
+                // Mode label per baris aktif bila kolom Observasi terisi (DrmMasterDb::labelDiBaris).
                 'item_sumber_observasi' => $ri === 1 ? 'Inspeksi unit' : null, 'item_sumber_oak' => null, 'item_sumber_ketidaksesuaian' => $ket]);
         }
-        // Workshop (3 baris) lebih banyak dari CPP (2 baris) → pusat bawaan = Workshop.
-        DB::table('drm_master_grup_baris')->insert([['gid' => 20, 'ri' => 1], ['gid' => 20, 'ri' => 2], ['gid' => 20, 'ri' => 3], ['gid' => 3, 'ri' => 1], ['gid' => 3, 'ri' => 3]]);
+        DB::table('drm_master_grup_baris')->insert([['gid' => 20, 'ri' => 1], ['gid' => 20, 'ri' => 2], ['gid' => 3, 'ri' => 3]]);
         DB::table('drm_master_dl')->insert([['id' => 1, 'site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'gid' => 20, 'aktif' => true]]);
         DB::table('drm_master_lokasi_pja')->insert([['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'aktif' => true]]);
     }

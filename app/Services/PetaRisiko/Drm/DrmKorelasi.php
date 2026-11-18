@@ -5,24 +5,32 @@ declare(strict_types=1);
 namespace App\Services\PetaRisiko\Drm;
 
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Throwable;
 
 /**
- * Peta korelasi master DRM 2.1 (graf): grup lokasi ↔ detail lokasi ↔ PJA, grup ↔ aktivitas HIRA (M05) ↔ kelompok (M02),
- * aktivitas ↔ bahaya-risiko (baris HIRA) ↔ label SAP (item sumber Observasi / OAK / Ketidaksesuaian).
- * Mode fokus: satu simpul pusat + tetangga yang relevan, dibatasi per jenis supaya tetap terbaca.
+ * Alur baseline DRM 2.1 (/peta-risiko-pja/korelasi), dibaca kiri → kanan per kolom:
+ *   Aktivitas HIRA → Sub aktivitas → Bahaya-risiko → Label SAP (cara tertangkap) → Grup lokasi (M05) → Detail lokasi → PJA.
+ * Satu simpul fokus menentukan cakupan alur; tiap kolom dibatasi supaya tetap terbaca (sisanya dihitung di "potong").
  * Status SAP bahaya (K/G/T) dari snapshot terakhir (rincian.json cakupan ALL, minggu penuh terakhir).
  */
 final class DrmKorelasi
 {
     public const JENIS = ['grup', 'dl', 'pja', 'kelompok', 'aktivitas', 'bahaya', 'obs', 'oak', 'ket'];
 
+    /** Kolom alur (indeks = posisi kiri → kanan). */
+    public const KOLOM = ['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja'];
+
     private const MAKS = 60;
 
+    private const MAKS_DL_PER_GRUP = 12;
+
     private const LABEL_JENIS = ['obs' => 'OBS', 'oak' => 'OAK', 'ket' => 'KET'];
+
+    private const NAMA_LABEL = ['obs' => 'Label Observasi', 'oak' => 'Label OAK', 'ket' => 'Label Ketidaksesuaian'];
 
     /** @var array<string, array<string, mixed>> */
     private array $node = [];
@@ -30,10 +38,10 @@ final class DrmKorelasi
     /** @var array<string, array{from: string, to: string}> */
     private array $edge = [];
 
-    /** @var array<string, int> jenis => jumlah yang tidak ditampilkan */
+    /** @var array<string, int> kolom => jumlah simpul yang tidak ditampilkan */
     private array $potong = [];
 
-    /** @var array<string, string>|null kode kelompok => nama */
+    /** @var array<string, string>|null */
     private ?array $namaKelompok = null;
 
     /** @var array{minggu: ?string, hid: array<string, string>}|null */
@@ -43,12 +51,41 @@ final class DrmKorelasi
     {
     }
 
-    /** Pusat bawaan: grup lokasi dengan baris HIRA terbanyak. */
+    /** Fokus bawaan: aktivitas HIRA dengan baris (bahaya-risiko) terbanyak — awal alur baseline. */
     public function pusatBawaan(): array
     {
-        $gid = DB::table('drm_master_grup_baris')->selectRaw('gid, count(*) n')->groupBy('gid')->orderByDesc('n')->value('gid');
+        $aid = DB::table('drm_master_baris')->selectRaw('aid, count(*) n')->groupBy('aid')->orderByDesc('n')->value('aid');
 
-        return ['jenis' => 'grup', 'id' => (string) ($gid ?? 1)];
+        return ['jenis' => 'aktivitas', 'id' => (string) ($aid ?? 0)];
+    }
+
+    /**
+     * Alur untuk satu simpul fokus.
+     *
+     * @return array{pusat: string, kolom: list<string>, node: list<array<string, mixed>>, edge: list<array{from: string, to: string}>, potong: array<string, int>, minggu: ?string}
+     */
+    public function alur(string $jenis, string $id): array
+    {
+        if (! in_array($jenis, self::JENIS, true)) {
+            throw new InvalidArgumentException('Jenis simpul tidak dikenal.');
+        }
+        $this->node = $this->edge = $this->potong = [];
+        $pusat = match ($jenis) {
+            'aktivitas' => $this->dariAktivitas((int) $id),
+            'bahaya' => $this->dariBaris(DB::table('drm_master_baris')->where('ri', (int) $id)->get(), 'bahaya'),
+            'kelompok' => $this->dariKelompok($id),
+            'grup' => $this->dariGrup((int) $id),
+            'dl' => $this->dariDl((int) $id),
+            'pja' => $this->dariPja($id),
+            default => $this->dariLabel(self::LABEL_JENIS[$jenis], $id),
+        };
+        if ($pusat === null) {
+            throw new InvalidArgumentException('Simpul tidak ditemukan di master.');
+        }
+        $this->node[$pusat]['pusat'] = true;
+
+        return ['pusat' => $pusat, 'kolom' => self::KOLOM, 'node' => array_values($this->node), 'edge' => array_values($this->edge),
+            'potong' => $this->potong, 'minggu' => $this->statusSap()['minggu']];
     }
 
     /**
@@ -69,10 +106,10 @@ final class DrmKorelasi
                 $hasil[] = ['jenis' => $jenis] + $f($r);
             }
         };
-        $tambah('grup', DB::table('drm_master_grup')->where('nama', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => (string) $r->gid, 'label' => $r->nama, 'sub' => 'Grup lokasi']);
-        $tambah('kelompok', DB::table('drm_master_kelompok')->where('nama', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => $r->kode, 'label' => $r->nama, 'sub' => 'Kelompok aktivitas']);
         $tambah('aktivitas', DB::table('drm_master_aktivitas')->where('aktivitas', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => (string) $r->aid, 'label' => $r->aktivitas, 'sub' => 'Aktivitas HIRA']);
         $tambah('bahaya', DB::table('drm_master_baris')->where('bahaya', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => (string) $r->ri, 'label' => $r->bahaya, 'sub' => 'Bahaya · '.$r->aktivitas]);
+        $tambah('grup', DB::table('drm_master_grup')->where('nama', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => (string) $r->gid, 'label' => $r->nama, 'sub' => 'Grup lokasi']);
+        $tambah('kelompok', DB::table('drm_master_kelompok')->where('nama', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => $r->kode, 'label' => $r->nama, 'sub' => 'Kelompok aktivitas']);
         $tambah('dl', DB::table('drm_master_dl')->where('detail', 'like', $pola)->limit(8)->get(), fn ($r) => ['id' => (string) $r->id, 'label' => $r->detail, 'sub' => $r->site.' · '.$r->lokasi]);
         $tambah('pja', DB::table('drm_master_lokasi_pja')->where('nama_pja', 'like', $pola)->distinct()->limit(8)->pluck('nama_pja'), fn ($n) => ['id' => (string) $n, 'label' => (string) $n, 'sub' => 'PJA']);
         foreach ($this->cariLabel($q) as $l) {
@@ -82,36 +119,68 @@ final class DrmKorelasi
         return $hasil;
     }
 
-    /**
-     * Graf fokus untuk satu simpul pusat.
-     *
-     * @return array{pusat: string, node: list<array<string, mixed>>, edge: list<array{from: string, to: string}>, potong: array<string, int>, minggu: ?string}
-     */
-    public function graf(string $jenis, string $id): array
-    {
-        if (! in_array($jenis, self::JENIS, true)) {
-            throw new InvalidArgumentException('Jenis simpul tidak dikenal.');
-        }
-        $this->node = $this->edge = $this->potong = [];
-        $pusat = match ($jenis) {
-            'grup' => $this->dariGrup((int) $id),
-            'dl' => $this->dariDl((int) $id),
-            'pja' => $this->dariPja($id),
-            'kelompok' => $this->dariKelompok($id),
-            'aktivitas' => $this->dariAktivitas((int) $id),
-            'bahaya' => $this->dariBahaya((int) $id),
-            default => $this->dariLabel(self::LABEL_JENIS[$jenis], $id),
-        };
-        if ($pusat === null) {
-            throw new InvalidArgumentException('Simpul tidak ditemukan di master.');
-        }
-        $this->node[$pusat]['pusat'] = true;
+    // ------------------------------------------------------------ titik masuk
 
-        return ['pusat' => $pusat, 'node' => array_values($this->node), 'edge' => array_values($this->edge), 'potong' => $this->potong, 'minggu' => $this->statusSap()['minggu']];
+    private function dariAktivitas(int $aid): ?string
+    {
+        $baris = DB::table('drm_master_baris')->where('aid', $aid)->orderBy('sub')->orderBy('bahaya')->get();
+
+        return $baris->isEmpty() ? null : $this->dariBaris($baris, 'aktivitas');
     }
 
-    // ------------------------------------------------------------ titik masuk per jenis
+    /**
+     * Alur lengkap untuk sekumpulan baris HIRA: aktivitas → sub → bahaya → label → grup → DL → PJA.
+     * $fokus menentukan simpul pusat (aktivitas pertama atau bahaya pertama).
+     */
+    private function dariBaris(Collection $baris, string $fokus): ?string
+    {
+        if ($baris->isEmpty()) {
+            return null;
+        }
+        $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
+        $grupPerRi = $this->grupPerBaris($baris->pluck('ri')->all());
+        $grupDipakai = [];
+        foreach ($this->batasi('bahaya', $baris) as $b) {
+            $a = $akt[$b->aid] ?? null;
+            $na = $this->simpulAktivitas((int) $b->aid, (string) ($a->aktivitas ?? $b->aktivitas), (string) ($a->kelompok ?? 'K0'));
+            $ns = $this->simpulSub((int) $b->aid, (string) $b->sub);
+            $nb = $this->simpulBahaya($b);
+            $this->sambung($na, $ns);
+            $this->sambung($ns, $nb);
+            foreach ($this->labelBaris($b) as [$jenis, $teks]) {
+                $this->sambung($nb, $this->simpulLabel($jenis, $teks));
+            }
+            foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $nama]) {
+                $this->sambung($nb, $this->simpulGrup($gid, $nama));
+                $grupDipakai[$gid] = true;
+            }
+        }
+        $this->lanjutDariGrup(array_keys($grupDipakai));
+        $pertama = $baris->first();
 
+        return $fokus === 'bahaya' ? 'b:'.$pertama->ri : 'a:'.$pertama->aid;
+    }
+
+    private function dariKelompok(string $kode): ?string
+    {
+        if (! DB::table('drm_master_kelompok')->where('kode', $kode)->exists()) {
+            return null;
+        }
+        $akt = DB::table('drm_master_aktivitas')->where('kelompok', $kode)->orderBy('aktivitas')->get();
+        $grupPerAkt = $this->grupPerAktivitas($akt->pluck('aid')->all());
+        $pusat = null;
+        foreach ($this->batasi('aktivitas', $akt) as $a) {
+            $na = $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, $kode);
+            $pusat ??= $na;
+            foreach ($grupPerAkt[(int) $a->aid] ?? [] as [$gid, $nama]) {
+                $this->sambung($na, $this->simpulGrup($gid, $nama));
+            }
+        }
+
+        return $pusat;
+    }
+
+    /** Grup lokasi: aktivitas yang berlaku → grup → detail lokasi → PJA (sub & bahaya dibuka lewat aktivitas). */
     private function dariGrup(int $gid): ?string
     {
         $g = DB::table('drm_master_grup')->where('gid', $gid)->first();
@@ -119,20 +188,12 @@ final class DrmKorelasi
             return null;
         }
         $pusat = $this->simpulGrup($gid, (string) $g->nama);
-        $dl = DB::table('drm_master_dl')->where('gid', $gid)->where('aktif', true)->orderBy('site')->orderBy('detail')->get();
-        foreach ($this->batasi('dl', $dl) as $d) {
-            $this->sambung($pusat, $this->simpulDl($d));
-        }
-        foreach ($this->batasi('pja', $this->pjaDariDl($dl)) as $p) {
-            $this->sambung($pusat, $this->simpulPja($p));
-        }
-        $akt = DB::table('drm_master_grup_baris as g')->join('drm_master_baris as b', 'b.ri', '=', 'g.ri')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
-            ->where('g.gid', $gid)->selectRaw('a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
+        $akt = DB::table('drm_master_grup_baris as gb')->join('drm_master_baris as b', 'b.ri', '=', 'gb.ri')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
+            ->where('gb.gid', $gid)->selectRaw('a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
         foreach ($this->batasi('aktivitas', $akt) as $a) {
-            $na = $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (int) $a->n);
-            $this->sambung($pusat, $na);
-            $this->sambung($na, $this->simpulKelompok((string) $a->kelompok));
+            $this->sambung($this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (string) $a->kelompok, (int) $a->n), $pusat);
         }
+        $this->lanjutDariGrup([$gid], self::MAKS);
 
         return $pusat;
     }
@@ -143,24 +204,23 @@ final class DrmKorelasi
         if ($d === null) {
             return null;
         }
-        $pusat = $this->simpulDl($d);
+        $this->dariGrup((int) $d->gid);
+        // Hanya detail lokasi ini (bukan semua DL grup) di kolom detail lokasi.
+        $this->buangKolom('dl');
+        $this->buangKolom('pja');
+        $nd = $this->simpulDl($d);
         $g = DB::table('drm_master_grup')->where('gid', $d->gid)->first();
         if ($g !== null) {
-            $ng = $this->simpulGrup((int) $g->gid, (string) $g->nama);
-            $this->sambung($pusat, $ng);
-            $akt = DB::table('drm_master_grup_baris as gb')->join('drm_master_baris as b', 'b.ri', '=', 'gb.ri')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
-                ->where('gb.gid', $g->gid)->selectRaw('a.aid, a.aktivitas, count(*) n')->groupBy('a.aid', 'a.aktivitas')->orderByDesc('n')->get();
-            foreach ($this->batasi('aktivitas', $akt, 30) as $a) {
-                $this->sambung($ng, $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (int) $a->n));
-            }
+            $this->sambung($this->simpulGrup((int) $g->gid, (string) $g->nama), $nd);
         }
         foreach ($this->pjaDariDl(collect([$d])) as $p) {
-            $this->sambung($pusat, $this->simpulPja($p));
+            $this->sambung($nd, $this->simpulPja($p));
         }
 
-        return $pusat;
+        return $nd;
     }
 
+    /** PJA: detail lokasinya → grup lokasi → aktivitas yang berlaku (dibaca ke kiri). */
     private function dariPja(string $nama): ?string
     {
         $lok = DB::table('drm_master_lokasi_pja')->where('nama_pja', $nama)->where('aktif', true)->get(['site', 'lokasi']);
@@ -176,165 +236,145 @@ final class DrmKorelasi
         $grup = DB::table('drm_master_grup')->whereIn('gid', $dl->pluck('gid')->unique())->pluck('nama', 'gid');
         foreach ($this->batasi('dl', $dl) as $d) {
             $nd = $this->simpulDl($d);
-            $this->sambung($pusat, $nd);
+            $this->sambung($nd, $pusat);
             if (isset($grup[$d->gid])) {
-                $this->sambung($nd, $this->simpulGrup((int) $d->gid, (string) $grup[$d->gid]));
+                $this->sambung($this->simpulGrup((int) $d->gid, (string) $grup[$d->gid]), $nd);
             }
+        }
+        $akt = DB::table('drm_master_grup_baris as gb')->join('drm_master_baris as b', 'b.ri', '=', 'gb.ri')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
+            ->whereIn('gb.gid', $grup->keys())->selectRaw('gb.gid, a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('gb.gid', 'a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
+        foreach ($this->batasi('aktivitas', $akt) as $a) {
+            $this->sambung($this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (string) $a->kelompok), $this->simpulGrup((int) $a->gid, (string) $grup[$a->gid]));
         }
 
         return $pusat;
     }
 
-    private function dariKelompok(string $kode): ?string
-    {
-        if (! DB::table('drm_master_kelompok')->where('kode', $kode)->exists()) {
-            return null;
-        }
-        $pusat = $this->simpulKelompok($kode);
-        $akt = DB::table('drm_master_aktivitas as a')->leftJoin('drm_master_baris as b', 'b.aid', '=', 'a.aid')->where('a.kelompok', $kode)
-            ->selectRaw('a.aid, a.aktivitas, count(b.ri) n')->groupBy('a.aid', 'a.aktivitas')->orderByDesc('n')->get();
-        $tampil = $this->batasi('aktivitas', $akt);
-        $grupPerAkt = $this->grupPerAktivitas($tampil->pluck('aid')->all());
-        foreach ($tampil as $a) {
-            $na = $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (int) $a->n);
-            $this->sambung($pusat, $na);
-            foreach ($grupPerAkt[(int) $a->aid] ?? [] as [$gid, $nama]) {
-                $this->sambung($na, $this->simpulGrup($gid, $nama));
-            }
-        }
-
-        return $pusat;
-    }
-
-    private function dariAktivitas(int $aid): ?string
-    {
-        $a = DB::table('drm_master_aktivitas')->where('aid', $aid)->first();
-        if ($a === null) {
-            return null;
-        }
-        $baris = DB::table('drm_master_baris')->where('aid', $aid)->orderBy('bahaya')->get();
-        $pusat = $this->simpulAktivitas($aid, (string) $a->aktivitas, $baris->count());
-        $this->sambung($pusat, $this->simpulKelompok((string) $a->kelompok));
-        foreach ($this->grupPerAktivitas([$aid])[$aid] ?? [] as [$gid, $nama]) {
-            $this->sambung($pusat, $this->simpulGrup($gid, $nama));
-        }
-        foreach ($this->batasi('bahaya', $baris) as $b) {
-            $nb = $this->simpulBahaya($b);
-            $this->sambung($pusat, $nb);
-            foreach ($this->labelBaris($b) as [$jenis, $teks]) {
-                $this->sambung($nb, $this->simpulLabel($jenis, $teks));
-            }
-        }
-
-        return $pusat;
-    }
-
-    private function dariBahaya(int $ri): ?string
-    {
-        $b = DB::table('drm_master_baris')->where('ri', $ri)->first();
-        if ($b === null) {
-            return null;
-        }
-        $pusat = $this->simpulBahaya($b);
-        $a = DB::table('drm_master_aktivitas')->where('aid', $b->aid)->first();
-        if ($a !== null) {
-            $na = $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, null);
-            $this->sambung($pusat, $na);
-            $this->sambung($na, $this->simpulKelompok((string) $a->kelompok));
-        }
-        foreach (DB::table('drm_master_grup_baris as g')->join('drm_master_grup as m', 'm.gid', '=', 'g.gid')->where('g.ri', $ri)->get(['m.gid', 'm.nama']) as $g) {
-            $this->sambung($pusat, $this->simpulGrup((int) $g->gid, (string) $g->nama));
-        }
-        // Label SAP baris ini, dan baris lain yang ditangkap label yang sama (ke mana label itu juga mengarah).
-        foreach ($this->labelBaris($b) as [$jenis, $teks]) {
-            $nl = $this->simpulLabel($jenis, $teks);
-            $this->sambung($pusat, $nl);
-            foreach ($this->batasi('bahaya', $this->barisDenganLabel($jenis, $teks)->where('ri', '!=', $ri), 6) as $lain) {
-                $this->sambung($nl, $this->simpulBahaya($lain));
-            }
-        }
-
-        return $pusat;
-    }
-
+    /** Label SAP: baris yang ditangkap label ini, dengan aktivitas & sub di kiri dan grup lokasi di kanan. */
     private function dariLabel(string $jenis, string $teks): ?string
     {
         $baris = $this->barisDenganLabel($jenis, $teks);
+        if ($baris->isEmpty()) {
+            return null;
+        }
         $pusat = $this->simpulLabel($jenis, $teks);
-        $aktNama = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->pluck('aktivitas', 'aid');
+        $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
+        $grupPerRi = $this->grupPerBaris($baris->pluck('ri')->all());
         foreach ($this->batasi('bahaya', $baris) as $b) {
+            $a = $akt[$b->aid] ?? null;
+            $na = $this->simpulAktivitas((int) $b->aid, (string) ($a->aktivitas ?? $b->aktivitas), (string) ($a->kelompok ?? 'K0'));
+            $ns = $this->simpulSub((int) $b->aid, (string) $b->sub);
             $nb = $this->simpulBahaya($b);
-            $this->sambung($pusat, $nb);
-            if (isset($aktNama[$b->aid])) {
-                $this->sambung($nb, $this->simpulAktivitas((int) $b->aid, (string) $aktNama[$b->aid], null));
+            $this->sambung($na, $ns);
+            $this->sambung($ns, $nb);
+            $this->sambung($nb, $pusat);
+            foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $nama]) {
+                $this->sambung($nb, $this->simpulGrup($gid, $nama));
             }
         }
 
         return $pusat;
+    }
+
+    /** Grup → detail lokasi (maks per grup) → PJA pemiliknya. */
+    private function lanjutDariGrup(array $gids, int $maksPerGrup = self::MAKS_DL_PER_GRUP): void
+    {
+        if ($gids === []) {
+            return;
+        }
+        $nama = DB::table('drm_master_grup')->whereIn('gid', $gids)->pluck('nama', 'gid');
+        $semua = collect();
+        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->orderBy('site')->orderBy('detail')->get()->groupBy('gid') as $gid => $dl) {
+            foreach ($this->batasi('dl', $dl, $maksPerGrup) as $d) {
+                $this->sambung($this->simpulGrup((int) $gid, (string) $nama[$gid]), $this->simpulDl($d));
+                $semua->push($d);
+            }
+        }
+        foreach ($semua->groupBy(fn ($d) => mb_strtolower(trim($d->site).'|'.trim($d->lokasi))) as $kelompokDl) {
+            foreach ($this->pjaDariDl($kelompokDl) as $p) {
+                foreach ($kelompokDl as $d) {
+                    $this->sambung($this->simpulDl($d), $this->simpulPja($p));
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------ simpul
 
-    private function simpulGrup(int $gid, string $nama): string
-    {
-        return $this->simpul('g:'.$gid, 'grup', (string) $gid, $nama, 'Grup lokasi');
-    }
-
-    private function simpulDl(object $d): string
-    {
-        return $this->simpul('d:'.$d->id, 'dl', (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi);
-    }
-
-    private function simpulPja(string $nama): string
-    {
-        return $this->simpul('p:'.md5($nama), 'pja', $nama, $nama, 'PJA');
-    }
-
-    private function simpulKelompok(string $kode): string
+    private function simpulAktivitas(int $aid, string $nama, string $kelompok, ?int $n = null): string
     {
         $this->namaKelompok ??= DB::table('drm_master_kelompok')->pluck('nama', 'kode')->all();
 
-        return $this->simpul('k:'.$kode, 'kelompok', $kode, (string) ($this->namaKelompok[$kode] ?? $kode), 'Kelompok aktivitas');
+        return $this->simpul('a:'.$aid, 'aktivitas', 0, (string) $aid, $nama, (string) ($this->namaKelompok[$kelompok] ?? $kelompok).($n !== null ? ' · '.$n.' bahaya di grup' : ''));
     }
 
-    private function simpulAktivitas(int $aid, string $nama, ?int $n): string
+    private function simpulSub(int $aid, string $sub): string
     {
-        return $this->simpul('a:'.$aid, 'aktivitas', (string) $aid, $nama, 'Aktivitas HIRA'.($n !== null ? ' · '.$n.' bahaya' : ''));
+        $sub = trim($sub) === '' ? '(tanpa sub aktivitas)' : $sub;
+
+        return $this->simpul('s:'.$aid.':'.md5(mb_strtolower($sub)), 'sub', 1, (string) $aid, $sub, 'Sub aktivitas');
     }
 
     private function simpulBahaya(object $b): string
     {
         $st = $this->statusSap()['hid'][(string) $b->ri] ?? null;
 
-        return $this->simpul('b:'.$b->ri, 'bahaya', (string) $b->ri, (string) $b->bahaya, trim($b->sub.' · '.$b->kb, ' ·'), ['kb' => (string) $b->kb, 'status' => $st]);
+        return $this->simpul('b:'.$b->ri, 'bahaya', 2, (string) $b->ri, (string) $b->bahaya, 'Risiko awal '.($b->kb ?: '-'), ['kb' => (string) $b->kb, 'status' => $st]);
     }
 
     private function simpulLabel(string $jenis, string $teks): string
     {
-        $j = array_search($jenis, self::LABEL_JENIS, true);
-        $nama = ['obs' => 'Label Observasi', 'oak' => 'Label OAK', 'ket' => 'Label Ketidaksesuaian'][$j];
+        $j = (string) array_search($jenis, self::LABEL_JENIS, true);
 
-        return $this->simpul('l:'.$j.':'.md5($this->kunciLabel($jenis, $teks)), (string) $j, $teks, $teks, $nama);
+        return $this->simpul('l:'.$j.':'.md5($this->kunciLabel($jenis, $teks)), $j, 3, $teks, $teks, self::NAMA_LABEL[$j]);
+    }
+
+    private function simpulGrup(int $gid, string $nama): string
+    {
+        return $this->simpul('g:'.$gid, 'grup', 4, (string) $gid, $nama, 'Grup lokasi');
+    }
+
+    private function simpulDl(object $d): string
+    {
+        return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi);
+    }
+
+    private function simpulPja(string $nama): string
+    {
+        return $this->simpul('p:'.md5($nama), 'pja', 6, $nama, $nama, 'PJA');
     }
 
     /** @param array<string, mixed> $ekstra */
-    private function simpul(string $kunci, string $jenis, string $id, string $label, string $sub, array $ekstra = []): string
+    private function simpul(string $kunci, string $jenis, int $kolom, string $id, string $label, string $sub, array $ekstra = []): string
     {
-        $this->node[$kunci] ??= ['key' => $kunci, 'jenis' => $jenis, 'id' => $id, 'label' => $label, 'sub' => $sub] + $ekstra;
+        $this->node[$kunci] ??= ['key' => $kunci, 'jenis' => $jenis, 'kolom' => $kolom, 'id' => $id, 'label' => $label, 'sub' => $sub] + $ekstra;
 
         return $kunci;
     }
 
+    /** Relasi berarah kiri → kanan (dari kolom lebih kecil). */
     private function sambung(string $a, string $b): void
     {
-        if ($a !== $b) {
-            $k = strcmp($a, $b) < 0 ? $a.'|'.$b : $b.'|'.$a;
-            $this->edge[$k] ??= ['from' => $a, 'to' => $b];
+        if ($a === $b) {
+            return;
         }
+        [$from, $to] = ($this->node[$a]['kolom'] ?? 0) <= ($this->node[$b]['kolom'] ?? 0) ? [$a, $b] : [$b, $a];
+        $this->edge[$from.'|'.$to] ??= ['from' => $from, 'to' => $to];
     }
 
-    /** Batasi jumlah simpul satu jenis per graf; sisanya dihitung di $potong. */
-    private function batasi(string $jenis, $rows, int $maks = self::MAKS)
+    /** Hapus semua simpul satu jenis beserta relasinya (dipakai fokus detail lokasi). */
+    private function buangKolom(string $jenis): void
+    {
+        foreach ($this->node as $k => $n) {
+            if ($n['jenis'] === $jenis) {
+                unset($this->node[$k]);
+            }
+        }
+        $this->edge = array_filter($this->edge, fn ($e) => isset($this->node[$e['from']], $this->node[$e['to']]));
+        unset($this->potong[$jenis]);
+    }
+
+    private function batasi(string $jenis, $rows, int $maks = self::MAKS): Collection
     {
         $rows = collect($rows)->values();
         if ($rows->count() > $maks) {
@@ -344,10 +384,10 @@ final class DrmKorelasi
         return $rows->take($maks);
     }
 
-    // ------------------------------------------------------------ relasi
+    // ------------------------------------------------------------ relasi master
 
-    /** @return \Illuminate\Support\Collection<int, string> nama PJA pemilik detail lokasi (lewat site + lokasi, M07/M08) */
-    private function pjaDariDl($dl)
+    /** @return Collection<int, string> nama PJA pemilik detail lokasi (lewat site + lokasi, M07/M08) */
+    private function pjaDariDl($dl): Collection
     {
         $kunci = collect($dl)->map(fn ($d) => mb_strtolower(trim($d->site).'|'.trim($d->lokasi)))->unique()->flip();
         if ($kunci->isEmpty()) {
@@ -356,6 +396,17 @@ final class DrmKorelasi
 
         return DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', collect($dl)->pluck('site')->unique())->get()
             ->filter(fn ($p) => isset($kunci[mb_strtolower(trim($p->site).'|'.trim($p->lokasi))]))->pluck('nama_pja')->unique()->sort()->values();
+    }
+
+    /** @return array<int, list<array{0: int, 1: string}>> ri => [[gid, nama grup]] */
+    private function grupPerBaris(array $ri): array
+    {
+        $hasil = [];
+        foreach (DB::table('drm_master_grup_baris as g')->join('drm_master_grup as m', 'm.gid', '=', 'g.gid')->whereIn('g.ri', $ri)->get(['g.ri', 'm.gid', 'm.nama']) as $r) {
+            $hasil[(int) $r->ri][] = [(int) $r->gid, (string) $r->nama];
+        }
+
+        return $hasil;
     }
 
     /** @return array<int, list<array{0: int, 1: string}>> aid => [[gid, nama grup]] */
@@ -370,7 +421,7 @@ final class DrmKorelasi
         return $hasil;
     }
 
-    /** @return list<array{0: string, 1: string}> [jenis OBS/OAK/KET, teks label] dari kolom item sumber baris */
+    /** @return list<array{0: string, 1: string}> [OBS/OAK/KET, teks label] dari kolom item sumber baris */
     private function labelBaris(object $b): array
     {
         if (! DrmMasterDb::labelDiBaris()) {
@@ -386,18 +437,18 @@ final class DrmKorelasi
         return $hasil;
     }
 
-    /** Baris HIRA yang memuat label ini (dicocokkan dengan normalisasi yang sama dengan sync). */
-    private function barisDenganLabel(string $jenis, string $teks)
+    /** Baris HIRA yang memuat label ini (normalisasi sama dengan sync). */
+    private function barisDenganLabel(string $jenis, string $teks): Collection
     {
         if (! DrmMasterDb::labelDiBaris()) {
             return collect();
         }
         $kolom = DrmMasterDb::KOLOM_LABEL[$jenis];
         $kunci = $this->kunciLabel($jenis, $teks);
-        // Saring kasar dengan LIKE kata terpanjang, lalu cocokkan persis per label.
+        // Saring kasar dengan kata terpanjang, lalu cocokkan persis per label.
         $kata = collect(preg_split('/\W+/u', $teks))->sortByDesc(fn ($k) => mb_strlen($k))->first() ?: $teks;
 
-        return DB::table('drm_master_baris')->where($kolom, 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $kata).'%')->get()
+        return DB::table('drm_master_baris')->where($kolom, 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $kata).'%')->orderBy('aid')->get()
             ->filter(fn ($b) => collect(DrmMasterDb::pisahLabel($b->{$kolom}))->contains(fn ($l) => $this->kunciLabel($jenis, $l) === $kunci))->values();
     }
 
@@ -428,9 +479,9 @@ final class DrmKorelasi
                     }
                 }
             }
-            $j = array_search($jenis, self::LABEL_JENIS, true);
+            $j = (string) array_search($jenis, self::LABEL_JENIS, true);
             foreach (array_slice(array_values($temu), 0, 8) as $l) {
-                $hasil[] = ['jenis' => (string) $j, 'id' => $l, 'label' => $l, 'sub' => ['obs' => 'Label Observasi', 'oak' => 'Label OAK', 'ket' => 'Label Ketidaksesuaian'][$j]];
+                $hasil[] = ['jenis' => $j, 'id' => $l, 'label' => $l, 'sub' => self::NAMA_LABEL[$j]];
             }
         }
 
@@ -439,7 +490,7 @@ final class DrmKorelasi
 
     /**
      * Status SAP per baris HIRA di cakupan seluruh BC (rincian.json lingkup ALL), minggu penuh terakhir.
-     * K = teridentifikasi & terkontrol, G = ada gap, T = tidak teridentifikasi. Kosong bila snapshot belum ada.
+     * K = terkontrol, G = ada gap, T = tidak teridentifikasi; status terburuk bila baris ada di >1 kelompok.
      *
      * @return array{minggu: ?string, hid: array<string, string>}
      */
@@ -462,7 +513,6 @@ final class DrmKorelasi
             foreach ((array) ($r['lingkup']['ALL']['u'] ?? []) as $x) {
                 $kode = (string) ($x[5] ?? '');
                 $k = $kode[$w] ?? 'T';
-                // Satu baris bisa di beberapa kelompok: status terburuk (G > T > K) yang dipakai.
                 $lama = $hid[(string) $x[1]] ?? null;
                 $hid[(string) $x[1]] = $lama === null ? $k : (str_contains($lama.$k, 'G') ? 'G' : (str_contains($lama.$k, 'T') ? 'T' : 'K'));
             }

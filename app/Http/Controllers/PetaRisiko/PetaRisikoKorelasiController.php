@@ -13,8 +13,8 @@ use Illuminate\Http\Request;
 use InvalidArgumentException;
 
 /**
- * Peta korelasi master DRM 2.1 (/peta-risiko-pja/korelasi): graf grup lokasi ↔ detail lokasi ↔ PJA ↔ aktivitas ↔
- * kelompok ↔ bahaya-risiko ↔ label SAP, dalam mode fokus (satu simpul pusat + tetangganya).
+ * Alur baseline DRM 2.1 (/peta-risiko-pja/korelasi): aktivitas → sub aktivitas → bahaya-risiko → label SAP →
+ * grup lokasi → detail lokasi → PJA, dalam mode fokus (satu simpul menentukan cakupan alur).
  */
 final class PetaRisikoKorelasiController extends Controller
 {
@@ -37,7 +37,7 @@ final class PetaRisikoKorelasiController extends Controller
         abort_unless(DrmMasterDb::terisi(), 404);
         $v = $request->validate(['jenis' => ['required', 'in:'.implode(',', DrmKorelasi::JENIS)], 'id' => ['required', 'string', 'max:600']]);
         try {
-            return response()->json($this->korelasi->graf($v['jenis'], $v['id']));
+            return response()->json($this->korelasi->alur($v['jenis'], $v['id']));
         } catch (InvalidArgumentException $e) {
             return response()->json(['pesan' => $e->getMessage()], 404);
         }
