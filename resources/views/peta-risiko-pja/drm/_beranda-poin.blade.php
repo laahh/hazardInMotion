@@ -34,6 +34,15 @@
   .bp-flag:hover { border-color: var(--navy); background: var(--sky); }
   .bp-flag.off { color: #8a5300; border-color: #f2c76b; background: #fff7e6; }
   .bp-tot td { background: #eef3fa; font-weight: 800; }
+  /* Tabel poin: isi baris rata atas supaya sel pendek tidak terdorong ke tengah oleh sel panjang. */
+  #bp-isi .pr-tbl td { vertical-align: top; }
+  .bp-akar { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-width: 340px; }
+  .bp-akar li { font-size: 12.5px; line-height: 1.45; color: #475569; }
+  .bp-akar b { display: block; color: #1f2937; font-weight: 700; }
+  .bp-akar-isi { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .bp-akar-lengkap { margin-top: 4px; max-width: 340px; }
+  .bp-akar-lengkap summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--navy); }
+  .bp-akar-lengkap p { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: #475569; white-space: pre-line; }
   .bp-dialog { width: min(640px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 0; box-shadow: 0 30px 80px rgba(15, 23, 42, .35); }
   .bp-dialog::backdrop { background: rgba(15, 23, 42, .45); }
   .bp-dialog header { display: flex; gap: 12px; align-items: flex-start; padding: 18px 20px 12px; border-bottom: 1px solid var(--line); }
@@ -227,6 +236,23 @@ window.BerandaPoin = (function () {
   }
 
   // ------------------------------------------------ 6 insiden & root cause
+  /**
+   * Akar penyebab investigasi berisi beberapa poin "Layer N · judul: uraian" yang digabung dengan koma.
+   * Ditampilkan ringkas: per layer judul + 2 baris uraian, teks lengkap di "Selengkapnya".
+   */
+  function akarPenyebab(akar) {
+    const teks = String(akar || '').trim();
+    if (!teks) return '<span class="dr-mute">–</span>';
+    const poin = teks.split(/\s*,\s*(?=Layer\s*\d)/i).map((p) => p.trim()).filter(Boolean);
+    const ringkas = poin.map((p) => {
+      const m = p.match(/^(Layer\s*\d+\s*·?\s*[^:]{0,80}):\s*([\s\S]*)$/i);
+      const judul = m ? m[1].trim() : '';
+      const isi = m ? m[2].trim() : p;
+      return `<li>${judul ? `<b>${E(judul)}</b>` : ''}<span class="bp-akar-isi">${E(isi)}</span></li>`;
+    }).join('');
+    return `<ul class="bp-akar">${ringkas}</ul>${teks.length > 160 ? `<details class="bp-akar-lengkap"><summary>Selengkapnya</summary><p>${E(teks)}</p></details>` : ''}`;
+  }
+
   function insiden(X) {
     const rc = {};
     (X.BE.rc || []).forEach((r) => (rc[r.no] ||= []).push(r));
@@ -235,7 +261,7 @@ window.BerandaPoin = (function () {
       return `<tr><td style="white-space:nowrap"><b>#${E(i.no)}</b><br><span class="dr-mute">${pendek(i.tanggal)} ${String(i.tanggal).slice(0, 4)}</span></td>
         <td>${E(i.kategori)}</td><td>${E(i.lokasi)} · <b>${E(i.detlok)}</b></td>
         <td><div class="pr-clamp" title="${E(i.kronologi)}">${E(i.kronologi || '–')}</div>${i.potensi ? `<span class="dr-mute">Potensi: ${E(i.potensi)}</span>` : ''}</td>
-        <td>${i.akar ? `<div class="bp-kt">${E(i.akar)}</div>` : '<span class="dr-mute">–</span>'}</td>
+        <td>${akarPenyebab(i.akar)}</td>
         <td>${r.length ? r.map((x) => `<div style="margin-bottom:4px">${E(x.label)} <span class="dr-mute">· sebelum ${x.sebelum ? F(x.sebelum) : '<b class="br-red">0</b>'} · belum closed ${F(x.belum)}</span></div>`).join('') : '<span class="dr-mute">belum terpetakan</span>'}</td></tr>`;
     }).join('');
     return kartu('6. Insiden dan root cause di lokasi PJA', `${(X.D.insiden || []).length} insiden · root cause SAP = label ketidaksesuaian yang terpetakan, "sebelum" = laporan label sama 3 bulan sebelum insiden`,
