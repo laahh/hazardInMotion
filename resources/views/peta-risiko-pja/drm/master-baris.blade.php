@@ -145,6 +145,8 @@
   #mb-tabel_wrapper .dt-length select { border-radius: 8px; padding: 4px 8px; }
   table.mb-tbl.dataTable > thead > tr > th { padding: 10px 12px; }
 </style>
+{{-- DataTables 2 tetap butuh jQuery; layout _layout-drm tidak memuatnya. --}}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/datatables.net@2.1.8/js/dataTables.min.js"></script>
 <script>
 (function () {
