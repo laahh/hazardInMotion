@@ -51,7 +51,8 @@ class DmsRosterApproverDepartemenTest extends TestCase
         $this->assertCount(48, $tanam['approver']);
         $this->assertSame('MINE PLANNING & TECHNICAL SERVICES DIVISION', $tanam['approver']['YBT3P']);
         $this->assertContains('QUALITY & RISK MANAGEMENT SYSTEM DEPARTMENT', $tanam['approver']['K1I5I']);
-        $this->assertSame('BINUNGAN MINE OPERATION AREA 1 DEPARTEMENT', $tanam['approver']['9KWOO']);
+        // Manager BMO 1 juga memegang ejaan "BMO1 DEPARTMENT" (karyawan BC & BCE di data karyawan).
+        $this->assertSame(['BINUNGAN MINE OPERATION AREA 1 DEPARTEMENT', 'BMO1 DEPARTMENT'], $tanam['approver']['9KWOO']);
     }
 
     public function test_akun_dicocokkan_dari_sid_di_kolom_email_tanpa_beda_huruf(): void
