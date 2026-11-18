@@ -11,9 +11,23 @@
   #br-perh { margin-top: 24px; }
   .br-root details[open] > summary.pr-card-head::after { transform: rotate(90deg); }
 
-  /* Bilah filter: menempel di atas saat menggulir */
-  .br-bar-wrap { position: sticky; top: 10px; z-index: 30; }
-  .br-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 18px; background: rgba(255, 255, 255, .92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 20px rgba(20, 30, 60, .08); }
+  /* Bilah sub-tab + filter: satu blok yang menempel di atas saat menggulir */
+  .br-bar-wrap { position: sticky; top: 10px; z-index: 30; background: rgba(255, 255, 255, .94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 4px 16px rgba(20, 30, 60, .06); overflow: hidden; }
+  .br-tabs { display: flex; gap: 4px; padding: 6px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); background: #f6f8fb; }
+  .br-tabs::-webkit-scrollbar { display: none; }
+  .br-tabs button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 11px; font: 700 13.5px/1 "Plus Jakarta Sans", sans-serif; color: var(--mute); white-space: nowrap; transition: background .25s var(--ease), color .25s var(--ease), box-shadow .25s var(--ease); }
+  .br-tabs button .material-symbols-outlined { font-size: 18px; }
+  .br-tabs button:hover { color: var(--ink); background: rgba(255, 255, 255, .7); }
+  .br-tabs button[aria-selected="true"] { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(20, 26, 34, .08), 0 4px 12px rgba(20, 26, 34, .06); }
+  .br-tabs button:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
+  .br-tab-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #E8112D; color: #fff; font: 800 11px/20px "Plus Jakarta Sans", sans-serif; text-align: center; }
+  .br-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 18px; }
+
+  /* Isi sub-tab: masuk dengan pudar + geser halus */
+  .br-panel > * + * { margin-top: 20px; }
+  .br-ganti { animation: br-naik .35s var(--ease) both; }
+  .br-lampiran { display: grid; gap: 20px; margin-top: 20px; }
+  .br-lampiran[hidden] { display: none; }
   .br-bar .lbl { font: 700 12px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--mute-2); }
   .br-bar select { height: 36px; border: 1px solid var(--line-2); border-radius: 10px; padding: 0 10px; font: inherit; font-size: 14px; background: #fff; max-width: 330px; transition: border-color .2s; }
   .br-bar select:hover { border-color: var(--navy); }
@@ -39,7 +53,7 @@
   .br-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
   .br-kpi { position: relative; overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 14px 20px; box-shadow: var(--shadow); transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
   .br-kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--ac, var(--mute-2)); }
-  .br-kpi:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(20, 26, 34, .05), 0 14px 32px rgba(20, 26, 34, .10); }
+  .br-kpi:hover { box-shadow: 0 2px 4px rgba(20, 26, 34, .05), 0 10px 24px rgba(20, 26, 34, .08); }
   .br-kpi small { display: block; font: 700 12px/1.3 "Plus Jakarta Sans", sans-serif; letter-spacing: .04em; text-transform: uppercase; color: var(--mute); }
   .br-kpi b { display: block; margin: 6px 0 4px; font: 800 32px/1 "Plus Jakarta Sans", sans-serif; letter-spacing: -.02em; color: var(--kc, var(--navy)); }
   .br-kpi em { font-style: normal; font-size: 13px; line-height: 1.4; color: var(--mute); }
@@ -47,7 +61,7 @@
   /* Kartu perlu aksi */
   .br-act { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
   .br-ac { background: #fff; border: 1px solid var(--line); border-top: 4px solid var(--ac); border-radius: 14px; padding: 12px 16px 14px; box-shadow: var(--shadow); transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
-  .br-ac:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(20, 26, 34, .05), 0 14px 32px rgba(20, 26, 34, .10); }
+  .br-ac:hover { box-shadow: 0 2px 4px rgba(20, 26, 34, .05), 0 10px 24px rgba(20, 26, 34, .08); }
   .br-ac small { display: block; font: 700 13px/1.3 "Plus Jakarta Sans", sans-serif; color: var(--mute); }
   .br-ac .big { display: block; margin: 4px 0 2px; font: 800 28px/1.15 "Plus Jakarta Sans", sans-serif; color: var(--ink); }
   .br-ac .big span { font-size: 14px; font-weight: 600; color: var(--mute); }
@@ -122,12 +136,13 @@
   .br-awal > *:nth-child(4) { animation-delay: .12s; } .br-awal > *:nth-child(n+5) { animation-delay: .16s; }
   .br-buka > td > * { animation: br-naik .35s var(--ease) both; }
   @media (prefers-reduced-motion: reduce) {
-    .br-awal > *, .br-buka > td > * { animation: none; }
+    .br-awal > *, .br-buka > td > *, .br-ganti { animation: none; }
+    .br-tabs button { transition: none; }
     .br-kpi, .br-ac, .br-hm td.c, .br-wc .stk, .br-cr { transition: none; }
   }
 
   @media (max-width: 1100px) { .br-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 900px) { .br-act, .br-tis, .br-two { grid-template-columns: 1fr; } .br-sum { margin-left: 0; } }
-  @media (max-width: 560px) { .br-kpis { grid-template-columns: 1fr; } .br-bar-wrap { position: static; } }
+  @media (max-width: 560px) { .br-kpis { grid-template-columns: 1fr; } .br-bar-wrap { position: static; } .br-tabs button { padding: 8px 11px; } }
 </style>
 @endpush

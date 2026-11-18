@@ -37,7 +37,13 @@ window.BerandaPJA = function (cfg) {
   const TIER = { t: ['Tinggi', '#b3261e'], s: ['Sedang', '#c28f12'], r: ['Rendah', '#6a8f3c'] };
   const BIT = { DET: 1, SPE: 2, CLOSED: 4, ULANG: 8, STOP: 16, TS: 32, INC: 64 };
   const HARI_INI = new Date().toISOString().slice(0, 10);
-  const S = { w: 0, kb: { Significant: 1, High: 1, Medium: 0, Low: 0 }, aopen: {}, gopen: {}, semua: false, mg: false };
+  const S = { w: 0, kb: { Significant: 1, High: 1, Medium: 0, Low: 0 }, aopen: {}, gopen: {}, semua: false, mg: false, tab: 'ringkas', ganti: false };
+  // Sub-tab Beranda: satu bagian tampil sekaligus supaya halaman tidak menumpuk; filter periode & risiko tetap di atas.
+  const TABS = [['ringkas', 'Ringkasan', 'space_dashboard'], ['gap', 'Gap & perhatian', 'report'], ['tren', 'Tren', 'show_chart'],
+    ['rinci', 'Rincian aktivitas', 'account_tree'], ['insiden', 'Insiden', 'emergency'], ['lain', 'Lainnya', 'more_horiz']];
+  // Tautan "Lihat …" di kartu Perlu aksi: elemen tujuan → sub-tab tempat elemen itu berada.
+  const TAB_TUJUAN = { 'br-kel': 'rinci', 'br-perh': 'gap', 'br-rc': 'insiden' };
+  try { const t = sessionStorage.getItem('br-tab'); if (TABS.some(([k]) => k === t)) S.tab = t; } catch (e) { /* penyimpanan sesi tidak tersedia */ }
   let D = null, R = [], FL = { tersedia: false, flag: [] }, NW = 0, NH = 0;
   const idx = {};
 
@@ -268,24 +274,54 @@ window.BerandaPJA = function (cfg) {
     const isi = $('#br-isi');
     isi.classList.toggle('br-awal', !S.sudah);
     S.sudah = true;
-    isi.innerHTML = filterBar(UT, GU)
-      + `<div class="br-kpis">
+    const kpis = `<div class="br-kpis">
         ${kpi('var(--navy)', 'var(--navy)', 'Baris baseline unik · ' + E(wKode(S.w)), F(UT.tot), `kelompok aktivitas × bahaya-risiko${UT.excl ? ` · ${F(UT.excl)} dikecualikan flag` : ''}`)}
         ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh menurut SAP', pct(UT.full, UT.tot), `${F(UT.full)} baris${UT.excl ? ` · tanpa flag ${pct(U0.full, U0.tot)}` : ''}`)}
         ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pct(UT.part, UT.tot), `${F(UT.part)} baris · gap total ${pct(GU, UT.tot)}`)}
         ${kpi(W.none, W.bm, 'Tanpa laporan', pct(UT.none, UT.tot), `${F(UT.none)} baris${UT.gaponly ? ` · ${F(UT.gaponly)} hanya bermasalah` : ''}`)}
-      </div>`
-      + perluAksi(U) + petaPanas() + ringkasan(H, U) + panelRc()
-      + `<details class="pr-card" id="br-mg"${S.mg ? ' open' : ''}><summary class="pr-card-head" style="cursor:pointer"><div><b>Perbandingan antar PJA (untuk manajemen)</b><small>Tanpa flag · klik baris untuk membuka PJA</small></div></summary><div class="pr-card-body" id="br-mg-isi">${S.mg ? tabelMgmt() : ''}</div></details>`
-      + `<div class="pr-card"><div class="pr-card-head"><div><b>Tren mingguan</b><small>Klik batang untuk pindah minggu</small></div></div><div class="pr-card-body">${tren()}</div></div>`
-      + hierarki(H) + caraMembaca();
+      </div>`;
+    // Hanya sub-tab aktif yang dihitung & digambar: lebih ringan dan tidak menumpuk.
+    const bagian = {
+      ringkas: () => kpis + perluAksi(U) + ringkasan(H, U, 'tl'),
+      gap: () => ringkasan(H, U, 'gap'),
+      tren: () => `<div class="pr-card"><div class="pr-card-head"><div><b>Tren mingguan</b><small>Klik batang untuk pindah minggu</small></div></div><div class="pr-card-body">${tren()}</div></div>` + petaPanas(),
+      rinci: () => hierarki(H),
+      insiden: () => panelRc(),
+      lain: () => `<details class="pr-card" id="br-mg"${S.mg ? ' open' : ''}><summary class="pr-card-head" style="cursor:pointer"><div><b>Perbandingan antar PJA (untuk manajemen)</b><small>Tanpa flag · klik baris untuk membuka PJA</small></div></summary><div class="pr-card-body" id="br-mg-isi">${S.mg ? tabelMgmt() : ''}</div></details>` + caraMembaca(),
+    };
+    isi.innerHTML = filterBar(UT, GU) + `<div class="br-panel${S.ganti ? ' br-ganti' : ''}" role="tabpanel" aria-labelledby="br-tab-${S.tab}">${bagian[S.tab]()}</div>`;
+    const lampiran = $('#br-lampiran');
+    if (lampiran) lampiran.hidden = S.tab !== 'lain';
     S.baru = '';
+    S.ganti = false;
     pasang();
     window.scrollTo(0, y);
   }
 
+  function tabBar() {
+    const nInsiden = new Set((D.beranda.rc || []).map((r) => r.no)).size;
+    return `<div class="br-tabs" role="tablist" aria-label="Bagian Beranda PJA">${TABS.map(([k, label, ikon]) => {
+      const badge = k === 'insiden' && nInsiden ? `<span class="br-tab-n">${nInsiden}</span>` : '';
+      return `<button type="button" role="tab" id="br-tab-${k}" data-tab="${k}" aria-selected="${S.tab === k}"><span class="material-symbols-outlined">${ikon}</span>${label}${badge}</button>`;
+    }).join('')}</div>`;
+  }
+
+  function pindahTab(tab, tujuan) {
+    if (tab !== S.tab) {
+      S.tab = tab;
+      S.ganti = true;
+      try { sessionStorage.setItem('br-tab', tab); } catch (e) { /* penyimpanan sesi tidak tersedia */ }
+      render();
+    }
+    const el = tujuan && $('#' + tujuan);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    // Ganti tab dari bawah halaman: naik ke awal Beranda supaya isi baru terlihat dari atas.
+    const atas = $('#br-isi').getBoundingClientRect().top + window.pageYOffset - 12;
+    if (window.pageYOffset > atas) window.scrollTo({ top: atas, behavior: 'smooth' });
+  }
+
   function filterBar(UT, GU) {
-    return `<div class="br-bar-wrap"><div class="br-bar">
+    return `<div class="br-bar-wrap">${tabBar()}<div class="br-bar">
         <span class="lbl">Periode</span>
         <select id="br-w" aria-label="Pilih minggu">${BR.minggu.map((_, i) => `<option value="${i}"${i === S.w ? ' selected' : ''}>${E(wLabel(i))}</option>`).join('')}</select>
         <span class="br-nav"><button type="button" id="br-prev" aria-label="Minggu sebelumnya" ${S.w >= NW - 1 ? 'disabled' : ''}>‹</button><button type="button" id="br-next" aria-label="Minggu berikutnya" ${S.w <= 0 ? 'disabled' : ''}>›</button></span>
@@ -334,7 +370,8 @@ window.BerandaPJA = function (cfg) {
   }
 
   // ------------------------------------------------- ringkasan & tindak lanjut
-  function ringkasan(H, U) {
+  /** bagian 'tl' = kartu tindak lanjut (tab Ringkasan); 'gap' = komposisi, tabel gap, dan bahaya perlu perhatian. */
+  function ringkasan(H, U, bagian) {
     const UT = U.T;
     const groups = Object.values(H.AG);
     const hi = groups.filter((o) => nrel(o.c) && o.c.u4 / nrel(o.c) >= BR.tekanan.u4_tinggi).length;
@@ -363,7 +400,12 @@ window.BerandaPJA = function (cfg) {
     if (nSig) tl.push([C.bm, `<b>Significant tanpa laporan:</b> ${F(nSig)} baris (${sigL.slice(0, 3).map(([t]) => E(t)).join(', ')}${sigL.length > 3 ? ', …' : ''}).`]);
     if (inc.length) tl.push([C.inc, `<b>Insiden ${NH} hari:</b> ${inc.length} kejadian (${inc.slice(0, 3).map((i) => E(i.detlok) + ' ' + pendek(i.tanggal)).join(', ')}).`]);
 
-    return `<div class="pr-card"><div class="br-rhead"><b class="t">Ringkasan gap dan tindak lanjut · ${E(wKode(S.w))}</b>
+    if (bagian === 'tl') {
+      return `<div class="pr-card"><div class="pr-card-head"><div><b>Tindak lanjut yang perlu dibuat PJA · ${E(wKode(S.w))}</b><small>Disusun otomatis dari gap minggu terpilih</small></div></div><div class="pr-card-body">${
+        tl.length ? `<div class="br-tis">${tl.map(([c, t], i) => `<div class="br-ti" style="--c:${c}"><span class="br-tn">${i + 1}</span><div>${t}</div></div>`).join('')}</div>` : '<div class="dr-mute">Tidak ada tindak lanjut otomatis untuk periode ini.</div>'}</div></div>`;
+    }
+
+    return `<div class="pr-card"><div class="br-rhead"><b class="t">Komposisi gap · ${E(wKode(S.w))}</b>
       ${sb4(UT.full, UT.part, UT.gaponly, UT.none).replace('class="br-sb"', 'class="br-sb big"')}
       <div class="br-chips">${[[W.ok, 'terkontrol penuh', UT.full], [W.part, 'sebagian', UT.part], ...(UT.gaponly ? [[W.bm, 'hanya bermasalah', UT.gaponly]] : []), [W.none, 'tanpa laporan', UT.none]]
         .map(([c, l, x]) => `<span><i style="background:${c}"></i><b>${pct(x, UT.tot)}</b> ${l} <span class="dr-mute">(${F(x)})</span></span>`).join('')}</div></div><div class="pr-card-body">
@@ -371,7 +413,6 @@ window.BerandaPJA = function (cfg) {
         akt.map(([k, a]) => `<tr><td>${E(KEL[k] || k)}</td><td>${sb4(a.full, a.part, a.gaponly, a.none)}</td><td class="r">${F(a.tot)}</td><td class="r"><b>${pct(a.full, a.tot)}</b></td><td class="r">${F(a.part)}</td><td class="r">${F(a.none)}</td></tr>`).join('') || '<tr><td colspan="6" class="pr-empty">Tidak ada baris.</td></tr>'}</tbody></table></div>
         <div><span class="br-h">Detail lokasi dengan laporan bermasalah terbanyak</span>${topDl.length ? `<table class="pr-tbl dr-tbl"><thead><tr><th>Detail lokasi</th><th class="r">Baris bermasalah</th><th>Kelompok</th></tr></thead><tbody>${
           topDl.map(([dl, a]) => { const l = idx.dl[dl] || {}; return `<tr><td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td><td class="r">${a.n}</td><td class="dr-mute">${[...a.kel].slice(0, 3).map((k) => E(KEL[k] || k)).join(', ')}</td></tr>`; }).join('')}</tbody></table>` : '<div class="dr-mute">Tidak ada laporan bermasalah pada periode ini.</div>'}</div></div>
-      <span class="br-h">Tindak lanjut yang perlu dibuat PJA</span>${tl.length ? `<div class="br-tis">${tl.map(([c, t], i) => `<div class="br-ti" style="--c:${c}"><span class="br-tn">${i + 1}</span><div>${t}</div></div>`).join('')}</div>` : '<div class="dr-mute">Tidak ada tindak lanjut otomatis untuk periode ini.</div>'}
       <div id="br-perh">${perhatian(H)}</div>
       </div></div>`;
   }
@@ -560,7 +601,8 @@ window.BerandaPJA = function (cfg) {
     $('#br-next').addEventListener('click', () => { if (S.w > 0) { S.w--; render(); } });
     ROOT.querySelectorAll('.br-kb').forEach((c) => c.addEventListener('click', () => { S.kb[c.dataset.k] = S.kb[c.dataset.k] ? 0 : 1; render(); }));
     ROOT.querySelectorAll('.br-wc, .br-hm td[data-w]').forEach((c) => c.addEventListener('click', () => { S.w = +c.dataset.w; render(); }));
-    ROOT.querySelectorAll('[data-go]').forEach((a) => a.addEventListener('click', () => { const t = $('#' + a.dataset.go); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+    ROOT.querySelectorAll('.br-tabs [data-tab]').forEach((b) => b.addEventListener('click', () => pindahTab(b.dataset.tab)));
+    ROOT.querySelectorAll('[data-go]').forEach((a) => a.addEventListener('click', () => pindahTab(TAB_TUJUAN[a.dataset.go] || S.tab, a.dataset.go)));
     ROOT.querySelectorAll('tr.br-a').forEach((t) => t.addEventListener('click', () => { S.aopen[t.dataset.a] = !S.aopen[t.dataset.a]; S.baru = 'a:' + t.dataset.a; render(); }));
     ROOT.querySelectorAll('tr.br-g').forEach((t) => t.addEventListener('click', () => { S.gopen[t.dataset.g] = !S.gopen[t.dataset.g]; S.baru = 'g:' + t.dataset.g; render(); }));
     ROOT.querySelectorAll('[data-flag]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); bukaFlag(b.dataset.flag, b.dataset.kel); }));
@@ -568,7 +610,7 @@ window.BerandaPJA = function (cfg) {
     const semua = $('#br-semua');
     if (semua) semua.addEventListener('click', () => { S.semua = !S.semua; render(); });
     const mg = $('#br-mg');
-    mg.addEventListener('toggle', () => { if (mg.open && !S.mg) { S.mg = true; $('#br-mg-isi').innerHTML = tabelMgmt(); pasangMgmt(); } else if (!mg.open) S.mg = false; });
+    if (mg) mg.addEventListener('toggle', () => { if (mg.open && !S.mg) { S.mg = true; $('#br-mg-isi').innerHTML = tabelMgmt(); pasangMgmt(); } else if (!mg.open) S.mg = false; });
   }
   function pasangMgmt() {
     ROOT.querySelectorAll('tr[data-pja]').forEach((t) => t.addEventListener('click', () => pindahPja(t.dataset.pja)));
