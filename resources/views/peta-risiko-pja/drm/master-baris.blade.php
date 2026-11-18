@@ -59,7 +59,6 @@
   .mb-tambah button { align-self: flex-start; padding: 5px 12px; border-radius: 999px; border: 0; background: #3952bc; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
   .mb-ubah { display: inline-block; margin-top: 6px; font-size: 11.5px; font-weight: 600; color: #3952bc; text-decoration: none; }
   .mb-ubah:hover { text-decoration: underline; }
-  .mb-pag { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; font-size: 13px; color: #595c5e; }
   .mb-scroll { overflow-x: auto; }
   @media (max-width: 760px) { .mb-ring { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
@@ -80,7 +79,7 @@
     <code>php artisan peta-risiko:master-db --turunkan-oak</code>.
     @if ($bolehUbah)
       <br><small>Diagnosis proses web: server <code>{{ $diagnosis['server'] }}</code> · folder <code>{{ $diagnosis['folder'] }}</code> ·
-        koneksi <code>{{ $diagnosis['koneksi'] }}</code> · database <code>{{ $namaDb }}</code> · config cache {{ $diagnosis['configCache'] ? 'aktif' : 'tidak' }}
+        koneksi <code>{{ $diagnosis['koneksi'] }}</code> · host <code>{{ $diagnosis['host'] }}</code> · database <code>{{ $namaDb }}</code> · config cache {{ $diagnosis['configCache'] ? 'aktif' : 'tidak' }}
         @if ($diagnosis['error'])· error: <code>{{ $diagnosis['error'] }}</code>@endif</small>
     @endif
   </div></div>
@@ -99,29 +98,25 @@
   </div>
 
   <div class="pr-card">
-    <form class="mb-bar" method="get" action="{{ route('peta-risiko-pja.master.baris.index') }}">
-      <input type="search" name="q" value="{{ $q }}" placeholder="Cari aktivitas, sub aktivitas, bahaya, atau ID baris…" aria-label="Cari">
-      <select name="kb" aria-label="Risiko awal">
+    <div class="mb-bar">
+      <select id="mb-f-kb" aria-label="Risiko awal">
         <option value="">Semua risiko</option>
         @foreach (['Significant', 'High', 'Medium', 'Low'] as $lv)
-          <option value="{{ $lv }}" @selected($kb === $lv)>{{ $lv }}</option>
+          <option value="{{ $lv }}">{{ $lv }}</option>
         @endforeach
       </select>
-      <select name="kosong" aria-label="Filter label">
+      <select id="mb-f-kosong" aria-label="Filter label">
         <option value="">Semua baris</option>
-        <option value="OBS" @selected($kosong === 'OBS')>Tanpa label Observasi</option>
-        <option value="OAK" @selected($kosong === 'OAK')>Tanpa label OAK</option>
-        <option value="KET" @selected($kosong === 'KET')>Tanpa label Ketidaksesuaian</option>
-        <option value="SEMUA" @selected($kosong === 'SEMUA')>Tanpa label sama sekali</option>
+        <option value="OBS">Tanpa label Observasi</option>
+        <option value="OAK">Tanpa label OAK</option>
+        <option value="KET">Tanpa label Ketidaksesuaian</option>
+        <option value="SEMUA">Tanpa label sama sekali</option>
       </select>
-      <button class="mb-btn" type="submit"><span class="material-symbols-outlined" style="font-size:18px">search</span> Terapkan</button>
+      <button class="mb-btn sek" type="button" id="mb-reset">Reset filter</button>
       @if ($bolehUbah)
         <a class="mb-btn sek" href="{{ route('peta-risiko-pja.master.index', ['t' => 'baris', 'tambah' => 1]) }}"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah baris HIRA</a>
       @endif
-      @if ($q !== '' || $kb !== '' || $kosong !== '')
-        <a class="mb-btn sek" href="{{ route('peta-risiko-pja.master.baris.index') }}">Reset</a>
-      @endif
-    </form>
+    </div>
 
     <datalist id="mb-obs">@foreach ($saranObs as $s)<option value="{{ $s }}">@endforeach</datalist>
     <datalist id="mb-oak">@foreach ($saranOak as $s)<option value="{{ $s }}">@endforeach</datalist>
@@ -129,67 +124,128 @@
     <datalist id="mb-sk">@foreach ($saranSk as $s)<option value="{{ $s }}">@endforeach</datalist>
 
     <div class="mb-scroll">
-      <table class="mb-tbl">
+      <table class="mb-tbl" id="mb-tabel" style="width:100%">
         <thead><tr>
           <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko terkait</th>
           <th>Item Sumber Observasi</th><th>Item Sumber OAK</th><th>Item Sumber Ketidaksesuaian</th>
         </tr></thead>
-        <tbody>
-        @forelse ($baris as $b)
-          @php $lb = $labelBaris[$b->ri] ?? []; @endphp
-          <tr>
-            <td class="hira">{{ $b->aktivitas }}<small>ID {{ $b->ri }}</small>
-              @if ($bolehUbah)
-                <a class="mb-ubah" href="{{ route('peta-risiko-pja.master.index', ['t' => 'baris', 'ubah' => $b->ri]) }}">Ubah baris</a>
-              @endif
-            </td>
-            <td class="hira">{{ $b->sub ?: '—' }}</td>
-            <td class="hira">{{ $b->bahaya }}<br><span class="mb-lv {{ $b->kb }}">{{ $b->kb ?: '-' }}</span></td>
-            @foreach ([['OBS', 'mb-obs', 'Observasi', 'Jenis kegiatan observasi'], ['OAK', 'mb-oak', 'OAK', 'Aktivitas OAK / Sub aktivitas'], ['KET', null, 'Ketidaksesuaian', null]] as [$jenis, $dl, $nama, $ph])
-              <td class="lbl">
-                @forelse ($lb[$jenis] ?? [] as $l)
-                  @php $kls = $l['sumber'] === \App\Services\PetaRisiko\Drm\Master\DrmMasterDb::SUMBER_TURUNAN_OAK ? 'turunan' : ($l['sumber'] === 'manual' ? 'manual' : ''); @endphp
-                  <div class="mb-chip {{ $kls }}"><span>{{ $l['label'] }}@if ($l['sumber'] !== '')<em>{{ $l['sumber'] }}</em>@endif</span>
-                    @if ($bolehUbah)
-                      <form method="post" action="{{ route('peta-risiko-pja.master.baris.hapus', $l['hapus']) }}" onsubmit="return confirm('Hapus label ini dari baris {{ $b->ri }}?')">@csrf
-                        <input type="hidden" name="label" value="{{ $l['label'] }}">
-                        <button type="submit" title="Hapus label" aria-label="Hapus label">×</button></form>
-                    @endif
-                  </div>
-                @empty
-                  <div class="mb-kosong">Belum ada label</div>
-                @endforelse
-                @if ($bolehUbah)
-                  <details class="mb-tambah"><summary>+ Tambah label {{ $nama }}</summary>
-                    <form method="post" action="{{ route('peta-risiko-pja.master.baris.tambah', ['ri' => $b->ri]) }}">@csrf
-                      <input type="hidden" name="jenis" value="{{ $jenis }}">
-                      @if ($jenis === 'KET')
-                        <input name="k" list="mb-k" maxlength="300" required placeholder="Ketidaksesuaian">
-                        <input name="sk" list="mb-sk" maxlength="300" required placeholder="Sub ketidaksesuaian">
-                      @else
-                        <input name="teks" list="{{ $dl }}" maxlength="500" required placeholder="{{ $ph }}">
-                      @endif
-                      <button type="submit">Simpan</button>
-                    </form>
-                  </details>
-                @endif
-              </td>
-            @endforeach
-          </tr>
-        @empty
-          <tr><td colspan="6" class="mb-kosong" style="padding:24px">Tidak ada baris yang cocok.</td></tr>
-        @endforelse
-        </tbody>
+        <tbody></tbody>
       </table>
     </div>
-
-    <div class="mb-pag">
-      <span>{{ number_format($baris->total(), 0, ',', '.') }} baris · halaman {{ $baris->currentPage() }} dari {{ max(1, $baris->lastPage()) }}</span>
-      <span style="display:flex;gap:8px">
-        @if ($baris->previousPageUrl()) <a class="mb-btn sek" href="{{ $baris->previousPageUrl() }}">‹ Sebelumnya</a> @endif
-        @if ($baris->nextPageUrl()) <a class="mb-btn sek" href="{{ $baris->nextPageUrl() }}">Berikutnya ›</a> @endif
-      </span>
-    </div>
   </div>
+@endif
+@endsection
+
+@section('scripts')
+@if ($siap && $terisi)
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@2.1.8/css/dataTables.dataTables.min.css">
+<style>
+  #mb-tabel_wrapper .dt-layout-row { padding: 10px 20px; margin: 0; }
+  #mb-tabel_wrapper .dt-search input { min-width: 280px; padding: 7px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #f8fafc; }
+  #mb-tabel_wrapper .dt-length select { border-radius: 8px; padding: 4px 8px; }
+  table.mb-tbl.dataTable > thead > tr > th { padding: 10px 12px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net@2.1.8/js/dataTables.min.js"></script>
+<script>
+(function () {
+  const ROWS = @json($rows);
+  const BOLEH = @json($bolehUbah);
+  const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+  const URL_TAMBAH = @json(route('peta-risiko-pja.master.baris.tambah', ['ri' => 0]));
+  const URL_HAPUS = @json(route('peta-risiko-pja.master.baris.hapus', ['jenis' => 'OBS', 'id' => 0]));
+  const URL_UBAH = @json(route('peta-risiko-pja.master.index', ['t' => 'baris', 'ubah' => 0]));
+  const TURUNAN = @json(\App\Services\PetaRisiko\Drm\Master\DrmMasterDb::SUMBER_TURUNAN_OAK);
+  const JENIS = {
+    OBS: { nama: 'Observasi', dl: 'mb-obs', ph: 'Jenis kegiatan observasi' },
+    OAK: { nama: 'OAK', dl: 'mb-oak', ph: 'Aktivitas OAK / Sub aktivitas' },
+    KET: { nama: 'Ketidaksesuaian', dl: null, ph: null },
+  };
+  const PETA_ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => PETA_ESC[c]);
+  // URL dibangun dari route asli (placeholder 0) agar tetap benar bila prefix route berubah.
+  const urlTambah = (ri) => URL_TAMBAH.replace(/\/0\/label$/, '/' + ri + '/label');
+  const urlHapus = (jenis, id) => URL_HAPUS.replace(/\/label\/OBS\/0\/hapus$/, '/label/' + encodeURIComponent(jenis) + '/' + id + '/hapus');
+  const urlUbah = (ri) => URL_UBAH.replace(/ubah=0$/, 'ubah=' + ri);
+  const token = () => '<input type="hidden" name="_token" value="' + esc(CSRF) + '">';
+
+  function chip(l, ri) {
+    const kls = l.sumber === TURUNAN ? 'turunan' : (l.sumber === 'manual' ? 'manual' : '');
+    const sumber = l.sumber ? '<em>' + esc(l.sumber) + '</em>' : '';
+    const hapus = BOLEH
+      ? '<form method="post" action="' + esc(urlHapus(l.hapus.jenis, l.hapus.id)) + '" data-konfirmasi="Hapus label ini dari baris ' + ri + '?">'
+        + token() + '<input type="hidden" name="label" value="' + esc(l.label) + '">'
+        + '<button type="submit" title="Hapus label" aria-label="Hapus label">×</button></form>'
+      : '';
+    return '<div class="mb-chip ' + kls + '"><span>' + esc(l.label) + sumber + '</span>' + hapus + '</div>';
+  }
+
+  function formTambah(jenis, ri) {
+    const j = JENIS[jenis];
+    const isian = jenis === 'KET'
+      ? '<input name="k" list="mb-k" maxlength="300" required placeholder="Ketidaksesuaian"><input name="sk" list="mb-sk" maxlength="300" required placeholder="Sub ketidaksesuaian">'
+      : '<input name="teks" list="' + j.dl + '" maxlength="500" required placeholder="' + esc(j.ph) + '">';
+    return '<details class="mb-tambah"><summary>+ Tambah label ' + j.nama + '</summary>'
+      + '<form method="post" action="' + esc(urlTambah(ri)) + '">' + token()
+      + '<input type="hidden" name="jenis" value="' + jenis + '">' + isian + '<button type="submit">Simpan</button></form></details>';
+  }
+
+  const kolomLabel = (jenis) => ({
+    data: jenis,
+    orderable: false,
+    className: 'lbl',
+    render: (d, type, r) => {
+      if (type !== 'display') return d.map((l) => l.label).join(' | ');
+      const isi = d.length ? d.map((l) => chip(l, r.ri)).join('') : '<div class="mb-kosong">Belum ada label</div>';
+      return isi + (BOLEH ? formTambah(jenis, r.ri) : '');
+    },
+  });
+
+  const tabel = new DataTable('#mb-tabel', {
+    data: ROWS,
+    deferRender: true,
+    stateSave: true,
+    pageLength: 25,
+    lengthMenu: [10, 25, 50, 100, 250],
+    order: [[0, 'asc']],
+    autoWidth: false,
+    language: {
+      search: 'Cari:', searchPlaceholder: 'aktivitas, bahaya, label, ID…',
+      lengthMenu: 'Tampilkan _MENU_ baris', info: '_START_–_END_ dari _TOTAL_ baris',
+      infoEmpty: 'Tidak ada baris', infoFiltered: '(disaring dari _MAX_)', zeroRecords: 'Tidak ada baris yang cocok.',
+      paginate: { first: '«', previous: '‹', next: '›', last: '»' },
+    },
+    columns: [
+      { data: 'a', className: 'hira', render: (d, type, r) => type !== 'display' ? d + ' ' + r.ri
+          : esc(d) + '<small>ID ' + r.ri + '</small>' + (BOLEH ? '<a class="mb-ubah" href="' + esc(urlUbah(r.ri)) + '">Ubah baris</a>' : '') },
+      { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
+      { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
+          ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
+      kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
+    ],
+  });
+
+  const fKb = document.getElementById('mb-f-kb');
+  const fKosong = document.getElementById('mb-f-kosong');
+  DataTable.ext.search.push((settings, _data, idx) => {
+    if (settings.nTable.id !== 'mb-tabel') return true;
+    const r = ROWS[idx];
+    if (fKb.value && r.kb !== fKb.value) return false;
+    const k = fKosong.value;
+    if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
+    if (k) return !r[k].length;
+    return true;
+  });
+  [fKb, fKosong].forEach((el) => el.addEventListener('change', () => tabel.draw()));
+  document.getElementById('mb-reset').addEventListener('click', () => {
+    fKb.value = '';
+    fKosong.value = '';
+    tabel.search('').order([0, 'asc']).page(0).draw();
+  });
+  document.getElementById('mb-tabel').addEventListener('submit', (e) => {
+    const pesan = e.target.dataset.konfirmasi;
+    if (pesan && !confirm(pesan)) e.preventDefault();
+  });
+})();
+</script>
 @endif
 @endsection

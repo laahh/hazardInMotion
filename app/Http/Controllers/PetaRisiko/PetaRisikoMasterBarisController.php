@@ -21,8 +21,6 @@ use Illuminate\Support\Facades\Schema;
  */
 final class PetaRisikoMasterBarisController extends Controller
 {
-    private const PER_HALAMAN = 40;
-
     public function __construct(private readonly DrmMasterDb $db)
     {
     }
@@ -30,13 +28,13 @@ final class PetaRisikoMasterBarisController extends Controller
     public function index(Request $request): View
     {
         $siap = DrmMasterDb::siap();
-        $data = ['siap' => $siap, 'terisi' => false, 'bolehUbah' => $this->bolehUbah($request), 'q' => trim((string) $request->query('q', '')),
-            'kb' => (string) $request->query('kb', ''), 'kosong' => (string) $request->query('kosong', ''),
-            // Untuk diagnosis "belum siap": database yang dibaca halaman ini (bukan host / kredensial).
+        $data = ['siap' => $siap, 'terisi' => false, 'bolehUbah' => $this->bolehUbah($request),
+            // Untuk diagnosis "belum siap": database yang dibaca halaman ini (bukan kredensial).
             'namaDb' => (string) DB::connection()->getDatabaseName(),
             'diagnosis' => [
                 'error' => DrmMasterDb::$errorSiap,
                 'koneksi' => (string) config('database.default'),
+                'host' => (string) config('database.connections.'.config('database.default').'.host'),
                 'folder' => base_path(),
                 'server' => (string) gethostname(),
                 'configCache' => app()->configurationIsCached(),
@@ -46,35 +44,28 @@ final class PetaRisikoMasterBarisController extends Controller
         }
         $kolom = DrmMasterDb::labelDiBaris();
 
-        $query = DB::table('drm_master_baris')->where('aktif', true);
-        if ($data['q'] !== '') {
-            $pola = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $data['q']).'%';
-            $query->where(function ($w) use ($pola, $data, $kolom) {
-                $w->where('aktivitas', 'like', $pola)->orWhere('sub', 'like', $pola)->orWhere('bahaya', 'like', $pola);
-                if ($kolom) {
-                    foreach (DrmMasterDb::KOLOM_LABEL as $k) {
-                        $w->orWhere($k, 'like', $pola);
-                    }
-                }
-                if (ctype_digit($data['q'])) {
-                    $w->orWhere('ri', (int) $data['q']);
-                }
-            });
-        }
-        if (in_array($data['kb'], ['Significant', 'High', 'Medium', 'Low'], true)) {
-            $query->where('kb', $data['kb']);
-        }
-        $this->saringKosong($query, $data['kosong'], $kolom);
-        $baris = $query->orderBy('aktivitas')->orderBy('sub')->orderBy('ri')->paginate(self::PER_HALAMAN)->withQueryString();
+        // Semua baris aktif dikirim sekali; cari / saring / urut / halaman dikerjakan DataTables di browser.
+        $baris = DB::table('drm_master_baris')->where('aktif', true)
+            ->orderBy('aktivitas')->orderBy('sub')->orderBy('ri')->get()->all();
+        $label = $this->labelHalaman($baris, $kolom);
+        $rows = array_map(fn ($b) => [
+            'ri' => (int) $b->ri,
+            'a' => (string) $b->aktivitas,
+            's' => (string) ($b->sub ?? ''),
+            'b' => (string) $b->bahaya,
+            'kb' => (string) ($b->kb ?? ''),
+            'OBS' => $label[(int) $b->ri]['OBS'] ?? [],
+            'OAK' => $label[(int) $b->ri]['OAK'] ?? [],
+            'KET' => $label[(int) $b->ri]['KET'] ?? [],
+        ], $baris);
 
-        return view('peta-risiko-pja.drm.master-baris', $data + [
+        // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.
+        return view('peta-risiko-pja.drm.master-baris', array_merge($data, [
             'terisi' => true,
             'modeKolom' => $kolom,
-            'baris' => $baris,
-            'labelBaris' => $this->labelHalaman($baris->items(), $kolom),
+            'rows' => $rows,
             'jumlah' => $this->jumlah($kolom),
-            ...$this->saran($kolom),
-        ]);
+        ], $this->saran($kolom)));
     }
 
     /** Tambah satu label ke baris: jenis OBS / OAK (teks) atau KET (ketidaksesuaian + subketidaksesuaian). */
@@ -148,30 +139,8 @@ final class PetaRisikoMasterBarisController extends Controller
         return DrmMaster::normTeks($label);
     }
 
-    private function saringKosong($query, string $kosong, bool $kolom): void
-    {
-        if ($kolom) {
-            $kosongKolom = fn ($q, string $k) => $q->where(fn ($w) => $w->whereNull($k)->orWhere($k, ''));
-            match ($kosong) {
-                'OBS', 'OAK', 'KET' => $kosongKolom($query, DrmMasterDb::KOLOM_LABEL[$kosong]),
-                'SEMUA' => array_map(fn ($k) => $kosongKolom($query, $k), DrmMasterDb::KOLOM_LABEL),
-                default => null,
-            };
-
-            return;
-        }
-        if (in_array($kosong, ['OBS', 'OAK'], true)) {
-            $query->whereNotIn('ri', DB::table('drm_master_teks')->where('aktif', true)->where('jenis', $kosong)->select('ri'));
-        } elseif ($kosong === 'KET') {
-            $query->whereNotIn('ri', DB::table('drm_master_label')->where('aktif', true)->select('ri'));
-        } elseif ($kosong === 'SEMUA') {
-            $query->whereNotIn('ri', DB::table('drm_master_teks')->where('aktif', true)->select('ri'))
-                ->whereNotIn('ri', DB::table('drm_master_label')->where('aktif', true)->select('ri'));
-        }
-    }
-
     /**
-     * Label per baris di halaman: [ri][jenis] = list<array{label: string, sumber: string, hapus: array}>.
+     * Label per baris: [ri][jenis] = list<array{label: string, sumber: string, hapus: array}>.
      *
      * @param  list<object>  $items
      * @return array<int, array<string, list<array<string, mixed>>>>
