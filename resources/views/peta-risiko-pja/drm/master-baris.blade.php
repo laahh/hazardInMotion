@@ -57,6 +57,8 @@
   .mb-tambah form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
   .mb-tambah input { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(171, 173, 175, .55); font-size: 12.5px; }
   .mb-tambah button { align-self: flex-start; padding: 5px 12px; border-radius: 999px; border: 0; background: #3952bc; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .mb-ubah { display: inline-block; margin-top: 6px; font-size: 11.5px; font-weight: 600; color: #3952bc; text-decoration: none; }
+  .mb-ubah:hover { text-decoration: underline; }
   .mb-pag { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; font-size: 13px; color: #595c5e; }
   .mb-scroll { overflow-x: auto; }
   @media (max-width: 760px) { .mb-ring { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -84,7 +86,8 @@
   </div></div>
 @else
   <div class="mb-banner info"><span class="material-symbols-outlined">info</span><div>
-    Label <b>kuning</b> = turunan kurasi aktivitas OAK (periksa, hapus yang tidak sesuai). Label <b>hijau</b> = ditambah manual.
+    @if ($modeKolom) Master satu tabel: label disimpan di kolom Item Sumber pada tabel baris HIRA (<code>drm_master_baris</code>); "Ubah baris" untuk mengubah aktivitas, sub aktivitas, bahaya, atau seluruh label sekaligus.
+    @else Label <b>kuning</b> = turunan kurasi aktivitas OAK (periksa, hapus yang tidak sesuai). Label <b>hijau</b> = ditambah manual. @endif
     Label OAK ditulis <code>Aktivitas OAK / Sub aktivitas</code>; label OBS = jenis kegiatan observasi; huruf besar/kecil, spasi, dan tanda baca diabaikan saat dicocokkan.
     @unless ($bolehUbah) Anda hanya bisa melihat; hubungi admin untuk menjadi editor. @endunless</div></div>
 
@@ -112,6 +115,9 @@
         <option value="SEMUA" @selected($kosong === 'SEMUA')>Tanpa label sama sekali</option>
       </select>
       <button class="mb-btn" type="submit"><span class="material-symbols-outlined" style="font-size:18px">search</span> Terapkan</button>
+      @if ($bolehUbah)
+        <a class="mb-btn sek" href="{{ route('peta-risiko-pja.master.index', ['t' => 'baris', 'tambah' => 1]) }}"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah baris HIRA</a>
+      @endif
       @if ($q !== '' || $kb !== '' || $kosong !== '')
         <a class="mb-btn sek" href="{{ route('peta-risiko-pja.master.baris.index') }}">Reset</a>
       @endif
@@ -130,23 +136,23 @@
         </tr></thead>
         <tbody>
         @forelse ($baris as $b)
-          @php
-            $obs = $teks[$b->ri.'|OBS'] ?? collect();
-            $oak = $teks[$b->ri.'|OAK'] ?? collect();
-            $ket = $label[$b->ri] ?? collect();
-            $kelas = fn ($s) => ($s ?? '') === \App\Services\PetaRisiko\Drm\Master\DrmMasterDb::SUMBER_TURUNAN_OAK ? 'turunan' : (($s ?? '') === 'manual' ? 'manual' : '');
-          @endphp
+          @php $lb = $labelBaris[$b->ri] ?? []; @endphp
           <tr>
-            <td class="hira">{{ $b->aktivitas }}<small>ID {{ $b->ri }}</small></td>
+            <td class="hira">{{ $b->aktivitas }}<small>ID {{ $b->ri }}</small>
+              @if ($bolehUbah)
+                <a class="mb-ubah" href="{{ route('peta-risiko-pja.master.index', ['t' => 'baris', 'ubah' => $b->ri]) }}">Ubah baris</a>
+              @endif
+            </td>
             <td class="hira">{{ $b->sub ?: '—' }}</td>
             <td class="hira">{{ $b->bahaya }}<br><span class="mb-lv {{ $b->kb }}">{{ $b->kb ?: '-' }}</span></td>
-            @foreach ([['OBS', $obs, 'mb-obs'], ['OAK', $oak, 'mb-oak']] as [$jenis, $daftar, $dl])
+            @foreach ([['OBS', 'mb-obs', 'Observasi', 'Jenis kegiatan observasi'], ['OAK', 'mb-oak', 'OAK', 'Aktivitas OAK / Sub aktivitas'], ['KET', null, 'Ketidaksesuaian', null]] as [$jenis, $dl, $nama, $ph])
               <td class="lbl">
-                @forelse ($daftar as $t)
-                  <div class="mb-chip {{ $kelas($t->sumber ?? null) }}"><span>{{ $t->teks }}
-                    @if (($t->sumber ?? '') !== '')<em>{{ $t->sumber }}</em>@endif</span>
+                @forelse ($lb[$jenis] ?? [] as $l)
+                  @php $kls = $l['sumber'] === \App\Services\PetaRisiko\Drm\Master\DrmMasterDb::SUMBER_TURUNAN_OAK ? 'turunan' : ($l['sumber'] === 'manual' ? 'manual' : ''); @endphp
+                  <div class="mb-chip {{ $kls }}"><span>{{ $l['label'] }}@if ($l['sumber'] !== '')<em>{{ $l['sumber'] }}</em>@endif</span>
                     @if ($bolehUbah)
-                      <form method="post" action="{{ route('peta-risiko-pja.master.baris.hapus', ['jenis' => 'teks', 'id' => $t->id]) }}" onsubmit="return confirm('Hapus label ini dari baris {{ $b->ri }}?')">@csrf
+                      <form method="post" action="{{ route('peta-risiko-pja.master.baris.hapus', $l['hapus']) }}" onsubmit="return confirm('Hapus label ini dari baris {{ $b->ri }}?')">@csrf
+                        <input type="hidden" name="label" value="{{ $l['label'] }}">
                         <button type="submit" title="Hapus label" aria-label="Hapus label">×</button></form>
                     @endif
                   </div>
@@ -154,39 +160,21 @@
                   <div class="mb-kosong">Belum ada label</div>
                 @endforelse
                 @if ($bolehUbah)
-                  <details class="mb-tambah"><summary>+ Tambah label {{ $jenis === 'OBS' ? 'Observasi' : 'OAK' }}</summary>
+                  <details class="mb-tambah"><summary>+ Tambah label {{ $nama }}</summary>
                     <form method="post" action="{{ route('peta-risiko-pja.master.baris.tambah', ['ri' => $b->ri]) }}">@csrf
                       <input type="hidden" name="jenis" value="{{ $jenis }}">
-                      <input name="teks" list="{{ $dl }}" maxlength="500" required placeholder="{{ $jenis === 'OBS' ? 'Jenis kegiatan observasi' : 'Aktivitas OAK / Sub aktivitas' }}">
+                      @if ($jenis === 'KET')
+                        <input name="k" list="mb-k" maxlength="300" required placeholder="Ketidaksesuaian">
+                        <input name="sk" list="mb-sk" maxlength="300" required placeholder="Sub ketidaksesuaian">
+                      @else
+                        <input name="teks" list="{{ $dl }}" maxlength="500" required placeholder="{{ $ph }}">
+                      @endif
                       <button type="submit">Simpan</button>
                     </form>
                   </details>
                 @endif
               </td>
             @endforeach
-            <td class="lbl">
-              @forelse ($ket as $l)
-                <div class="mb-chip {{ ($l->sumber ?? '') === 'manual' ? 'manual' : '' }}"><span>{{ $l->ketidaksesuaian }} / {{ $l->subketidaksesuaian }}
-                  @if (($l->sumber ?? '') !== '')<em>{{ $l->sumber }}</em>@endif</span>
-                  @if ($bolehUbah)
-                    <form method="post" action="{{ route('peta-risiko-pja.master.baris.hapus', ['jenis' => 'label', 'id' => $l->id]) }}" onsubmit="return confirm('Hapus label ini dari baris {{ $b->ri }}?')">@csrf
-                      <button type="submit" title="Hapus label" aria-label="Hapus label">×</button></form>
-                  @endif
-                </div>
-              @empty
-                <div class="mb-kosong">Belum ada label</div>
-              @endforelse
-              @if ($bolehUbah)
-                <details class="mb-tambah"><summary>+ Tambah label Ketidaksesuaian</summary>
-                  <form method="post" action="{{ route('peta-risiko-pja.master.baris.tambah', ['ri' => $b->ri]) }}">@csrf
-                    <input type="hidden" name="jenis" value="KET">
-                    <input name="k" list="mb-k" maxlength="300" required placeholder="Ketidaksesuaian">
-                    <input name="sk" list="mb-sk" maxlength="300" required placeholder="Sub ketidaksesuaian">
-                    <button type="submit">Simpan</button>
-                  </form>
-                </details>
-              @endif
-            </td>
           </tr>
         @empty
           <tr><td colspan="6" class="mb-kosong" style="padding:24px">Tidak ada baris yang cocok.</td></tr>

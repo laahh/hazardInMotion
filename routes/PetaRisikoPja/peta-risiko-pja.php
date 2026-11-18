@@ -31,7 +31,7 @@ Route::prefix('peta-risiko-pja')
         Route::prefix('master/baris')->name('master.baris.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoMasterBarisController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/{ri}/label', 'tambah')->whereNumber('ri')->middleware('throttle:120,1')->name('tambah');
-            Route::post('/label/{jenis}/{id}/hapus', 'hapus')->where(['jenis' => 'teks|label'])->whereNumber('id')->middleware('throttle:120,1')->name('hapus');
+            Route::post('/label/{jenis}/{id}/hapus', 'hapus')->where(['jenis' => 'teks|label|OBS|OAK|KET'])->whereNumber('id')->middleware('throttle:120,1')->name('hapus');
         });
 
         Route::prefix('master')->name('master.')->controller(PetaRisikoMasterController::class)->group(function () {

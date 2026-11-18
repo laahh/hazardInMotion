@@ -28,6 +28,7 @@ class PetaRisikoMasterDbCommand extends Command
         {--isi : Isi/timpa semua tabel master dari baseline awal (koreksi manual di database ikut tertimpa)}
         {--isi-oak : Isi/timpa hanya tabel kurasi aktivitas OAK → aktivitas HIRA dari config}
         {--turunkan-oak : Turunkan kurasi aktivitas OAK menjadi label OAK per baris (Item Sumber OAK) di master}
+        {--isi-label-baris : Satukan label OBS/OAK/Ketidaksesuaian ke kolom item_sumber_* drm_master_baris (master satu tabel)}
         {--force : Lewati konfirmasi saat menimpa tabel yang sudah berisi}';
 
     protected $description = 'Status / pengisian awal tabel master mapping Peta Risiko PJA (drm_master_*)';
@@ -42,6 +43,9 @@ class PetaRisikoMasterDbCommand extends Command
         }
         if ($this->option('turunkan-oak')) {
             return $this->turunkanOak($db, $ch);
+        }
+        if ($this->option('isi-label-baris')) {
+            return $this->isiLabelBaris($db);
         }
         if (! DrmMasterDb::siap()) {
             $this->error('Tabel master belum ada. Jalankan migrasi 2026_11_17_100000_create_drm_master_tables lebih dulu.');
@@ -99,6 +103,30 @@ ORDER BY site, lokasi, pja', 120));
         }
         $this->info("Tabel kurasi aktivitas OAK terisi: {$n} pasangan aktivitas OAK → aktivitas HIRA.");
         $this->line('Sesuaikan di /peta-risiko-pja/master (tab "Aktivitas OAK → aktivitas HIRA"), lalu jalankan peta-risiko:sync.');
+
+        return self::SUCCESS;
+    }
+
+    private function isiLabelBaris(DrmMasterDb $db): int
+    {
+        if (! DrmMasterDb::terisi()) {
+            $this->error('Tabel master belum berisi. Jalankan peta-risiko:master-db --isi lebih dulu.');
+
+            return self::FAILURE;
+        }
+        if (DrmMasterDb::labelDiBaris() && ! $this->option('force')
+            && ! $this->confirm('Kolom Item Sumber di drm_master_baris sudah berisi. Isinya akan ditimpa dari drm_master_teks / drm_master_label. Lanjutkan?')) {
+            return self::INVALID;
+        }
+        try {
+            $j = $db->isiLabelBaris();
+        } catch (Throwable $e) {
+            $this->error('Gagal: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+        $this->info("Master satu tabel: {$j['baris']} baris HIRA · label Observasi {$j['OBS']} · OAK {$j['OAK']} · Ketidaksesuaian {$j['KET']}.");
+        $this->line('Mulai sekarang sync membaca label dari kolom item_sumber_* drm_master_baris. Ubah di /peta-risiko-pja/master/baris, lalu jalankan peta-risiko:sync.');
 
         return self::SUCCESS;
     }

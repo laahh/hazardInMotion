@@ -208,7 +208,8 @@
                   <span class="mm-ri" data-ri-teks>{{ $teksRiPeta[(int) $nilai] ?? ($nilai !== '' ? 'ID baris tidak ditemukan di M01' : '') }}</span>
                 </label>
               @elseif ($tipe === 'teks_panjang')
-                <label class="lebar">{{ $label }}<textarea name="{{ $kolom }}" rows="3" @disabled($kunciTerkunci)>{{ $nilai }}</textarea></label>
+                <label class="lebar">{{ $label }}@if (! empty($opsi['satuBaris'])) <small style="text-transform:none;font-weight:500;letter-spacing:0">satu label per baris</small>@endif
+                  <textarea name="{{ $kolom }}" rows="{{ ! empty($opsi['satuBaris']) ? 8 : 3 }}" @disabled($kunciTerkunci)>{{ $nilai }}</textarea></label>
               @else
                 <label class="{{ in_array($kolom, ['aktivitas', 'detail', 'teks', 'nama_pja', 'ketidaksesuaian', 'subketidaksesuaian'], true) ? 'lebar-2' : '' }}">{{ $label }}
                   @if ($daftarSaran !== null)
@@ -286,6 +287,14 @@
                     @endif
                   @elseif (($opsi['pilihan'] ?? null) && ! is_array($opsi['pilihan']))
                     {{ $pilihan[$opsi['pilihan']][(string) $r->{$kolom}] ?? $r->{$kolom} }}
+                  @elseif (! empty($opsi['satuBaris']))
+                    @php $daftarLabel = \App\Services\PetaRisiko\Drm\Master\DrmMasterDb::pisahLabel($r->{$kolom} ?? ''); @endphp
+                    @forelse (array_slice($daftarLabel, 0, 4) as $l)
+                      <span class="clamp" style="display:block;margin-bottom:3px" title="{{ $l }}">• {{ $l }}</span>
+                    @empty
+                      <span class="dr-mute">—</span>
+                    @endforelse
+                    @if (count($daftarLabel) > 4)<span class="dr-mute">+{{ count($daftarLabel) - 4 }} lainnya</span>@endif
                   @else
                     <span class="clamp" title="{{ $r->{$kolom} }}">{{ $r->{$kolom} }}</span>
                   @endif

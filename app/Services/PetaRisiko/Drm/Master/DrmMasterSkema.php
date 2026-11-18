@@ -156,6 +156,21 @@ final class DrmMasterSkema
         if (! self::adaTabel('drm_master_oak_aktivitas')) {
             unset($semua['oak_aktivitas']);
         }
+        // Master satu tabel: tiga kolom label Item Sumber di baris HIRA (bila sudah dimigrasi).
+        if (self::adaKolom('drm_master_baris', 'item_sumber_observasi')) {
+            $kolom = $semua['baris']['kolom'];
+            $label = [
+                'item_sumber_observasi' => ['Item Sumber Observasi (label master)', 'teks_panjang', ['nullable', 'string', 'max:30000'], ['satuBaris' => true]],
+                'item_sumber_oak' => ['Item Sumber OAK (label master)', 'teks_panjang', ['nullable', 'string', 'max:60000'], ['satuBaris' => true]],
+                'item_sumber_ketidaksesuaian' => ['Item Sumber Ketidaksesuaian (label master)', 'teks_panjang', ['nullable', 'string', 'max:60000'], ['satuBaris' => true]],
+            ];
+            $posisi = array_search('bahaya', array_keys($kolom), true) + 1;
+            $semua['baris']['kolom'] = array_slice($kolom, 0, $posisi, true) + $label + array_slice($kolom, $posisi, null, true);
+            $semua['baris']['judul'] = 'Master HIRA ↔ SAP (per baris)';
+            $semua['baris']['catatan'] = 'Satu baris = aktivitas × sub × bahaya-risiko + label SAP yang menangkapnya. Kolom Item Sumber: satu label per baris teks — '
+                .'Observasi = jenis kegiatan; OAK = "aktivitas / sub aktivitas"; Ketidaksesuaian = "ketidaksesuaian / sub ketidaksesuaian".';
+            $semua['baris']['cari'] = [...$semua['baris']['cari'], 'item_sumber_observasi', 'item_sumber_oak', 'item_sumber_ketidaksesuaian'];
+        }
 
         return $semua;
     }
@@ -164,6 +179,15 @@ final class DrmMasterSkema
     public static function satu(string $kode): ?array
     {
         return self::semua()[$kode] ?? null;
+    }
+
+    private static function adaKolom(string $tabel, string $kolom): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Schema::hasColumn($tabel, $kolom);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /** Tabel dari migrasi terpisah: tab hanya tampil bila tabelnya sudah dimigrasi. */

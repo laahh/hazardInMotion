@@ -13,8 +13,11 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Master per baris (acuan utama, keputusan user 18 Nov 2026): tiap baris HIRA (aktivitas · sub · bahaya-risiko) dengan
- * tiga daftar label yang bisa diubah — Item Sumber Observasi (drm_master_teks OBS), Item Sumber OAK (drm_master_teks OAK,
- * "aktivitas / sub aktivitas"), Item Sumber Ketidaksesuaian (drm_master_label). Yang dihitung sync persis label ini.
+ * tiga daftar label yang bisa diubah — Item Sumber Observasi, Item Sumber OAK ("aktivitas / sub aktivitas"),
+ * Item Sumber Ketidaksesuaian ("ketidaksesuaian / sub"). Yang dihitung sync persis label ini.
+ *
+ * Mode kolom (master satu tabel, setelah --isi-label-baris): label disimpan di kolom item_sumber_* drm_master_baris.
+ * Mode lama: label di drm_master_teks (OBS/OAK) dan drm_master_label (Ketidaksesuaian).
  */
 final class PetaRisikoMasterBarisController extends Controller
 {
@@ -41,12 +44,18 @@ final class PetaRisikoMasterBarisController extends Controller
         if (! $siap || ! DrmMasterDb::terisi()) {
             return view('peta-risiko-pja.drm.master-baris', $data);
         }
+        $kolom = DrmMasterDb::labelDiBaris();
 
         $query = DB::table('drm_master_baris')->where('aktif', true);
         if ($data['q'] !== '') {
             $pola = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $data['q']).'%';
-            $query->where(function ($w) use ($pola, $data) {
+            $query->where(function ($w) use ($pola, $data, $kolom) {
                 $w->where('aktivitas', 'like', $pola)->orWhere('sub', 'like', $pola)->orWhere('bahaya', 'like', $pola);
+                if ($kolom) {
+                    foreach (DrmMasterDb::KOLOM_LABEL as $k) {
+                        $w->orWhere($k, 'like', $pola);
+                    }
+                }
                 if (ctype_digit($data['q'])) {
                     $w->orWhere('ri', (int) $data['q']);
                 }
@@ -55,39 +64,16 @@ final class PetaRisikoMasterBarisController extends Controller
         if (in_array($data['kb'], ['Significant', 'High', 'Medium', 'Low'], true)) {
             $query->where('kb', $data['kb']);
         }
-        // Filter baris yang belum punya label di salah satu sumber.
-        if (in_array($data['kosong'], ['OBS', 'OAK'], true)) {
-            $query->whereNotIn('ri', DB::table('drm_master_teks')->where('aktif', true)->where('jenis', $data['kosong'])->select('ri'));
-        } elseif ($data['kosong'] === 'KET') {
-            $query->whereNotIn('ri', DB::table('drm_master_label')->where('aktif', true)->select('ri'));
-        } elseif ($data['kosong'] === 'SEMUA') {
-            $query->whereNotIn('ri', DB::table('drm_master_teks')->where('aktif', true)->select('ri'))
-                ->whereNotIn('ri', DB::table('drm_master_label')->where('aktif', true)->select('ri'));
-        }
+        $this->saringKosong($query, $data['kosong'], $kolom);
         $baris = $query->orderBy('aktivitas')->orderBy('sub')->orderBy('ri')->paginate(self::PER_HALAMAN)->withQueryString();
-        $ri = collect($baris->items())->pluck('ri')->all();
-
-        $adaSumber = Schema::hasColumn('drm_master_teks', 'sumber');
-        $teks = DB::table('drm_master_teks')->where('aktif', true)->whereIn('ri', $ri)
-            ->orderBy('teks')->get(['id', 'jenis', 'teks', 'ri', ...($adaSumber ? ['sumber'] : [])])->groupBy(fn ($t) => $t->ri.'|'.$t->jenis);
-        $label = DB::table('drm_master_label')->where('aktif', true)->whereIn('ri', $ri)
-            ->orderBy('ketidaksesuaian')->orderBy('subketidaksesuaian')->get(['id', 'ketidaksesuaian', 'subketidaksesuaian', 'ri', 'sumber'])->groupBy('ri');
 
         return view('peta-risiko-pja.drm.master-baris', $data + [
             'terisi' => true,
+            'modeKolom' => $kolom,
             'baris' => $baris,
-            'teks' => $teks,
-            'label' => $label,
-            'jumlah' => [
-                'baris' => DB::table('drm_master_baris')->where('aktif', true)->count(),
-                'OBS' => DB::table('drm_master_teks')->where('aktif', true)->where('jenis', 'OBS')->distinct()->count('ri'),
-                'OAK' => DB::table('drm_master_teks')->where('aktif', true)->where('jenis', 'OAK')->distinct()->count('ri'),
-                'KET' => DB::table('drm_master_label')->where('aktif', true)->distinct()->count('ri'),
-            ],
-            'saranObs' => DB::table('drm_master_teks')->where('jenis', 'OBS')->distinct()->orderBy('teks')->limit(3000)->pluck('teks'),
-            'saranOak' => DB::table('drm_master_teks')->where('jenis', 'OAK')->distinct()->orderBy('teks')->limit(3000)->pluck('teks'),
-            'saranK' => DB::table('drm_master_label')->distinct()->orderBy('ketidaksesuaian')->limit(1000)->pluck('ketidaksesuaian'),
-            'saranSk' => DB::table('drm_master_label')->distinct()->orderBy('subketidaksesuaian')->limit(3000)->pluck('subketidaksesuaian'),
+            'labelBaris' => $this->labelHalaman($baris->items(), $kolom),
+            'jumlah' => $this->jumlah($kolom),
+            ...$this->saran($kolom),
         ]);
     }
 
@@ -96,24 +82,185 @@ final class PetaRisikoMasterBarisController extends Controller
     {
         abort_unless(DrmMasterDb::terisi(), 404);
         abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
-        abort_unless(DB::table('drm_master_baris')->where('ri', $ri)->exists(), 404);
+        $baris = DB::table('drm_master_baris')->where('ri', $ri)->first() ?? abort(404);
         $v = $request->validate([
             'jenis' => ['required', 'in:OBS,OAK,KET'],
             'teks' => ['required_unless:jenis,KET', 'nullable', 'string', 'max:500'],
             'k' => ['required_if:jenis,KET', 'nullable', 'string', 'max:300'],
             'sk' => ['required_if:jenis,KET', 'nullable', 'string', 'max:300'],
         ]);
+        $label = $v['jenis'] === 'KET' ? trim((string) $v['k']).' / '.trim((string) $v['sk']) : trim((string) $v['teks']);
+
+        if (DrmMasterDb::labelDiBaris()) {
+            $kolom = DrmMasterDb::KOLOM_LABEL[$v['jenis']];
+            $ada = DrmMasterDb::pisahLabel($baris->{$kolom});
+            if (in_array($this->kunci($v['jenis'], $label), array_map(fn ($l) => $this->kunci($v['jenis'], $l), $ada), true)) {
+                return back()->with('pesan', 'Label sudah ada di baris ini.');
+            }
+            $baru = implode("\n", [...$ada, $label]);
+            DB::table('drm_master_baris')->where('ri', $ri)->update([$kolom => $baru, 'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'updated_at' => now()]);
+            $this->db->catat('drm_master_baris', (string) $ri, 'ubah', [$kolom => $baris->{$kolom}], [$kolom => $baru]);
+
+            return back()->with('pesan', 'Label ditambahkan ke baris '.$ri.'.');
+        }
+
+        return $this->tambahTabelLama($request, $ri, $v, $label);
+    }
+
+    /** Hapus satu label dari baris. Mode kolom: jenis OBS / OAK / KET + teks label; mode lama: tabel teks / label + id. */
+    public function hapus(Request $request, string $jenis, int $id): RedirectResponse
+    {
+        abort_unless(DrmMasterDb::terisi(), 404);
+        abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
+
+        if (in_array($jenis, ['OBS', 'OAK', 'KET'], true)) {
+            $baris = DB::table('drm_master_baris')->where('ri', $id)->first() ?? abort(404);
+            $kolom = DrmMasterDb::KOLOM_LABEL[$jenis];
+            $hapus = $this->kunci($jenis, trim((string) $request->input('label', '')));
+            $ada = DrmMasterDb::pisahLabel($baris->{$kolom});
+            $sisa = array_values(array_filter($ada, fn ($l) => $this->kunci($jenis, $l) !== $hapus));
+            if (count($sisa) === count($ada)) {
+                return back()->with('pesan', 'Label tidak ditemukan di baris ini.');
+            }
+            DB::table('drm_master_baris')->where('ri', $id)->update([$kolom => implode("\n", $sisa), 'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'updated_at' => now()]);
+            $this->db->catat('drm_master_baris', (string) $id, 'ubah', [$kolom => $baris->{$kolom}], [$kolom => implode("\n", $sisa)]);
+
+            return back()->with('pesan', 'Label dihapus dari baris '.$id.'.');
+        }
+
+        $tabel = ['teks' => 'drm_master_teks', 'label' => 'drm_master_label'][$jenis] ?? abort(404);
+        $lama = DB::table($tabel)->where('id', $id)->first() ?? abort(404);
+        DB::table($tabel)->where('id', $id)->delete();
+        $this->db->catat($tabel, (string) $id, 'hapus', (array) $lama, null);
+
+        return back()->with('pesan', 'Label dihapus dari baris '.$lama->ri.'.');
+    }
+
+    /** Kunci pencocokan label (sama dengan sync): OBS/OAK = DrmMaster::normTeks, Ketidaksesuaian = norm "k / sk". */
+    private function kunci(string $jenis, string $label): string
+    {
+        if ($jenis === 'KET') {
+            [$k, $sk] = DrmMasterDb::pisahKet($label);
+
+            return DrmMaster::norm($k).' / '.DrmMaster::norm($sk);
+        }
+
+        return DrmMaster::normTeks($label);
+    }
+
+    private function saringKosong($query, string $kosong, bool $kolom): void
+    {
+        if ($kolom) {
+            $kosongKolom = fn ($q, string $k) => $q->where(fn ($w) => $w->whereNull($k)->orWhere($k, ''));
+            match ($kosong) {
+                'OBS', 'OAK', 'KET' => $kosongKolom($query, DrmMasterDb::KOLOM_LABEL[$kosong]),
+                'SEMUA' => array_map(fn ($k) => $kosongKolom($query, $k), DrmMasterDb::KOLOM_LABEL),
+                default => null,
+            };
+
+            return;
+        }
+        if (in_array($kosong, ['OBS', 'OAK'], true)) {
+            $query->whereNotIn('ri', DB::table('drm_master_teks')->where('aktif', true)->where('jenis', $kosong)->select('ri'));
+        } elseif ($kosong === 'KET') {
+            $query->whereNotIn('ri', DB::table('drm_master_label')->where('aktif', true)->select('ri'));
+        } elseif ($kosong === 'SEMUA') {
+            $query->whereNotIn('ri', DB::table('drm_master_teks')->where('aktif', true)->select('ri'))
+                ->whereNotIn('ri', DB::table('drm_master_label')->where('aktif', true)->select('ri'));
+        }
+    }
+
+    /**
+     * Label per baris di halaman: [ri][jenis] = list<array{label: string, sumber: string, hapus: array}>.
+     *
+     * @param  list<object>  $items
+     * @return array<int, array<string, list<array<string, mixed>>>>
+     */
+    private function labelHalaman(array $items, bool $kolom): array
+    {
+        $hasil = [];
+        if ($kolom) {
+            foreach ($items as $b) {
+                foreach (DrmMasterDb::KOLOM_LABEL as $jenis => $k) {
+                    foreach (DrmMasterDb::pisahLabel($b->{$k} ?? '') as $l) {
+                        $hasil[(int) $b->ri][$jenis][] = ['label' => $l, 'sumber' => '', 'hapus' => ['jenis' => $jenis, 'id' => (int) $b->ri]];
+                    }
+                }
+            }
+
+            return $hasil;
+        }
+        $ri = array_map(fn ($b) => (int) $b->ri, $items);
+        $adaSumber = Schema::hasColumn('drm_master_teks', 'sumber');
+        foreach (DB::table('drm_master_teks')->where('aktif', true)->whereIn('ri', $ri)->orderBy('teks')->get() as $t) {
+            $hasil[(int) $t->ri][(string) $t->jenis][] = ['label' => (string) $t->teks, 'sumber' => $adaSumber ? (string) ($t->sumber ?? '') : '',
+                'hapus' => ['jenis' => 'teks', 'id' => (int) $t->id]];
+        }
+        foreach (DB::table('drm_master_label')->where('aktif', true)->whereIn('ri', $ri)->orderBy('ketidaksesuaian')->orderBy('subketidaksesuaian')->get() as $l) {
+            $hasil[(int) $l->ri]['KET'][] = ['label' => $l->ketidaksesuaian.' / '.$l->subketidaksesuaian, 'sumber' => (string) ($l->sumber ?? ''),
+                'hapus' => ['jenis' => 'label', 'id' => (int) $l->id]];
+        }
+
+        return $hasil;
+    }
+
+    /** @return array<string, int> */
+    private function jumlah(bool $kolom): array
+    {
+        $aktif = fn () => DB::table('drm_master_baris')->where('aktif', true);
+        if ($kolom) {
+            return ['baris' => $aktif()->count()] + array_map(fn ($k) => $aktif()->whereNotNull($k)->where($k, '!=', '')->count(), DrmMasterDb::KOLOM_LABEL);
+        }
+
+        return [
+            'baris' => $aktif()->count(),
+            'OBS' => DB::table('drm_master_teks')->where('aktif', true)->where('jenis', 'OBS')->distinct()->count('ri'),
+            'OAK' => DB::table('drm_master_teks')->where('aktif', true)->where('jenis', 'OAK')->distinct()->count('ri'),
+            'KET' => DB::table('drm_master_label')->where('aktif', true)->distinct()->count('ri'),
+        ];
+    }
+
+    /** Saran isian (datalist) dari label yang sudah ada. @return array<string, list<string>> */
+    private function saran(bool $kolom): array
+    {
+        if ($kolom) {
+            $kumpul = function (string $k): array {
+                $s = [];
+                foreach (DB::table('drm_master_baris')->whereNotNull($k)->where($k, '!=', '')->pluck($k) as $isi) {
+                    foreach (DrmMasterDb::pisahLabel($isi) as $l) {
+                        $s[$l] = true;
+                    }
+                }
+                $s = array_keys($s);
+                sort($s);
+
+                return array_slice($s, 0, 3000);
+            };
+            $ket = $kumpul(DrmMasterDb::KOLOM_LABEL['KET']);
+
+            return ['saranObs' => $kumpul('item_sumber_observasi'), 'saranOak' => $kumpul('item_sumber_oak'),
+                'saranK' => array_values(array_unique(array_map(fn ($l) => DrmMasterDb::pisahKet($l)[0], $ket))),
+                'saranSk' => array_values(array_unique(array_map(fn ($l) => DrmMasterDb::pisahKet($l)[1], $ket)))];
+        }
+
+        return [
+            'saranObs' => DB::table('drm_master_teks')->where('jenis', 'OBS')->distinct()->orderBy('teks')->limit(3000)->pluck('teks')->all(),
+            'saranOak' => DB::table('drm_master_teks')->where('jenis', 'OAK')->distinct()->orderBy('teks')->limit(3000)->pluck('teks')->all(),
+            'saranK' => DB::table('drm_master_label')->distinct()->orderBy('ketidaksesuaian')->limit(1000)->pluck('ketidaksesuaian')->all(),
+            'saranSk' => DB::table('drm_master_label')->distinct()->orderBy('subketidaksesuaian')->limit(3000)->pluck('subketidaksesuaian')->all(),
+        ];
+    }
+
+    /** Mode lama: tambah ke drm_master_teks / drm_master_label. */
+    private function tambahTabelLama(Request $request, int $ri, array $v, string $label): RedirectResponse
+    {
         $sekarang = now();
-
         if ($v['jenis'] === 'KET') {
-            [$k, $sk] = [trim((string) $v['k']), trim((string) $v['sk'])];
-            $kunci = DrmMaster::norm($k).' / '.DrmMaster::norm($sk);
+            [$k, $sk] = DrmMasterDb::pisahKet($label);
             $sama = DB::table('drm_master_label')->where('ri', $ri)->get()
-                ->first(fn ($l) => DrmMaster::norm($l->ketidaksesuaian).' / '.DrmMaster::norm($l->subketidaksesuaian) === $kunci);
+                ->first(fn ($l) => $this->kunci('KET', $l->ketidaksesuaian.' / '.$l->subketidaksesuaian) === $this->kunci('KET', $label));
             if ($sama !== null) {
-                $sama->aktif ? null : DB::table('drm_master_label')->where('id', $sama->id)->update(['aktif' => true, 'updated_at' => $sekarang]);
-
-                return back()->with('pesan', 'Label sudah ada di baris ini'.($sama->aktif ? '.' : ' — diaktifkan kembali.'));
+                return back()->with('pesan', 'Label sudah ada di baris ini.');
             }
             $nilai = ['ketidaksesuaian' => $k, 'subketidaksesuaian' => $sk, 'ri' => $ri, 'sumber' => 'manual', 'aktif' => true,
                 'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'created_at' => $sekarang, 'updated_at' => $sekarang];
@@ -122,35 +269,18 @@ final class PetaRisikoMasterBarisController extends Controller
 
             return back()->with('pesan', 'Label ketidaksesuaian ditambahkan ke baris '.$ri.'.');
         }
-
-        $teks = trim((string) $v['teks']);
         $sama = DB::table('drm_master_teks')->where('ri', $ri)->where('jenis', $v['jenis'])->get()
-            ->first(fn ($t) => DrmMaster::crcTeks($t->teks) === DrmMaster::crcTeks($teks));
+            ->first(fn ($t) => DrmMaster::crcTeks($t->teks) === DrmMaster::crcTeks($label));
         if ($sama !== null) {
-            $sama->aktif ? null : DB::table('drm_master_teks')->where('id', $sama->id)->update(['aktif' => true, 'updated_at' => $sekarang]);
-
-            return back()->with('pesan', 'Label sudah ada di baris ini'.($sama->aktif ? '.' : ' — diaktifkan kembali.'));
+            return back()->with('pesan', 'Label sudah ada di baris ini.');
         }
-        $nilai = ['jenis' => $v['jenis'], 'teks' => $teks, 'ri' => $ri, 'aktif' => true,
+        $nilai = ['jenis' => $v['jenis'], 'teks' => $label, 'ri' => $ri, 'aktif' => true,
             'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'created_at' => $sekarang, 'updated_at' => $sekarang]
             + (Schema::hasColumn('drm_master_teks', 'sumber') ? ['sumber' => 'manual'] : []);
         $id = DB::table('drm_master_teks')->insertGetId($nilai);
         $this->db->catat('drm_master_teks', (string) $id, 'tambah', null, $nilai);
 
         return back()->with('pesan', 'Label '.$v['jenis'].' ditambahkan ke baris '.$ri.'.');
-    }
-
-    /** Hapus satu label dari baris (jenis teks = OBS/OAK, label = ketidaksesuaian). Tercatat di riwayat. */
-    public function hapus(Request $request, string $jenis, int $id): RedirectResponse
-    {
-        abort_unless(DrmMasterDb::terisi(), 404);
-        abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
-        $tabel = ['teks' => 'drm_master_teks', 'label' => 'drm_master_label'][$jenis] ?? abort(404);
-        $lama = DB::table($tabel)->where('id', $id)->first() ?? abort(404);
-        DB::table($tabel)->where('id', $id)->delete();
-        $this->db->catat($tabel, (string) $id, 'hapus', (array) $lama, null);
-
-        return back()->with('pesan', 'Label dihapus dari baris '.$lama->ri.'.');
     }
 
     private function bolehUbah(Request $request): bool

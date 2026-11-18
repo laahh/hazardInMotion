@@ -168,6 +168,12 @@ final class DrmMasterDb
             return $c;
         }, []);
 
+        // Master satu tabel: label dibaca dari kolom item_sumber_* di drm_master_baris bila sudah diisi.
+        [$obs, $oak] = [null, null];
+        if (self::labelDiBaris()) {
+            [$obs, $oak, $label] = self::labelDariKolom($baris);
+        }
+
         return [
             'dibuat' => (string) (DB::table('drm_master_log')->max('dibuat') ?? now()->toIso8601String()),
             'sumber' => 'database (tabel drm_master_*)',
@@ -181,8 +187,8 @@ final class DrmMasterDb
             'dl' => DB::table('drm_master_dl')->where('aktif', true)->whereIn('gid', array_keys($grupAktif))->orderBy('id')->get()
                 ->map(fn ($x) => ['id' => (int) $x->id, 'site' => (string) $x->site, 'lokasi' => (string) $x->lokasi, 'detail' => (string) $x->detail, 'gid' => (int) $x->gid])->all(),
             'label' => array_values(array_map(fn ($l) => [...$l, 'ri' => array_values(array_unique($l['ri']))], $label)),
-            'obs' => $teks('OBS'),
-            'oak' => $teks('OAK'),
+            'obs' => $obs ?? $teks('OBS'),
+            'oak' => $oak ?? $teks('OAK'),
             'kelompokAkt' => DB::table('drm_master_aktivitas')->pluck('kelompok', 'aid')->mapWithKeys(fn ($v, $k) => [(int) $k => (string) $v])->all(),
             'kelompokDaftar' => $kelompok->mapWithKeys(fn ($k) => [(string) $k->kode => [(string) $k->nama, 'inti', (string) $k->regex]])->all(),
             'tema' => DB::table('drm_master_tema')->orderBy('id')->get()->mapWithKeys(fn ($t) => [(int) $t->id => [(string) $t->nama, (string) $t->regex_teks, (string) $t->regex_bahaya]])->all(),
@@ -243,6 +249,106 @@ final class DrmMasterDb
         return count($rows);
     }
 
+    /** Kolom label di drm_master_baris (master satu tabel), per jenis. */
+    public const KOLOM_LABEL = ['OBS' => 'item_sumber_observasi', 'OAK' => 'item_sumber_oak', 'KET' => 'item_sumber_ketidaksesuaian'];
+
+    /** Label sudah disimpan di kolom item_sumber_* drm_master_baris? (kolom ada dan sudah diisi --isi-label-baris) */
+    public static function labelDiBaris(): bool
+    {
+        try {
+            return Schema::hasColumn(self::TABEL_UTAMA, 'item_sumber_observasi')
+                && DB::table(self::TABEL_UTAMA)->whereNotNull('item_sumber_observasi')->exists();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** Teks kolom label → daftar label (satu per baris teks, kosong & duplikat dibuang). @return list<string> */
+    public static function pisahLabel(?string $teks): array
+    {
+        $hasil = [];
+        foreach (preg_split('/\r\n|\r|\n/', (string) $teks) ?: [] as $l) {
+            $l = trim($l);
+            if ($l !== '' && ! isset($hasil[DrmMaster::norm($l)])) {
+                $hasil[DrmMaster::norm($l)] = $l;
+            }
+        }
+
+        return array_values($hasil);
+    }
+
+    /** "ketidaksesuaian / sub ketidaksesuaian" → [k, sk] (dipisah pada " / " pertama). @return array{0: string, 1: string} */
+    public static function pisahKet(string $label): array
+    {
+        $i = strpos($label, ' / ');
+
+        return $i === false ? [trim($label), ''] : [trim(substr($label, 0, $i)), trim(substr($label, $i + 3))];
+    }
+
+    /**
+     * Label OBS / OAK / Ketidaksesuaian dari kolom item_sumber_* baris aktif, dalam bentuk data DrmMaster.
+     *
+     * @return array{0: list<array{teks: string, ri: list<int>}>, 1: list<array{teks: string, ri: list<int>}>, 2: array<string, array<string, mixed>>}
+     */
+    private static function labelDariKolom(iterable $baris): array
+    {
+        $teks = ['OBS' => [], 'OAK' => []];
+        $ket = [];
+        foreach ($baris as $b) {
+            foreach (['OBS', 'OAK'] as $jenis) {
+                foreach (self::pisahLabel($b->{self::KOLOM_LABEL[$jenis]} ?? '') as $l) {
+                    $teks[$jenis][DrmMaster::norm($l)] ??= ['teks' => $l, 'ri' => []];
+                    $teks[$jenis][DrmMaster::norm($l)]['ri'][] = (int) $b->ri;
+                }
+            }
+            foreach (self::pisahLabel($b->{self::KOLOM_LABEL['KET']} ?? '') as $l) {
+                [$k, $sk] = self::pisahKet($l);
+                $kunci = DrmMaster::norm($k).' / '.DrmMaster::norm($sk);
+                $ket[$kunci] ??= ['k' => $k, 'sk' => $sk, 'ri' => [], 'sumber' => ''];
+                $ket[$kunci]['ri'][] = (int) $b->ri;
+            }
+        }
+        $rapi = fn (array $d) => array_values(array_map(fn ($t) => [...$t, 'ri' => array_values(array_unique($t['ri']))], $d));
+
+        return [$rapi($teks['OBS']), $rapi($teks['OAK']), $ket];
+    }
+
+    /**
+     * Isi kolom item_sumber_* drm_master_baris dari drm_master_teks (OBS/OAK aktif) dan drm_master_label (aktif),
+     * supaya master menjadi satu tabel. Semua baris diisi (baris tanpa label = teks kosong), menimpa isi kolom lama.
+     *
+     * @return array{baris: int, OBS: int, OAK: int, KET: int}
+     */
+    public function isiLabelBaris(): array
+    {
+        if (! self::siap() || ! Schema::hasColumn(self::TABEL_UTAMA, 'item_sumber_observasi')) {
+            throw new RuntimeException('Kolom item_sumber_* belum dimigrasi (2026_11_18_120000_add_item_sumber_to_drm_master_baris_table).');
+        }
+        $per = [];
+        foreach (DB::table('drm_master_teks')->where('aktif', true)->orderBy('teks')->get(['jenis', 'teks', 'ri']) as $t) {
+            $per[(int) $t->ri][(string) $t->jenis][] = (string) $t->teks;
+        }
+        foreach (DB::table('drm_master_label')->where('aktif', true)->orderBy('ketidaksesuaian')->orderBy('subketidaksesuaian')->get() as $l) {
+            $per[(int) $l->ri]['KET'][] = trim((string) $l->ketidaksesuaian).' / '.trim((string) $l->subketidaksesuaian);
+        }
+        $jumlah = ['baris' => 0, 'OBS' => 0, 'OAK' => 0, 'KET' => 0];
+        DB::transaction(function () use ($per, &$jumlah) {
+            foreach (DB::table(self::TABEL_UTAMA)->pluck('ri') as $ri) {
+                $nilai = ['updated_at' => now()];
+                foreach (self::KOLOM_LABEL as $jenis => $kolom) {
+                    $daftar = self::pisahLabel(implode("\n", $per[(int) $ri][$jenis] ?? []));
+                    $nilai[$kolom] = implode("\n", $daftar);
+                    $jumlah[$jenis] += count($daftar);
+                }
+                DB::table(self::TABEL_UTAMA)->where('ri', $ri)->update($nilai);
+                $jumlah['baris']++;
+            }
+        });
+        $this->catat(self::TABEL_UTAMA, '*', 'isi', null, ['item_sumber_*' => $jumlah]);
+
+        return $jumlah;
+    }
+
     /** Nilai kolom sumber untuk label OAK hasil penurunan kurasi aktivitas. */
     public const SUMBER_TURUNAN_OAK = 'kurasi aktivitas OAK';
 
@@ -272,6 +378,11 @@ final class DrmMasterDb
         $ada = [];
         foreach (DB::table('drm_master_teks')->where('jenis', 'OAK')->where(fn ($q) => $q->whereNull('sumber')->orWhere('sumber', '!=', self::SUMBER_TURUNAN_OAK))->get(['teks', 'ri']) as $t) {
             $ada[DrmMaster::crcTeks((string) $t->teks).'|'.(int) $t->ri] = true;
+        }
+
+        // Master satu tabel: tambahkan ke kolom item_sumber_oak (tanpa duplikat; label yang sudah ada tidak dihapus).
+        if (self::labelDiBaris()) {
+            return $this->turunkanOakKeKolom($kurasi, $subNorm, $riPerAkt);
         }
 
         $sekarang = now();
@@ -305,6 +416,50 @@ final class DrmMasterDb
         $this->catat('drm_master_teks', 'OAK:'.self::SUMBER_TURUNAN_OAK, 'isi', null, $hasil);
 
         return $hasil;
+    }
+
+    /**
+     * @param  array<string, list<string>>  $kurasi
+     * @param  array<string, array{0: string, 1: list<string>}>  $subNorm
+     * @param  array<string, list<int>>  $riPerAkt
+     * @return array{baris: int, label: int}
+     */
+    private function turunkanOakKeKolom(array $kurasi, array $subNorm, array $riPerAkt): array
+    {
+        $tambah = [];
+        foreach ($kurasi as $oak => $daftarHira) {
+            [$namaOak, $subs] = $subNorm[DrmMaster::normTeks((string) $oak)] ?? [(string) $oak, []];
+            foreach ((array) $daftarHira as $hira) {
+                foreach ($riPerAkt[DrmMaster::normTeks((string) $hira)] ?? [] as $ri) {
+                    foreach ($subs as $sub) {
+                        $tambah[$ri][] = trim($namaOak).' / '.trim((string) $sub);
+                    }
+                }
+            }
+        }
+        $jumlah = ['baris' => 0, 'label' => 0];
+        DB::transaction(function () use ($tambah, &$jumlah) {
+            foreach (DB::table(self::TABEL_UTAMA)->whereIn('ri', array_keys($tambah))->get(['ri', 'item_sumber_oak']) as $b) {
+                $ada = self::pisahLabel($b->item_sumber_oak);
+                $kunci = array_flip(array_map(fn ($l) => DrmMaster::crcTeks($l), $ada));
+                $baru = [];
+                foreach ($tambah[(int) $b->ri] as $l) {
+                    $c = DrmMaster::crcTeks($l);
+                    if (! isset($kunci[$c])) {
+                        $kunci[$c] = true;
+                        $baru[] = $l;
+                    }
+                }
+                if ($baru !== []) {
+                    DB::table(self::TABEL_UTAMA)->where('ri', $b->ri)->update(['item_sumber_oak' => implode("\n", [...$ada, ...$baru]), 'updated_at' => now()]);
+                    $jumlah['baris']++;
+                    $jumlah['label'] += count($baru);
+                }
+            }
+        });
+        $this->catat(self::TABEL_UTAMA, 'item_sumber_oak', 'isi', null, $jumlah);
+
+        return $jumlah;
     }
 
     /**
