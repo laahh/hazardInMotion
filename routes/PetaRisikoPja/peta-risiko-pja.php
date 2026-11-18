@@ -34,6 +34,13 @@ Route::prefix('peta-risiko-pja')
             Route::post('/label/{jenis}/{id}/hapus', 'hapus')->where(['jenis' => 'teks|label|OBS|OAK|KET'])->whereNumber('id')->middleware('throttle:120,1')->name('hapus');
         });
 
+        // Peta korelasi master (graf grup lokasi ↔ DL ↔ PJA ↔ aktivitas ↔ kelompok ↔ bahaya ↔ label SAP).
+        Route::prefix('korelasi')->name('korelasi.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoKorelasiController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/data', 'data')->middleware('throttle:120,1')->name('data');
+            Route::get('/cari', 'cari')->middleware('throttle:120,1')->name('cari');
+        });
+
         // Master grup lokasi & aktivitas (M05 per aktivitas + kelompok aktivitas M02), didaftarkan sebelum /{tabel}.
         Route::prefix('master/grup')->name('master.grup.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoMasterGrupController::class)->group(function () {
             Route::get('/', 'index')->name('index');
