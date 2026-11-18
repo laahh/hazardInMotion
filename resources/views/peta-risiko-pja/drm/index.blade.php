@@ -296,11 +296,12 @@
 
   // Baris rincian per status satu PJA (modal kartu): disimpan sync di berkas pja/{id}.json → beranda.rincian.
   const URL_PJA_DATA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.pja.data', ['pja' => '999999999'])) }}.replace('999999999', '__ID__');
-  const rincianPja = {};
-  const muatRincianPja = (id) => (rincianPja[id] ||= fetch(URL_PJA_DATA.replace('__ID__', encodeURIComponent(id)), { headers: { Accept: 'application/json' } })
+  // Berkas pja/{id}.json dimuat sekali per PJA dan dipakai bersama (modal kartu Beranda PJA, bahaya belum tercover per DL).
+  const dataPjaPenuh = {};
+  const muatDataPja = (id) => (dataPjaPenuh[id] ||= fetch(URL_PJA_DATA.replace('__ID__', encodeURIComponent(id)), { headers: { Accept: 'application/json' } })
     .then((r) => { if (!r.ok) throw new Error(`Gagal memuat data PJA (HTTP ${r.status}).`); return r.json(); })
-    .then((d) => ((d.beranda || {}).rincian || null))
-    .catch((e) => { delete rincianPja[id]; throw e; }));
+    .catch((e) => { delete dataPjaPenuh[id]; throw e; }));
+  const muatRincianPja = (id) => muatDataPja(id).then((d) => ((d.beranda || {}).rincian || null));
   const namaPjaB = () => ((M.beranda.mgmt.find((x) => String(x.id) === String(state.pjaB)) || {}).nama || 'PJA');
   /** Parameter cakupan untuk laporan SAP / item satu baris: PJA terpilih (tab Beranda PJA) atau site / grup. */
   const cakupanSap = () => (state.tab === 'bpja' ? { site: 'ALL', pja: state.pjaB } : { site: state.site, ...(state.tab === 'grup' ? { grup: state.grup } : {}) });
@@ -775,7 +776,9 @@
           <td>${DR.sb4(v.full, 0, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td>
           <td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
           <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`
-          + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:12px 16px 16px 40px" data-sap="${DR.esc(d)}"><span class="dr-mute">Memuat laporan SAP…</span></td></tr>` : '');
+          + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:12px 16px 16px 40px">
+              <div data-belum="${DR.esc(d)}" data-pja-id="${DR.esc(pja[0].id)}" style="margin-bottom:16px"><span class="dr-mute">Memuat bahaya-risiko yang belum tercover SAP…</span></div>
+              <div data-sap="${DR.esc(d)}"><span class="dr-mute">Memuat laporan SAP…</span></div></td></tr>` : '');
       }).join('')
         || `<tr><td colspan="8" class="pr-empty">Tidak ada detail lokasi ${DR.esc(state.grup)}${state.site === 'ALL' ? '' : ' di ' + DR.esc(state.site)} yang punya baris baseline${M.beranda.dl ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`)
       + (kosongan ? `<tr><td colspan="8" class="dr-mute" style="font-size:12px">${kosongan} detail lokasi lain di grup ini tidak punya baris pada level risiko terpilih.</td></tr>` : '')
@@ -785,6 +788,57 @@
     }));
     document.querySelectorAll('#dr-tbl-grup a[data-pja]').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
     document.querySelectorAll('#dr-tbl-grup [data-sap]').forEach((td) => muatSap(td.dataset.sap, w, td));
+    document.querySelectorAll('#dr-tbl-grup [data-belum]').forEach((el) => muatBelum(el.dataset.belum, el.dataset.pjaId, w, el));
+  }
+
+  // ------------------------------------------------------------ Bahaya-risiko belum tercover SAP di satu detail lokasi
+  /**
+   * Baris baseline (detail lokasi × bahaya, tanpa bahaya umum, level sesuai filter) yang tidak tertangkap laporan SAP
+   * pada minggu w — sama dengan angka "Tanpa laporan" di tabel. Juga baris yang tertangkap tetapi bermasalah.
+   * Data dari berkas PJA pemilik detail lokasi (bit mingguan kelompok `kd` dan spesifik `sp`, aturan DrmBeranda::status).
+   */
+  function bahayaDl(D, d, w) {
+    const B = Object.fromEntries(M.kolomBahaya.map((k, i) => [k, i]));
+    const urai = (s) => { const o = {}; if (s) String(s).split(',').forEach((p) => { const [i, b] = p.split(':'); o[+i] = (o[+i] || 0) | +b; }); return o; };
+    const l = (D.lokasi || []).find((x) => String(x.dl) === String(d));
+    if (!l) return null;
+    const BE = D.beranda || {}, umum = new Set(((BE.umum || {})[l.grp] || []).map(String));
+    const bh = Object.fromEntries((D.bahaya || []).map((b) => [String(b[B.hid]), b]));
+    const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+    const hasil = { n: 0, none: [], bm: [] };
+    String((D.pasangan || {})[d] || '').split(',').filter(Boolean).forEach((p) => {
+      const hid = p.split(':')[0], b = bh[hid];
+      if (!b || umum.has(hid) || (lvBoleh && !lvBoleh.has(b[B.n1]))) return;
+      const kel = b[B.proses] || 'X', kd = (BE.kd || {})[d + '|' + kel] || [], sp = (BE.sp || {})[d + '|' + hid] || [];
+      const k = urai(kd[0])[w] || 0, s = urai(sp[0])[w] || 0;
+      const m = (s & (4 | 8 | 16 | 32)) | (k & 16);
+      hasil.n++;
+      const baris = { kel, an: b[B.aktivitas], sn: b[B.sub], bn: b[B.bahaya], n1: b[B.n1], n2: b[B.n2], m };
+      if (m) hasil.bm.push(baris); else if (!((k & 1) || (s & 2))) hasil.none.push(baris);
+    });
+    return hasil;
+  }
+
+  function muatBelum(d, pjaId, w, el) {
+    muatDataPja(pjaId).then((D) => {
+      if (!el.isConnected) return;
+      const H = bahayaDl(D, d, w);
+      if (!H) { el.innerHTML = '<span class="dr-mute">Detail lokasi ini tidak ada di berkas PJA-nya.</span>'; return; }
+      const namaKel = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]);
+      const urutLv = { Significant: 0, High: 1, Medium: 2, Low: 3 };
+      const lvTag = (lv) => `<span class="dr-lv lv-${DR.esc(lv)}">${DR.esc(lv || '-')}</span>`;
+      const tabel = (L, alasan) => `<div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:880px"><thead><tr><th>Risiko awal</th><th>Kelompok aktivitas</th><th style="min-width:220px">Aktivitas HIRA · sub aktivitas</th><th style="min-width:220px">Bahaya - risiko</th>${alasan ? '<th>Masalah</th>' : '<th>Residual</th>'}</tr></thead><tbody>${
+        L.slice().sort((a, b) => (urutLv[a.n1] ?? 9) - (urutLv[b.n1] ?? 9) || String(namaKel[a.kel]).localeCompare(String(namaKel[b.kel])) || String(a.an).localeCompare(String(b.an)) || String(a.bn).localeCompare(String(b.bn)))
+          .map((x) => `<tr><td>${lvTag(x.n1)}</td><td>${DR.esc(namaKel[x.kel] || x.kel)}</td><td>${DR.esc(x.an)}${x.sn && x.sn !== x.an ? `<br><span class="dr-mute">${DR.esc(x.sn)}</span>` : ''}</td><td><b>${DR.esc(x.bn)}</b></td>
+            <td>${alasan ? [x.m & 4 && 'belum closed', x.m & 8 && 'berulang', x.m & 16 && 'OAK Stop', x.m & 32 && 'butir OAK tidak sesuai'].filter(Boolean).join(', ') : lvTag(x.n2)}</td></tr>`).join('')}</tbody></table></div>`;
+      const lv = state.lv === 'ALL' ? 'semua level' : 'Significant + High';
+      el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;margin-bottom:8px;font-size:13px">
+          <b style="color:#b42318">● ${DR.fmt(H.none.length)} bahaya-risiko belum tercover SAP</b>
+          <span class="dr-mute">dari ${DR.fmt(H.n)} baris baseline (${pctI(H.none.length, H.n)}) · ${wKode(w)} · ${lv}</span></div>`
+        + (H.none.length ? tabel(H.none, false) : '<div class="dr-mute">Semua bahaya-risiko baseline di detail lokasi ini sudah tertangkap laporan SAP minggu ini.</div>')
+        + (H.bm.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#a07a00">● ${DR.fmt(H.bm.length)} sudah tertangkap SAP tetapi laporannya bermasalah</summary>${tabel(H.bm, true)}</details>` : '')
+        + '<p class="dr-mute" style="font-size:12px;margin:8px 0 0">Baseline detail lokasi = semua baris HIRA grup lokasinya (M05), jadi sebagian baris bisa saja aktivitasnya memang tidak ada di lokasi ini.</p>';
+    }).catch((e) => { if (el.isConnected) el.innerHTML = `<span class="br-red">${DR.esc(e.message || 'Gagal memuat data PJA.')}</span>`; });
   }
 
   // ------------------------------------------------------------ Laporan SAP satu detail lokasi (dimuat saat baris dibuka)
