@@ -34,15 +34,10 @@
   .bp-flag:hover { border-color: var(--navy); background: var(--sky); }
   .bp-flag.off { color: #8a5300; border-color: #f2c76b; background: #fff7e6; }
   .bp-tot td { background: #eef3fa; font-weight: 800; }
+  /* Baris nonaktif diredupkan kecuali kolom status (kolom ke-3) supaya tombolnya tetap jelas. */
+  .bp-off td:not(:nth-child(3)) { opacity: .5; }
   /* Tabel poin: isi baris rata atas supaya sel pendek tidak terdorong ke tengah oleh sel panjang. */
   #bp-isi .pr-tbl td { vertical-align: top; }
-  .bp-akar { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; max-width: 340px; }
-  .bp-akar li { font-size: 12.5px; line-height: 1.45; color: #475569; }
-  .bp-akar b { display: block; color: #1f2937; font-weight: 700; }
-  .bp-akar-isi { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .bp-akar-lengkap { margin-top: 4px; max-width: 340px; }
-  .bp-akar-lengkap summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--navy); }
-  .bp-akar-lengkap p { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: #475569; white-space: pre-line; }
   .bp-dialog { width: min(640px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 0; box-shadow: 0 30px 80px rgba(15, 23, 42, .35); }
   .bp-dialog::backdrop { background: rgba(15, 23, 42, .45); }
   .bp-dialog header { display: flex; gap: 12px; align-items: flex-start; padding: 18px 20px 12px; border-bottom: 1px solid var(--line); }
@@ -236,23 +231,6 @@ window.BerandaPoin = (function () {
   }
 
   // ------------------------------------------------ 6 insiden & root cause
-  /**
-   * Akar penyebab investigasi berisi beberapa poin "Layer N · judul: uraian" yang digabung dengan koma.
-   * Ditampilkan ringkas: per layer judul + 2 baris uraian, teks lengkap di "Selengkapnya".
-   */
-  function akarPenyebab(akar) {
-    const teks = String(akar || '').trim();
-    if (!teks) return '<span class="dr-mute">–</span>';
-    const poin = teks.split(/\s*,\s*(?=Layer\s*\d)/i).map((p) => p.trim()).filter(Boolean);
-    const ringkas = poin.map((p) => {
-      const m = p.match(/^(Layer\s*\d+\s*·?\s*[^:]{0,80}):\s*([\s\S]*)$/i);
-      const judul = m ? m[1].trim() : '';
-      const isi = m ? m[2].trim() : p;
-      return `<li>${judul ? `<b>${E(judul)}</b>` : ''}<span class="bp-akar-isi">${E(isi)}</span></li>`;
-    }).join('');
-    return `<ul class="bp-akar">${ringkas}</ul>${teks.length > 160 ? `<details class="bp-akar-lengkap"><summary>Selengkapnya</summary><p>${E(teks)}</p></details>` : ''}`;
-  }
-
   function insiden(X) {
     const rc = {};
     (X.BE.rc || []).forEach((r) => (rc[r.no] ||= []).push(r));
@@ -261,11 +239,10 @@ window.BerandaPoin = (function () {
       return `<tr><td style="white-space:nowrap"><b>#${E(i.no)}</b><br><span class="dr-mute">${pendek(i.tanggal)} ${String(i.tanggal).slice(0, 4)}</span></td>
         <td>${E(i.kategori)}</td><td>${E(i.lokasi)} · <b>${E(i.detlok)}</b></td>
         <td><div class="pr-clamp" title="${E(i.kronologi)}">${E(i.kronologi || '–')}</div>${i.potensi ? `<span class="dr-mute">Potensi: ${E(i.potensi)}</span>` : ''}</td>
-        <td>${akarPenyebab(i.akar)}</td>
         <td>${r.length ? r.map((x) => `<div style="margin-bottom:4px">${E(x.label)} <span class="dr-mute">· sebelum ${x.sebelum ? F(x.sebelum) : '<b class="br-red">0</b>'} · belum closed ${F(x.belum)}</span></div>`).join('') : '<span class="dr-mute">belum terpetakan</span>'}</td></tr>`;
     }).join('');
     return kartu('6. Insiden dan root cause di lokasi PJA', `${(X.D.insiden || []).length} insiden · root cause SAP = label ketidaksesuaian yang terpetakan, "sebelum" = laporan label sama 3 bulan sebelum insiden`,
-      tabel('<th>Insiden</th><th>Kategori</th><th>Detail lokasi</th><th style="min-width:280px">Kronologi</th><th style="min-width:200px">Akar penyebab</th><th style="min-width:240px">Root cause (label SAP)</th>', baris, 'Tidak ada insiden di detail lokasi PJA ini.', 1100));
+      tabel('<th>Insiden</th><th>Kategori</th><th>Detail lokasi</th><th style="min-width:320px">Kronologi</th><th style="min-width:260px">Root cause (label SAP)</th>', baris, 'Tidak ada insiden di detail lokasi PJA ini.', 960));
   }
 
   // ------------------------------------------------ a–c personil & coverage
@@ -310,10 +287,17 @@ window.BerandaPoin = (function () {
     const akhir7 = y.slice(-7).reduce((a, b) => a + b, 0) / 7;
     return { f: s, arah: s - akhir7 > 0.03 ? 'naik' : akhir7 - s > 0.03 ? 'turun' : 'stabil' };
   }
+  /** Tombol status aktivitas (flag) satu kelompok aktivitas × detail lokasi; dipakai tab Identifikasi harian & Open risk. */
+  function tombolFlag(X, dl, kel, off) {
+    const pending = flagKel(X, dl, kel).some((f) => f.review === 'PENDING');
+    return `<button type="button" class="bp-flag${off ? ' off' : ''}" data-flag="${E(dl)}" data-kel="${E(kel)}" title="Ubah status aktivitas (berlaku setelah disetujui orang lain)"><span class="material-symbols-outlined" style="font-size:15px">${off ? 'pause_circle' : 'play_circle'}</span>${off ? 'Nonaktif' : 'Ada aktivitas'}</button>${pending ? '<br><span class="dr-tag st-X">Menunggu review</span>' : ''}`;
+  }
+
   function harian(X) {
     const NH = C.M.beranda.hari, h0 = C.M.beranda.hari0, T = C.M.beranda.tekanan;
     const grup = {};
-    aktif(X).forEach((r) => { if (!nonaktif(X, r.dl, r.kel, C.w)) (grup[r.kel + '|' + r.dl] ||= { kel: r.kel, dl: r.dl, rows: [] }).rows.push(r); });
+    // Kombinasi bertanda nonaktif tetap ditampilkan (redup, di bawah) supaya statusnya bisa diubah kembali.
+    aktif(X).forEach((r) => { (grup[r.kel + '|' + r.dl] ||= { kel: r.kel, dl: r.dl, off: nonaktif(X, r.dl, r.kel, C.w), rows: [] }).rows.push(r); });
     const L = Object.values(grup).map((g) => {
       const d = Array.from({ length: NH }, () => ({ ok: 0, bm: 0, inc: 0 }));
       g.rows.forEach((r) => {
@@ -333,7 +317,8 @@ window.BerandaPoin = (function () {
       let tk = c7 >= T.hari_tinggi || beruntun >= T.beruntun_tinggi ? 2 : c7 >= T.hari_sedang ? 1 : 0;
       if (inc && tk < 2) tk++;
       return { ...g, d, n, ok7, pj: proyeksiHarian(gap), tk, c7, inc };
-    }).sort((a, b) => b.tk - a.tk || a.ok7 - b.ok7 || b.n - a.n);
+    }).sort((a, b) => Number(a.off) - Number(b.off) || b.tk - a.tk || a.ok7 - b.ok7 || b.n - a.n);
+    const nOff = L.filter((g) => g.off).length;
     const tampil = S.semuaHarian ? L : L.slice(0, 40);
     const warna = (x, n) => (x.bm > 0 ? DR.BW.bm : x.ok === 0 ? '#e5e9ef' : `hsl(214, 70%, ${(78 - 38 * (x.ok / n)).toFixed(0)}%)`);
     const kepalaHari = Array.from({ length: NH }, (_, i) => { const t = geser(h0, i); return `<span>${tgl(t).getDay() === 0 ? pendek(t) : ''}</span>`; }).join('');
@@ -341,14 +326,17 @@ window.BerandaPoin = (function () {
     const baris = tampil.map((g) => {
       const l = X.dl[g.dl] || {};
       const pj = g.pj ? `<b>~${Math.round(100 * (1 - g.pj.f))}%</b> terkontrol<br><span class="dr-mute">gap ${g.pj.arah}</span>` : '<span class="dr-mute">data kurang</span>';
-      return `<tr><td><b>${E(namaKel(g.kel))}</b><br><span class="dr-mute">${g.n} bahaya</span></td><td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td>
+      const kecenderungan = g.off ? '<span class="dr-mute">dikecualikan (nonaktif)</span>'
+        : `<span class="bp-chip" style="--b:${TK[g.tk][1]};--c:${TK[g.tk][2]}">${TK[g.tk][0]}</span>${g.inc ? '<br><span class="br-red" style="font-size:12px">ada riwayat insiden</span>' : ''}`;
+      return `<tr${g.off ? ' class="bp-off"' : ''}><td><b>${E(namaKel(g.kel))}</b><br><span class="dr-mute">${g.n} bahaya</span></td><td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td>
+        <td>${tombolFlag(X, g.dl, g.kel, g.off)}</td>
         <td><div class="bp-strip">${g.d.map((x, i) => `<i class="${x.inc ? 'inc' : ''}${i && tgl(geser(h0, i)).getDay() === 0 ? ' sep' : ''}" style="--c:${warna(x, g.n)}" title="${pendek(geser(h0, i))}: ${x.ok} terkontrol, ${x.bm} bermasalah, ${Math.max(0, g.n - x.ok - x.bm)} tanpa laporan${x.inc ? ' · INSIDEN' : ''}"></i>`).join('')}</div></td>
-        <td class="r"><b>${pct(g.ok7, 1)}</b><br><span class="dr-mute">${g.c7} hari bergap</span></td><td>${pj}</td>
-        <td><span class="bp-chip" style="--b:${TK[g.tk][1]};--c:${TK[g.tk][2]}">${TK[g.tk][0]}</span>${g.inc ? '<br><span class="br-red" style="font-size:12px">ada riwayat insiden</span>' : ''}</td></tr>`;
+        <td class="r"><b>${pct(g.ok7, 1)}</b><br><span class="dr-mute">${g.c7} hari bergap</span></td><td>${g.off ? '<span class="dr-mute">–</span>' : pj}</td>
+        <td>${kecenderungan}</td></tr>`;
     }).join('');
-    return kartu('7. Identifikasi risiko per kelompok aktivitas – detail lokasi', `${pendek(h0)} – ${pendek(C.M.sampai)} · satu kotak = satu hari · titik merah = insiden · proyeksi = EWMA % terkontrol harian untuk 7 hari ke depan`,
+    return kartu('7. Identifikasi risiko per kelompok aktivitas – detail lokasi', `${pendek(h0)} – ${pendek(C.M.sampai)} · satu kotak = satu hari · titik merah = insiden · proyeksi = EWMA % terkontrol harian untuk 7 hari ke depan · klik "Ada aktivitas" bila aktivitas tidak berjalan di lokasi itu${nOff ? ` · ${nOff} kombinasi nonaktif` : ''}`,
       `<div class="pr-card-body" style="padding-bottom:0"><div class="bp-lg"><span><i style="--c:hsl(214,70%,40%)"></i>semua bahaya terkontrol</span><span><i style="--c:hsl(214,70%,70%)"></i>sebagian terkontrol</span><span><i style="--c:${DR.BW.bm}"></i>ada laporan bermasalah</span><span><i style="--c:#e5e9ef"></i>tanpa laporan</span><span>Kecenderungan insiden naik bila gap terjadi hampir setiap hari (≥${T.hari_tinggi} dari 7 hari atau ${T.beruntun_tinggi} hari beruntun) atau pernah ada insiden.</span></div></div>`
-      + tabel(`<th style="min-width:180px">Kelompok aktivitas</th><th style="min-width:200px">Lokasi · detail lokasi</th><th><div class="bp-hari">${kepalaHari}</div></th><th class="r">Terkontrol 7 hari</th><th>Proyeksi 7 hari</th><th>Kecenderungan insiden</th>`, baris, 'Tidak ada baris aktif pada filter ini.', 1200)
+      + tabel(`<th style="min-width:180px">Kelompok aktivitas</th><th style="min-width:200px">Lokasi · detail lokasi</th><th>Status aktivitas</th><th><div class="bp-hari">${kepalaHari}</div></th><th class="r">Terkontrol 7 hari</th><th>Proyeksi 7 hari</th><th>Kecenderungan insiden</th>`, baris, 'Tidak ada baris aktif pada filter ini.', 1200)
       + (L.length > 40 ? `<div class="pr-card-body"><button type="button" class="pr-back" id="bp-semua-harian">${S.semuaHarian ? 'Tampilkan 40 teratas' : `Tampilkan semua ${L.length} baris`}</button></div>` : ''));
   }
 
@@ -384,11 +372,10 @@ window.BerandaPoin = (function () {
     const tot = `<tr class="bp-tot"><td colspan="5">Total ${daftar.filter((o) => !o.off).length} kombinasi dengan open risk</td><td class="r">${F(jml('g1'))}</td><td class="r">${F(jml('g2'))}</td><td class="r">${F(jml('g3'))}</td><td class="r">${F(jml('g4'))}</td></tr>`;
     const baris = daftar.map((o) => {
       const l = X.dl[o.dl] || {}, k = 'open:' + o.kel + '|' + o.dl, buka = !!S.buka[k];
-      const fl = flagKel(X, o.dl, o.kel), pending = fl.some((f) => f.review === 'PENDING');
       const utama = `<tr class="br-a${buka ? ' open' : ''}" data-buka="${E(k)}" style="cursor:pointer${o.off ? ';opacity:.6' : ''}">
         <td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Lihat bahaya-risiko">▸</button><b>${E(namaKel(o.kel))}</b></td>
         <td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td><td>${terakhir(o.last || (X.BE.dlast || {})[o.dl])}</td>
-        <td><button type="button" class="bp-flag${o.off ? ' off' : ''}" data-flag="${E(o.dl)}" data-kel="${E(o.kel)}"><span class="material-symbols-outlined" style="font-size:15px">${o.off ? 'pause_circle' : 'play_circle'}</span>${o.off ? 'Nonaktif' : 'Ada aktivitas'}</button>${pending ? '<br><span class="dr-tag st-X">Menunggu review</span>' : ''}</td>
+        <td>${tombolFlag(X, o.dl, o.kel, o.off)}</td>
         <td>${o.inc ? `<span class="bp-chip" style="--b:#f1e8fa;--c:#7e3fb3">Ya (${o.inc} bahaya)</span>` : '<span class="dr-mute">Tidak</span>'}</td>
         <td class="r">${o.off ? '–' : F(o.g1)}</td><td class="r">${o.off ? '–' : F(o.g2)}</td><td class="r">${o.off ? '–' : F(o.g3)}</td><td class="r">${o.off ? '–' : F(o.g4)}</td></tr>`;
       if (!buka) return utama;
