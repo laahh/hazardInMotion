@@ -150,6 +150,22 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(1, $snap['meta']['pja'][0]['insiden']);
     }
 
+    public function test_rincian_baris_per_pja_disimpan_di_berkas_dan_tidak_masuk_meta(): void
+    {
+        $snap = $this->susun();
+        $rincian = $snap['pja']['10']['beranda']['rincian'];
+        $mgmt = $snap['meta']['beranda']['mgmt'][0];
+
+        // Satu baris per kelompok × bahaya di detail lokasi PJA ini: [kel, hid, level, inc, tr, kode minggu, gap, vol].
+        $this->assertNotEmpty($rincian);
+        $this->assertCount(8, $rincian[0]);
+        $this->assertEqualsCanonicalizing(['1', '2', '3'], array_unique(array_map(fn ($r) => (string) $r[1], $rincian)));
+        // Jumlah baris rincian = total baris ringkasan PJA (semua level, minggu 0), dan meta tidak ikut membawa rincian.
+        $total = array_sum(array_map(fn ($v) => $v[0], $mgmt['w'][0]));
+        $this->assertSame($total, count($rincian));
+        $this->assertArrayNotHasKey('rincian', $mgmt);
+    }
+
     public function test_ringkasan_baseline_unik_tidak_dipetakan_ke_pja(): void
     {
         $r = $this->susun()['meta']['beranda']['ringkas'];

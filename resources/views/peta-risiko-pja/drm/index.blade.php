@@ -41,7 +41,7 @@
     <div class="dr-bar">
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
-      <label>Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
+      <label data-ctl="site">Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
       <label><span class="material-symbols-outlined" style="font-size:18px;color:var(--primary)">calendar_month</span> Periode <select id="dr-w"></select></label>
       <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
       <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
@@ -136,27 +136,26 @@
   <div id="dr-panel-periode" class="br-root" style="margin-top:20px" hidden></div>
   <div id="dr-panel-pja" class="br-root" style="margin-top:20px" hidden></div>
 
-  {{-- Tab Beranda PJA: Beranda PJA hidup (data snapshot sync), dirender langsung tanpa iframe. --}}
+  {{-- Tab Beranda PJA: tampilan tab Semua PJA (kartu status + baris PJA + rincian) untuk satu PJA terpilih.
+       Analisis lengkap (tren, heatmap, rincian aktivitas, flag) tetap di halaman /peta-risiko-pja/pja/{id}. --}}
   <div id="dr-panel-bpja" class="br-root" style="margin-top:20px" hidden>
-    <div class="pr-card" style="margin-bottom:18px">
+    <div class="pr-card">
       <div class="pr-card-body" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
         <label class="dr-bpja-pilih" style="display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:13px">
           <span class="material-symbols-outlined" style="color:var(--primary)">badge</span> PJA
-          <select id="dr-bpja-pja" style="min-width:320px;padding:8px 10px;border-radius:10px;border:1px solid rgba(171,173,175,.45);font-weight:600"></select>
+          <select id="dr-bpja-pja" style="min-width:320px;max-width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(171,173,175,.45);font-weight:600"></select>
         </label>
-        <a class="pr-back" id="dr-bpja-buka" href="#" style="margin-left:auto"><span class="material-symbols-outlined" style="font-size:18px">open_in_new</span> Buka halaman PJA</a>
+        <span class="dr-mute" id="dr-bpja-sub" style="font-size:13px"></span>
+        <a class="pr-back" id="dr-bpja-buka" href="#" style="margin-left:auto"><span class="material-symbols-outlined" style="font-size:18px">open_in_new</span> Analisis lengkap PJA</a>
       </div>
     </div>
-    @include('peta-risiko-pja.drm._beranda-pja-isi', ['denganSub' => true])
+    <div id="dr-bpja-isi"><div class="pr-card"><div class="pr-empty">Memuat…</div></div></div>
   </div>
 @endif
 @endsection
 
 @section('scripts')
 @include('peta-risiko-pja.drm._ui')
-@if ($meta)
-@include('peta-risiko-pja.drm._beranda-pja-script')
-@endif
 @if ($meta)
 <script>
 (() => {
@@ -230,9 +229,8 @@
     $('#dr-ringkas').hidden = true;
     const bpja = state.tab === 'bpja';
     $('#dr-panel-bpja').hidden = !bpja;
-    // Beranda PJA punya filter minggu & tingkat risiko sendiri. Pakai style.display: CSS .dr-bar (display:flex)
-    // mengalahkan atribut hidden.
-    $('.dr-bar').style.display = bpja ? 'none' : '';
+    // Beranda PJA memakai filter periode & risiko awal yang sama dengan Semua PJA; site ditentukan oleh PJA terpilih.
+    document.querySelector('[data-ctl="site"]').hidden = bpja;
     if (bpja) {
       $('#dr-panel-cakupan').hidden = true;
       bukaBeranda();
@@ -242,39 +240,65 @@
 
   function kosong() { return Array.from({ length: 5 }, () => [0, 0, 0, 0, 0]); }
 
-  // ------------------------------------------------------------ Beranda PJA (komponen bersama _beranda-pja-*)
-  let berandaDimuat = '';
-  /** Isi pemilih PJA (dikelompokkan per site) sekali, lalu muat Beranda PJA terpilih bila belum dimuat. */
+  // ------------------------------------------------------------ Beranda PJA = tampilan Semua PJA untuk satu PJA
+  /** Isi pemilih PJA (dikelompokkan per site) sekali, lalu gambar PJA terpilih untuk minggu & level di bilah filter. */
   function bukaBeranda() {
     const sel = $('#dr-bpja-pja');
     const L = ((M.beranda || {}).mgmt || []).slice().sort((a, b) => a.site.localeCompare(b.site) || a.nama.localeCompare(b.nama));
-    if (!L.length) { $('#br-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
+    if (!L.length) { $('#dr-bpja-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
     if (!sel.options.length) {
       const perSite = {};
       L.forEach((p) => { (perSite[p.site] ||= []).push(p); });
       sel.innerHTML = Object.entries(perSite).map(([site, d]) => `<optgroup label="${DR.esc(site)}">${d.map((p) => `<option value="${DR.esc(p.id)}">${DR.esc(p.nama)}</option>`).join('')}</optgroup>`).join('');
-      sel.addEventListener('change', () => { state.pjaB = sel.value; muatBeranda(state.w); simpanUrl(); });
+      sel.addEventListener('change', () => { state.pjaB = sel.value; renderBpja(); simpanUrl(); });
     }
     if (!state.pjaB || !L.some((p) => String(p.id) === String(state.pjaB))) {
       state.pjaB = String((L.find((p) => state.site === 'ALL' || p.site === state.site) || L[0]).id);
     }
     sel.value = state.pjaB;
-    if (berandaDimuat !== state.pjaB) muatBeranda(state.w);
+    renderBpja();
   }
 
-  function muatBeranda(w) {
+  /** Kartu status (sama dengan tab Semua PJA, klik = daftar baris PJA ini) + baris PJA dengan rincian kelompok & tindak lanjut. */
+  function renderBpja() {
+    const isi = $('#dr-bpja-isi');
+    if (!formatBaru()) { isi.innerHTML = pesanLama(); return; }
     const p = M.beranda.mgmt.find((x) => String(x.id) === String(state.pjaB));
     if (!p) return;
-    berandaDimuat = String(p.id);
-    $('#dr-bpja-buka').href = URL_PJA.replace('__ID__', p.id) + '?w=' + w;
-    $('#dr-sub').textContent = `${p.nama} · ${p.site} · data sampai ${M.sampai.split('-').reverse().join('/')} · periode minggu kalender (Minggu–Sabtu)`;
-    $('#br-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Memuat Beranda PJA…</div></div>';
-    BerandaPJA({
-      meta: M, id: String(p.id), w,
-      // Memilih PJA lain di tabel antar PJA: ganti isi tab tanpa memuat ulang halaman.
-      pindahPja: (id, wk) => { state.pjaB = String(id); $('#dr-bpja-pja').value = state.pjaB; muatBeranda(wk); simpanUrl(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
-    });
+    const NW = M.beranda.minggu.length, wk = wKode(state.w);
+    const o = dataPja().find((x) => x.id === String(p.id));
+    $('#dr-bpja-buka').href = URL_PJA.replace('__ID__', p.id) + '?w=' + state.w;
+    $('#dr-bpja-sub').textContent = `${p.site} · ${p.ndl} detail lokasi · data sampai ${M.sampai.split('-').reverse().join('/')}`;
+    const V = vekPja(p, state.w), V0 = state.w + 1 < NW ? vekPja(p, state.w + 1) : null;
+    isi.innerHTML = kartu4(V, V0, `${DR.esc(p.nama)} · ${wk}`) + (o ? tabelSatuPja(o, wk) : '');
   }
+
+  function tabelSatuPja(o, wk) {
+    return `<div class="pr-card" style="margin-top:20px"><div class="pr-card-head"><div><b>${DR.esc(o.nama)} · ${wk}</b><small>Satuan sama dengan tab Semua PJA: satu baris = kelompok aktivitas × bahaya-risiko di PJA ini, tanpa flag</small></div></div>
+      <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:1100px"><thead><tr><th style="min-width:240px">PJA</th><th style="min-width:200px">Komposisi</th>
+      <th class="r">Terkontrol penuh</th><th class="r">Gap</th><th class="r">Sebagian</th><th class="r">Tanpa laporan</th>
+      <th class="r">Open</th><th class="r">Lewat janji</th><th class="r">Open &gt; 30 hari</th><th class="r">Insiden ${M.beranda.hari} hr</th><th>Prioritas</th></tr></thead>
+      <tbody><tr class="br-a open">
+        <td><b>${DR.esc(o.nama)}</b><br><span class="dr-mute">${DR.esc(o.site)} · ${o.ndl} detail lokasi · ${DR.fmt(o.personil)} personil</span></td>
+        <td>${o.tot ? DR.sb4(o.full, o.part, o.gapo, o.none) + `<span class="dr-mute">${DR.fmt(o.tot)} baris</span>` : '<span class="dr-mute">tanpa baris baseline</span>'}</td>
+        <td class="r">${pctI(o.full, o.tot)}</td><td class="r"><b>${pctI(o.tot - o.full, o.tot)}</b></td><td class="r">${DR.fmt(o.part)}</td><td class="r">${DR.fmt(o.none)}</td>
+        <td class="r"><b>${DR.fmt(o.op)}</b></td><td class="r">${DR.fmt(o.lewat)}<br><span class="dr-mute">${pctI(o.lewat, o.op)}</span></td>
+        <td class="r">${DR.fmt(o.lama30)}<br><span class="dr-mute">${pctI(o.lama30, o.op)}</span></td>
+        <td class="r">${o.insiden ? `<b class="br-red">${o.insiden}</b>` : ''}</td>
+        <td><span class="br-pill" style="background:${PRI[o.pri][1]}">${PRI[o.pri][0]}</span><br><span class="dr-mute">skor ${o.skor}</span></td></tr>
+      ${rincian(o)}</tbody></table></div></div>`;
+  }
+
+  // Baris rincian per status satu PJA (modal kartu): disimpan sync di berkas pja/{id}.json → beranda.rincian.
+  const URL_PJA_DATA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.pja.data', ['pja' => '999999999'])) }}.replace('999999999', '__ID__');
+  const rincianPja = {};
+  const muatRincianPja = (id) => (rincianPja[id] ||= fetch(URL_PJA_DATA.replace('__ID__', encodeURIComponent(id)), { headers: { Accept: 'application/json' } })
+    .then((r) => { if (!r.ok) throw new Error(`Gagal memuat data PJA (HTTP ${r.status}).`); return r.json(); })
+    .then((d) => ((d.beranda || {}).rincian || null))
+    .catch((e) => { delete rincianPja[id]; throw e; }));
+  const namaPjaB = () => ((M.beranda.mgmt.find((x) => String(x.id) === String(state.pjaB)) || {}).nama || 'PJA');
+  /** Parameter cakupan untuk laporan SAP / item satu baris: PJA terpilih (tab Beranda PJA) atau site / grup. */
+  const cakupanSap = () => (state.tab === 'bpja' ? { site: 'ALL', pja: state.pjaB } : { site: state.site, ...(state.tab === 'grup' ? { grup: state.grup } : {}) });
 
   // ------------------------------------------------------------ Per Site / Group Lokasi / Kelompok Aktivitas (satuan ketat)
   /** Peta {level: peta kunci → vektor} menjadi {level: vektor} untuk satu kunci (grup / kelompok). */
@@ -396,10 +420,19 @@
     return daftar.filter((b) => (state.tab !== 'proses' || b.kel === state.proses) && (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
   }
 
+  /** Tab Beranda PJA: baris rincian satu PJA (format sama dengan lingkup u). Null bila snapshot belum menyimpannya. */
+  function barisPja(rows, kat) {
+    if (!rows) return null;
+    const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+    const f = KAT_MODAL[kat][3];
+    return rows.map(([kel, hid, lv, inc, tr, kode, gap, vol]) => ({ kel, hid: String(hid), lv, inc, tr, kode, gap, vol }))
+      .filter((b) => (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
+  }
+
   async function bukaModal(kat) {
     const d = dialogModal(), [judul, warna, ket] = KAT_MODAL[kat];
     const lokasi = state.site === 'ALL' ? 'BC' : state.site;
-    const cakupan = state.tab === 'grup' ? `${state.grup} · ${lokasi}` : state.tab === 'proses' ? `${(M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses} · ${lokasi}` : lokasi;
+    const cakupan = state.tab === 'bpja' ? namaPjaB() : state.tab === 'grup' ? `${state.grup} · ${lokasi}` : state.tab === 'proses' ? `${(M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses} · ${lokasi}` : lokasi;
     d.style.setProperty('--mc', warna);
     d.querySelector('#dr-modal-judul').textContent = judul;
     d.querySelector('#dr-modal-ket').textContent = `${cakupan} · ${wKode(state.w)} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}. ${ket}`;
@@ -413,8 +446,8 @@
     try {
       const R = await muatRincian();
       d._rincian = R;
-      const b = barisModal(R, kat);
-      if (b === null) { d.querySelector('#dr-modal-isi').innerHTML = '<div class="pr-empty">Rincian untuk cakupan ini belum ada di snapshot. Jalankan ulang sync.</div>'; return; }
+      const b = state.tab === 'bpja' ? barisPja(await muatRincianPja(state.pjaB), kat) : barisModal(R, kat);
+      if (b === null) { d.querySelector('#dr-modal-isi').innerHTML = '<div class="pr-empty">Rincian untuk cakupan ini belum ada di snapshot. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div>'; return; }
       modalBaris = b;
       isiModal();
     } catch (e) {
@@ -589,7 +622,7 @@
     d.querySelector('#dr-item-judul').textContent = `Item Sumber - ${nama} ( ${b.t[0] || '-'} / ${b.t[2] || '-'} )`;
     isi.innerHTML = '<div class="dr-mute">Memuat item dari ClickHouse…</div>';
     if (!d.open) d.showModal();
-    const qs = new URLSearchParams({ kel: b.kel, site: state.site, w: String(state.w), sumber, ...(state.tab === 'grup' ? { grup: state.grup } : {}) });
+    const qs = new URLSearchParams({ kel: b.kel, w: String(state.w), sumber, ...cakupanSap() });
     try {
       const r = await fetch(`${URL_SAP_BAHAYA.replace('__HID__', encodeURIComponent(b.hid))}?${qs}`, { headers: { Accept: 'application/json' } });
       const data = await r.json().catch(() => ({}));
@@ -619,7 +652,7 @@
     btn.classList.toggle('on', buka);
     if (!buka || td.dataset.dimuat) return;
     td.innerHTML = '<span class="dr-mute">Memuat laporan SAP dari ClickHouse…</span>';
-    const qs = new URLSearchParams({ kel: b.kel, site: state.site, w: String(state.w), ...(state.tab === 'grup' ? { grup: state.grup } : {}) });
+    const qs = new URLSearchParams({ kel: b.kel, w: String(state.w), ...cakupanSap() });
     try {
       const r = await fetch(`${URL_SAP_BAHAYA.replace('__HID__', encodeURIComponent(b.hid))}?${qs}`, { headers: { Accept: 'application/json' } });
       const data = await r.json().catch(() => ({}));

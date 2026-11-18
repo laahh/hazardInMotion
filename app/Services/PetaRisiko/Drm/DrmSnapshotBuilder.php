@@ -241,8 +241,12 @@ class DrmSnapshotBuilder
             // Agregat per kelompok/grup/aktivitas/detail lokasi/matriks tidak disimpan per PJA: tab Overview, Group Lokasi,
             // dan Kelompok Aktivitas memakai ringkasan unik per site (ringkasUnik). Menyimpannya per PJA × 12 minggu
             // membuat meta.json 47 MB dan halaman tidak termuat (16 Nov 2026).
+            // rincian = true: baris per status (dengan volume laporan) untuk modal kartu KPI tab Beranda PJA, disimpan di
+            // berkas PJA (bukan meta.json). Angka ringkasan tidak berubah; opsi ini hanya menambah volume.
+            $ringkas = $b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden'], false, true);
+            $berkas[$id]['beranda']['rincian'] = $ringkas['rincian']['u'];
             $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds), 'dls' => $dlIds,
-                ...array_diff_key($b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden']), self::BERAT_PER_PJA)];
+                ...array_diff_key($ringkas, self::BERAT_PER_PJA + ['rincian' => 1])];
             // $idDl, bukan $d: $d = data sync (master dipakai ringkasUnik di bawah).
             foreach ($dlIds as $idDl) {
                 $kamusDl[$idDl] ??= [(string) ($dl[$idDl]['site'] ?? ''), (string) ($dl[$idDl]['lokasi'] ?? ''), (string) ($dl[$idDl]['detlok'] ?? ''), (string) ($dl[$idDl]['grp'] ?? '')];

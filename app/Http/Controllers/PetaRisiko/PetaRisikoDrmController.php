@@ -99,14 +99,17 @@ class PetaRisikoDrmController extends Controller
             'w' => ['nullable', 'integer', 'min:0', 'max:52'],
             // Diisi = daftar item sumber (cara SAP tertangkap ke baris ini), bukan daftar laporan.
             'sumber' => ['nullable', 'string', 'in:obs,oak,ket'],
+            // Diisi = cakupan hanya detail lokasi PJA ini (tab Beranda PJA).
+            'pja' => ['nullable', 'string', 'regex:/^\d{1,12}$/'],
         ]);
+        $pja = (string) ($v['pja'] ?? '');
 
         try {
             if (! empty($v['sumber'])) {
-                return response()->json($sap->item((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0), $v['sumber']));
+                return response()->json($sap->item((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0), $v['sumber'], $pja));
             }
 
-            return response()->json($sap->ambil((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0)));
+            return response()->json($sap->ambil((int) $hid, $v['kel'], $v['site'], (string) ($v['grup'] ?? ''), (int) ($v['w'] ?? 0), $pja));
         } catch (\Throwable $e) {
             report($e);
 

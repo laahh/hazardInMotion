@@ -32,11 +32,12 @@ class DrmSapBahaya
     /**
      * @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool}
      */
-    public function ambil(int $hid, string $kel, string $site, string $grup, int $w): array
+    /** $pja diisi = cakupan hanya detail lokasi PJA itu (tab Beranda PJA), di samping filter site / grup. */
+    public function ambil(int $hid, string $kel, string $site, string $grup, int $w, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v8:%d:%s:%s:%s:%d:%d', $hid, $kel, md5($site), md5($grup), $w, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v8:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
 
-        return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w));
+        return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w, $pja));
     }
 
     /**
@@ -45,8 +46,10 @@ class DrmSapBahaya
      * @return array{dari: CarbonImmutable, sampai: CarbonImmutable, dl: array<int, array{0: string, 1: string, 2: string, 3: string}>,
      *   labelBahaya: list<int>, cfg: array<string, mixed>, labelObs: list<int>, labelOak: list<int>}
      */
-    private function persiapan(int $hid, string $kel, string $site, string $grup, int $w): array
+    private function persiapan(int $hid, string $kel, string $site, string $grup, int $w, string $pja = ''): array
     {
+        // Cakupan PJA: detail lokasi dari berkas PJA di snapshot (null = tanpa batas PJA).
+        $dlPja = $pja === '' ? null : array_flip(array_map('strval', array_column(($this->repo->pja($pja) ?? [])['lokasi'] ?? [], 'dl')));
         ['dl' => $kamusDl, 'minggu' => $minggu, 'sampai' => $sampaiData] = $this->kamus();
         $master = DrmMaster::muat();
         $m = $master->data;
@@ -66,7 +69,8 @@ class DrmSapBahaya
         }
         $dl = [];
         foreach ($kamusDl as $id => [$s, $lokasi, $detlok, $g]) {
-            if (($site === 'ALL' || $s === $site) && isset($grupMemuat[$g]) && ($grup === '' || $g === $grup)) {
+            if (($site === 'ALL' || $s === $site) && isset($grupMemuat[$g]) && ($grup === '' || $g === $grup)
+                && ($dlPja === null || isset($dlPja[(string) $id]))) {
                 $dl[(int) $id] = [$s, $lokasi, $detlok, $g];
             }
         }
@@ -94,9 +98,9 @@ class DrmSapBahaya
     }
 
     /** @return array{dari: string, sampai: string, ndl: int, laporan: list<array<string, mixed>>, ringkas: array<string, int>, terpotong: bool} */
-    private function hitung(int $hid, string $kel, string $site, string $grup, int $w): array
+    private function hitung(int $hid, string $kel, string $site, string $grup, int $w, string $pja = ''): array
     {
-        $p = $this->persiapan($hid, $kel, $site, $grup, $w);
+        $p = $this->persiapan($hid, $kel, $site, $grup, $w, $pja);
         ['dari' => $dari, 'sampai' => $sampai, 'dl' => $dl, 'labelBahaya' => $labelBahaya, 'cfg' => $cfg] = $p;
         $kosong = ['dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(), 'ndl' => 0, 'laporan' => [],
             'ringkas' => ['total' => 0, 'label' => 0, 'obs' => 0, 'oak' => 0,
@@ -187,12 +191,12 @@ class DrmSapBahaya
      * @return array{sumber: string, dari: string, sampai: string, ndl: int, nlabel: int,
      *   item: list<array{isi: string, n: int, ndl: int, nstop: int}>}
      */
-    public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber): array
+    public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v9:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v9:%d:%s:%s:%s:%d:%s:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, $pja, (int) @filemtime($this->repo->pathMeta()));
 
-        return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber) {
-            $p = $this->persiapan($hid, $kel, $site, $grup, $w);
+        return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber, $pja) {
+            $p = $this->persiapan($hid, $kel, $site, $grup, $w, $pja);
             $teks = match ($sumber) {
                 'ket' => $p['teksBahaya'], 'oak' => $p['teksOak'], default => $p['teksObs'],
             };
