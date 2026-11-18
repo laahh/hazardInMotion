@@ -46,9 +46,10 @@ class DmsRosterApproverDepartemenTest extends TestCase
         $config = require base_path('config/dms_roster.php');
         $tanam = $config['master']['approver_departemen'];
 
-        $this->assertSame('PT Berau Coal', $tanam['perusahaan']);
-        // 46 manager + SID kedua Ridho (W2PAR).
-        $this->assertCount(47, $tanam['approver']);
+        $this->assertSame(['PT Berau Coal', 'PT Berau Coal Energy'], $tanam['perusahaan']);
+        // 46 manager + SID kedua Ridho (W2PAR) + YBT3P (Mine Planning & Technical Services Division).
+        $this->assertCount(48, $tanam['approver']);
+        $this->assertSame('MINE PLANNING & TECHNICAL SERVICES DIVISION', $tanam['approver']['YBT3P']);
         $this->assertContains('QUALITY & RISK MANAGEMENT SYSTEM DEPARTMENT', $tanam['approver']['K1I5I']);
         $this->assertSame('BINUNGAN MINE OPERATION AREA 1 DEPARTEMENT', $tanam['approver']['9KWOO']);
     }
@@ -130,6 +131,28 @@ class DmsRosterApproverDepartemenTest extends TestCase
 
         $this->assertFalse($svc->bolehLihat($manager, 2));
         $this->assertFalse($svc->bolehReview($manager, 2, ['PT Berau Coal']));
+    }
+
+    public function test_berau_coal_energy_ikut_approval_departemen(): void
+    {
+        $this->siapkanDb();
+        $this->isiSalinan(['HEALTH & SAFETY PERFORMANCE ASSSURANCE' => ['A1']]);
+        $svc = $this->approver();
+        $manager = $this->akun('S69PK');
+
+        $this->assertSame(['PT Berau Coal', 'PT Berau Coal Energy'], Approver::daftarPerusahaan());
+        // Roster karyawan BCE saja, atau campuran BC + BCE, boleh di-review manager departemennya.
+        $this->assertTrue($svc->bolehReview($manager, 1, ['PT Berau Coal Energy']));
+        $this->assertTrue($svc->bolehReview($manager, 1, ['PT. Berau Coal Energy', 'PT Berau Coal']));
+        // Nama mirip tetap bukan perusahaan approver.
+        $this->assertFalse($svc->bolehReview($manager, 1, ['Politeknik Sinar Mas Berau Coal']));
+    }
+
+    public function test_config_lama_berupa_satu_nama_tetap_dibaca(): void
+    {
+        config(['dms_roster.master.approver_departemen.perusahaan' => 'PT Berau Coal']);
+
+        $this->assertSame(['PT Berau Coal'], Approver::daftarPerusahaan());
     }
 
     public function test_roster_campur_perusahaan_lain_hanya_bisa_dilihat(): void

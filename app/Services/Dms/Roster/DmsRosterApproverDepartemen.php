@@ -29,14 +29,14 @@ use Throwable;
  */
 final class DmsRosterApproverDepartemen
 {
-    public const KUNCI = 'dms_roster:departemen_karyawan:v1';
+    public const KUNCI = 'dms_roster:departemen_karyawan:v2'; // v2: + PT Berau Coal Energy (18 Nov 2026)
 
     private const TTL_HARI = 2;
 
     private const TIMEOUT_MS = 180000;
 
     /** SID manager (dari jabatan) => departemen. */
-    public const KUNCI_MANAGER = 'dms_roster:manager_jabatan:v1';
+    public const KUNCI_MANAGER = 'dms_roster:manager_jabatan:v2';
 
     private const TTL_MANAGER_MENIT = 360;
 
@@ -160,11 +160,11 @@ final class DmsRosterApproverDepartemen
             $rows = app(RfidClickHouseClient::class)->select(sprintf(
                 "SELECT upper(trimBoth(ifNull(kode_sid, ''))) AS sid, any(trimBoth(ifNull(departement, ''))) AS departemen
                  FROM obds.bep_vw_safety_karyawan_aktif FINAL
-                 WHERE upper(trimBoth(ifNull(nama_perusahaan, ''))) = upper(%s)
+                 WHERE upper(trimBoth(ifNull(nama_perusahaan, ''))) IN (%s)
                    AND upper(trimBoth(ifNull(jabatan_fungsional, ''))) IN (%s)
                    AND trimBoth(ifNull(kode_sid, '')) <> '' AND trimBoth(ifNull(departement, '')) <> ''
                  GROUP BY sid",
-                RfidClickHouseClient::quote($this->perusahaan()),
+                $this->perusahaanSqlCh(),
                 implode(', ', $jabatan),
             ));
         } catch (Throwable $e) {
@@ -274,7 +274,7 @@ final class DmsRosterApproverDepartemen
     public function bolehReview(?User $user, int $uploadId, array $ptUpload): bool
     {
         return $this->bolehLihat($user, $uploadId)
-            && DmsRosterAksesPerusahaan::mencakup([$this->perusahaan()], $ptUpload);
+            && DmsRosterAksesPerusahaan::mencakup($this->perusahaan(), $ptUpload);
     }
 
     /**
@@ -285,16 +285,17 @@ final class DmsRosterApproverDepartemen
      */
     public function segarkan(): ?array
     {
+        $pt = $this->perusahaan();
         try {
             $rows = $this->olap->select(
                 "SELECT DISTINCT ON (trim(kode_sid)) trim(kode_sid) AS sid, departement AS departemen
                  FROM {$this->view()}
-                 WHERE status_karyawan = ? AND upper(trim(nama_perusahaan)) = upper(?)
+                 WHERE status_karyawan = ? AND upper(trim(nama_perusahaan)) IN (".implode(', ', array_fill(0, count($pt), 'upper(?)')).")
                    AND coalesce(trim(kode_sid), '') <> ''
                  ORDER BY trim(kode_sid), id DESC",
                 [
                     (string) config('dms_roster.master.approver_departemen.status_karyawan', 'AKTIF'),
-                    $this->perusahaan(),
+                    ...$pt,
                 ],
                 self::TIMEOUT_MS,
             );
@@ -325,10 +326,10 @@ final class DmsRosterApproverDepartemen
             $rows = app(RfidClickHouseClient::class)->select(sprintf(
                 "SELECT trimBoth(ifNull(kode_sid, '')) AS sid, any(ifNull(departement, '')) AS departemen
                  FROM obds.bep_vw_safety_karyawan_aktif FINAL
-                 WHERE upper(trimBoth(ifNull(nama_perusahaan, ''))) = upper(%s)
+                 WHERE upper(trimBoth(ifNull(nama_perusahaan, ''))) IN (%s)
                    AND trimBoth(ifNull(kode_sid, '')) <> ''
                  GROUP BY sid",
-                RfidClickHouseClient::quote($this->perusahaan()),
+                $this->perusahaanSqlCh(),
             ));
         } catch (Throwable $e) {
             $this->galat = $e->getMessage();
@@ -348,7 +349,7 @@ final class DmsRosterApproverDepartemen
     {
         $peta = self::petakan($rows);
         if ($peta === []) {
-            $this->galat = 'Tidak ada karyawan ber-departemen untuk '.$this->perusahaan().'.';
+            $this->galat = 'Tidak ada karyawan ber-departemen untuk '.implode(' / ', $this->perusahaan()).'.';
 
             return null;
         }
@@ -380,9 +381,29 @@ final class DmsRosterApproverDepartemen
         return array_values(array_unique($tak));
     }
 
-    private function perusahaan(): string
+    /**
+     * Perusahaan yang karyawannya di-approve per departemen (config boleh satu nama atau daftar).
+     * Sejak 18 Nov 2026: PT Berau Coal + PT Berau Coal Energy.
+     *
+     * @return list<string>
+     */
+    public static function daftarPerusahaan(): array
     {
-        return (string) config('dms_roster.master.approver_departemen.perusahaan', 'PT Berau Coal');
+        $daftar = array_map(static fn ($p): string => trim((string) $p), (array) config('dms_roster.master.approver_departemen.perusahaan', ['PT Berau Coal']));
+
+        return array_values(array_unique(array_filter($daftar, static fn (string $p): bool => $p !== '')));
+    }
+
+    /** @return list<string> */
+    private function perusahaan(): array
+    {
+        return self::daftarPerusahaan();
+    }
+
+    /** Daftar nama perusahaan sebagai literal SQL ClickHouse (huruf besar) untuk klausa IN. */
+    private function perusahaanSqlCh(): string
+    {
+        return implode(', ', array_map(static fn (string $p): string => RfidClickHouseClient::quote(mb_strtoupper($p)), $this->perusahaan()));
     }
 
     private function view(): string

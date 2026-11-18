@@ -157,6 +157,9 @@
 @section('scripts')
 @include('peta-risiko-pja.drm._ui')
 @if ($meta)
+@include('peta-risiko-pja.drm._beranda-poin')
+@endif
+@if ($meta)
 <script>
 (() => {
   const URL_META = @json(route('peta-risiko-pja.meta'));
@@ -270,7 +273,9 @@
     $('#dr-bpja-buka').href = URL_PJA.replace('__ID__', p.id) + '?w=' + state.w;
     $('#dr-bpja-sub').textContent = `${p.site} · ${p.ndl} detail lokasi · data sampai ${M.sampai.split('-').reverse().join('/')}`;
     const V = vekPja(p, state.w), V0 = state.w + 1 < NW ? vekPja(p, state.w + 1) : null;
-    isi.innerHTML = kartu4(V, V0, `${DR.esc(p.nama)} · ${wk}`) + (o ? tabelSatuPja(o, wk) : '');
+    isi.innerHTML = kartu4(V, V0, `${DR.esc(p.nama)} · ${wk}`) + (o ? tabelSatuPja(o, wk) : '') + '<div id="dr-bpja-poin"></div>';
+    // Poin Beranda PJA (lokasi & risiko, insiden, personil, identifikasi harian, open risk, temuan): _beranda-poin.
+    BerandaPoin({ el: $('#dr-bpja-poin'), meta: M, id: String(p.id), w: state.w, lv: state.lv });
   }
 
   function tabelSatuPja(o, wk) {

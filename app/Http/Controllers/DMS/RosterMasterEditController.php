@@ -323,14 +323,18 @@ class RosterMasterEditController extends Controller
      */
     private function ejaanBerauCoal(?array $daftarPt = null): array
     {
-        $nama = (string) config('dms_roster.master.approver_departemen.perusahaan', 'PT Berau Coal');
+        // Semua perusahaan approver departemen (PT Berau Coal + PT Berau Coal Energy) beserta ejaannya di roster.
         $daftarPt ??= array_map(
             static fn (array $p): array => ['nama' => $p['perusahaan'], 'ejaan' => $p['ejaan']],
             $this->master->perusahaanTerupload($this->cakupan->peta()),
         );
-        $p = collect($daftarPt)->firstWhere('nama', $nama);
+        $ejaan = [];
+        foreach (\App\Services\Dms\Roster\DmsRosterApproverDepartemen::daftarPerusahaan() as $nama) {
+            $p = collect($daftarPt)->firstWhere('nama', $nama);
+            array_push($ejaan, ...($p['ejaan'] ?? [$nama]));
+        }
 
-        return $p['ejaan'] ?? [$nama];
+        return array_values(array_unique($ejaan));
     }
 
     /**

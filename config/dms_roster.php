@@ -96,7 +96,8 @@ return [
         // memuat karyawan departemennya (DmsRosterApproverDepartemen). Kunci
         // approver = SID, yaitu isi kolom email akun loginnya.
         'approver_departemen' => [
-            'perusahaan' => 'PT Berau Coal',
+            // Perusahaan yang karyawannya di-approve per departemen (18 Nov 2026: + PT Berau Coal Energy).
+            'perusahaan' => ['PT Berau Coal', 'PT Berau Coal Energy'],
             'view_karyawan' => 'bcsid.bep_sid_karyawan',
             'status_karyawan' => 'AKTIF',
             // Selain daftar `approver` di bawah, karyawan perusahaan ini dengan

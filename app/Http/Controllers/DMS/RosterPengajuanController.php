@@ -158,7 +158,7 @@ final class RosterPengajuanController extends Controller
             return true;
         }
 
-        return DmsRosterAksesPerusahaan::mencakup([self::ptDepartemen()], [$pt])
+        return DmsRosterAksesPerusahaan::mencakup(DmsRosterApproverDepartemen::daftarPerusahaan(), [$pt])
             && in_array(mb_strtoupper(trim((string) $pengajuan->kode_sid)), $this->sidDepartemen(), true);
     }
 
@@ -177,7 +177,7 @@ final class RosterPengajuanController extends Controller
             ->filter(static fn (?string $pt): bool => DmsRosterAksesPerusahaan::mencakup($cakupan, [self::namaPt($pt)]))
             ->values()->all();
         $ejaanDept = $sidDept === [] ? [] : $semuaEjaan
-            ->filter(static fn (?string $pt): bool => DmsRosterAksesPerusahaan::mencakup([self::ptDepartemen()], [self::namaPt($pt)]))
+            ->filter(static fn (?string $pt): bool => DmsRosterAksesPerusahaan::mencakup(DmsRosterApproverDepartemen::daftarPerusahaan(), [self::namaPt($pt)]))
             ->values()->all();
 
         if ($ejaan === [] && $ejaanDept === []) {
@@ -205,9 +205,10 @@ final class RosterPengajuanController extends Controller
         return $this->sidDept ??= $this->approverDepartemen->sidUntuk($this->user());
     }
 
+    /** Nama perusahaan approver departemen untuk teks tampilan ("PT Berau Coal / PT Berau Coal Energy"). */
     private static function ptDepartemen(): string
     {
-        return (string) config('dms_roster.master.approver_departemen.perusahaan', 'PT Berau Coal');
+        return implode(' / ', DmsRosterApproverDepartemen::daftarPerusahaan());
     }
 
     private function user(): ?User
