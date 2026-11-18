@@ -21,6 +21,18 @@ final class DrmMasterDb
 {
     public const TABEL_UTAMA = 'drm_master_baris';
 
+    /** Kurasi aktivitas OAK → aktivitas HIRA (migrasi terpisah 2026_11_18_100000). */
+    public const TABEL_OAK_AKTIVITAS = 'drm_master_oak_aktivitas';
+
+    /** @var array<string, list<string>>|false|null cache oakAktivitas() per proses (false = belum dibaca) */
+    private static array|false|null $cacheOak = false;
+
+    /** Lupakan cache oakAktivitas() (setelah tabel kurasi diubah dalam proses yang sama). */
+    public static function lupakanCacheOak(): void
+    {
+        self::$cacheOak = false;
+    }
+
     private const PECAH = 500;
 
     /** Tabel sudah dimigrasi? */
@@ -84,6 +96,10 @@ final class DrmMasterDb
                 array_keys($cfg['tema_checklist']), $cfg['tema_checklist']),
             'drm_master_tema_baris' => $this->rata($master->temaBaris($cfg['tema_checklist']), fn ($id, $ri) => $cap(['tema_id' => (int) $id, 'ri' => $ri])),
         ];
+
+        if (Schema::hasTable(self::TABEL_OAK_AKTIVITAS)) {
+            $isi[self::TABEL_OAK_AKTIVITAS] = $this->barisOakAktivitas($cfg, $cap);
+        }
 
         DB::transaction(function () use ($isi) {
             foreach (array_reverse(array_keys($isi)) as $tabel) {
@@ -167,6 +183,73 @@ final class DrmMasterDb
             'lokasiPja' => DB::table('drm_master_lokasi_pja')->where('aktif', true)->get()
                 ->map(fn ($x) => [(string) $x->site, (string) $x->lokasi, (string) $x->nama_pja])->all(),
         ];
+    }
+
+    /**
+     * Kurasi aktivitas OAK → [aktivitas HIRA] dari tabel, hanya baris aktif. null bila tabel belum dimigrasi atau
+     * belum pernah diisi (sync lalu memakai config oak_aktivitas_hira). Dibaca langsung, terlepas dari apakah master
+     * lain sudah dari database. Disimpan per proses.
+     *
+     * @return array<string, list<string>>|null
+     */
+    public static function oakAktivitas(): ?array
+    {
+        if (self::$cacheOak !== false) {
+            return self::$cacheOak;
+        }
+        try {
+            if (! Schema::hasTable(self::TABEL_OAK_AKTIVITAS) || ! DB::table(self::TABEL_OAK_AKTIVITAS)->exists()) {
+                return self::$cacheOak = null;
+            }
+            $peta = [];
+            foreach (DB::table(self::TABEL_OAK_AKTIVITAS)->where('aktif', true)->orderBy('aktivitas_oak')->orderBy('id')->get() as $r) {
+                $peta[trim((string) $r->aktivitas_oak)][] = trim((string) $r->aktivitas_hira);
+            }
+
+            return self::$cacheOak = array_map(fn ($d) => array_values(array_unique($d)), $peta);
+        } catch (\Throwable) {
+            return self::$cacheOak = null;
+        }
+    }
+
+    /**
+     * Isi (timpa) hanya tabel kurasi aktivitas OAK dari config oak_aktivitas_hira. Tabel master lain tidak tersentuh.
+     *
+     * @param  array<string, mixed>  $cfg
+     */
+    public function isiOakAktivitas(array $cfg): int
+    {
+        if (! Schema::hasTable(self::TABEL_OAK_AKTIVITAS)) {
+            throw new RuntimeException('Tabel '.self::TABEL_OAK_AKTIVITAS.' belum dimigrasi (2026_11_18_100000_create_drm_master_oak_aktivitas_table).');
+        }
+        $sekarang = now();
+        $rows = $this->barisOakAktivitas($cfg, fn (array $r) => $r + ['created_at' => $sekarang, 'updated_at' => $sekarang]);
+        DB::transaction(function () use ($rows) {
+            DB::table(self::TABEL_OAK_AKTIVITAS)->delete();
+            foreach (array_chunk($rows, self::PECAH) as $potong) {
+                DB::table(self::TABEL_OAK_AKTIVITAS)->insert($potong);
+            }
+        });
+        $this->catat(self::TABEL_OAK_AKTIVITAS, '*', 'isi', null, ['baris' => count($rows)]);
+        self::lupakanCacheOak();
+
+        return count($rows);
+    }
+
+    /**
+     * @param  array<string, mixed>  $cfg
+     * @return list<array<string, mixed>>
+     */
+    private function barisOakAktivitas(array $cfg, callable $cap): array
+    {
+        $rows = [];
+        foreach ((array) ($cfg['oak_aktivitas_hira'] ?? []) as $oak => $daftar) {
+            foreach (array_unique((array) $daftar) as $hira) {
+                $rows[] = $cap(['aktivitas_oak' => mb_substr((string) $oak, 0, 300), 'aktivitas_hira' => mb_substr((string) $hira, 0, 500), 'aktif' => true]);
+            }
+        }
+
+        return $rows;
     }
 
     /** Catat perubahan ke drm_master_log. */

@@ -17,7 +17,7 @@ final class DrmMasterSkema
     /** @return array<string, array<string, mixed>> */
     public static function semua(): array
     {
-        return [
+        $semua = [
             'baris' => [
                 'judul' => 'Baris HIRA (baseline)', 'sheet' => 'M01', 'tabel' => 'drm_master_baris', 'kunci' => 'ri', 'kunciManual' => true,
                 'catatan' => 'Baseline: tiap baris = aktivitas × sub × bahaya-risiko. Nonaktifkan untuk mengeluarkan baris dari baseline.',
@@ -121,6 +121,17 @@ final class DrmMasterSkema
                 ],
                 'cari' => ['teks', 'ri', 'jenis'], 'urut' => 'teks',
             ],
+            'oak_aktivitas' => [
+                'judul' => 'Aktivitas OAK → aktivitas HIRA', 'sheet' => 'OAK', 'tabel' => 'drm_master_oak_aktivitas', 'kunci' => 'id', 'kunciManual' => false,
+                'catatan' => 'Laporan OAK dengan aktivitas ini (sub aktivitas apa pun) membuat SEMUA bahaya-risiko di aktivitas HIRA terpilih berlaku untuk laporan itu, di samping label M12. Baris baru tertangkap bila ada butir checklist bertema sama. Nonaktifkan tautan yang terlalu luas.',
+                'kolom' => [
+                    'aktivitas_oak' => ['Aktivitas OAK', 'teks', ['required', 'string', 'max:300'], ['saran' => 'drm_master_oak_aktivitas.aktivitas_oak']],
+                    'aktivitas_hira' => ['Aktivitas HIRA', 'teks', ['required', 'string', 'max:500'], ['saran' => 'drm_master_baris.aktivitas']],
+                    'aktif' => ['Aktif', 'bool', ['boolean'], []],
+                    'catatan' => ['Catatan', 'teks', ['nullable', 'string', 'max:500'], []],
+                ],
+                'cari' => ['aktivitas_oak', 'aktivitas_hira'], 'urut' => 'aktivitas_oak',
+            ],
             'tema' => [
                 'judul' => 'Tema checklist', 'sheet' => 'M15', 'tabel' => 'drm_master_tema', 'kunci' => 'id', 'kunciManual' => true,
                 'catatan' => 'Regex teks dipakai untuk butir checklist OAK dan teks OBS. Pasangan tema → baris diatur di tab Tema → baris.',
@@ -142,11 +153,26 @@ final class DrmMasterSkema
                 'cari' => ['tema_id', 'ri'], 'urut' => 'tema_id',
             ],
         ];
+        if (! self::adaTabel('drm_master_oak_aktivitas')) {
+            unset($semua['oak_aktivitas']);
+        }
+
+        return $semua;
     }
 
     /** @return array<string, mixed>|null */
     public static function satu(string $kode): ?array
     {
         return self::semua()[$kode] ?? null;
+    }
+
+    /** Tabel dari migrasi terpisah: tab hanya tampil bila tabelnya sudah dimigrasi. */
+    private static function adaTabel(string $tabel): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Schema::hasTable($tabel);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

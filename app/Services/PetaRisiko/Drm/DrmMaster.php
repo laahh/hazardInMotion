@@ -278,6 +278,12 @@ final class DrmMaster
         if (! empty($this->data['tema'])) {
             $cfg['tema_checklist'] = $this->data['tema'];
         }
+        // Kurasi aktivitas OAK → aktivitas HIRA dari tabel drm_master_oak_aktivitas bila sudah diisi (bisa disesuaikan
+        // di /peta-risiko-pja/master); selain itu tetap dari config.
+        $oak = Master\DrmMasterDb::oakAktivitas();
+        if ($oak !== null) {
+            $cfg['oak_aktivitas_hira'] = $oak;
+        }
 
         return $cfg;
     }
