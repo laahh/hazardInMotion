@@ -4,6 +4,7 @@
 
 @section('hero-aksi')
   <a class="pr-back" href="{{ route('peta-risiko-pja.index') }}"><span class="material-symbols-outlined" style="font-size:18px">dashboard</span> Dashboard</a>
+  <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}"><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup lokasi & aktivitas</a>
   <a class="pr-back" href="{{ route('peta-risiko-pja.master.index') }}"><span class="material-symbols-outlined" style="font-size:18px">table_view</span> Tabel master</a>
   @if ($siap)
     <a class="pr-back" href="{{ route('peta-risiko-pja.master.log') }}"><span class="material-symbols-outlined" style="font-size:18px">history</span> Riwayat</a>
