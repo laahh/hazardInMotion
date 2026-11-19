@@ -16,12 +16,17 @@ use Illuminate\Support\Facades\Cache;
  * Label OBS / OAK dicocokkan dengan kunci DrmMaster::normTeks (huruf + angka, "Risk Intervention Center" = "Langsung"),
  * mengikuti dokumentasi Risk Matrix 5x5. Semua laporan dari obds.ch_rfid_sap_cuti_all_site. Hanya detail lokasi
  * cakupan (site / grup) yang grup lokasinya memuat bahaya ini (gerbang M05). Selesai = CLOSED / DONE (REJECT terbuka); BUKAN TEMUAN dan DELETED dibuang.
+ * Satu laporan = satu task (nomor tasklist): ch_rfid memuat baris kembar per task (gabungan RFID), jadi daftar & semua
+ * hitungan memakai task unik (LIMIT 1 BY task / uniqExact(task)); OAK bcbeats memakai id register (= task).
  */
 class DrmSapBahaya
 {
     private const STATUS_SELESAI = ['CLOSED', 'DONE'];
 
     private const MAKS_BARIS = 300;
+
+    /** Batas task yang diambil untuk ringkasan (jumlah, belum closed, berulang); daftar tetap MAKS_BARIS terbaru. */
+    private const MAKS_HITUNG = 5000;
 
     private const CACHE_DETIK = 600;
 
@@ -35,7 +40,7 @@ class DrmSapBahaya
     /** $pja diisi = cakupan hanya detail lokasi PJA itu (tab Beranda PJA), di samping filter site / grup. */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v8:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v9:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w, $pja));
     }
@@ -126,15 +131,21 @@ class DrmSapBahaya
         // OAK (bcbeats): label persis M12 per baris (+ kurasi aktivitas OAK hanya bila disetujui di config).
         if ($p['labelOak'] !== [] || $p['labelOakAkt'] !== []) {
             foreach ($this->ch->select($this->sqlOakLabel($p, $dlIds, 'laporan'), 60) as $r) {
-                $baris[] = ['cara' => 'oak', 'jenis' => 'OBSERVASI AREA KRITIS', 'waktu' => $r['waktu'], 'dl' => $r['dl'],
+                $baris[] = ['cara' => 'oak', 'jenis' => 'OBSERVASI AREA KRITIS', 'waktu' => $r['waktu'], 'dl' => $r['dl'], 'task' => (string) $r['rid'],
                     'isi' => trim($r['akt'].' / '.$r['sub'], ' /'), 'deskripsi' => '',
                     'status' => (int) $r['stop'] === 1 ? 'Stop Pekerjaan' : 'Pekerjaan Dilanjutkan', 'hasil_oak' => '',
                     'stop' => (int) $r['stop'], 'ts' => 0, 'pelapor' => ''];
             }
         }
+        // Task unik lintas sumber (jaga-jaga), terbaru dulu.
         usort($baris, fn ($a, $b) => strcmp((string) $b['waktu'], (string) $a['waktu']));
+        $unik = [];
+        foreach ($baris as $r) {
+            $unik[$r['cara'].'|'.($r['task'] ?? '')] ??= $r;
+        }
+        $baris = array_values($unik);
         $terpotong = count($baris) > self::MAKS_BARIS;
-        $baris = array_slice($baris, 0, self::MAKS_BARIS);
+        $pelaporOak = $this->pelaporOak(array_slice($baris, 0, self::MAKS_BARIS), $dari, $sampai);
 
         // Berulang = ≥ ambang laporan dengan label sama di satu detail lokasi dalam minggu itu (hanya label bahaya ini).
         $ambang = (int) $cfg['ambang_berulang'];
@@ -147,7 +158,7 @@ class DrmSapBahaya
 
         $laporan = [];
         $ringkas = $kosong['ringkas'];
-        foreach ($baris as $r) {
+        foreach ($baris as $i => $r) {
             $hazard = in_array($r['jenis'], ['HAZARD', 'INSPEKSI'], true);
             $belum = $hazard && ! in_array(strtoupper((string) $r['status']), self::STATUS_SELESAI, true);
             $ulang = $r['cara'] === 'label' && ($jumlahLabel[$r['dl'].'|'.$r['isi']] ?? 0) >= $ambang;
@@ -160,7 +171,11 @@ class DrmSapBahaya
             $ringkas['belum_closed'] += (int) $belum;
             $ringkas['berulang'] += (int) $ulang;
             $ringkas['oak_stop'] += (int) $stop;
+            if ($i >= self::MAKS_BARIS) {
+                continue;
+            }
             $laporan[] = [
+                'task' => (string) ($r['task'] ?? ''),
                 'waktu' => substr((string) $r['waktu'], 0, 16),
                 'jenis' => (string) $r['jenis'],
                 'cara' => (string) $r['cara'],
@@ -169,7 +184,7 @@ class DrmSapBahaya
                 'deskripsi' => (string) $r['deskripsi'],
                 'status' => (string) $r['status'],
                 'hasil_oak' => (string) ($r['hasil_oak'] ?? ''),
-                'pelapor' => (string) ($r['pelapor'] ?? ''),
+                'pelapor' => (string) (($r['pelapor'] ?? '') !== '' ? $r['pelapor'] : ($pelaporOak[(string) ($r['task'] ?? '')] ?? '')),
                 'belum_closed' => $belum,
                 'berulang' => $ulang,
                 'oak_stop' => $stop,
@@ -178,6 +193,34 @@ class DrmSapBahaya
         }
 
         return [...$kosong, 'ndl' => count($dl), 'laporan' => $laporan, 'ringkas' => $ringkas, 'terpotong' => $terpotong];
+    }
+
+    /**
+     * Nama pelapor OAK (register bcbeats tidak memuat nama): diambil dari ch_rfid lewat task = id register.
+     *
+     * @param  list<array<string, mixed>>  $baris
+     * @return array<string, string>  task → pelapor
+     */
+    private function pelaporOak(array $baris, CarbonImmutable $dari, CarbonImmutable $sampai): array
+    {
+        $task = array_values(array_unique(array_filter(array_map(fn ($r) => $r['cara'] === 'oak' ? (string) ($r['task'] ?? '') : '', $baris),
+            fn ($t) => preg_match('/^[0-9]+$/', $t) === 1)));
+        if ($task === []) {
+            return [];
+        }
+        $q = [RfidClickHouseClient::class, 'quote'];
+        try {
+            $rows = $this->ch->select('SELECT task, any(ifNull(pelapor, \'\')) AS pelapor FROM obds.ch_rfid_sap_cuti_all_site
+WHERE jenis_data = \'OBSERVASI AREA KRITIS\' AND task IN ('.implode(', ', array_map($q, $task)).')
+  AND `date time` >= toDate('.$q($dari->toDateString()).') AND `date time` < toDate('.$q($sampai->toDateString()).') + 1
+GROUP BY task', 60);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        return array_column(array_map(fn ($r) => ['t' => (string) $r['task'], 'p' => (string) $r['pelapor']], $rows), 'p', 't');
     }
 
     /**
@@ -193,7 +236,7 @@ class DrmSapBahaya
      */
     public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v9:%d:%s:%s:%s:%d:%s:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, $pja, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v10:%d:%s:%s:%s:%d:%s:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, $pja, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber, $pja) {
             $p = $this->persiapan($hid, $kel, $site, $grup, $w, $pja);
@@ -267,7 +310,7 @@ class DrmSapBahaya
 FROM ('.$dasar.') '.$saring.' GROUP BY kl, ka LIMIT 500';
         }
 
-        return 'SELECT * FROM ('.$dasar.') '.$saring.' ORDER BY waktu DESC LIMIT '.(self::MAKS_BARIS + 1);
+        return 'SELECT * FROM ('.$dasar.') '.$saring.' ORDER BY waktu DESC LIMIT 1 BY rid LIMIT '.self::MAKS_HITUNG;
     }
 
     /**
@@ -285,7 +328,7 @@ FROM ('.$dasar.') '.$saring.' GROUP BY kl, ka LIMIT 500';
         $q = [RfidClickHouseClient::class, 'quote'];
         $daftar = fn (array $a) => $a === [] ? '0' : implode(',', array_map('intval', $a));
 
-        $dasar = 'SELECT toString(`date time`) AS waktu, jenis_data AS jenis, toString(`id detail lokasi`) AS dl,
+        $dasar = 'SELECT toString(`date time`) AS waktu, jenis_data AS jenis, toString(`id detail lokasi`) AS dl, ifNull(task, \'\') AS task,
          if(jenis_data = \'OBSERVASI\', trim(ifNull(`aktivitas  OBS`, \'\')),
             concat(trim(ifNull(`aktivitas pekerjaan OAK`, \'\')), \' / \', trim(ifNull(`sub aktivitas pekerjaan OAK`, \'\')))) AS isi,
          CRC32('.DrmSql::normTeksSql('isi').') AS kc,
@@ -303,15 +346,15 @@ FROM ('.$dasar.') '.$saring.' GROUP BY kl, ka LIMIT 500';
         $saring = 'NOT na AND ((jenis = \'OBSERVASI\' AND kc IN ('.$daftar($obs).')) OR (jenis = \'OBSERVASI AREA KRITIS\' AND (kc IN ('.$daftar($oak).') OR ka IN ('.$daftar($oakAkt).'))))';
 
         if ($mode === 'item_akt') {
-            return 'SELECT ka, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
+            return 'SELECT ka, uniqExact(task) AS n, uniqExact(dl) AS ndl, uniqExactIf(task, stop = 1) AS nstop
 FROM ('.$dasar.') WHERE '.$saring.' GROUP BY ka LIMIT 100';
         }
         if ($mode === 'item') {
-            return 'SELECT kc, any(isi) AS isi, count() AS n, uniqExact(dl) AS ndl, countIf(stop = 1) AS nstop
+            return 'SELECT kc, any(isi) AS isi, uniqExact(task) AS n, uniqExact(dl) AS ndl, uniqExactIf(task, stop = 1) AS nstop
 FROM ('.$dasar.') WHERE '.$saring.' GROUP BY kc ORDER BY n DESC, isi LIMIT 500';
         }
 
-        return 'SELECT * FROM ('.$dasar.') WHERE '.$saring.' ORDER BY waktu DESC LIMIT '.(self::MAKS_BARIS + 1);
+        return 'SELECT * FROM ('.$dasar.') WHERE '.$saring.' ORDER BY waktu DESC LIMIT 1 BY task LIMIT '.self::MAKS_HITUNG;
     }
 
     private function saringHazard(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $buang): string
@@ -340,7 +383,7 @@ FROM ('.$dasar.') WHERE '.$saring.' GROUP BY kc ORDER BY n DESC, isi LIMIT 500';
     private function sqlHazard(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $label, array $buang): string
     {
         return 'SELECT * FROM (
-  SELECT toString(`date time`) AS waktu, jenis_data AS jenis, toString(`id detail lokasi`) AS dl,
+  SELECT toString(`date time`) AS waktu, jenis_data AS jenis, toString(`id detail lokasi`) AS dl, ifNull(task, \'\') AS task,
          concat(trim(ifNull(ketidaksesuaian, \'\')), \' / \', trim(ifNull(subketidaksesuaian, \'\'))) AS isi,
          '.$this->crcLabel().' AS kc, ifNull(status, \'\') AS status,
          substring(ifNull(deskripsi, \'\'), 1, 400) AS deskripsi, ifNull(pelapor, \'\') AS pelapor
@@ -349,14 +392,15 @@ FROM ('.$dasar.') WHERE '.$saring.' GROUP BY kc ORDER BY n DESC, isi LIMIT 500';
 )
 WHERE kc IN ('.implode(',', array_map('intval', $label)).')
 ORDER BY waktu DESC
-LIMIT '.(self::MAKS_BARIS + 1);
+LIMIT 1 BY task
+LIMIT '.self::MAKS_HITUNG;
     }
 
     /** @param list<int> $dl  @param list<int> $label */
     private function sqlItemLabel(array $dl, CarbonImmutable $dari, CarbonImmutable $sampai, array $label, array $buang): string
     {
         return 'SELECT '.$this->crcLabel().' AS kc, any(concat(trim(ifNull(ketidaksesuaian, \'\')), \' / \', trim(ifNull(subketidaksesuaian, \'\')))) AS isi,
-       count() AS n, uniqExact(`id detail lokasi`) AS ndl
+       uniqExact(task) AS n, uniqExact(`id detail lokasi`) AS ndl
 FROM obds.ch_rfid_sap_cuti_all_site
 '.$this->saringHazard($dl, $dari, $sampai, $buang).'
     AND kc IN ('.implode(',', array_map('intval', $label)).')

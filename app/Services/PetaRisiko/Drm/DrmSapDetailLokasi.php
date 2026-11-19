@@ -23,7 +23,7 @@ class DrmSapDetailLokasi
     private const CACHE_DETIK = 600;
 
     /** Naikkan bila bentuk respons berubah agar cache lama tidak terpakai. */
-    private const VERSI_CACHE = 3;
+    private const VERSI_CACHE = 4;
 
     public function __construct(private readonly RfidClickHouseClient $ch)
     {
@@ -58,6 +58,7 @@ WHERE `id detail lokasi` = '.$dl.'
   AND jenis_data IN (\'HAZARD\', \'INSPEKSI\', \'OBSERVASI\', \'OBSERVASI AREA KRITIS\')
   AND ifNull(status, \'\') NOT IN ('.$buang.')
 ORDER BY `date time` DESC
+LIMIT 1 BY ifNull(task, \'\')
 LIMIT '.(self::MAKS_BARIS + 1), 60);
 
         $terpotong = count($rows) > self::MAKS_BARIS;

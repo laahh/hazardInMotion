@@ -805,6 +805,8 @@ sap AS (
     AND `date time` >= toDate('.$this->q($mulaiData).') AND `date time` < t_end + 1
     AND `id detail lokasi` IN (SELECT dl FROM dl0)
     AND ifNull(status, \'\') NOT IN ('.$this->daftar($c['status_buang']).')
+  -- Satu laporan = satu task: ch_rfid memuat baris kembar per task (gabungan RFID), hitungan memakai task unik.
+  LIMIT 1 BY ifNull(task, \'\')
 ),
 labx AS (
   SELECT k, sk, CRC32(concat('.$this->norm('k').', \' / \', '.$this->norm('sk').')) AS kc

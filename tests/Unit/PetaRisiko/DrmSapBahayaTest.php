@@ -39,12 +39,16 @@ class DrmSapBahayaTest extends TestCase
         $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (101)) OR (jenis = 'OBSERVASI AREA KRITIS' AND (kc IN (202) OR ka IN (0)))", $item);
         $this->assertStringContainsString("'risk\\\\s*intervention\\\\s*center', 'langsung'), '[^0-9a-z]+', '')) AS kc", $item);
         $this->assertStringContainsString('`id detail lokasi` IN (11,22)', $item);
-        $this->assertStringContainsString('countIf(stop = 1) AS nstop', $item);
+        // Satu laporan = satu task: ch_rfid memuat baris kembar per task.
+        $this->assertStringContainsString('uniqExact(task) AS n', $item);
+        $this->assertStringContainsString('uniqExactIf(task, stop = 1) AS nstop', $item);
         $this->assertStringContainsString('GROUP BY kc', $item);
         $this->assertStringNotContainsString('bcbeats', $item);
 
         // Tanpa label di master untuk satu jenis → jenis itu tidak bisa menangkap.
-        $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (0))", $this->teks([], [202], 'laporan'));
+        $laporan = $this->teks([], [202], 'laporan');
+        $this->assertStringContainsString("(jenis = 'OBSERVASI' AND kc IN (0))", $laporan);
+        $this->assertStringContainsString('ORDER BY waktu DESC LIMIT 1 BY task LIMIT 5000', $laporan);
     }
 
     public function test_oak_juga_lewat_kurasi_aktivitas_oak_ke_aktivitas_hira(): void

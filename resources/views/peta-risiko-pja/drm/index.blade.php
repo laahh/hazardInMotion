@@ -724,14 +724,14 @@
     const R = data.ringkas || {}, L = data.laporan || [];
     const periode = `${data.dari.split('-').reverse().join('/')} – ${data.sampai.split('-').reverse().join('/')}`;
     if (!L.length) return `<span class="dr-mute">Tidak ada laporan SAP yang memetakan ke bahaya ini di ${DR.fmt(data.ndl)} detail lokasi cakupan pada ${periode}.</span>`;
-    const ringkas = `<div class="dr-sap-ringkas"><b>${DR.fmt(R.total)} laporan · ${periode} · ${DR.fmt(data.ndl)} detail lokasi</b>
+    const ringkas = `<div class="dr-sap-ringkas"><b title="Dihitung per task (nomor tasklist) unik; baris kembar di sumber SAP digabung">${DR.fmt(R.total)} laporan (task unik) · ${periode} · ${DR.fmt(data.ndl)} detail lokasi</b>
       ${Object.entries(CARA_SAP).map(([k, [c, t]]) => R[k] ? `<span style="color:${c}">● ${DR.fmt(R[k])} ${t}</span>` : '').join('')}
       <span>belum closed ${DR.fmt(R.belum_closed)} · berulang ${DR.fmt(R.berulang)} · OAK Stop ${DR.fmt(R.oak_stop)}</span></div>`;
     const baris = L.map((x) => {
       const [c, t] = CARA_SAP[x.cara] || ['#8a8d90', x.cara];
       const bendera = [x.belum_closed ? '<span class="dr-tanda merah">Belum closed</span>' : '', x.berulang ? '<span class="dr-tanda merah">Berulang</span>' : '',
         x.oak_stop ? '<span class="dr-tanda merah">OAK Stop</span>' : '', x.tidak_sesuai ? '<span class="dr-tanda merah">Tidak Sesuai</span>' : ''].join('');
-      return `<tr><td style="white-space:nowrap">${DR.esc(x.waktu)}<small>${DR.esc(x.jenis)}</small></td>
+      return `<tr><td style="white-space:nowrap">${DR.esc(x.waktu)}<small>${DR.esc(x.jenis)}${x.task ? ` · task ${DR.esc(x.task)}` : ''}</small></td>
         <td>${DR.esc(x.lokasi)}</td>
         <td><b>${DR.esc(x.isi || '-')}</b>${x.deskripsi ? `<small>${DR.esc(x.deskripsi)}</small>` : ''}</td>
         <td>${DR.esc(x.status || x.hasil_oak || '-')}${bendera ? `<br>${bendera}` : ''}</td>
@@ -739,7 +739,7 @@
         <td class="dr-mute">${DR.esc(x.pelapor)}</td></tr>`;
     }).join('');
     return ringkas + `<div class="dr-scroll"><table class="pr-tbl dr-tbl dr-sap-tbl"><thead><tr><th>Waktu</th><th>Detail lokasi</th><th>Isi laporan</th><th>Status</th><th>Cara terpetakan</th><th>Pelapor</th></tr></thead><tbody>${baris}</tbody></table></div>`
-      + (data.terpotong ? '<div class="dr-mute" style="font-size:12px;margin-top:6px">Ditampilkan 300 laporan terbaru.</div>' : '');
+      + (data.terpotong ? `<div class="dr-mute" style="font-size:12px;margin-top:6px">Ditampilkan ${DR.fmt(L.length)} laporan terbaru dari ${DR.fmt(R.total)} task.</div>` : '');
   }
 
   // Klik / Enter / Spasi pada kartu KPI membuka modal (delegasi: kartu dirender ulang tiap filter berubah).
