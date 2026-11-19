@@ -918,36 +918,36 @@
   }
 
   /**
-   * Laporan SAP minggu ini dikelompokkan per PJA pelapornya (respons data.pja dari server). PJA pemilik detail lokasi
-   * yang tidak melapor tetap ditampilkan agar terlihat siapa yang belum mengisi. Tiap PJA bisa dibuka untuk
-   * komposisi jenis laporan dan daftar pelapornya.
+   * Laporan SAP minggu ini per PJA pelapornya (respons data.pja dari server), HANYA PJA hasil mapping detail lokasi ini
+   * (kolom PJA di tabel). PJA mapping yang tidak melapor tetap ditampilkan; laporan dari personil PJA lain / non-PJA
+   * cukup disebut jumlahnya. Tiap PJA bisa dibuka untuk komposisi jenis laporan dan daftar pelapornya.
    */
   function pjaPelapor(data, pemilik) {
-    const G = data.pja;
-    if (!Array.isArray(G)) return '';
+    if (!Array.isArray(data.pja)) return '';
     const idMilik = new Set(pemilik.map(([id]) => id));
+    const G = data.pja.filter((g) => idMilik.has(g.id));
     const ada = new Set(G.map((g) => g.id));
     const diam = pemilik.filter(([id]) => !ada.has(id));
-    const nPja = G.filter((g) => g.id !== '').length;
-    const tag = (g) => (idMilik.has(g.id) ? '<span class="dr-pl-tag milik">PJA lokasi ini</span>' : '')
-      + (g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '');
+    // Laporan oleh pelapor yang bukan personil PJA mapping (dihitung per laporan, bukan per PJA).
+    const sidMilik = new Set(G.flatMap((g) => g.pelapor.map((o) => o.sid || 'nama:' + String(o.nama).trim().toLowerCase())));
+    const luar = (data.laporan || []).filter((x) => !sidMilik.has(x.sid || 'nama:' + String(x.pelapor).trim().toLowerCase())).length;
+    const tag = (g) => (g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '');
     const masalah = (g) => [g.belum_closed && `${DR.fmt(g.belum_closed)} belum closed`, g.oak_stop && `${DR.fmt(g.oak_stop)} OAK Stop`].filter(Boolean).join(' · ') || '<span class="dr-mute">-</span>';
-    const urut = [...G.filter((g) => idMilik.has(g.id)), ...G.filter((g) => !idMilik.has(g.id))];
     const isi = (g) => `<div class="dr-pl-isi">
         <div>${JENIS_SAP.filter(([k]) => g.jenis[k]).map(([k, t, c]) => `<span class="dr-pl-chip"><i style="--c:${c}"></i>${t} <b>${DR.fmt(g.jenis[k])}</b> <span class="dr-mute">${pctI(g.jenis[k], g.n)}</span></span>`).join('')}</div>
         <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:640px"><thead><tr><th>Pelapor</th><th>Kategori</th><th class="r">Laporan</th><th style="min-width:160px">Komposisi</th><th class="r">Mengidentifikasi HIRA</th></tr></thead><tbody>${
           g.pelapor.map((o) => `<tr><td><b>${DR.esc(o.nama || '-')}</b>${o.sid ? `<br><span class="dr-mute">${DR.esc(o.sid)}</span>` : ''}</td><td>${DR.esc(o.kategori || '-')}</td>
             <td class="r">${DR.fmt(o.n)}</td><td>${barJenis(o.jenis, o.n)}</td><td class="r">${pctI(o.lolos, o.n)}</td></tr>`).join('')}</tbody></table></div></div>`;
-    const baris = urut.map((g) => `<details class="dr-pl"><summary>
+    const baris = G.map((g) => `<details class="dr-pl"><summary>
         <span><b>${DR.esc(g.nama)}</b>${tag(g)}</span><span class="r"><b>${DR.fmt(g.n)}</b></span><span class="r">${DR.fmt(g.pelapor.length)}</span>
         <span>${barJenis(g.jenis, g.n)}</span><span class="r">${pctI(g.lolos, g.n)}</span><span>${masalah(g)}</span></summary>${isi(g)}</details>`).join('')
-      + diam.map(([, nama]) => `<div class="dr-pl-row kosong"><span><b>${DR.esc(nama)}</b><span class="dr-pl-tag milik">PJA lokasi ini</span></span><span class="r">0</span><span class="r">0</span><span class="dr-mute" style="grid-column:span 3">Tidak ada laporan di detail lokasi ini minggu ini</span></div>`).join('');
+      + diam.map(([, nama]) => `<div class="dr-pl-row kosong"><span><b>${DR.esc(nama)}</b></span><span class="r">0</span><span class="r">0</span><span class="dr-mute" style="grid-column:span 3">Tidak ada laporan di detail lokasi ini minggu ini</span></div>`).join('');
     return `<div class="dr-pl-wrap">
-        <div class="dr-pl-head"><b>PJA yang melaporkan · ${DR.fmt(nPja)} PJA${G.some((g) => g.id === '') ? ' + pelapor non-PJA' : ''}</b>
-          <span class="dr-mute">${DR.fmt(pemilik.length - diam.length)} dari ${DR.fmt(pemilik.length)} PJA lokasi ini melapor</span>
+        <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(G.length)} dari ${DR.fmt(pemilik.length)} PJA</b>
+          <span class="dr-mute">${DR.fmt((data.laporan || []).length - luar)} laporan oleh personil PJA lokasi ini${luar ? ` · ${DR.fmt(luar)} laporan lain dari personil di luar mapping (tidak dirinci)` : ''}</span>
           <span class="dr-pl-leg">${JENIS_SAP.map(([, t, c]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</span></div>
-        ${G.length || diam.length ? `<div class="dr-pl-row kepala"><span>PJA pelapor</span><span class="r">Laporan</span><span class="r">Pelapor</span><span>Komposisi jenis</span><span class="r">Identifikasi HIRA</span><span>Bermasalah</span></div>${baris}` : ''}
-        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya, jadi jumlahnya bisa melebihi total laporan. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
+        ${pemilik.length ? `<div class="dr-pl-row kepala"><span>PJA pelapor</span><span class="r">Laporan</span><span class="r">Pelapor</span><span>Komposisi jenis</span><span class="r">Identifikasi HIRA</span><span>Bermasalah</span></div>${baris}` : ''}
+        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">Hanya PJA hasil mapping detail lokasi ini. PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp); pelapor yang terdaftar di dua PJA lokasi ini dihitung di keduanya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
   }
 
   function isiSap(data) {
