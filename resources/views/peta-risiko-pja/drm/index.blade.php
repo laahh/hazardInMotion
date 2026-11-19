@@ -125,9 +125,18 @@
   .dr-tm-i .n { font-size: 12.5px; font-weight: 600; color: #2c2f31; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dr-tm-i .v { font-size: 13px; font-weight: 800; color: #2c2f31; }
   .dr-tm-i .bar { grid-column: 2 / span 2; height: 6px; border-radius: 3px; background: #eef1f3; overflow: hidden; }
-  .dr-tm-i .bar i { display: block; height: 100%; border-radius: 3px; }
+  .dr-tm-i .bar .dr-tm-bar { margin: 0; height: 100%; box-shadow: none; }
+  /* Komposisi tiga status (Terkontrol / Ada Gap / Open Risk) di kotak treemap & daftar. */
+  .dr-tm-bar { display: flex; height: 6px; margin-top: 6px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, .55); box-shadow: 0 0 0 1px rgba(255, 255, 255, .6); }
+  .dr-tm-bar i { display: block; height: 100%; }
+  .dr-tm-st { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 6px; font-size: 11px; font-weight: 600; }
+  .dr-tm-st span { display: inline-flex; align-items: center; gap: 4px; }
+  .dr-tm-st i, .dr-tm-leg i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; box-shadow: 0 0 0 1px rgba(255, 255, 255, .7); }
+  .dr-tm-st.kecil { grid-column: 2 / span 2; margin-top: 0; color: #595c5e; font-weight: 500; }
+  .dr-tm-leg { display: inline-flex; gap: 12px; margin-right: 8px; }
+  .dr-tm-leg span { display: inline-flex; align-items: center; gap: 5px; }
   .dr-tm-skala { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 11.5px; color: #595c5e; flex-wrap: wrap; }
-  .dr-tm-skala i { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #fff1dc, #fbbf24, #ea580c, #7c2d12); }
+  .dr-tm-skala > i { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #fff1dc, #fbbf24, #ea580c, #7c2d12); }
   @media (max-width: 1100px) { .dr-tm-wrap { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .dr-tm { height: 320px; } }
 </style>
@@ -143,14 +152,14 @@
 
     <div class="pr-card" id="dr-card-tm">
       <div class="pr-card-head"><div><b>Kelompok aktivitas dengan risiko terbesar</b>
-        <small>Luas kotak = jumlah bahaya-risiko yang belum terkontrol di ≥80% detail lokasinya. Warna = porsi bahaya yang tidak terkontrol di detail lokasi mana pun. Klik kotak atau daftar untuk memfilter matriks di bawah; klik lagi untuk semua kelompok.</small></div></div>
+        <small>Status sama dengan kartu di atas: Teridentifikasi &amp; Terkontrol · Teridentifikasi - Ada Gap · Tidak Teridentifikasi (Open Risk). Luas kotak = bahaya belum terkontrol (Ada Gap + Open Risk); warna = porsi Open Risk. Klik kotak atau daftar untuk memfilter matriks di bawah; klik lagi untuk semua kelompok.</small></div></div>
       <div class="pr-card-body">
         <div class="dr-tm-wrap">
           <div>
             <div id="dr-treemap" class="dr-tm" role="list" aria-label="Treemap kelompok aktivitas"></div>
             <div class="dr-tm-skala" id="dr-tm-skala"></div>
           </div>
-          <div class="dr-tm-top" id="dr-tm-top" aria-label="Lima kelompok dengan baris belum terkontrol terbanyak"></div>
+          <div class="dr-tm-top" id="dr-tm-top" aria-label="Lima kelompok dengan bahaya Ada Gap dan Open Risk terbanyak"></div>
         </div>
       </div>
     </div>
@@ -1256,50 +1265,53 @@
   }
 
   /**
-   * Treemap kelompok aktivitas: luas = baris belum terkontrol penuh; warna = porsi baris tanpa kontrol sama sekali
-   * (tanpa laporan + hanya bermasalah), diskalakan relatif min–maks antar kotak supaya perbedaannya terlihat.
-   * Klik kotak / daftar 5 teratas memfilter matriks.
+   * Treemap kelompok aktivitas, memakai status yang sama dengan kartu KPI (gabungan antar detail lokasi: G > K > T):
+   * Teridentifikasi & Terkontrol (idk) · Teridentifikasi - Ada Gap (idg) · Tidak Teridentifikasi / Open Risk (tid).
+   * Luas = bahaya belum terkontrol (Ada Gap + Open Risk); warna = porsi Open Risk, diskalakan relatif min–maks antar kotak.
+   * Tiap kotak / daftar 5 teratas memuat bar komposisi tiga status. Klik memfilter matriks.
    */
+  const ST_TM = [['idk', '#16a34a', 'Terkontrol'], ['idg', '#d9a400', 'Ada Gap'], ['tid', '#dc2626', 'Open Risk']];
+  const barTm = (b) => `<span class="dr-tm-bar" aria-hidden="true">${ST_TM.map(([k, c]) => (b[k] ? `<i style="width:${(100 * b[k] / b.t).toFixed(1)}%;background:${c}"></i>` : '')).join('')}</span>`;
+  const angkaTm = (b) => ST_TM.map(([k, c, n]) => `<span title="${n}"><i style="background:${c}"></i>${DR.fmt(b[k])}</span>`).join('');
   function renderTreemap(P, w) {
     const el = $('#dr-treemap');
-    const items = M.proses.map((k) => {
+    const semua = M.proses.map((k) => {
       const v = jumlahF(P, (p) => vekKel(p, w, k.kode));
-      // Pita: "buta" = tidak terkontrol di DL mana pun (pita 0%). Spec: tanpa laporan + hanya bermasalah.
-      const buta = pitaAktif() ? v.none : v.none + v.gapo;
-      return { kode: k.kode, nama: k.nama, t: v.t, gap: v.t - v.full, full: v.full, part: v.part, gapo: v.gapo, none: v.none, nb: buta, buta: v.t ? buta / v.t : 0 };
-    }).filter((i) => i.gap > 0).sort((a, b) => b.gap - a.gap).map((i) => ({ ...i, v: i.gap }));
-    if (!items.length) { el.innerHTML = '<div class="pr-empty">Tidak ada baris belum terkontrol penuh pada minggu ini.</div>'; $('#dr-tm-top').innerHTML = ''; $('#dr-tm-skala').innerHTML = ''; return; }
-    const lo = Math.min(...items.map((i) => i.buta)), hi = Math.max(...items.map((i) => i.buta));
+      return { kode: k.kode, nama: k.nama, t: v.idk + v.idg + v.tid, idk: v.idk, idg: v.idg, tid: v.tid, risiko: v.idg + v.tid };
+    }).filter((i) => i.t > 0);
+    const items = semua.filter((i) => i.risiko > 0).sort((a, b) => b.risiko - a.risiko || b.tid - a.tid).map((i) => ({ ...i, v: i.risiko, open: i.tid / i.t }));
+    if (!items.length) { el.innerHTML = '<div class="pr-empty">Semua bahaya teridentifikasi &amp; terkontrol pada minggu ini.</div>'; $('#dr-tm-top').innerHTML = ''; $('#dr-tm-skala').innerHTML = ''; return; }
+    const lo = Math.min(...items.map((i) => i.open)), hi = Math.max(...items.map((i) => i.open));
     const skala = (x) => (hi - lo < 0.005 ? 0.55 : 0.12 + 0.88 * (x - lo) / (hi - lo));
     const pilih = (k) => { state.kelMx = state.kelMx === k ? '' : k; render(); };
     const kls = (k) => `${state.kelMx === k ? ' on' : ''}${state.kelMx && state.kelMx !== k ? ' redup' : ''}`;
-    const L = LBL(), belum = pitaAktif() ? `belum terkontrol di ${L.kFull}` : 'belum terkontrol penuh';
-    const ket = (b) => `${b.nama}: ${DR.fmt(b.gap)} dari ${DR.fmt(b.t)} baris ${belum} (${DR.pct(b.gap, b.t)}); ${L.kPart} ${DR.fmt(b.part)}, ${L.kGapo} ${DR.fmt(b.gapo)}, ${L.kNone} ${DR.fmt(b.none)}; ${DR.pct(b.nb, b.t)} tidak terkontrol sama sekali`;
+    const ket = (b) => `${b.nama}: ${DR.fmt(b.t)} bahaya · Terkontrol ${DR.fmt(b.idk)} · Ada Gap ${DR.fmt(b.idg)} · Open Risk ${DR.fmt(b.tid)} (${DR.pct(b.tid, b.t)})`;
 
     const W = el.clientWidth || 800, H = el.clientHeight || 420, CELAH = 3;
     el.innerHTML = squarify(items, W, H).map((b) => {
       const x = b.x + CELAH / 2, y = b.y + CELAH / 2, lw = Math.max(0, b.w - CELAH), lh = Math.max(0, b.h - CELAH);
-      const besar = lw > 130 && lh > 78, sedang = lw > 78 && lh > 46, kecil = lw > 34 && lh > 22;
-      const { bg, fg } = warnaTm(skala(b.buta));
+      const besar = lw > 130 && lh > 92, sedang = lw > 78 && lh > 46, kecil = lw > 34 && lh > 22;
+      const { bg, fg } = warnaTm(skala(b.open));
       const isi = besar
-        ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b> baris<small>${DR.pct(b.gap, b.t)} ${pitaAktif() ? 'di bawah ' + L.kFull : 'gap'} · ${DR.pct(b.nb, b.t)} tanpa kontrol</small></span>`
-        : sedang ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b></span>`
-          : kecil ? `<span class="dr-tm-v"><b>${DR.fmt(b.gap)}</b></span>` : '';
+        ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.risiko)}</b> belum terkontrol<small>dari ${DR.fmt(b.t)} bahaya</small><span class="dr-tm-st">${angkaTm(b)}</span>${barTm(b)}</span>`
+        : sedang ? `<span class="dr-tm-n">${DR.esc(b.nama)}</span><span class="dr-tm-v"><b>${DR.fmt(b.risiko)}</b>${barTm(b)}</span>`
+          : kecil ? `<span class="dr-tm-v"><b>${DR.fmt(b.risiko)}</b></span>` : '';
       return `<button type="button" role="listitem" class="dr-tm-k${besar || sedang ? '' : ' kecil'}${kls(b.kode)}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(ket(b))}" aria-label="${DR.esc(ket(b))}" aria-pressed="${state.kelMx === b.kode}"
         style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${lw.toFixed(1)}px;height:${lh.toFixed(1)}px;background:${bg};color:${fg}">${isi}</button>`;
     }).join('');
 
-    const maks = items[0].gap;
-    $('#dr-tm-top').innerHTML = `<h4>5 teratas · baris ${pitaAktif() ? 'di bawah ' + L.kFull : 'belum terkontrol penuh'}</h4>` + items.slice(0, 5).map((b, i) => {
-      const { bg, fg } = warnaTm(skala(b.buta));
+    const total = (k) => semua.reduce((s, b) => s + b[k], 0);
+    $('#dr-tm-top').innerHTML = '<h4>5 teratas · Ada Gap + Open Risk</h4>' + items.slice(0, 5).map((b, i) => {
+      const { bg, fg } = warnaTm(skala(b.open));
       return `<button type="button" class="dr-tm-i${kls(b.kode)}" data-kel="${DR.esc(b.kode)}" title="${DR.esc(ket(b))}" aria-pressed="${state.kelMx === b.kode}">
-        <span class="r" style="background:${bg};color:${fg}">${i + 1}</span><span class="n">${DR.esc(b.nama)}</span><span class="v">${DR.fmt(b.gap)}</span>
-        <span class="bar"><i style="width:${(100 * b.gap / maks).toFixed(1)}%;background:${bg}"></i></span></button>`;
-    }).join('') + `<p class="dr-mute" style="margin:2px 0 0;font-size:11.5px">${DR.fmt(items.length)} kelompok punya baris belum terkontrol · total ${DR.fmt(items.reduce((s, b) => s + b.gap, 0))} baris.</p>`;
+        <span class="r" style="background:${bg};color:${fg}">${i + 1}</span><span class="n">${DR.esc(b.nama)}</span><span class="v">${DR.fmt(b.risiko)}</span>
+        <span class="bar">${barTm(b)}</span><span class="dr-tm-st kecil">${angkaTm(b)}</span></button>`;
+    }).join('') + `<p class="dr-mute" style="margin:2px 0 0;font-size:11.5px">${DR.fmt(items.length)} dari ${DR.fmt(semua.length)} kelompok punya bahaya belum terkontrol · total Terkontrol ${DR.fmt(total('idk'))} · Ada Gap ${DR.fmt(total('idg'))} · Open Risk ${DR.fmt(total('tid'))}.</p>`;
 
-    $('#dr-tm-skala').innerHTML = hi - lo < 0.005
-      ? `<span>Tanpa kontrol sama sekali: semua kelompok ±${DR.pct(lo, 1)}</span>`
-      : `<span>Tanpa kontrol sama sekali</span><span>${DR.pct(lo, 1)}</span><i></i><span>${DR.pct(hi, 1)}</span><span class="dr-mute">(skala relatif antar kelompok)</span>`;
+    const legenda = `<span class="dr-tm-leg">${ST_TM.map(([, c, n]) => `<span><i style="background:${c}"></i>${n}</span>`).join('')}</span>`;
+    $('#dr-tm-skala').innerHTML = legenda + (hi - lo < 0.005
+      ? `<span>Warna kotak: porsi Open Risk semua kelompok ±${DR.pct(lo, 1)}</span>`
+      : `<span>Warna kotak = porsi Open Risk</span><span>${DR.pct(lo, 1)}</span><i></i><span>${DR.pct(hi, 1)}</span><span class="dr-mute">(skala relatif antar kelompok)</span>`);
 
     document.querySelectorAll('#dr-treemap [data-kel], #dr-tm-top [data-kel]').forEach((t) => t.addEventListener('click', () => pilih(t.dataset.kel)));
   }
