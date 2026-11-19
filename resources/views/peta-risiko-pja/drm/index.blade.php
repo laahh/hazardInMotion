@@ -615,7 +615,7 @@
         <td class="akt k2">${DR.esc(b.t[1] || '-')}</td>
         <td class="bhy k3"${b.t[3] ? ` title="${DR.esc(b.t[3])}"` : ''}>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}${tanda ? `<div>${tanda}</div>` : ''}</td>
         <td class="c"><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
-        <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span></td>
+        <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span>${T ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td>
         <td class="c"><span class="dr-lv lv-${DR.esc(akhir)}">${DR.esc(akhir || '-')}</span></td>
         <td class="c">${gapSel(T, false, false)}</td>
         <td class="c">${gapSel(m & GAP_BIT.closed, T)}</td>
@@ -628,7 +628,8 @@
         <td class="n">${angka(nOak)}</td>
         <td class="n">${angka(nKet)}</td>
         <td class="n"><b>${angka(nObs + nOak + nKet)}</b></td>
-        <td class="c">${insiden}</td></tr>`;
+        <td class="c">${insiden}</td></tr>
+        <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="${NK}"><div class="dr-bl-sap"></div></td></tr>`;
     });
     const isi = d.querySelector('#dr-modal-isi');
     const wk = wKode(state.w);
@@ -639,6 +640,7 @@
       <th class="c">Item Sumber Observasi <small>(label master)</small></th><th class="c">Item Sumber OAK <small>(label master)</small></th><th class="c">Item Sumber Ketidaksesuaian <small>(label master)</small></th>
       <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th><th class="n">Vol. Total</th><th class="c">Pernah Incident? <small>(12 bln)</small></th></tr></thead><tbody>${html}</tbody></table>`;
     isi.querySelectorAll('.dr-item').forEach((btn) => btn.addEventListener('click', () => bukaItem(baris[+btn.dataset.i], btn.dataset.sumber)));
+    isi.querySelectorAll('.dr-sap-btn').forEach((btn) => btn.addEventListener('click', () => bukaSapBahaya(baris[+btn.dataset.i], btn)));
   }
 
   /**
@@ -695,9 +697,13 @@
 
   /** Buka / tutup daftar SAP satu baris di modal. */
   async function bukaSapBahaya(b, btn) {
-    const tr = btn.closest('tbody').querySelector(`tr.dr-modal-sap[data-i="${btn.dataset.i}"]`), td = tr.firstElementChild;
+    const tr = btn.closest('tbody').querySelector(`tr.dr-modal-sap[data-i="${btn.dataset.i}"]`);
+    // Tabel Baseline lebar: isi masuk panel sticky selebar area gulir agar tidak ikut tergeser ke kanan.
+    const td = tr.querySelector('.dr-bl-sap') || tr.firstElementChild;
     const buka = tr.hidden;
     tr.hidden = !buka;
+    const gulir = td.classList.contains('dr-bl-sap') ? tr.closest('.dr-modal-isi') : null;
+    if (buka && gulir) td.style.width = `${Math.max(320, gulir.clientWidth - 48)}px`;
     btn.setAttribute('aria-expanded', String(buka));
     btn.classList.toggle('on', buka);
     if (!buka || td.dataset.dimuat) return;

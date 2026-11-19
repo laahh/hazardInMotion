@@ -139,7 +139,10 @@
   .dr-gap { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10.5px; font-weight: 600; background: #f3f4f6; color: #8a8d90; white-space: nowrap; }
   .dr-gap.ya { background: #fdecee; color: #b91c1c; text-decoration: underline; }
   .dr-st-tbl td { vertical-align: top; }
-  .dr-st-tbl td .dr-sap-btn { margin-top: 6px; }
+  .dr-st-tbl td .dr-sap-btn, .dr-bl-tbl td .dr-sap-btn { margin-top: 6px; }
+  /* Laporan SAP di tabel Baseline lebar: panel tetap di area terlihat walau tabel digeser ke kanan. */
+  .dr-bl-tbl .dr-modal-sap > td { padding: 0 !important; }
+  .dr-bl-sap { position: sticky; left: 0; box-sizing: border-box; padding: 12px 14px 14px; max-width: 100%; }
   .dr-sap-ada { display: inline-block; font-weight: 700; color: #166534; white-space: nowrap; }
   .dr-sap-tidak { display: inline-block; font-weight: 700; color: #b42318; white-space: nowrap; }
   .dr-gap.ya-ungu { background: #f1e8fa; color: #7e3fb3; }
