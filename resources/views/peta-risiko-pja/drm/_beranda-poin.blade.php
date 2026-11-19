@@ -369,13 +369,12 @@ window.BerandaPoin = (function () {
 
     const daftar = L.filter((o) => o.off || o.g1 + o.g2 + o.g3 + o.g4 + o.ts > 0)
       .sort((a, b) => Number(a.off) - Number(b.off) || (b.g1 + b.g2 + b.g3 + b.g4) - (a.g1 + a.g2 + a.g3 + a.g4) || b.inc - a.inc);
-    const tot = `<tr class="bp-tot"><td colspan="5">Total ${daftar.filter((o) => !o.off).length} kombinasi dengan open risk</td><td class="r">${F(jml('g1'))}</td><td class="r">${F(jml('g2'))}</td><td class="r">${F(jml('g3'))}</td><td class="r">${F(jml('g4'))}</td></tr>`;
+    const tot = `<tr class="bp-tot"><td colspan="4">Total ${daftar.filter((o) => !o.off).length} kombinasi dengan open risk</td><td class="r">${F(jml('g1'))}</td><td class="r">${F(jml('g2'))}</td><td class="r">${F(jml('g3'))}</td><td class="r">${F(jml('g4'))}</td></tr>`;
     const baris = daftar.map((o) => {
       const l = X.dl[o.dl] || {}, k = 'open:' + o.kel + '|' + o.dl, buka = !!S.buka[k];
       const utama = `<tr class="br-a${buka ? ' open' : ''}" data-buka="${E(k)}" style="cursor:pointer${o.off ? ';opacity:.6' : ''}">
         <td><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="Lihat bahaya-risiko">▸</button><b>${E(namaKel(o.kel))}</b></td>
         <td>${E(l.lokasi)} · <b>${E(l.detlok)}</b></td><td>${terakhir(o.last || (X.BE.dlast || {})[o.dl])}</td>
-        <td>${tombolFlag(X, o.dl, o.kel, o.off)}</td>
         <td>${o.inc ? `<span class="bp-chip" style="--b:#f1e8fa;--c:#7e3fb3">Ya (${o.inc} bahaya)</span>` : '<span class="dr-mute">Tidak</span>'}</td>
         <td class="r">${o.off ? '–' : F(o.g1)}</td><td class="r">${o.off ? '–' : F(o.g2)}</td><td class="r">${o.off ? '–' : F(o.g3)}</td><td class="r">${o.off ? '–' : F(o.g4)}</td></tr>`;
       if (!buka) return utama;
@@ -383,11 +382,11 @@ window.BerandaPoin = (function () {
       const isi = o.list.slice().sort((a, b) => (urut[a.r.b.n1] ?? 9) - (urut[b.r.b.n1] ?? 9)).map((x) => `<tr><td>${E(x.r.b.bn)}<br><span class="dr-mute">${E(x.r.b.an)}${x.r.b.sn && x.r.b.sn !== x.r.b.an ? ' · ' + E(x.r.b.sn) : ''}</span></td><td>${lvTag(x.r.b.n1)}</td>
         <td>${x.st === 'none' ? '<span class="bp-chip" style="--b:#fde4e4;--c:#b42318">Tidak teridentifikasi</span>' : alasan(x.m).map((a) => `<span class="bp-chip" style="--b:#ffedd5;--c:#c2410c">${a}</span>`).join(' ')}</td>
         <td>${x.r.inc ? `<span class="br-red">${x.r.inc} insiden</span>` : '<span class="dr-mute">–</span>'}</td></tr>`).join('');
-      return utama + `<tr class="br-sub br-buka"><td colspan="9" style="padding:8px 12px 14px 34px">${o.off ? '<span class="dr-mute">Dikecualikan dari perhitungan karena flag nonaktif disetujui.</span>' : tabel('<th>Bahaya-risiko spesifik</th><th>Risiko awal</th><th>Jenis gap</th><th>Insiden 12 bln</th>', isi, 'Tidak ada.')}</td></tr>`;
+      return utama + `<tr class="br-sub br-buka"><td colspan="8" style="padding:8px 12px 14px 34px">${o.off ? '<span class="dr-mute">Dikecualikan dari perhitungan karena flag nonaktif disetujui.</span>' : tabel('<th>Bahaya-risiko spesifik</th><th>Risiko awal</th><th>Jenis gap</th><th>Insiden 12 bln</th>', isi, 'Tidak ada.')}</td></tr>`;
     }).join('');
     return kartu(`8. Ringkasan open risk · ${wKode()}`, 'Open = tidak teridentifikasi SAP atau masih ada laporan bermasalah', sum)
-      + kartu('9. Open risk per kelompok aktivitas & detail lokasi', 'Klik baris untuk bahaya-risiko spesifiknya · ubah status aktivitas lewat tombol flag (berlaku setelah disetujui orang lain)',
-        tabel('<th style="min-width:200px">Kelompok aktivitas</th><th style="min-width:200px">Lokasi · detail lokasi</th><th>Terakhir dilaporkan</th><th>Status aktivitas (flag)</th><th>Terkait insiden?</th><th class="r">Tidak teridentifikasi<br>(Gap1)</th><th class="r">Belum closed<br>(Gap2)</th><th class="r">Berulang<br>(Gap3)</th><th class="r">OAK Stop<br>(Gap4)</th>',
+      + kartu('9. Open risk per kelompok aktivitas & detail lokasi', 'Klik baris untuk bahaya-risiko spesifiknya · status aktivitas diubah di tab Identifikasi harian',
+        tabel('<th style="min-width:200px">Kelompok aktivitas</th><th style="min-width:200px">Lokasi · detail lokasi</th><th>Terakhir dilaporkan</th><th>Terkait insiden?</th><th class="r">Tidak teridentifikasi<br>(Gap1)</th><th class="r">Belum closed<br>(Gap2)</th><th class="r">Berulang<br>(Gap3)</th><th class="r">OAK Stop<br>(Gap4)</th>',
           daftar.length ? tot + baris : '', 'Tidak ada open risk pada filter ini.', 1150));
   }
 

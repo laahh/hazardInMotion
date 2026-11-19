@@ -1042,6 +1042,60 @@
       e.preventDefault(); e.stopPropagation();
       state.tab = 'proses'; state.proses = a.dataset.kekel; $('#dr-proses').value = state.proses; render(); window.scrollTo({ top: 0, behavior: 'smooth' });
     }));
+    document.querySelectorAll(`${sel} tr[data-akt]`).forEach((tr) => tr.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.abuka[tr.dataset.akt] = !state.abuka[tr.dataset.akt];
+      const y = window.pageYOffset; render(); window.scrollTo(0, y);
+    }));
+    document.querySelectorAll(`${sel} [data-akt-isi]`).forEach((td) => isiBahayaAktivitas(td));
+  }
+
+  // ------------------------------------------------------------ Bahaya-risiko satu aktivitas (tab Kelompok Aktivitas / Group Lokasi)
+  /**
+   * Baris rincian (kelompok × bahaya) aktivitas ini di cakupan aktif: site, grup (tab Group Lokasi), level risiko, minggu.
+   * Status sama dengan kartu KPI (K terkontrol, G ada gap, T tidak teridentifikasi) dan jumlah laporan SAP minggu itu.
+   */
+  async function isiBahayaAktivitas(td) {
+    const [kel, ...sisa] = td.dataset.aktIsi.split('|'), nama = sisa.join('|');
+    try {
+      const R = await muatRincian();
+      if (!td.isConnected) return;
+      const L = R.lingkup[state.site];
+      if (!L) { td.innerHTML = '<span class="dr-mute">Rincian untuk cakupan ini belum ada di snapshot.</span>'; return; }
+      const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+      const sumber = state.tab === 'grup'
+        ? L.g.filter((x) => x[0] === state.grup).map(([, k, hid, lv, inc, tr, kode, gap, vol]) => ({ kel: k, hid, lv, inc, tr, kode, gap, vol }))
+        : L.u.map(([k, hid, lv, inc, tr, kode, gap, vol]) => ({ kel: k, hid, lv, inc, tr, kode, gap, vol }));
+      // Aktivitas dicocokkan lewat kelompok + nama aktivitas di teks rincian.
+      const urutSt = { G: 0, T: 1, K: 2 }, urutLv = { Significant: 0, High: 1, Medium: 2, Low: 3 };
+      const baris = sumber.filter((b) => b.kel === kel && (!lvBoleh || lvBoleh.has(b.lv)) && (R.teks[b.hid] || [])[0] === nama)
+        .map((b) => ({ ...b, t: R.teks[b.hid] || ['', '', '', '', ''], st: b.kode[state.w] || 'T' }))
+        .sort((a, b) => urutSt[a.st] - urutSt[b.st] || (urutLv[a.lv] ?? 9) - (urutLv[b.lv] ?? 9) || String(a.t[2]).localeCompare(String(b.t[2])));
+      if (!baris.length) { td.innerHTML = '<span class="dr-mute">Tidak ada bahaya-risiko aktivitas ini pada filter terpilih.</span>'; return; }
+      const n = { K: 0, G: 0, T: 0 };
+      baris.forEach((b) => { n[b.st]++; });
+      const wk = wKode(state.w);
+      const isi = baris.map((b, i) => {
+        const m = parseInt((b.gap || '')[state.w] || '0', 16);
+        const [nObs, nOak, nKet] = uraiVol(b.vol)[state.w] || [0, 0, 0];
+        const alasan = [m & GAP_BIT.closed && 'Belum closed', m & GAP_BIT.ulang && 'Berulang', m & GAP_BIT.stop && 'OAK Stop'].filter(Boolean)
+          .map((x) => `<span class="dr-tanda merah">${x}</span>`).join('');
+        const rinci = [nObs && `${DR.fmt(nObs)} Obs`, nOak && `${DR.fmt(nOak)} OAK`, nKet && `${DR.fmt(nKet)} Ketidaksesuaian`].filter(Boolean).join(' · ');
+        const sap = b.st === 'T' ? '<span class="dr-sap-tidak">Tidak ada SAP</span>'
+          : `<span class="dr-sap-ada">Ada · ${DR.fmt(nObs + nOak + nKet)} laporan</span>${rinci ? `<small>${rinci}</small>` : ''}`;
+        return `<tr><td>${DR.esc(b.t[1] || '-')}</td><td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${+b.inc > 0 ? `<div><span class="dr-tanda ungu">insiden 12 bln (${DR.fmt(+b.inc)})</span></div>` : ''}</td>
+          <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
+          <td><span class="dr-st ${b.st}">${STATUS_SAP[b.st]}</span>${alasan ? `<div>${alasan}</div>` : ''}</td>
+          <td>${sap}${b.st === 'T' ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td></tr>
+          <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="5"></td></tr>`;
+      }).join('');
+      td.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:8px;font-size:13px"><b>${DR.fmt(baris.length)} bahaya-risiko · ${wk}</b>
+          <span style="color:#a07a00">● ${DR.fmt(n.G)} ada gap</span><span style="color:#b42318">● ${DR.fmt(n.T)} tidak teridentifikasi</span><span style="color:#1a7f37">● ${DR.fmt(n.K)} terkontrol</span></div>
+        <div class="dr-scroll"><table class="pr-tbl dr-tbl dr-st-tbl" style="min-width:900px"><thead><tr><th>Sub aktivitas</th><th style="min-width:240px">Bahaya - risiko</th><th>Risiko awal</th><th>Status SAP ${wk}</th><th>SAP ${wk}</th></tr></thead><tbody>${isi}</tbody></table></div>`;
+      td.querySelectorAll('.dr-sap-btn').forEach((btn) => btn.addEventListener('click', (e) => { e.stopPropagation(); bukaSapBahaya({ kel: baris[+btn.dataset.i].kel, hid: baris[+btn.dataset.i].hid }, btn); }));
+    } catch (e) {
+      if (td.isConnected) td.innerHTML = `<span class="br-red">${DR.esc(e.message || 'Gagal memuat rincian.')}</span>`;
+    }
   }
 
   /** Sub-baris aktivitas HIRA satu kelompok; di tab Group Lokasi hanya aktivitas dan baris di grup terpilih. */
@@ -1051,7 +1105,13 @@
     const L = Object.entries(M.beranda.akt).filter(([, x]) => x[1] === kel)
       .map(([a, x]) => ({ nama: x[0], v: jumlahF(P, (p) => vek(p, w, a)), v0: w + 1 < NW ? jumlahF(P, (p) => vek(p, w + 1, a)) : null }))
       .filter((r) => r.v.t).sort((a, b) => (b.v.t - b.v.full) - (a.v.t - a.v.full) || b.v.t - a.v.t);
-    const isi = L.map(({ nama, v, v0 }) => `<tr class="br-sub"><td style="padding-left:40px">${DR.esc(nama)}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`).join('')
+    state.abuka ||= {};
+    // Aktivitas bisa dibuka: bahaya-risikonya dengan status SAP, jenis gap, dan laporan SAP (dimuat dari rincian.json).
+    const isi = L.map(({ nama, v, v0 }) => {
+      const kunci = `${kel}|${nama}`, buka = !!state.abuka[kunci];
+      return `<tr class="br-sub br-akt${buka ? ' open' : ''}" data-akt="${DR.esc(kunci)}" style="cursor:pointer"><td style="padding-left:40px"><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} bahaya-risiko ${DR.esc(nama)}">▸</button>${DR.esc(nama)}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`
+        + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:6px 16px 14px 64px" data-akt-isi="${DR.esc(kunci)}"><span class="dr-mute">Memuat bahaya-risiko…</span></td></tr>` : '');
+    }).join('')
       || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${adaUnik() && M.beranda.ringkas.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
     const tautan = diGrup || state.tab !== 'proses' || state.proses !== kel
       ? `<tr class="br-sub"><td colspan="8" style="padding-left:40px"><a href="#" data-kekel="${DR.esc(kel)}">Lihat kelompok ini di semua grup ›</a></td></tr>` : '';
