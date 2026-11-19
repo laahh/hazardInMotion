@@ -246,6 +246,10 @@ window.BerandaPoin = (function () {
   }
 
   // ------------------------------------------------ a–c personil & coverage
+  /**
+   * a–c: performa SAP per personil PJA (BC & Mitra) dan coverage SAP per lokasi – detail lokasi.
+   * Coverage dipisah: oleh tim PJA (personil PJA ini + PJA Mitra anaknya) dan dari luar PJA (semua − tim PJA).
+   */
   function personil(X) {
     const D = X.D, akhir = {};
     (D.bearc || []).forEach((b) => { if (!akhir[b.sid] || akhir[b.sid].mulai < b.mulai) akhir[b.sid] = b; });
@@ -254,26 +258,62 @@ window.BerandaPoin = (function () {
       if (!acc[k]) acc[k] = { ...p, kat: new Set() };
       if (p.kategori) acc[k].kat.add(String(p.kategori).trim());
       return acc;
-    }, {}));
-    const tbl = (rows) => tabel('<th>Personil</th><th>Peran</th><th>SAP 14 hari</th><th class="r">Total</th><th class="r">%SAP minggu lalu</th><th>BeARC</th>',
-      rows.map((p) => {
-        const tot = p.harian.reduce((a, n) => a + Number(n), 0), mx = Math.max(1, ...p.harian.map(Number)), b = akhir[p.sid];
-        return `<tr><td><b>${E(p.nama)}</b><br><span class="dr-mute">${E(p.sid)} · ${E(p.perusahaan)}${!p.bc ? ' · ' + E(p.pja) : ''}</span></td><td class="dr-mute">${E([...p.kat].join(', ') || '–')}</td>
-          <td><span class="dr-spark" title="${E(p.harian.join(', '))}">${p.harian.map((n) => (Number(n) ? `<i style="height:${(100 * n / mx).toFixed(0)}%"></i>` : '<i class="z"></i>')).join('')}</span></td>
-          <td class="r"><b>${F(tot)}</b></td><td class="r">${!b ? '–' : b.persen === null ? 'N/A' : Number(b.persen).toFixed(0) + '%'}</td>
-          <td>${!b ? '<span class="dr-mute">tidak ada data</span>' : Number(b.banned_sap) ? '<span class="dr-tag st-L">Banned SAP</span>' : '<span class="dr-tag st-K">Achieve dihitung</span>'}</td></tr>`;
-      }).join(''), 'Tidak ada personil terdaftar.', 760);
+    }, {})).map(performa).sort((x, y) => y.tot - x.tot || String(x.nama).localeCompare(String(y.nama)));
     const bc = gabung(D.personil.filter((p) => p.bc)), mk = gabung(D.personil.filter((p) => !p.bc));
-    const cov = D.coverage.map((c) => ({ ...c, l: X.dl[String(c.dl)] })).filter((c) => c.l).sort((a, b) => Number(a.semua) - Number(b.semua));
-    const nol = cov.filter((c) => !Number(c.semua)).length;
-    const sap = (rows) => rows.reduce((s, p) => s + p.harian.reduce((a, n) => a + Number(n), 0), 0);
-    return kartu(`a. Personil PJA BC & pemenuhan SAP (${bc.length})`, `${F(sap(bc))} laporan SAP 14 hari · ${bc.filter((p) => !p.harian.some(Number)).length} personil tanpa laporan`, tbl(bc))
-      + kartu(`b. Personil PJA Mitra & pemenuhan SAP (${mk.length})`, `${F(sap(mk))} laporan SAP 14 hari · ${mk.filter((p) => !p.harian.some(Number)).length} personil tanpa laporan`, tbl(mk))
-      + kartu(`c. Coverage SAP detail lokasi (${C.M.jendela} hari)`, `${nol} dari ${cov.length} detail lokasi tanpa laporan SAP sama sekali · dedicated = dilaporkan personil PJA ini sendiri`,
-        tabel('<th>Detail lokasi</th><th class="r">Laporan (semua)</th><th class="r">Oleh personil PJA</th><th style="min-width:160px">Porsi dedicated</th>',
-          cov.map((c) => { const s = Number(c.semua), d = Number(c.dedicated);
-            return `<tr><td>${E(c.l.lokasi)} · <b>${E(c.l.detlok)}</b></td><td class="r">${s ? F(s) : '<span class="dr-tag st-T">0</span>'}</td><td class="r">${F(d)}</td>
-              <td>${s ? `<div class="br-sb"><i style="width:${(100 * d / s).toFixed(1)}%;background:${DR.BW.ok}"></i></div><span class="dr-mute">${pct(d, s)}</span>` : '<span class="dr-mute">–</span>'}</td></tr>`; }).join(''), 'Tidak ada data coverage.', 640));
+    const cov = D.coverage.map((c) => ({ ...c, l: X.dl[String(c.dl)], s: Number(c.semua), d: Number(c.dedicated) })).filter((c) => c.l);
+    const sCov = cov.reduce((a, c) => a + c.s, 0), dCov = cov.reduce((a, c) => a + c.d, 0);
+    const semua = [...bc, ...mk];
+    const ringkas = `<div class="pr-card-body"><div class="bp-sum">${[
+      ['#3952bc', 'Personil PJA', F(semua.length), `${bc.length} BC · ${mk.length} Mitra`],
+      ['#1a7f37', 'Aktif lapor 7 hari terakhir', F(semua.filter((p) => p.tot7 > 0).length), `${semua.filter((p) => !p.tot).length} personil tanpa laporan 14 hari`],
+      ['#0891b2', 'Laporan SAP personil 14 hari', F(semua.reduce((a, p) => a + p.tot, 0)), `rata-rata ${(semua.reduce((a, p) => a + p.tot, 0) / Math.max(1, semua.length) / 14).toFixed(1)} per orang per hari`],
+      ['#a07a00', `Coverage oleh tim PJA (${C.M.jendela} hari)`, pct(dCov, sCov), `${F(dCov)} dari ${F(sCov)} laporan di detail lokasi PJA`],
+      ['#b42318', 'Detail lokasi tanpa laporan', F(cov.filter((c) => !c.s).length), `dari ${cov.length} detail lokasi`],
+    ].map(([c, j, n, k]) => `<div style="--c:${c}"><small>${j}</small><b>${n}</b><em>${k}</em></div>`).join('')}</div></div>`;
+    const ket = (rows) => `${F(rows.reduce((a, p) => a + p.tot, 0))} laporan SAP 14 hari · ${rows.filter((p) => !p.tot).length} personil tanpa laporan · diurutkan dari laporan terbanyak`;
+    return ringkas
+      + kartu(`a. Performa SAP personil PJA BC (${bc.length})`, ket(bc), tabelPersonil(bc, akhir))
+      + kartu(`b. Performa SAP personil PJA Mitra (${mk.length})`, ket(mk), tabelPersonil(mk, akhir))
+      + kartu(`c. Lokasi – detail lokasi & coverage SAP (${C.M.jendela} hari)`, 'Tim PJA = personil PJA ini dan PJA Mitra-nya · luar PJA = laporan orang lain di lokasi yang sama', tabelCoverage(X, cov));
+  }
+
+  /** Angka performa satu personil dari jumlah laporan harian 14 hari (indeks 0 = 14 hari lalu). */
+  function performa(p) {
+    const h = (p.harian || []).map(Number), tot = h.reduce((a, n) => a + n, 0);
+    const tot7 = h.slice(-7).reduce((a, n) => a + n, 0), sebelum7 = h.slice(0, -7).reduce((a, n) => a + n, 0);
+    return { ...p, h, tot, tot7, sebelum7, aktif: h.filter((n) => n > 0).length };
+  }
+
+  function tabelPersonil(rows, akhir) {
+    return tabel('<th>Personil</th><th>Peran</th><th>SAP 14 hari</th><th class="r">Total</th><th class="r">Hari aktif</th><th class="r">Rata-rata / hari</th><th>Tren 7 hari</th><th class="r">%SAP minggu lalu</th><th>BeARC</th>',
+      rows.map((p) => {
+        const mx = Math.max(1, ...p.h), b = akhir[p.sid], beda = p.tot7 - p.sebelum7;
+        const tren = !p.tot ? '<span class="br-red">tanpa laporan</span>'
+          : `<span style="color:${beda > 0 ? '#1a7f37' : beda < 0 ? '#b42318' : 'var(--mute)'}">${beda > 0 ? '▲' : beda < 0 ? '▼' : '='} ${F(p.tot7)}</span> <span class="dr-mute">vs ${F(p.sebelum7)}</span>`;
+        return `<tr><td><b>${E(p.nama)}</b><br><span class="dr-mute">${E(p.sid)} · ${E(p.perusahaan)}${!p.bc ? ' · ' + E(p.pja) : ''}</span></td><td class="dr-mute">${E([...p.kat].join(', ') || '–')}</td>
+          <td><span class="dr-spark" title="${E(p.h.join(', '))}">${p.h.map((n) => (n ? `<i style="height:${(100 * n / mx).toFixed(0)}%"></i>` : '<i class="z"></i>')).join('')}</span></td>
+          <td class="r"><b>${F(p.tot)}</b></td><td class="r">${p.aktif}<span class="dr-mute">/14</span></td><td class="r">${(p.tot / 14).toFixed(1)}</td><td>${tren}</td>
+          <td class="r">${!b ? '–' : b.persen === null ? 'N/A' : Number(b.persen).toFixed(0) + '%'}</td>
+          <td>${!b ? '<span class="dr-mute">tidak ada data</span>' : Number(b.banned_sap) ? '<span class="dr-tag st-L">Banned SAP</span>' : '<span class="dr-tag st-K">Achieve dihitung</span>'}</td></tr>`;
+      }).join(''), 'Tidak ada personil terdaftar.', 1040);
+  }
+
+  /** Coverage per lokasi (subtotal) → detail lokasi: total, oleh tim PJA, dari luar PJA, porsi, laporan terakhir. */
+  function tabelCoverage(X, cov) {
+    const perLok = {};
+    cov.forEach((c) => (perLok[c.l.lokasi || '–'] ||= []).push(c));
+    const batang = (d, s) => (s ? `<div class="br-sb" title="Tim PJA ${pct(d, s)} · luar PJA ${pct(s - d, s)}"><i style="width:${(100 * d / s).toFixed(1)}%;background:#1a7f37"></i><i style="width:${(100 * (s - d) / s).toFixed(1)}%;background:#93c5fd"></i></div>` : '<span class="dr-mute">–</span>');
+    const isi = Object.keys(perLok).sort().map((lok) => {
+      const L = perLok[lok].sort((a, b) => String(a.l.detlok).localeCompare(String(b.l.detlok)));
+      const s = L.reduce((a, c) => a + c.s, 0), d = L.reduce((a, c) => a + c.d, 0);
+      return `<tr class="bp-tot"><td><b>${E(lok)}</b> <span class="dr-mute" style="font-weight:400">· ${L.length} detail lokasi</span></td><td></td><td class="r">${F(s)}</td><td class="r">${F(d)}</td><td class="r">${F(s - d)}</td><td>${batang(d, s)}</td><td class="r">${pct(d, s)}</td><td></td></tr>`
+        + L.map((c) => `<tr><td style="padding-left:28px">${E(c.l.detlok)}</td><td class="dr-mute">${E(c.l.grp)}</td>
+          <td class="r">${c.s ? F(c.s) : '<span class="dr-tag st-T">0</span>'}</td><td class="r">${F(c.d)}</td><td class="r">${F(c.s - c.d)}</td>
+          <td>${batang(c.d, c.s)}</td><td class="r">${pct(c.d, c.s)}</td><td>${terakhir((X.BE.dlast || {})[c.dl])}</td></tr>`).join('');
+    }).join('');
+    return `<div class="pr-card-body" style="padding-bottom:0"><div class="bp-lg"><span><i style="--c:#1a7f37"></i>oleh tim PJA</span><span><i style="--c:#93c5fd"></i>dari luar PJA</span></div></div>`
+      + tabel('<th style="min-width:240px">Lokasi · detail lokasi</th><th>Grup lokasi</th><th class="r">Laporan (semua)</th><th class="r">Oleh tim PJA</th><th class="r">Dari luar PJA</th><th style="min-width:150px">Porsi</th><th class="r">% tim PJA</th><th>Laporan SAP terakhir</th>',
+        isi, 'Tidak ada data coverage.', 1080);
   }
 
   // ------------------------------------------------ 7 identifikasi harian + proyeksi
