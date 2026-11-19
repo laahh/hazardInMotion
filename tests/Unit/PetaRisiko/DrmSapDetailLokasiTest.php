@@ -20,7 +20,7 @@ class DrmSapDetailLokasiTest extends TestCase
             $lap('', 'Tanpa SID', 'HAZARD', 'luar_grup'),
         ];
         $anggota = [
-            'AAA01' => [['id' => '10', 'nama' => 'PJA Hauling', 'tipe' => 'BC', 'kategori' => 'Superior']],
+            'AAA01' => [['id' => '10', 'nama' => 'PJA Hauling', 'tipe' => 'BC', 'kategori' => 'Superior', 'induk' => '5', 'induk_nama' => 'PJA Induk BC']],
             // Sari terdaftar di dua PJA → dihitung di keduanya.
             'BBB02' => [['id' => '10', 'nama' => 'PJA Hauling', 'tipe' => 'BC', 'kategori' => 'Layer 1'],
                 ['id' => '20', 'nama' => 'PJA Workshop', 'tipe' => 'Mitra Kerja', 'kategori' => 'Layer 1']],
@@ -35,6 +35,9 @@ class DrmSapDetailLokasiTest extends TestCase
         $this->assertSame(['Budi', 'Sari'], array_column($hauling['pelapor'], 'nama'));
         $this->assertSame([2, 1], [$hauling['pelapor'][0]['n'], $hauling['pelapor'][0]['lolos']]);
         $this->assertSame(1, $workshop['n']);
+        // Parent PJA dibawa ke kelompok (untuk penggabungan child di tampilan); tanpa data induk = ''.
+        $this->assertSame(['5', 'PJA Induk BC'], [$hauling['induk'], $hauling['induk_nama']]);
+        $this->assertSame('', $workshop['induk']);
         // Bukan personil PJA: pelapor dengan SID tak terdaftar & tanpa SID, dipisah per orang.
         $this->assertSame('Bukan personil PJA', $bukan['nama']);
         $this->assertSame([2, ['Tamu', 'Tanpa SID']], [$bukan['n'], array_column($bukan['pelapor'], 'nama')]);

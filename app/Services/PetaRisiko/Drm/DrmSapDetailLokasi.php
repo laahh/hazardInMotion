@@ -23,7 +23,7 @@ class DrmSapDetailLokasi
     private const CACHE_DETIK = 600;
 
     /** Naikkan bila bentuk respons berubah agar cache lama tidak terpakai. */
-    private const VERSI_CACHE = 2;
+    private const VERSI_CACHE = 3;
 
     public function __construct(private readonly RfidClickHouseClient $ch)
     {
@@ -114,6 +114,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
     /**
      * Laporan dikelompokkan per PJA pelapornya (penugasan aktif m_pja_emp). Pelapor anggota beberapa PJA dihitung
      * di setiap PJA-nya; pelapor yang bukan personil PJA mana pun masuk kelompok id '' (paling akhir).
+     * induk / induk_nama = parent PJA (m_pja.id_parent), dipakai tampilan untuk menggabungkan child PJA lokasi.
      *
      * @param  list<array<string, mixed>>  $laporan
      * @param  array<string, list<array{id: string, nama: string, tipe: string, kategori: string}>>  $anggota  sid → PJA
@@ -121,14 +122,15 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
      */
     public static function perPja(array $laporan, array $anggota): array
     {
-        $bukan = [['id' => '', 'nama' => 'Bukan personil PJA', 'tipe' => '', 'kategori' => '']];
+        $bukan = [['id' => '', 'nama' => 'Bukan personil PJA', 'tipe' => '', 'kategori' => '', 'induk' => '', 'induk_nama' => '']];
         $grup = [];
         foreach ($laporan as $l) {
             $sid = (string) ($l['sid'] ?? '');
             $kunciOrang = $sid !== '' ? $sid : 'nama:'.mb_strtolower(trim((string) $l['pelapor']));
             $lolos = (int) ($l['pemetaan'] === 'lolos');
             foreach ($anggota[$sid] ?? $bukan as $p) {
-                $g = $grup[$p['id']] ?? ['id' => $p['id'], 'nama' => $p['nama'], 'tipe' => $p['tipe'], 'n' => 0, 'jenis' => [],
+                $g = $grup[$p['id']] ?? ['id' => $p['id'], 'nama' => $p['nama'], 'tipe' => $p['tipe'],
+                    'induk' => (string) ($p['induk'] ?? ''), 'induk_nama' => (string) ($p['induk_nama'] ?? ''), 'n' => 0, 'jenis' => [],
                     'lolos' => 0, 'belum_closed' => 0, 'oak_stop' => 0, 'pelapor' => []];
                 $o = $g['pelapor'][$kunciOrang] ?? ['sid' => $sid, 'nama' => (string) $l['pelapor'], 'kategori' => $p['kategori'], 'n' => 0, 'jenis' => [], 'lolos' => 0];
                 $o = self::tambahLaporan($o, (string) $l['jenis'], $lolos);
@@ -161,6 +163,34 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
     }
 
     /**
+     * Parent (m_pja.id_parent) PJA mapping detail lokasi, agar parent PJA lokasi ikut di bagian utama tampilan.
+     *
+     * @param  list<string>  $id
+     * @return array<string, array{id: string, nama: string}>  id PJA → parent ('' bila tanpa parent)
+     */
+    public function indukPja(array $id): array
+    {
+        $id = array_values(array_unique(array_filter(array_map('intval', $id), fn ($x) => $x > 0)));
+        if ($id === []) {
+            return [];
+        }
+        sort($id);
+
+        return Cache::remember('peta-risiko:induk-pja:'.md5(implode(',', $id)), self::CACHE_DETIK, function () use ($id) {
+            $rows = $this->ch->select('
+SELECT toString(p.id) AS id, if(ifNull(p.parent, 0) = 0, \'\', toString(p.parent)) AS induk, ifNull(pp.name, \'\') AS induk_nama
+FROM (SELECT id, any(id_parent) AS parent FROM obds.m_pja WHERE id IN ('.implode(', ', $id).') GROUP BY id) p
+LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja GROUP BY id) pp ON pp.id = p.parent', 60);
+            $peta = [];
+            foreach ($rows as $r) {
+                $peta[(string) $r['id']] = ['id' => (string) $r['induk'], 'nama' => (string) $r['induk_nama']];
+            }
+
+            return $peta;
+        });
+    }
+
+    /**
      * PJA aktif tiap SID pelapor (m_pja_emp → bep_vw_safety_all_karyawan), sama seperti personil di snapshot.
      *
      * @param  list<string>  $sid
@@ -174,17 +204,20 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
         }
         $daftar = implode(', ', array_map([RfidClickHouseClient::class, 'quote'], $sid));
         $rows = $this->ch->select('
-SELECT k.kode_sid AS sid, toString(pe.id_pja) AS id, ifNull(pj.name, \'\') AS nama, ifNull(t.name, \'\') AS tipe, ifNull(c.name, \'\') AS kategori
+SELECT k.kode_sid AS sid, toString(pe.id_pja) AS id, ifNull(pj.name, \'\') AS nama, ifNull(t.name, \'\') AS tipe, ifNull(c.name, \'\') AS kategori,
+       if(ifNull(pj.parent, 0) = 0, \'\', toString(pj.parent)) AS induk, ifNull(pp.name, \'\') AS induk_nama
 FROM (SELECT DISTINCT toInt64(id_pja) AS id_pja, toInt64(id_employee) AS id_emp, id_pja_type, category_id
       FROM obds.m_pja_emp WHERE is_active = 1) pe
 JOIN (SELECT toInt64(id) AS id, any(kode_sid) AS kode_sid FROM obds.bep_vw_safety_all_karyawan
       GROUP BY id HAVING kode_sid IN ('.$daftar.')) k ON k.id = pe.id_emp
-LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja GROUP BY id) pj ON pj.id = pe.id_pja
+LEFT JOIN (SELECT id, any(name) AS name, any(id_parent) AS parent FROM obds.m_pja GROUP BY id) pj ON pj.id = pe.id_pja
+LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja GROUP BY id) pp ON pp.id = pj.parent
 LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_type GROUP BY id) t ON t.id = pe.id_pja_type
 LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_category GROUP BY id) c ON c.id = pe.category_id', 60);
         $peta = [];
         foreach ($rows as $r) {
-            $peta[(string) $r['sid']][] = ['id' => (string) $r['id'], 'nama' => (string) $r['nama'], 'tipe' => (string) $r['tipe'], 'kategori' => (string) $r['kategori']];
+            $peta[(string) $r['sid']][] = ['id' => (string) $r['id'], 'nama' => (string) $r['nama'], 'tipe' => (string) $r['tipe'], 'kategori' => (string) $r['kategori'],
+                'induk' => (string) $r['induk'], 'induk_nama' => (string) $r['induk_nama']];
         }
 
         return $peta;

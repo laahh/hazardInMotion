@@ -962,7 +962,8 @@
       td.innerHTML = kotakPja ? isiSap(data) : pjaPelapor(data, pemilik) + isiSap(data);
     };
     if (sapCache[kunci]) { tulis(sapCache[kunci]); return; }
-    fetch(URL_SAP.replace('__DL__', encodeURIComponent(d)) + '?w=' + w, { headers: { Accept: 'application/json' } })
+    const qPemilik = pemilik.map(([id]) => id).filter((id) => /^[0-9]+$/.test(id)).join(',');
+    fetch(URL_SAP.replace('__DL__', encodeURIComponent(d)) + '?w=' + w + (qPemilik ? '&pemilik=' + qPemilik : ''), { headers: { Accept: 'application/json' } })
       .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j))))
       .then((data) => { sapCache[kunci] = data; tulis(data); })
       .catch((e) => {
@@ -987,7 +988,7 @@
    * (bukan memakai data.pja apa adanya) agar pelapor yang juga anggota PJA mapping tidak muncul dua kali.
    * Keanggotaan sid → PJA diambil dari data.pja (penugasan aktif m_pja_emp, sudah dihitung server).
    */
-  function kelompokLuar(data, sidMilik, idMilik) {
+  function kelompokLuar(data, sidMilik, idTerkait) {
     const anggota = new Map();
     data.pja.forEach((g) => g.pelapor.forEach((o) => {
       const k = kunciPelapor(o.sid, o.nama);
@@ -998,7 +999,7 @@
     (data.laporan || []).forEach((x) => {
       const k = kunciPelapor(x.sid, x.pelapor);
       if (sidMilik.has(k)) return;
-      const daftar = (anggota.get(k) || []).filter((a) => !idMilik.has(a.g.id));
+      const daftar = (anggota.get(k) || []).filter((a) => !idTerkait.has(a.g.id));
       (daftar.length ? daftar : [{ g: { id: '', nama: 'Bukan personil PJA', tipe: '' }, kategori: '' }]).forEach(({ g, kategori }) => {
         if (!hasil.has(g.id)) hasil.set(g.id, { id: g.id, nama: g.nama, tipe: g.tipe, n: 0, jenis: {}, lolos: 0, belum_closed: 0, oak_stop: 0, orang: new Map() });
         const h = hasil.get(g.id), lolos = x.pemetaan === 'lolos' ? 1 : 0;
@@ -1015,7 +1016,9 @@
 
   /** Satu baris PJA (bisa dibuka → komposisi jenis + daftar pelapor). */
   function barisPjaPelapor(g) {
-    const tag = g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '';
+    const tag = (g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '')
+      + (g.relasi === 'child' ? `<span class="dr-pl-tag milik" title="Child dari ${DR.esc(g.dari)}">child · ${DR.esc(g.dari)}</span>` : '')
+      + (g.relasi === 'parent' ? `<span class="dr-pl-tag milik" title="Parent dari ${DR.esc(g.dari)}">parent · ${DR.esc(g.dari)}</span>` : '');
     const masalah = [g.belum_closed && `${DR.fmt(g.belum_closed)} belum closed`, g.oak_stop && `${DR.fmt(g.oak_stop)} OAK Stop`].filter(Boolean).join(' · ') || '<span class="dr-mute">-</span>';
     const isi = `<div class="dr-pl-isi">
         <div>${JENIS_SAP.filter(([k]) => g.jenis[k]).map(([k, t, c]) => `<span class="dr-pl-chip"><i style="--c:${c}"></i>${t} <b>${DR.fmt(g.jenis[k])}</b> <span class="dr-mute">${pctI(g.jenis[k], g.n)}</span></span>`).join('')}</div>
@@ -1037,30 +1040,49 @@
    */
   function pjaPelapor(data, pemilik) {
     if (!Array.isArray(data.pja)) return '';
+    const norm = (t) => String(t || '').trim().toLowerCase();
     const idMilik = new Set(pemilik.map(([id]) => id));
-    const G = data.pja.filter((g) => idMilik.has(g.id));
-    const ada = new Set(G.map((g) => g.id));
+    const namaMilik = new Map(pemilik.map(([, nama]) => [norm(nama), nama]));
+    // Parent PJA mapping (dari server, ?pemilik=…): id & nama parent → nama PJA mapping anaknya.
+    const indukP = data.induk_pemilik || {};
+    const idInduk = new Map(), namaInduk = new Map();
+    pemilik.forEach(([id, nama]) => { const x = indukP[id]; if (x && x.id) { idInduk.set(x.id, nama); namaInduk.set(norm(x.nama), nama); } });
+    // Relasi tiap PJA pelapor terhadap PJA mapping lokasi ini. Dicocokkan lewat id ATAU nama, karena m_pja punya id
+    // ganda bernama sama (mis. "PJA Maintenance BC GMO" 1522 & 2310).
+    const relasi = (g) => {
+      if (g.id === '') return null;
+      if (idMilik.has(g.id)) return { relasi: 'mapping' };
+      if (idMilik.has(g.induk) || namaMilik.has(norm(g.induk_nama))) return { relasi: 'child', dari: g.induk_nama || (pemilik.find(([id]) => id === g.induk) || [])[1] || '' };
+      if (idInduk.has(g.id) || namaInduk.has(norm(g.nama))) return { relasi: 'parent', dari: idInduk.get(g.id) || namaInduk.get(norm(g.nama)) };
+      return null;
+    };
+    const urutRel = { mapping: 0, child: 1, parent: 2 };
+    const G = data.pja.map((g) => { const r = relasi(g); return r ? { ...g, ...r } : null; }).filter(Boolean)
+      .sort((p, q) => urutRel[p.relasi] - urutRel[q.relasi] || q.n - p.n || String(p.nama).localeCompare(String(q.nama)));
+    const idTerkait = new Set(G.map((g) => g.id));
+    const ada = new Set(G.filter((g) => g.relasi === 'mapping').map((g) => g.id));
     const diam = pemilik.filter(([id]) => !ada.has(id));
+    const nCp = G.filter((g) => g.relasi !== 'mapping').length;
     const sidMilik = new Set(G.flatMap((g) => g.pelapor.map((o) => kunciPelapor(o.sid, o.nama))));
     const nMilik = (data.laporan || []).filter((x) => sidMilik.has(kunciPelapor(x.sid, x.pelapor))).length;
     const nLuar = (data.laporan || []).length - nMilik;
-    const LG = nLuar ? kelompokLuar(data, sidMilik, idMilik) : [];
+    const LG = nLuar ? kelompokLuar(data, sidMilik, idTerkait) : [];
     const nPjaLuar = LG.filter((g) => g.id !== '').length;
 
     const utama = G.map(barisPjaPelapor).join('')
       + diam.map(([, nama]) => `<div class="dr-pl-row kosong"><span><b>${DR.esc(nama)}</b></span><span class="r">0</span><span class="r">0</span><span class="dr-mute" style="grid-column:span 3">Tidak ada laporan di detail lokasi ini minggu ini</span></div>`).join('');
     const bagianLuar = LG.length ? `<details class="dr-pl-luar"${nPjaLuar <= 8 ? ' open' : ''}>
         <summary><b>PJA lain yang melaporkan di lokasi ini · ${DR.fmt(nPjaLuar)} PJA${LG.some((g) => g.id === '') ? ' + pelapor non-PJA' : ''}</b>
-          <span class="dr-mute">${DR.fmt(nLuar)} laporan oleh personil di luar PJA lokasi ini</span></summary>
+          <span class="dr-mute">${DR.fmt(nLuar)} laporan oleh personil PJA yang bukan PJA lokasi ini, bukan child, dan bukan parent-nya</span></summary>
         ${KEPALA_PJA_PELAPOR}${LG.map(barisPjaPelapor).join('')}</details>` : '';
 
     return `<div class="dr-pl-wrap">
-        <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(G.length)} dari ${DR.fmt(pemilik.length)} PJA</b>
-          <span class="dr-mute">${DR.fmt(nMilik)} laporan oleh personil PJA lokasi ini</span>
+        <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA${nCp ? ` + ${DR.fmt(nCp)} PJA child/parent` : ''}</b>
+          <span class="dr-mute">${DR.fmt(nMilik)} laporan oleh personil PJA lokasi ini${nCp ? ' beserta child/parent-nya' : ''}</span>
           <span class="dr-pl-leg">${JENIS_SAP.map(([, t, c]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</span></div>
         ${pemilik.length ? KEPALA_PJA_PELAPOR + utama : ''}
         ${bagianLuar}
-        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Bagian "PJA lain" hanya berisi pelapor yang bukan personil PJA lokasi ini; pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
+        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Bagian atas = PJA mapping lokasi ini beserta child-nya (m_pja.id_parent = PJA lokasi) dan parent-nya. Bagian "PJA lain" hanya berisi pelapor di luar itu; pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
   }
 
   function isiSap(data) {

@@ -91,7 +91,11 @@ class PetaRisikoDrmController extends Controller
         $sampai = $dari->addDays(6)->min($akhirData);
 
         try {
-            return response()->json($sap->ambil((int) $dl, (string) $info[3], $dari, $sampai));
+            $hasil = $sap->ambil((int) $dl, (string) $info[3], $dari, $sampai);
+            // Parent PJA mapping lokasi (?pemilik=id,id) untuk menggabungkan parent/child di tampilan.
+            $pemilik = preg_match('/^[0-9,]{1,500}$/', (string) $request->query('pemilik', '')) ? explode(',', (string) $request->query('pemilik')) : [];
+
+            return response()->json([...$hasil, 'induk_pemilik' => $sap->indukPja($pemilik)]);
         } catch (\Throwable $e) {
             report($e);
 
