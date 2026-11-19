@@ -136,7 +136,7 @@
   .dr-tm-leg { display: inline-flex; gap: 12px; margin-right: 8px; }
   .dr-tm-leg span { display: inline-flex; align-items: center; gap: 5px; }
   .dr-tm-skala { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 11.5px; color: #595c5e; flex-wrap: wrap; }
-  .dr-tm-skala > i { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #fff1dc, #fbbf24, #ea580c, #7c2d12); }
+  .dr-tm-skala > i { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #fdd66e, #f8a024, #ea6216, #c42d1c, #7a1618); }
   @media (max-width: 1100px) { .dr-tm-wrap { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .dr-tm { height: 320px; } }
 </style>
@@ -1227,7 +1227,7 @@
   }
 
   /** Palet berurutan (terang → gelap) untuk nilai 0–1, plus warna teks yang kontras. */
-  const PALET_TM = [[255, 241, 220], [251, 191, 36], [234, 88, 12], [124, 45, 18]];
+  const PALET_TM = [[253, 214, 110], [248, 160, 36], [234, 98, 22], [196, 45, 28], [122, 22, 24]];
   function warnaTm(r) {
     const t = Math.max(0, Math.min(1, r)) * (PALET_TM.length - 1), i = Math.min(PALET_TM.length - 2, Math.floor(t)), f = t - i;
     const c = PALET_TM[i].map((v, j) => Math.round(v + (PALET_TM[i + 1][j] - v) * f));
@@ -1282,7 +1282,9 @@
     const items = semua.filter((i) => i.risiko > 0).sort((a, b) => b.risiko - a.risiko || b.tid - a.tid).map((i) => ({ ...i, v: i.risiko, open: i.tid / i.t }));
     if (!items.length) { el.innerHTML = '<div class="pr-empty">Semua bahaya teridentifikasi &amp; terkontrol pada minggu ini.</div>'; $('#dr-tm-top').innerHTML = ''; $('#dr-tm-skala').innerHTML = ''; return; }
     const lo = Math.min(...items.map((i) => i.open)), hi = Math.max(...items.map((i) => i.open));
-    const skala = (x) => (hi - lo < 0.005 ? 0.55 : 0.12 + 0.88 * (x - lo) / (hi - lo));
+    // Skala PERINGKAT (bukan min–maks): satu kelompok ekstrem tidak membuat yang lain pucat seragam; nilai sama = warna sama.
+    const urutOpen = [...new Set(items.map((i) => Math.round(i.open * 1000)))].sort((a, b) => a - b);
+    const skala = (x) => (urutOpen.length < 2 ? 0.5 : urutOpen.indexOf(Math.round(x * 1000)) / (urutOpen.length - 1));
     const pilih = (k) => { state.kelMx = state.kelMx === k ? '' : k; render(); };
     const kls = (k) => `${state.kelMx === k ? ' on' : ''}${state.kelMx && state.kelMx !== k ? ' redup' : ''}`;
     const ket = (b) => `${b.nama}: ${DR.fmt(b.t)} bahaya · Terkontrol ${DR.fmt(b.idk)} · Ada Gap ${DR.fmt(b.idg)} · Open Risk ${DR.fmt(b.tid)} (${DR.pct(b.tid, b.t)})`;
@@ -1311,7 +1313,7 @@
     const legenda = `<span class="dr-tm-leg">${ST_TM.map(([, c, n]) => `<span><i style="background:${c}"></i>${n}</span>`).join('')}</span>`;
     $('#dr-tm-skala').innerHTML = legenda + (hi - lo < 0.005
       ? `<span>Warna kotak: porsi Open Risk semua kelompok ±${DR.pct(lo, 1)}</span>`
-      : `<span>Warna kotak = porsi Open Risk</span><span>${DR.pct(lo, 1)}</span><i></i><span>${DR.pct(hi, 1)}</span><span class="dr-mute">(skala relatif antar kelompok)</span>`);
+      : `<span>Warna kotak = porsi Open Risk</span><span>${DR.pct(lo, 1)}</span><i></i><span>${DR.pct(hi, 1)}</span><span class="dr-mute">(urutan antar kelompok)</span>`);
 
     document.querySelectorAll('#dr-treemap [data-kel], #dr-tm-top [data-kel]').forEach((t) => t.addEventListener('click', () => pilih(t.dataset.kel)));
   }
