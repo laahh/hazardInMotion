@@ -62,6 +62,7 @@
   .dr-hira:hover, .dr-hira:focus-visible { border-color: #3952bc; outline: none; }
   .dr-hira small { max-width: 172px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #595c5e; font-size: 11px; }
   .dr-hira-n { color: #3952bc; font-weight: 700; }
+  .dr-hira-kosong { color: #9a5b00; font-weight: 700; }
   .dr-hira-dok { margin-bottom: 14px; }
   .dr-hira-dok-k { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 14px; }
   .dr-hira-dok th { text-align: left; color: #595c5e; font-weight: 600; }
@@ -916,7 +917,7 @@
         if (!d) { td.innerHTML = '<span class="dr-mute">-</span>'; return; }
         td.innerHTML = `<button type="button" class="dr-hira" aria-haspopup="dialog" title="Lihat dokumen HIRA">
             <span><b>${DR.esc(d.idh)}</b>${d.ada ? ` · rev ${DR.esc(d.rev)}` : ''}${L.length > 1 ? ` <span class="dr-hira-n">+${L.length - 1}</span>` : ''}</span>
-            <small>${DR.esc(d.ada ? (d.dept || '-') : 'tidak ada di HIRA master')}</small></button>`;
+            <small>${d.ada ? (d.kosong ? '<span class="dr-hira-kosong">kosong</span> ' : '') + DR.esc(d.dept || '-') : 'tidak ditemukan di HIRA'}</small></button>`;
         td.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); bukaHira(td.dataset.hira, td.dataset.bahaya || ''); });
       });
     }).catch((e) => {
@@ -930,13 +931,14 @@
     const baris = (k, v) => (v ? `<tr><th style="width:170px">${k}</th><td>${v}</td></tr>` : '');
     isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
         <div class="dr-hira-dok-k"><b>HIRA ${DR.esc(x.idh)}</b>${x.ada ? ` · rev ${DR.esc(x.rev)}` : ''}
-          ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
+          ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.kosong ? '<span class="dr-pl-tag" style="background:#fff4e5;color:#9a5b00">dokumen kosong</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
           ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
+        ${x.kosong ? '<p class="dr-mute" style="margin:0 0 6px">Dokumen ini ada di HIRA (hira_master) tetapi belum berisi bahaya-risiko, site, maupun section, sehingga tidak muncul di mv_hira_master. Nilai risiko baris baseline ini tidak berasal dari dokumen ini.</p>' : ''}
         ${x.ada ? `<table class="pr-tbl dr-tbl"><tbody>
           ${baris('Departemen', DR.esc(x.dept))}${baris('Aktivitas spesifik', DR.esc(x.spesifik))}
           ${baris('Aktivitas · sub', DR.esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site', DR.esc((x.site || []).join(', ')))}
           ${baris('Bagian', DR.esc(x.bagian))}${baris('Perusahaan', DR.esc(x.perusahaan))}${baris('Klasifikasi', DR.esc(x.rutin))}${baris('Diperbarui', DR.esc(x.diperbarui))}
-        </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di mv_hira_master.</p>'}</div>`).join('')
+        </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di HIRA (hira_master maupun mv_hira_master).</p>'}</div>`).join('')
       || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>';
     if (!d.open) d.showModal();
   }
@@ -1137,10 +1139,71 @@
       : kel && !nBaris && nKel
         ? `<div class="pr-empty" style="grid-column:1/-1">${DR.fmt(nKel)} baris ${DR.esc(nama)} tidak punya nilai kekerapan/konsekuensi di HIRA (ID HIRA v31 tidak ada di mv_hira_master), jadi tidak bisa digambar di matriks.</div>`
         : '';
-    $('#dr-matriks').innerHTML = catatan || (DR.matriks(`Baseline HIRA (risiko awal) · ${wk}${akhiran}`, A, M) + DR.matriks(`Final · ${wk}${akhiran}`, F, M)
+    $('#dr-matriks').innerHTML = catatan || (DR.matriks(`Baseline HIRA (risiko awal) · ${wk}${akhiran}`, A, M, 'a') + DR.matriks(`Final · ${wk}${akhiran}`, F, M, 'f')
       + (kel && nKel > nBaris ? `<div class="dr-mute" style="grid-column:1/-1;font-size:12px">${DR.fmt(nBaris)} dari ${DR.fmt(nKel)} baris kelompok ini punya nilai risiko di HIRA; sisanya tidak masuk matriks.</div>` : ''));
     const hapus = $('#dr-mx-hapus');
     if (hapus) hapus.addEventListener('click', () => { state.kelMx = ''; render(); });
+    document.querySelectorAll('#dr-matriks td[data-mx]').forEach((td) => {
+      const buka = () => bukaSelMx(td.dataset.mx, +td.dataset.sel, td.textContent.trim());
+      td.addEventListener('click', buka);
+      td.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); buka(); } });
+    });
+  }
+
+  /**
+   * Baris rincian (kelompok × bahaya unik di cakupan) yang jatuh di satu sel matriks, aturan sama dengan DrmBeranda:
+   * awal = sel risiko awal HIRA; final = sel residual bila kategori minggu itu 1 (terkontrol penuh), selain itu awal.
+   * Filter sama dengan matriks: site, level (S+H / semua), kelompok terpilih di treemap.
+   * Butuh snapshot baru (teks[8..9] = sel, u[8] = kategori per minggu).
+   */
+  function barisSelMx(R, jenis, sel) {
+    const L = R.lingkup[state.site];
+    if (!L) return null;
+    const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+    const contoh = Object.values(R.teks || {})[0];
+    if ((contoh && contoh.length < 10) || (L.u[0] && L.u[0].length < 9)) return 'lama';
+    return L.u.filter(([kel, hid, lv]) => (!lvBoleh || lvBoleh.has(lv)) && (!state.kelMx || kel === state.kelMx))
+      .map(([kel, hid, lv, inc, tr, kode, gap, vol, kat]) => {
+        const t = R.teks[hid] || [], awal = t[8] ?? -1, sisa = t[9] ?? -1;
+        const final = (kat || '')[state.w] === '1' && sisa >= 0 ? sisa : awal;
+        return { kel, hid: String(hid), lv, inc, st: (kode || '')[state.w] || 'T', t, sel: jenis === 'a' ? awal : final, pakaiSisa: final !== awal };
+      })
+      .filter((b) => b.sel === sel && b.sel >= 0);
+  }
+
+  async function bukaSelMx(jenis, sel, nTampil) {
+    const d = dialogItem(), isi = d.querySelector('#dr-item-isi');
+    const kek = M.kekerapan[Math.floor(sel / 5)], kon = M.konsekuensi[sel % 5];
+    const namaKel = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]);
+    d.querySelector('#dr-item-judul').textContent = `${jenis === 'a' ? 'Baseline HIRA (risiko awal)' : 'Final'} · ${kek} × ${kon} · ${wKode(state.w)}`;
+    isi.innerHTML = '<div class="dr-mute">Memuat bahaya-risiko…</div>';
+    if (!d.open) d.showModal();
+    try {
+      const R = await muatRincian();
+      const B = barisSelMx(R, jenis, sel);
+      if (B === null) { isi.innerHTML = '<p class="dr-mute">Rincian untuk cakupan ini belum ada di snapshot.</p>'; return; }
+      if (B === 'lama') { isi.innerHTML = '<p class="dr-mute">Snapshot masih format lama (belum menyimpan sel matriks per baris). Jalankan ulang <code>php artisan peta-risiko:sync</code>, lalu muat ulang halaman.</p>'; return; }
+      const urutSt = { T: 0, G: 1, K: 2 };
+      B.sort((p, q) => urutSt[p.st] - urutSt[q.st] || String(namaKel[p.kel]).localeCompare(String(namaKel[q.kel])) || String(p.t[0]).localeCompare(String(q.t[0])) || String(p.t[2]).localeCompare(String(q.t[2])));
+      const n = { K: 0, G: 0, T: 0 };
+      B.forEach((b) => { n[b.st] = (n[b.st] || 0) + 1; });
+      isi.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:10px;font-size:13px">
+          <b>${DR.fmt(B.length)} bahaya-risiko</b>${String(B.length) !== String(nTampil).replace(/\D/g, '') ? `<span class="br-red">angka sel ${DR.esc(nTampil)}</span>` : ''}
+          <span style="color:#b42318">● ${DR.fmt(n.T)} tidak teridentifikasi</span><span style="color:#a07a00">● ${DR.fmt(n.G)} ada gap</span><span style="color:#1a7f37">● ${DR.fmt(n.K)} terkontrol</span>
+          <span class="dr-mute">${state.site === 'ALL' ? 'Semua site' : DR.esc(state.site)} · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}${state.kelMx ? ' · ' + DR.esc(namaKel[state.kelMx] || state.kelMx) : ''}</span></div>
+        <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:900px"><thead><tr><th>Kelompok aktivitas</th><th style="min-width:200px">Aktivitas HIRA · sub</th><th style="min-width:150px">HIRA</th><th style="min-width:220px">Bahaya - risiko</th><th>Risiko</th><th>Status SAP</th></tr></thead><tbody>${
+          B.map((b) => `<tr><td>${DR.esc(namaKel[b.kel] || b.kel)}</td>
+            <td>${DR.esc(b.t[0] || '-')}${b.t[1] && b.t[1] !== b.t[0] ? `<br><span class="dr-mute">${DR.esc(b.t[1])}</span>` : ''}</td>
+            <td data-hira="${DR.esc(b.hid)}" data-bahaya="${DR.esc(b.t[2] || '')}"><span class="dr-mute">…</span></td>
+            <td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${+b.inc > 0 ? `<div><span class="dr-tanda ungu">insiden 12 bln (${DR.fmt(+b.inc)})</span></div>` : ''}</td>
+            <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span>${b.t[4] ? `<br><span class="dr-mute" style="font-size:11px">residual ${DR.esc(b.t[4])}</span>` : ''}${b.pakaiSisa ? '<br><span class="dr-mute" style="font-size:11px">final = residual (terkontrol)</span>' : ''}</td>
+            <td><span class="dr-st ${b.st}">${STATUS_SAP[b.st]}</span></td></tr>`).join('')
+          || '<tr><td colspan="6" class="pr-empty">Tidak ada baris.</td></tr>'}</tbody></table></div>
+        <p class="dr-mute" style="font-size:12px;margin:8px 0 0">${jenis === 'a' ? 'Sel = kekerapan × konsekuensi risiko awal HIRA.' : 'Final = risiko residual HIRA bila bahaya terkontrol di ≥80% detail lokasinya minggu ini; selain itu tetap risiko awal.'} Klik kolom HIRA untuk dokumen asalnya.</p>`;
+      isiHira(isi, B.map((b) => b.hid));
+    } catch (e) {
+      isi.innerHTML = `<p class="br-red">${DR.esc(e.message || 'Gagal memuat rincian.')}</p>`;
+    }
   }
 
   /** Palet berurutan (terang → gelap) untuk nilai 0–1, plus warna teks yang kontras. */

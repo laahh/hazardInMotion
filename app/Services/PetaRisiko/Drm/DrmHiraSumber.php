@@ -86,7 +86,7 @@ class DrmHiraSumber
             return [];
         }
 
-        return Cache::remember('peta-risiko:hira-sumber:'.md5(implode(',', $idh)), self::CACHE_DETIK, function () use ($idh) {
+        return Cache::remember('peta-risiko:hira-sumber:v2:'.md5(implode(',', $idh)), self::CACHE_DETIK, function () use ($idh) {
             $rows = $this->ch->select('
 SELECT id_hira_master AS idh, any(ifNull(revisi, 0)) AS rev, any(ifNull(departemen, \'\')) AS dept,
        any(ifNull(nama_aktivitas_spesifik, \'\')) AS spesifik, any(ifNull(nama_aktivitas, \'\')) AS aktivitas,
@@ -106,10 +106,49 @@ GROUP BY id_hira_master', 60);
                     'perusahaan' => trim((string) $r['perusahaan']), 'site' => is_array($situs) ? array_values(array_map('strval', $situs)) : [],
                     'aktif' => (string) $r['aktif'] === '1', 'rutin' => (string) $r['rutin'], 'diperbarui' => (string) $r['diperbarui'],
                     'bahaya' => array_values(array_map('strval', (array) $r['bahaya'])),
+                    'kosong' => false,
                 ];
             }
+            $sisa = array_values(array_diff($idh, array_keys($peta)));
 
-            return $peta;
+            return $peta + $this->dokumenKosong($sisa);
         });
+    }
+
+    /**
+     * Dokumen yang tidak ada di mv_hira_master: view itu hanya memuat HIRA yang punya isi (bahaya / site). Header-nya
+     * tetap diambil dari tabel mentah hira_master agar terlihat dokumennya ada tetapi kosong. Rantai aktivitas
+     * hira_activity: spesifik → parent = sub aktivitas → parent = aktivitas (sama dengan kolom mv_hira_master).
+     *
+     * @param  list<int>  $idh
+     * @return array<int, array<string, mixed>>
+     */
+    private function dokumenKosong(array $idh): array
+    {
+        if ($idh === []) {
+            return [];
+        }
+        $rows = $this->ch->select('
+SELECT h.id AS idh, any(ifNull(h.rev, 0)) AS rev, any(ifNull(d.name, \'\')) AS dept, any(ifNull(a.name, \'\')) AS spesifik,
+       any(ifNull(a2.name, \'\')) AS sub, any(ifNull(a3.name, \'\')) AS aktivitas, any(ifNull(h.is_active, \'\')) AS aktif,
+       any(ifNull(toString(toDate(h.updated_date)), \'\')) AS diperbarui
+FROM obds.hira_master h
+LEFT JOIN obds.hira_department d ON d.id = h.hira_dept_id
+LEFT JOIN obds.hira_activity a ON a.id = h.hira_activity_id
+LEFT JOIN obds.hira_activity a2 ON a2.id = a.parent_id
+LEFT JOIN obds.hira_activity a3 ON a3.id = a2.parent_id
+WHERE h.id IN ('.implode(', ', $idh).')
+GROUP BY h.id', 60);
+        $peta = [];
+        foreach ($rows as $r) {
+            $peta[(int) $r['idh']] = [
+                'rev' => (int) $r['rev'], 'dept' => trim((string) $r['dept']), 'spesifik' => trim((string) $r['spesifik']),
+                'aktivitas' => trim((string) $r['aktivitas']), 'sub' => trim((string) $r['sub']), 'bagian' => '', 'perusahaan' => '',
+                'site' => [], 'aktif' => (string) $r['aktif'] === '1', 'rutin' => '', 'diperbarui' => (string) $r['diperbarui'],
+                'bahaya' => [], 'kosong' => true,
+            ];
+        }
+
+        return $peta;
     }
 }

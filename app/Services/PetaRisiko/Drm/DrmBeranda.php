@@ -307,7 +307,7 @@ class DrmBeranda
 
         return [
             // Daftar baris per status untuk modal kartu KPI (hanya ringkasan unik; lihat rincianBaris).
-            ...($rincian ? ['rincian' => self::rincianBaris($unik, $unikGrup, $hira)] : []),
+            ...($rincian ? ['rincian' => self::rincianBaris($unik, $unikGrup, $hira, $pita)] : []),
             'w' => $w,
             'kel' => $kelW,
             'grp' => $grpW,
@@ -400,8 +400,10 @@ class DrmBeranda
      *
      * @return array{u: list<list<int|string>>, g: list<list<int|string>>}
      */
-    private static function rincianBaris(array $unik, array $unikGrup, array $hira): array
+    private static function rincianBaris(array $unik, array $unikGrup, array $hira, bool $pita = false): array
     {
+        // Kategori (1 terkontrol penuh … 4) per minggu, aturan sama dengan kartu & matriks 5x5 (final = residual bila 1).
+        $kat = fn (array $w) => implode('', array_map(fn ($st) => (string) self::nilai($st, $pita)[0], $w));
         $kode = fn (array $w) => implode('', array_map(fn ($st) => $st[2] > 0 ? 'G' : ($st[1] > 0 ? 'K' : 'T'), $w));
         $gap = fn (array $w) => implode('', array_map(fn ($st) => dechex(($st[3] >> 2) & 0xF), $w));
         $vol = function (array $v): string {
@@ -420,10 +422,10 @@ class DrmBeranda
         $u = $g = [];
         foreach ($unik as $ku => $x) {
             $hid = substr($ku, strpos($ku, '|') + 1);
-            $u[] = [$x['kel'], $hid, $x['lv'], $x['inc'], $turun($hid), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
+            $u[] = [$x['kel'], $hid, $x['lv'], $x['inc'], $turun($hid), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? []), $kat($x['w'])];
         }
         foreach ($unikGrup as $x) {
-            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], $x['inc'], $turun($x['hid']), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? [])];
+            $g[] = [$x['grp'], $x['kel'], $x['hid'], $x['lv'], $x['inc'], $turun($x['hid']), $kode($x['w']), $gap($x['w']), $vol($x['v'] ?? []), $kat($x['w'])];
         }
 
         return ['u' => $u, 'g' => $g];
@@ -522,7 +524,8 @@ class DrmBeranda
     }
 
     /** Indeks sel matriks 5x5 (baris = kekerapan Hampir Pasti → Langka, kolom = konsekuensi), null bila tidak dikenal. */
-    private static function sel(string $kekerapan, string $konsekuensi): ?int
+    /** Indeks sel matriks 5x5 (kekerapan × 5 + konsekuensi), null bila nilai HIRA tidak dikenal. */
+    public static function sel(string $kekerapan, string $konsekuensi): ?int
     {
         $i = array_search($kekerapan, DrmSnapshotBuilder::KEKERAPAN, true);
         $j = array_search($konsekuensi, DrmSnapshotBuilder::KONSEKUENSI, true);

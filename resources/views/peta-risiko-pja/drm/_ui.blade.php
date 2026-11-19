@@ -34,6 +34,8 @@
   .dr-mx .z0 { background: #eef8f0; color: #15803d; } .dr-mx .z1 { background: #fef8e1; color: #92650a; }
   .dr-mx .z2 { background: #fff0e3; color: #b45309; } .dr-mx .z3 { background: #fdecee; color: #b91c1c; }
   .dr-mx td.nol { color: #c4c8cc; font-weight: 500; }
+  .dr-mx td.klik { cursor: pointer; }
+  .dr-mx td.klik:focus-visible { outline: 2px solid #3952bc; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { .dr-mx td { transition: none; } .dr-mx td:hover { transform: none; } }
   .dr-mx h4, .dr-h4 { margin: 0 0 8px; font: 700 14px/1.2 "Plus Jakarta Sans", sans-serif; }
 
@@ -118,9 +120,11 @@
     // Zona warna per sel (0 hijau … 3 merah); baris = kekerapan (Hampir Pasti → Langka), kolom = konsekuensi.
     ZONA: [[0, 1, 2, 3, 3], [0, 1, 2, 3, 3], [0, 0, 1, 2, 3], [0, 0, 1, 2, 3], [0, 0, 0, 1, 2]],
     zona(i, j) { return this.ZONA[i][j]; },
-    matriks(judul, m, meta) {
+    // jenis ('a' awal / 'f' final) opsional: sel bernilai > 0 jadi tombol (data-mx, data-sel = i × 5 + j) untuk daftar bahayanya.
+    matriks(judul, m, meta, jenis) {
       const head = meta.konsekuensi.map((k) => `<th>${k}</th>`).join('');
-      const rows = meta.kekerapan.map((k, i) => `<tr><th scope="row">${k}</th>${m[i].map((v, j) => `<td class="z${this.zona(i, j)}${v ? '' : ' nol'}" title="${k} × ${meta.konsekuensi[j]}: ${this.fmt(v)}">${this.fmt(v)}</td>`).join('')}</tr>`).join('');
+      const klik = (i, j, v, k) => (jenis && v ? ` data-mx="${jenis}" data-sel="${i * 5 + j}" role="button" tabindex="0" aria-haspopup="dialog" aria-label="${k} × ${meta.konsekuensi[j]}: ${this.fmt(v)} bahaya-risiko, lihat daftar"` : '');
+      const rows = meta.kekerapan.map((k, i) => `<tr><th scope="row">${k}</th>${m[i].map((v, j) => `<td class="z${this.zona(i, j)}${v ? '' : ' nol'}${jenis && v ? ' klik' : ''}" title="${k} × ${meta.konsekuensi[j]}: ${this.fmt(v)}"${klik(i, j, v, k)}>${this.fmt(v)}</td>`).join('')}</tr>`).join('');
       return `<div><h4 class="dr-h4">${judul}</h4><table class="dr-mx"><thead><tr><th class="dr-mx-sudut">Kemungkinan ↓<br>Konsekuensi →</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
     },
     kpiCards(kpi) {

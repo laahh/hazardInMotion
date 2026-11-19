@@ -156,9 +156,19 @@ class DrmSnapshotBuilderTest extends TestCase
         $rincian = $snap['pja']['10']['beranda']['rincian'];
         $mgmt = $snap['meta']['beranda']['mgmt'][0];
 
-        // Satu baris per kelompok × bahaya di detail lokasi PJA ini: [kel, hid, level, inc, tr, kode minggu, gap, vol].
+        // Satu baris per kelompok × bahaya di detail lokasi PJA ini: [kel, hid, level, inc, tr, kode minggu, gap, vol, kategori minggu].
         $this->assertNotEmpty($rincian);
-        $this->assertCount(8, $rincian[0]);
+        $this->assertCount(9, $rincian[0]);
+        // Kategori per minggu (1 terkontrol penuh … 4), satu digit per minggu seperti kode status.
+        $this->assertMatchesRegularExpression('/^[1-4]+$/', $rincian[0][8]);
+        $this->assertSame(strlen($rincian[0][5]), strlen($rincian[0][8]));
+        // Teks rincian membawa sel matriks risiko awal & residual (indeks kekerapan × 5 + konsekuensi, -1 bila tak dikenal).
+        foreach ((array) $snap['rincian']['teks'] as $t) {
+            $this->assertCount(10, $t);
+            $this->assertTrue(is_int($t[8]) && $t[8] >= -1 && $t[8] < 25 && is_int($t[9]) && $t[9] >= -1 && $t[9] < 25);
+        }
+        // Fixture hid 1: awal Mungkin (2) × Minor (1) = 11, residual Langka (4) × Minor (1) = 21.
+        $this->assertSame([11, 21], array_slice(((array) $snap['rincian']['teks'])['1'], 8, 2));
         $this->assertEqualsCanonicalizing(['1', '2', '3'], array_unique(array_map(fn ($r) => (string) $r[1], $rincian)));
         // Jumlah baris rincian = total baris ringkasan PJA (semua level, minggu 0), dan meta tidak ikut membawa rincian.
         $total = array_sum(array_map(fn ($v) => $v[0], $mgmt['w'][0]));
