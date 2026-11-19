@@ -87,6 +87,33 @@ class DrmAlurEditTest extends TestCase
         $svc->pjaLokasiUbah('BMO 1', 'Workshop', 'PJA Salah Ketik', true);
     }
 
+    public function test_label_ganti_dan_hapus_di_semua_bahaya(): void
+    {
+        $svc = app(DrmAlurEdit::class);
+        // ri 2 memakai label yang sama dengan ejaan berbeda, ditambah label lain.
+        DB::table('drm_master_baris')->where('ri', 2)->update(['item_sumber_ketidaksesuaian' => "bahaya  MEKANIKAL / terjepit\nKebakaran / Api"]);
+
+        $l = $svc->simpul('ket', 'Bahaya Mekanikal / Terjepit');
+        $this->assertSame([1, 2], array_column($l['baris'], 'ri'));
+
+        $this->assertSame('Label diganti di 2 bahaya-risiko.', $svc->gantiLabel('KET', 'Bahaya Mekanikal / Terjepit', 'Bahaya Mekanikal / Terjepit Mesin'));
+        $this->assertSame(['Bahaya Mekanikal / Terjepit Mesin', 'Kebakaran / Api'], $svc->simpul('bahaya', '2')['label']['KET']);
+        $this->assertSame([], $svc->simpul('ket', 'Bahaya Mekanikal / Terjepit')['baris']);
+
+        // Ganti ke label yang sudah ada di baris → tidak digandakan.
+        $svc->gantiLabel('KET', 'Kebakaran / Api', 'Bahaya Mekanikal / Terjepit Mesin');
+        $this->assertSame(['Bahaya Mekanikal / Terjepit Mesin'], $svc->simpul('bahaya', '2')['label']['KET']);
+
+        $this->assertSame('Label dihapus dari 2 bahaya-risiko.', $svc->hapusLabelSemua('KET', 'bahaya mekanikal / terjepit mesin'));
+        $this->assertSame([], $svc->simpul('bahaya', '1')['label']['KET']);
+
+        // Label lama tanpa format "k / sk" tetap bisa dilepas, tapi tidak bisa ditambahkan.
+        DB::table('drm_master_baris')->where('ri', 1)->update(['item_sumber_ketidaksesuaian' => 'Label lama tanpa garis miring']);
+        $this->assertSame('Label dilepas.', $svc->label(1, 'KET', 'Label lama tanpa garis miring', false));
+        $this->expectException(InvalidArgumentException::class);
+        $svc->gantiLabel('KET', 'x / y', 'tanpa format');
+    }
+
     private function isi(): void
     {
         DB::table('drm_master_kelompok')->insert([['kode' => 'K5', 'nama' => 'CPP', 'regex' => '', 'urutan' => 5], ['kode' => 'K10', 'nama' => 'Perawatan', 'regex' => '', 'urutan' => 10]]);

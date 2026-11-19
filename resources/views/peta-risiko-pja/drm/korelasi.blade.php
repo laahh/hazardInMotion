@@ -442,7 +442,6 @@
     simpulEdit = n;
     // Simpul yang diedit di halaman lain / lewat simpul lain.
     if (n.jenis === 'grup') { isi.innerHTML = `<p style="margin:0">Isi grup lokasi (aktivitas & bahaya yang berlaku) diedit di halaman master grup.</p><div class="al-baris"><a class="al-btn" href="${URL_GRUP}?gid=${encodeURIComponent(n.id)}">Buka master Grup lokasi &amp; aktivitas</a></div><p class="pr-meta" style="margin:0">Untuk menambah / mengeluarkan satu bahaya dari grup ini, klik kotak bahaya-risikonya.</p>`; return; }
-    if (['obs', 'oak', 'ket'].includes(n.jenis)) { isi.innerHTML = '<p style="margin:0">Label SAP ditambah atau dilepas per bahaya-risiko. Klik kotak bahaya-risiko yang terhubung dengan label ini untuk mengeditnya.</p>'; return; }
     if (n.jenis === 'pja') { isi.innerHTML = '<p style="margin:0">PJA penanggung jawab diatur per lokasi. Klik kotak detail lokasi untuk menambah atau melepas PJA-nya.</p>'; return; }
     if (n.jenis === 'kelompok') { isi.innerHTML = '<p style="margin:0">Kelompok aktivitas diubah dari kotak aktivitas HIRA.</p>'; return; }
     isi.innerHTML = '<p class="pr-meta" style="margin:0">Memuat…</p>';
@@ -483,6 +482,7 @@
         + `<div class="al-bagian"><h4>Grup lokasi (M05)</h4><div class="al-baris">${d.grup.map((g) => chip(g.nama, { aksi: 'grup', gid: g.gid })).join('') || '<span class="pr-meta">Belum masuk grup mana pun (tidak masuk baseline)</span>'}</div>
           <form data-aksi="grup" class="al-baris">${pilih('gid', grup.filter(([g]) => !d.grup.some((x) => x.gid === g)), '')}<button class="al-btn sek" type="submit">+ Tambah ke grup</button></form></div>`;
     }
+    if (['obs', 'oak', 'ket'].includes(jenis)) return formLabel(d);
     // detail lokasi
     return `<form data-aksi="dl" class="al-bagian" style="border:0;padding:0"><p class="pr-meta" style="margin:0">${esc(d.site)} · ${esc(d.lokasi)} · <b>${esc(d.detail)}</b></p>
         <div class="al-baris"><label class="al-f">Grup lokasi${pilih('gid', grup, d.gid)}</label>
@@ -493,6 +493,23 @@
         <form data-aksi="pja" class="al-baris"><input name="teks" list="al-daftar-pja" placeholder="Pilih nama PJA…" style="flex:1;min-width:220px;padding:7px 10px;border:1px solid rgba(171,173,175,.55);border-radius:10px"><button class="al-btn sek" type="submit">+ Tambah PJA</button></form>
         <datalist id="al-daftar-pja">${o.pja.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
         <p class="pr-meta" style="margin:0">PJA berlaku untuk semua ${d.dlSeLokasi} detail lokasi di ${esc(d.site)} · ${esc(d.lokasi)}.</p></div>`;
+  }
+
+  /** Modal Label SAP: ganti nama (semua bahaya), daftar bahaya pemakai (× lepas), tambah ke bahaya lain di diagram, hapus semua. */
+  function formLabel(d) {
+    const NAMA = { OBS: 'Observasi', OAK: 'OAK', KET: 'Ketidaksesuaian' };
+    if (!d.labelDiBaris) return '<div class="al-msg err">Label per baris belum aktif di master.</div>';
+    const dipakai = new Set(d.baris.map((b) => String(b.ri)));
+    const kandidat = (D ? D.node : []).filter((x) => x.jenis === 'bahaya' && !dipakai.has(String(x.id)));
+    return `<form data-aksi="labelganti" class="al-bagian" style="border:0;padding:0"><label class="al-f">Teks label ${NAMA[d.jenis]}<input name="teks" maxlength="500" required value="${esc(d.teks)}"></label>
+        <p class="pr-meta" style="margin:0">Mengganti teks berlaku untuk ${d.baris.length} bahaya-risiko yang memakai label ini.${d.jenis === 'KET' ? ' Format: Ketidaksesuaian / Sub ketidaksesuaian.' : ''} Teks harus sama dengan isian di laporan SAP supaya tertangkap.</p>
+        <div class="al-baris"><button class="al-btn" type="submit">Simpan teks label</button></div></form>
+      <div class="al-bagian"><h4>Dipakai di bahaya-risiko (${d.baris.length})</h4><div style="display:grid;gap:6px;max-height:260px;overflow:auto">${d.baris.map((b) =>
+        `<div class="al-baris" style="justify-content:space-between;gap:8px"><span style="font-size:13px"><b>${esc(b.bahaya)}</b><br><span class="pr-meta">${esc(b.aktivitas)} · ${esc(b.sub || '-')} · ${esc(b.kb || '-')}</span></span>${chip('Lepas', { aksi: 'label', id: String(b.ri), jenis: d.jenis, teks: d.teks })}</div>`).join('') || '<span class="pr-meta">Belum dipakai bahaya mana pun.</span>'}</div></div>
+      <div class="al-bagian"><h4>Tambahkan ke bahaya-risiko lain</h4>
+        <form data-aksi="labeltambah" class="al-baris">${kandidat.length ? pilih('ri', kandidat.map((x) => [x.id, potong(x.label, 70)]), '') : '<span class="pr-meta">Semua bahaya di diagram ini sudah memakai label ini.</span>'}${kandidat.length ? '<button class="al-btn sek" type="submit">+ Tambahkan</button>' : ''}</form>
+        <p class="pr-meta" style="margin:0">Pilihan diambil dari bahaya-risiko yang tampil di diagram saat ini.</p></div>
+      <div class="al-bagian"><button type="button" class="al-btn" id="al-label-hapus" style="background:#b42318;justify-self:start">Hapus label dari semua bahaya (${d.baris.length})</button></div>`;
   }
 
   function pasangForm(isi, n, d) {
@@ -509,13 +526,22 @@
         if (String(fd.get('gid')) !== String(d.gid) && !confirm('Pindahkan detail lokasi ini ke grup lain? Baseline-nya akan diganti dengan baris HIRA grup tujuan.')) return;
       }
       if (aksi === 'pja') Object.assign(data, { teks: fd.get('teks'), tambah: 1 });
+      if (aksi === 'labelganti') Object.assign(data, { jenis: d.jenis, teks: fd.get('teks') });
+      if (aksi === 'labeltambah') { if (!fd.get('ri')) return; Object.assign(data, { aksi: 'label', id: String(fd.get('ri')), jenis: d.jenis, teks: d.teks, tambah: 1 }); }
+      if (aksi === 'labelganti' && !String(data.teks || '').trim()) return;
       if ((aksi === 'label' || aksi === 'pja') && !String(data.teks || '').trim()) return;
       kirim(data, n);
     }));
+    const hapus = isi.querySelector('#al-label-hapus');
+    if (hapus) hapus.addEventListener('click', () => {
+      if (!confirm(`Hapus label ini dari ${d.baris.length} bahaya-risiko? Laporan SAP berlabel ini tidak akan lagi menangkap bahaya tersebut.`)) return;
+      kirim({ aksi: 'labelhapus', id: n.id, jenis: d.jenis }, n);
+    });
     isi.querySelectorAll('[data-lepas]').forEach((b) => b.addEventListener('click', () => {
       const x = JSON.parse(b.dataset.lepas);
       if (!confirm('Lepas hubungan ini dari master?')) return;
-      kirim({ ...x, id: n.id, tambah: 0 }, n);
+      // id dari tombol (mis. id bahaya di modal label) diutamakan, selain itu id simpul yang diedit.
+      kirim({ id: n.id, ...x, tambah: 0 }, n);
     }));
   }
 
@@ -527,6 +553,8 @@
       if (!r.ok) throw new Error(j.pesan || (j.errors ? Object.values(j.errors).flat().join(' ') : j.message) || `HTTP ${r.status}`);
       $('al-sync').hidden = false;
       // Ganti nama sub mengubah id simpulnya ("aid|nama sub").
+      // Ganti teks label mengubah id simpul label (id = teks).
+      if (data.aksi === 'labelganti') n = { ...n, id: String(data.teks || '').trim().replace(/\s+/g, ' '), label: String(data.teks || '').trim() };
       if (data.aksi === 'sub') n = { ...n, id: `${String(n.id).split('|')[0]}|${String(data.nama || '').trim()}`, label: String(data.nama || '').trim() || '(tanpa sub aktivitas)' };
       // Gambar ulang alur dari master, lalu isi ulang modal dengan nilai terbaru.
       const x = jejak[jejak.length - 1];

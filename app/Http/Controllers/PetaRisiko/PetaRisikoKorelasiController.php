@@ -56,7 +56,7 @@ final class PetaRisikoKorelasiController extends Controller
     public function simpul(Request $request): JsonResponse
     {
         abort_unless(DrmMasterDb::terisi() && $this->bolehUbah($request), 403);
-        $v = $request->validate(['jenis' => ['required', 'in:aktivitas,sub,bahaya,dl'], 'id' => ['required', 'string', 'max:600']]);
+        $v = $request->validate(['jenis' => ['required', 'in:aktivitas,sub,bahaya,dl,obs,oak,ket'], 'id' => ['required', 'string', 'max:600']]);
         try {
             return response()->json(['data' => $this->edit->simpul($v['jenis'], $v['id']), 'opsi' => $this->edit->opsi()]);
         } catch (InvalidArgumentException $e) {
@@ -70,7 +70,7 @@ final class PetaRisikoKorelasiController extends Controller
         abort_unless(DrmMasterDb::terisi(), 404);
         abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
         $v = $request->validate([
-            'aksi' => ['required', 'in:aktivitas,sub,bahaya,label,grup,dl,pja'],
+            'aksi' => ['required', 'in:aktivitas,sub,bahaya,label,labelganti,labelhapus,grup,dl,pja'],
             'id' => ['required', 'string', 'max:600'],
             'nama' => ['nullable', 'string', 'max:500'],
             'kelompok' => ['nullable', 'string', 'max:10'],
@@ -90,6 +90,9 @@ final class PetaRisikoKorelasiController extends Controller
                 'sub' => $this->edit->ubahSub($id, (string) ($v['nama'] ?? '')),
                 'bahaya' => $this->edit->ubahBahaya((int) $id, (string) ($v['bahaya'] ?? ''), (string) ($v['kb'] ?? ''), (bool) ($v['aktif'] ?? false)),
                 'label' => $this->edit->label((int) $id, (string) ($v['jenis'] ?? ''), (string) ($v['teks'] ?? ''), $tambah),
+                // id = teks label lama (simpul label di alur).
+                'labelganti' => $this->edit->gantiLabel((string) ($v['jenis'] ?? ''), $id, (string) ($v['teks'] ?? '')),
+                'labelhapus' => $this->edit->hapusLabelSemua((string) ($v['jenis'] ?? ''), $id),
                 'grup' => $this->edit->grupBaris((int) $id, (int) ($v['gid'] ?? 0), $tambah),
                 'dl' => $this->edit->ubahDl((int) $id, (int) ($v['gid'] ?? 0), (bool) ($v['aktif'] ?? false)),
                 'pja' => $this->pja($id, (string) ($v['teks'] ?? ''), $tambah),

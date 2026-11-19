@@ -33,8 +33,107 @@ final class DrmAlurEdit
             'sub' => $this->bacaSub($id),
             'bahaya' => $this->bacaBahaya((int) $id),
             'dl' => $this->bacaDl((int) $id),
+            'obs', 'oak', 'ket' => $this->bacaLabel(strtoupper($jenis), $id),
             default => throw new InvalidArgumentException('Simpul ini tidak diedit dari sini.'),
         };
+    }
+
+    /** Label SAP: bahaya-risiko yang memakainya (normalisasi sama dengan sync). */
+    private function bacaLabel(string $jenis, string $teks): array
+    {
+        $baris = $this->barisDenganLabel($jenis, $teks);
+
+        return ['jenis' => $jenis, 'teks' => $teks, 'labelDiBaris' => DrmMasterDb::labelDiBaris(),
+            'baris' => array_map(fn ($b) => ['ri' => (int) $b->ri, 'aktivitas' => (string) $b->aktivitas, 'sub' => (string) $b->sub, 'bahaya' => (string) $b->bahaya, 'kb' => (string) $b->kb], $baris)];
+    }
+
+    /**
+     * Ganti teks satu label di SEMUA baris yang memakainya (mis. membetulkan salah ketik).
+     * Baris yang sudah memuat label baru tidak digandakan.
+     */
+    public function gantiLabel(string $jenis, string $lama, string $baru): string
+    {
+        $baru = $this->rapikanLabel($jenis, $baru);
+        if ($this->kunciLabel($jenis, $lama) === $this->kunciLabel($jenis, $baru) && trim($lama) === $baru) {
+            return 'Tidak ada perubahan.';
+        }
+        $kolom = DrmMasterDb::KOLOM_LABEL[$jenis];
+
+        return DB::transaction(function () use ($jenis, $lama, $baru, $kolom) {
+            $n = 0;
+            foreach ($this->barisDenganLabel($jenis, $lama) as $b) {
+                $ada = DrmMasterDb::pisahLabel($b->{$kolom});
+                $hasil = [];
+                foreach ($ada as $l) {
+                    $l = $this->kunciLabel($jenis, $l) === $this->kunciLabel($jenis, $lama) ? $baru : $l;
+                    if (! in_array($this->kunciLabel($jenis, $l), array_map(fn ($x) => $this->kunciLabel($jenis, $x), $hasil), true)) {
+                        $hasil[] = $l;
+                    }
+                }
+                DB::table('drm_master_baris')->where('ri', $b->ri)->update([$kolom => implode("\n", $hasil), 'diubah_oleh' => $this->user(), 'updated_at' => now()]);
+                $this->db->catat('drm_master_baris', (string) $b->ri, 'ubah', [$kolom => $b->{$kolom}], [$kolom => implode("\n", $hasil)]);
+                $n++;
+            }
+            if ($n === 0) {
+                throw new InvalidArgumentException('Label tidak ditemukan di baris mana pun.');
+            }
+
+            return "Label diganti di {$n} bahaya-risiko.";
+        });
+    }
+
+    /** Hapus satu label dari SEMUA baris yang memakainya. */
+    public function hapusLabelSemua(string $jenis, string $teks): string
+    {
+        $kolom = $this->kolomLabel($jenis);
+        $kunci = $this->kunciLabel($jenis, $teks);
+
+        return DB::transaction(function () use ($jenis, $teks, $kolom, $kunci) {
+            $n = 0;
+            foreach ($this->barisDenganLabel($jenis, $teks) as $b) {
+                $sisa = array_values(array_filter(DrmMasterDb::pisahLabel($b->{$kolom}), fn ($l) => $this->kunciLabel($jenis, $l) !== $kunci));
+                DB::table('drm_master_baris')->where('ri', $b->ri)->update([$kolom => implode("\n", $sisa), 'diubah_oleh' => $this->user(), 'updated_at' => now()]);
+                $this->db->catat('drm_master_baris', (string) $b->ri, 'ubah', [$kolom => $b->{$kolom}], [$kolom => implode("\n", $sisa)]);
+                $n++;
+            }
+
+            return $n ? "Label dihapus dari {$n} bahaya-risiko." : 'Label tidak ditemukan di baris mana pun.';
+        });
+    }
+
+    /** @return list<object> baris yang memuat label (saring kasar LIKE kata terpanjang, lalu cocok persis ternormalisasi). */
+    private function barisDenganLabel(string $jenis, string $teks): array
+    {
+        $kolom = $this->kolomLabel($jenis);
+        $kunci = $this->kunciLabel($jenis, $teks);
+        $kata = collect(preg_split('/\W+/u', $teks))->sortByDesc(fn ($k) => mb_strlen($k))->first() ?: $teks;
+
+        return DB::table('drm_master_baris')->where($kolom, 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $kata).'%')->orderBy('aktivitas')->orderBy('ri')->get()
+            ->filter(fn ($b) => collect(DrmMasterDb::pisahLabel($b->{$kolom}))->contains(fn ($l) => $this->kunciLabel($jenis, $l) === $kunci))->values()->all();
+    }
+
+    private function kolomLabel(string $jenis): string
+    {
+        if (! isset(DrmMasterDb::KOLOM_LABEL[$jenis]) || ! DrmMasterDb::labelDiBaris()) {
+            throw new InvalidArgumentException('Label per baris belum aktif di master.');
+        }
+
+        return DrmMasterDb::KOLOM_LABEL[$jenis];
+    }
+
+    /** Teks label dirapikan + divalidasi (dipakai tambah & ganti). */
+    private function rapikanLabel(string $jenis, string $teks): string
+    {
+        $this->kolomLabel($jenis);
+        $teks = trim(preg_replace('/\s+/u', ' ', $teks) ?? $teks);
+        if ($teks === '' || mb_strlen($teks) > 500) {
+            throw new InvalidArgumentException('Teks label wajib diisi (maks 500 karakter).');
+        }
+        if ($jenis === 'KET' && ! str_contains($teks, ' / ')) {
+            throw new InvalidArgumentException('Label Ketidaksesuaian ditulis "Ketidaksesuaian / Sub ketidaksesuaian".');
+        }
+
+        return $teks;
     }
 
     /** Pilihan untuk isian modal: kelompok, grup lokasi, nama PJA yang dikenal. */
@@ -164,17 +263,9 @@ final class DrmAlurEdit
     /** Tambah / lepas satu label SAP (OBS / OAK / KET) di satu baris; dicocokkan dengan normalisasi yang sama dengan sync. */
     public function label(int $ri, string $jenis, string $teks, bool $tambah): string
     {
-        if (! isset(DrmMasterDb::KOLOM_LABEL[$jenis]) || ! DrmMasterDb::labelDiBaris()) {
-            throw new InvalidArgumentException('Label per baris belum aktif di master.');
-        }
-        $teks = trim(preg_replace('/\s+/u', ' ', $teks) ?? $teks);
-        if ($teks === '' || mb_strlen($teks) > 500) {
-            throw new InvalidArgumentException('Teks label wajib diisi (maks 500 karakter).');
-        }
-        if ($jenis === 'KET' && ! str_contains($teks, ' / ')) {
-            throw new InvalidArgumentException('Label Ketidaksesuaian ditulis "Ketidaksesuaian / Sub ketidaksesuaian".');
-        }
-        $kolom = DrmMasterDb::KOLOM_LABEL[$jenis];
+        // Format hanya diwajibkan saat menambah; label lama yang tidak rapi tetap bisa dilepas.
+        $teks = $tambah ? $this->rapikanLabel($jenis, $teks) : trim($teks);
+        $kolom = $this->kolomLabel($jenis);
 
         return DB::transaction(function () use ($ri, $jenis, $teks, $tambah, $kolom) {
             $b = DB::table('drm_master_baris')->where('ri', $ri)->lockForUpdate()->first() ?? throw new InvalidArgumentException('Baris HIRA tidak ditemukan.');
