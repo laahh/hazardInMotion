@@ -6,6 +6,7 @@ namespace App\Http\Controllers\PetaRisiko;
 
 use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmKorelasi;
+use App\Services\PetaRisiko\Drm\Master\DrmAlurEdit;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -14,11 +15,11 @@ use InvalidArgumentException;
 
 /**
  * Alur baseline DRM 2.1 (/peta-risiko-pja/korelasi): aktivitas → sub aktivitas → bahaya-risiko → label SAP →
- * grup lokasi → detail lokasi → PJA, dalam mode fokus (satu simpul menentukan cakupan alur).
+ * grup lokasi → detail lokasi → PJA, dalam mode fokus. Editor master bisa mengubah master lewat modal per simpul.
  */
 final class PetaRisikoKorelasiController extends Controller
 {
-    public function __construct(private readonly DrmKorelasi $korelasi)
+    public function __construct(private readonly DrmKorelasi $korelasi, private readonly DrmAlurEdit $edit)
     {
     }
 
@@ -29,7 +30,7 @@ final class PetaRisikoKorelasiController extends Controller
         $id = (string) $request->query('id', '');
         $awal = $siap && in_array($jenis, DrmKorelasi::JENIS, true) && $id !== '' ? ['jenis' => $jenis, 'id' => $id] : ($siap ? $this->korelasi->pusatBawaan() : null);
 
-        return view('peta-risiko-pja.drm.korelasi', ['siap' => $siap, 'awal' => $awal]);
+        return view('peta-risiko-pja.drm.korelasi', ['siap' => $siap, 'awal' => $awal, 'bolehUbah' => $this->bolehUbah($request)]);
     }
 
     public function data(Request $request): JsonResponse
@@ -49,5 +50,71 @@ final class PetaRisikoKorelasiController extends Controller
         $v = $request->validate(['q' => ['required', 'string', 'min:2', 'max:100']]);
 
         return response()->json(['hasil' => $this->korelasi->cari($v['q'])]);
+    }
+
+    /** Isi modal edit satu simpul (nilai sekarang + pilihan). */
+    public function simpul(Request $request): JsonResponse
+    {
+        abort_unless(DrmMasterDb::terisi() && $this->bolehUbah($request), 403);
+        $v = $request->validate(['jenis' => ['required', 'in:aktivitas,sub,bahaya,dl'], 'id' => ['required', 'string', 'max:600']]);
+        try {
+            return response()->json(['data' => $this->edit->simpul($v['jenis'], $v['id']), 'opsi' => $this->edit->opsi()]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['pesan' => $e->getMessage()], 404);
+        }
+    }
+
+    /** Simpan satu perubahan dari modal. */
+    public function simpan(Request $request): JsonResponse
+    {
+        abort_unless(DrmMasterDb::terisi(), 404);
+        abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
+        $v = $request->validate([
+            'aksi' => ['required', 'in:aktivitas,sub,bahaya,label,grup,dl,pja'],
+            'id' => ['required', 'string', 'max:600'],
+            'nama' => ['nullable', 'string', 'max:500'],
+            'kelompok' => ['nullable', 'string', 'max:10'],
+            'bahaya' => ['nullable', 'string', 'max:1000'],
+            'kb' => ['nullable', 'string', 'max:20'],
+            'aktif' => ['nullable', 'boolean'],
+            'jenis' => ['nullable', 'in:OBS,OAK,KET'],
+            'teks' => ['nullable', 'string', 'max:500'],
+            'gid' => ['nullable', 'integer'],
+            'tambah' => ['nullable', 'boolean'],
+        ]);
+        $id = $v['id'];
+        $tambah = (bool) ($v['tambah'] ?? false);
+        try {
+            $pesan = match ($v['aksi']) {
+                'aktivitas' => $this->edit->ubahAktivitas((int) $id, (string) ($v['nama'] ?? ''), (string) ($v['kelompok'] ?? '')),
+                'sub' => $this->edit->ubahSub($id, (string) ($v['nama'] ?? '')),
+                'bahaya' => $this->edit->ubahBahaya((int) $id, (string) ($v['bahaya'] ?? ''), (string) ($v['kb'] ?? ''), (bool) ($v['aktif'] ?? false)),
+                'label' => $this->edit->label((int) $id, (string) ($v['jenis'] ?? ''), (string) ($v['teks'] ?? ''), $tambah),
+                'grup' => $this->edit->grupBaris((int) $id, (int) ($v['gid'] ?? 0), $tambah),
+                'dl' => $this->edit->ubahDl((int) $id, (int) ($v['gid'] ?? 0), (bool) ($v['aktif'] ?? false)),
+                'pja' => $this->pja($id, (string) ($v['teks'] ?? ''), $tambah),
+            };
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['pesan' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['pesan' => $pesan.' Berlaku setelah peta-risiko:sync berikutnya.']);
+    }
+
+    /** PJA per lokasi; id = id detail lokasi (site + lokasi diambil dari master). */
+    private function pja(string $idDl, string $nama, bool $tambah): string
+    {
+        $d = $this->edit->simpul('dl', $idDl);
+
+        return $this->edit->pjaLokasiUbah($d['site'], $d['lokasi'], $nama, $tambah);
+    }
+
+    private function bolehUbah(Request $request): bool
+    {
+        $editor = (array) config('peta_risiko_drm.master.editor', []);
+        $user = $request->user();
+
+        return $user !== null && ($editor === [] || in_array((string) $user->getAuthIdentifier(), $editor, true)
+            || in_array((string) ($user->email ?? ''), $editor, true));
     }
 }

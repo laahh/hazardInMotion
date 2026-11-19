@@ -39,6 +39,8 @@ Route::prefix('peta-risiko-pja')
             Route::get('/', 'index')->name('index');
             Route::get('/data', 'data')->middleware('throttle:120,1')->name('data');
             Route::get('/cari', 'cari')->middleware('throttle:120,1')->name('cari');
+            Route::get('/simpul', 'simpul')->middleware('throttle:120,1')->name('simpul');
+            Route::post('/simpan', 'simpan')->middleware('throttle:60,1')->name('simpan');
         });
 
         // Master grup lokasi & aktivitas (M05 per aktivitas + kelompok aktivitas M02), didaftarkan sebelum /{tabel}.

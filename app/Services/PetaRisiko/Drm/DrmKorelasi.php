@@ -308,11 +308,12 @@ final class DrmKorelasi
         return $this->simpul('a:'.$aid, 'aktivitas', 0, (string) $aid, $nama, (string) ($this->namaKelompok[$kelompok] ?? $kelompok).($n !== null ? ' · '.$n.' bahaya di grup' : ''));
     }
 
+    /** id = "aid|teks sub persis" (dipakai modal edit untuk mengganti nama sub). */
     private function simpulSub(int $aid, string $sub): string
     {
-        $sub = trim($sub) === '' ? '(tanpa sub aktivitas)' : $sub;
+        $tampil = trim($sub) === '' ? '(tanpa sub aktivitas)' : $sub;
 
-        return $this->simpul('s:'.$aid.':'.md5(mb_strtolower($sub)), 'sub', 1, (string) $aid, $sub, 'Sub aktivitas');
+        return $this->simpul('s:'.$aid.':'.md5(mb_strtolower($sub)), 'sub', 1, $aid.'|'.$sub, $tampil, 'Sub aktivitas');
     }
 
     private function simpulBahaya(object $b): string

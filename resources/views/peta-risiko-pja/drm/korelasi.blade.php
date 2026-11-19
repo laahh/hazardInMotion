@@ -60,20 +60,53 @@
   .al-leg { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(171, 173, 175, .25); font-size: 12px; color: #595c5e; }
   .al-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: -1px; }
   .al-leg b { display: block; width: 100%; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #8a8d90; }
-  @media (max-width: 1100px) { .al-grid { grid-template-columns: 1fr; } .al-detail { position: static; } }
+  .al-edit-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .al-edit-btn[aria-pressed="true"] { background: #3952bc; color: #fff; border-color: #3952bc; }
+  .al-sync { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 12px; background: #fff7e6; color: #8a5300; border: 1px solid rgba(217, 119, 6, .25); font-size: 13px; margin-bottom: 10px; }
+  .al-mode-edit .al-n rect.kotak { stroke-dasharray: 4 3; }
+  .al-modal { width: min(680px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 0; box-shadow: 0 30px 80px rgba(15, 23, 42, .35); }
+  .al-modal::backdrop { background: rgba(15, 23, 42, .45); }
+  .al-modal header { display: flex; gap: 12px; align-items: flex-start; padding: 18px 20px 12px; border-bottom: 1px solid rgba(171, 173, 175, .3); }
+  .al-modal header h3 { margin: 0; font-size: 17px; line-height: 1.3; }
+  .al-modal header p { margin: 4px 0 0; font-size: 12.5px; color: #8a8d90; }
+  .al-modal header button { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: #8a8d90; }
+  .al-modal-isi { padding: 16px 20px 20px; max-height: 72vh; overflow: auto; display: grid; gap: 16px; }
+  .al-f { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: #595c5e; }
+  .al-f input, .al-f select, .al-f textarea { font: inherit; font-size: 14px; font-weight: 400; color: #1f2937; padding: 8px 10px; border: 1px solid rgba(171, 173, 175, .55); border-radius: 10px; }
+  .al-baris { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .al-bagian { border-top: 1px solid rgba(171, 173, 175, .25); padding-top: 14px; display: grid; gap: 8px; }
+  .al-bagian h4 { margin: 0; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: #595c5e; }
+  .al-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 10px; background: #f1f5f9; border: 1px solid #e2e8f0; font-size: 12.5px; max-width: 100%; }
+  .al-chip button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; font-size: 16px; line-height: 1; }
+  .al-chip button:hover { color: #b91c1c; }
+  .al-msg { font-size: 13px; padding: 8px 12px; border-radius: 10px; }
+  .al-msg.ok { background: #e9f7ee; color: #146c34; } .al-msg.err { background: #fdecef; color: #9b1c31; }
+  /* Mode perbesar: seluruh alat + diagram + rincian memenuhi layar (CSS, bukan Fullscreen API, agar modal edit tetap di atas). */
+  .al-wadah.penuh { position: fixed; inset: 0; z-index: 900; background: #f3f5f9; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 14px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; overflow: hidden; }
+  .al-wadah.penuh .al-grid { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .al-wadah.penuh .al-kanvas { max-height: none; height: 100%; }
+  .al-wadah.penuh .al-detail { position: static; height: 100%; overflow: auto; }
+  body.al-terkunci { overflow: hidden; }
+  @media (max-width: 1100px) { .al-grid { grid-template-columns: 1fr; } .al-detail { position: static; } .al-wadah.penuh .al-grid { grid-template-rows: minmax(0, 1fr) auto; } .al-wadah.penuh .al-detail { height: auto; max-height: 30vh; } }
   @media (prefers-reduced-motion: reduce) { .al-n, .al-e, .al-n rect.kotak { transition: none; } }
 </style>
 
 @if (! $siap)
   <div class="pr-card"><div class="pr-empty">Master database belum siap. Isi tabel master dulu (<code>php artisan peta-risiko:master-db --isi</code>).</div></div>
 @else
+  <div class="al-wadah" id="al-wadah">
   <div class="al-alat">
     <div class="al-cari-wrap">
       <input type="search" class="al-cari" id="al-cari" placeholder="Mulai dari aktivitas, bahaya, label SAP, grup lokasi, detail lokasi, atau PJA…" aria-label="Cari titik awal alur" autocomplete="off">
       <div class="al-hasil" id="al-hasil" hidden role="listbox" aria-label="Hasil pencarian"></div>
     </div>
     <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
+    @if ($bolehUbah)
+      <button type="button" class="al-edit-btn" id="al-edit" aria-pressed="false"><span class="material-symbols-outlined" style="font-size:18px">edit</span> Mode edit</button>
+    @endif
+    <button type="button" class="al-edit-btn" id="al-penuh" aria-pressed="false" title="Perbesar diagram memenuhi layar (Esc untuk kembali)"><span class="material-symbols-outlined" style="font-size:18px">open_in_full</span><span>Perbesar</span></button>
   </div>
+  <div class="al-sync" id="al-sync" hidden><span class="material-symbols-outlined">sync_problem</span><span>Master sudah diubah. Status SAP dan angka dashboard baru ikut berubah setelah <code>php artisan peta-risiko:sync</code>.</span></div>
   <div class="al-jejak" id="al-jejak" aria-label="Jejak penelusuran"></div>
 
   <div class="al-grid">
@@ -85,6 +118,7 @@
       <h3>Rincian</h3>
       <p class="pr-meta" style="margin:0">Klik sebuah kotak untuk melihat dari mana asalnya dan ke mana mengarahnya.</p>
     </aside>
+  </div>
   </div>
 @endif
 @endsection
@@ -214,7 +248,7 @@
       g.addEventListener('mouseleave', () => svg.classList.remove('sorot'));
       g.addEventListener('focus', () => sorot(n.key, edges));
       g.addEventListener('blur', () => svg.classList.remove('sorot'));
-      g.addEventListener('click', () => detail(n.key, edges));
+      g.addEventListener('click', () => { detail(n.key, edges); if (modeEdit) bukaEdit(n); });
       g.addEventListener('dblclick', () => fokus(n));
       g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); fokus(n); } else if (ev.key === ' ') { ev.preventDefault(); detail(n.key, edges); } });
     });
@@ -332,6 +366,159 @@
   document.addEventListener('click', (e) => { if (!e.target.closest('.al-cari-wrap')) hasil.hidden = true; });
   let ubah = 0;
   window.addEventListener('resize', () => { clearTimeout(ubah); ubah = setTimeout(gambar, 200); });
+
+  // ------------------------------------------------------------ mode edit (modal per simpul, simpan ke master)
+  const BOLEH = @json($bolehUbah);
+  const URL_SIMPUL = @json(route('peta-risiko-pja.korelasi.simpul'));
+  const URL_SIMPAN = @json(route('peta-risiko-pja.korelasi.simpan'));
+  const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  let modeEdit = false, simpulEdit = null;
+  if (BOLEH && $('al-edit')) {
+    $('al-edit').addEventListener('click', () => {
+      modeEdit = !modeEdit;
+      $('al-edit').setAttribute('aria-pressed', String(modeEdit));
+      $('al-kanvas').classList.toggle('al-mode-edit', modeEdit);
+    });
+  }
+
+  function modal() {
+    let d = document.getElementById('al-modal');
+    if (d) return d;
+    d = document.createElement('dialog');
+    d.id = 'al-modal';
+    d.className = 'al-modal';
+    d.setAttribute('aria-labelledby', 'al-modal-judul');
+    d.innerHTML = '<header><div><h3 id="al-modal-judul"></h3><p id="al-modal-sub"></p></div><button type="button" aria-label="Tutup"><span class="material-symbols-outlined">close</span></button></header><div class="al-modal-isi" id="al-modal-isi"></div>';
+    document.body.appendChild(d);
+    d.querySelector('header button').addEventListener('click', () => d.close());
+    d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+    return d;
+  }
+
+  async function bukaEdit(n) {
+    const d = modal();
+    d.querySelector('#al-modal-judul').textContent = `Edit ${NAMA_JENIS[n.jenis] || n.jenis}`;
+    d.querySelector('#al-modal-sub').textContent = n.label;
+    const isi = d.querySelector('#al-modal-isi');
+    if (!d.open) d.showModal();
+    simpulEdit = n;
+    // Simpul yang diedit di halaman lain / lewat simpul lain.
+    if (n.jenis === 'grup') { isi.innerHTML = `<p style="margin:0">Isi grup lokasi (aktivitas & bahaya yang berlaku) diedit di halaman master grup.</p><div class="al-baris"><a class="al-btn" href="${URL_GRUP}?gid=${encodeURIComponent(n.id)}">Buka master Grup lokasi &amp; aktivitas</a></div><p class="pr-meta" style="margin:0">Untuk menambah / mengeluarkan satu bahaya dari grup ini, klik kotak bahaya-risikonya.</p>`; return; }
+    if (['obs', 'oak', 'ket'].includes(n.jenis)) { isi.innerHTML = '<p style="margin:0">Label SAP ditambah atau dilepas per bahaya-risiko. Klik kotak bahaya-risiko yang terhubung dengan label ini untuk mengeditnya.</p>'; return; }
+    if (n.jenis === 'pja') { isi.innerHTML = '<p style="margin:0">PJA penanggung jawab diatur per lokasi. Klik kotak detail lokasi untuk menambah atau melepas PJA-nya.</p>'; return; }
+    if (n.jenis === 'kelompok') { isi.innerHTML = '<p style="margin:0">Kelompok aktivitas diubah dari kotak aktivitas HIRA.</p>'; return; }
+    isi.innerHTML = '<p class="pr-meta" style="margin:0">Memuat…</p>';
+    try {
+      const r = await fetch(`${URL_SIMPUL}?${new URLSearchParams({ jenis: n.jenis, id: n.id })}`, { headers: { Accept: 'application/json' } });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.pesan || j.message || `HTTP ${r.status}`);
+      isi.innerHTML = formEdit(n.jenis, j.data, j.opsi);
+      pasangForm(isi, n, j.data);
+    } catch (e) {
+      isi.innerHTML = `<div class="al-msg err">${esc(e.message)}</div>`;
+    }
+  }
+
+  const pilih = (nama, opsi, kini) => `<select name="${nama}">${opsi.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(kini) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  const chip = (teks, data) => `<span class="al-chip"><span>${esc(teks)}</span><button type="button" data-lepas='${esc(JSON.stringify(data))}' aria-label="Lepas ${esc(teks)}">×</button></span>`;
+
+  function formEdit(jenis, d, o) {
+    const kel = o.kelompok.map((k) => [k.kode, k.nama]), grup = o.grup.map((g) => [g.gid, g.nama]);
+    if (jenis === 'aktivitas') {
+      return `<form data-aksi="aktivitas" class="al-bagian" style="border:0;padding:0"><label class="al-f">Nama aktivitas HIRA<input name="nama" maxlength="500" required value="${esc(d.nama)}"></label>
+        <label class="al-f">Kelompok aktivitas (M02)${pilih('kelompok', kel, d.kelompok)}</label>
+        <p class="pr-meta" style="margin:0">Berlaku untuk ${d.baris} bahaya-risiko aktivitas ini di semua grup lokasi.</p><div class="al-baris"><button class="al-btn" type="submit">Simpan</button></div></form>`;
+    }
+    if (jenis === 'sub') {
+      return `<form data-aksi="sub" class="al-bagian" style="border:0;padding:0"><label class="al-f">Nama sub aktivitas<input name="nama" maxlength="500" value="${esc(d.sub)}"></label>
+        <p class="pr-meta" style="margin:0">Berlaku untuk ${d.baris} bahaya-risiko di sub ini.</p><div class="al-baris"><button class="al-btn" type="submit">Simpan</button></div></form>`;
+    }
+    if (jenis === 'bahaya') {
+      const label = (j, nama, ph) => `<div class="al-bagian"><h4>${nama}</h4><div class="al-baris">${(d.label[j] || []).map((l) => chip(l, { aksi: 'label', jenis: j, teks: l })).join('') || '<span class="pr-meta">Belum ada label</span>'}</div>
+        <form data-aksi="label" data-jenis="${j}" class="al-baris"><input name="teks" maxlength="500" placeholder="${esc(ph)}" style="flex:1;min-width:220px;padding:7px 10px;border:1px solid rgba(171,173,175,.55);border-radius:10px"><button class="al-btn sek" type="submit">+ Tambah</button></form></div>`;
+      return `<form data-aksi="bahaya" class="al-bagian" style="border:0;padding:0"><p class="pr-meta" style="margin:0">${esc(d.aktivitas)} · ${esc(d.sub || '(tanpa sub)')} · ID baris ${d.ri}</p>
+          <label class="al-f">Bahaya - risiko<textarea name="bahaya" rows="2" maxlength="1000" required>${esc(d.bahaya)}</textarea></label>
+          <div class="al-baris"><label class="al-f">Risiko awal${pilih('kb', o.kb.map((k) => [k, k]), d.kb)}</label>
+            <label class="al-f" style="flex-direction:row;display:flex;gap:6px;align-items:center;margin-top:18px"><input type="checkbox" name="aktif"${d.aktif ? ' checked' : ''}> Aktif (masuk baseline)</label></div>
+          <div class="al-baris"><button class="al-btn" type="submit">Simpan bahaya</button></div></form>`
+        + (d.labelDiBaris ? label('OBS', 'Label Observasi', 'Jenis kegiatan observasi') + label('OAK', 'Label OAK', 'Aktivitas OAK / Sub aktivitas') + label('KET', 'Label Ketidaksesuaian', 'Ketidaksesuaian / Sub ketidaksesuaian') : '')
+        + `<div class="al-bagian"><h4>Grup lokasi (M05)</h4><div class="al-baris">${d.grup.map((g) => chip(g.nama, { aksi: 'grup', gid: g.gid })).join('') || '<span class="pr-meta">Belum masuk grup mana pun (tidak masuk baseline)</span>'}</div>
+          <form data-aksi="grup" class="al-baris">${pilih('gid', grup.filter(([g]) => !d.grup.some((x) => x.gid === g)), '')}<button class="al-btn sek" type="submit">+ Tambah ke grup</button></form></div>`;
+    }
+    // detail lokasi
+    return `<form data-aksi="dl" class="al-bagian" style="border:0;padding:0"><p class="pr-meta" style="margin:0">${esc(d.site)} · ${esc(d.lokasi)} · <b>${esc(d.detail)}</b></p>
+        <div class="al-baris"><label class="al-f">Grup lokasi${pilih('gid', grup, d.gid)}</label>
+          <label class="al-f" style="flex-direction:row;display:flex;gap:6px;align-items:center;margin-top:18px"><input type="checkbox" name="aktif"${d.aktif ? ' checked' : ''}> Aktif</label></div>
+        <p class="pr-meta" style="margin:0">Memindah grup mengganti seluruh baseline detail lokasi ini dengan baris HIRA grup tujuan.</p>
+        <div class="al-baris"><button class="al-btn" type="submit">Simpan detail lokasi</button></div></form>
+      <div class="al-bagian"><h4>PJA penanggung jawab lokasi</h4><div class="al-baris">${d.pja.map((p) => chip(p, { aksi: 'pja', teks: p })).join('') || '<span class="pr-meta">Belum ada PJA</span>'}</div>
+        <form data-aksi="pja" class="al-baris"><input name="teks" list="al-daftar-pja" placeholder="Pilih nama PJA…" style="flex:1;min-width:220px;padding:7px 10px;border:1px solid rgba(171,173,175,.55);border-radius:10px"><button class="al-btn sek" type="submit">+ Tambah PJA</button></form>
+        <datalist id="al-daftar-pja">${o.pja.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
+        <p class="pr-meta" style="margin:0">PJA berlaku untuk semua ${d.dlSeLokasi} detail lokasi di ${esc(d.site)} · ${esc(d.lokasi)}.</p></div>`;
+  }
+
+  function pasangForm(isi, n, d) {
+    isi.querySelectorAll('form[data-aksi]').forEach((f) => f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(f), aksi = f.dataset.aksi, data = { aksi, id: n.id };
+      if (aksi === 'aktivitas') Object.assign(data, { nama: fd.get('nama'), kelompok: fd.get('kelompok') });
+      if (aksi === 'sub') data.nama = fd.get('nama');
+      if (aksi === 'bahaya') Object.assign(data, { bahaya: fd.get('bahaya'), kb: fd.get('kb'), aktif: fd.get('aktif') ? 1 : 0 });
+      if (aksi === 'label') Object.assign(data, { jenis: f.dataset.jenis, teks: fd.get('teks'), tambah: 1 });
+      if (aksi === 'grup') { if (!fd.get('gid')) return; Object.assign(data, { gid: fd.get('gid'), tambah: 1 }); }
+      if (aksi === 'dl') {
+        Object.assign(data, { gid: fd.get('gid'), aktif: fd.get('aktif') ? 1 : 0 });
+        if (String(fd.get('gid')) !== String(d.gid) && !confirm('Pindahkan detail lokasi ini ke grup lain? Baseline-nya akan diganti dengan baris HIRA grup tujuan.')) return;
+      }
+      if (aksi === 'pja') Object.assign(data, { teks: fd.get('teks'), tambah: 1 });
+      if ((aksi === 'label' || aksi === 'pja') && !String(data.teks || '').trim()) return;
+      kirim(data, n);
+    }));
+    isi.querySelectorAll('[data-lepas]').forEach((b) => b.addEventListener('click', () => {
+      const x = JSON.parse(b.dataset.lepas);
+      if (!confirm('Lepas hubungan ini dari master?')) return;
+      kirim({ ...x, id: n.id, tambah: 0 }, n);
+    }));
+  }
+
+  async function kirim(data, n) {
+    const isi = modal().querySelector('#al-modal-isi');
+    try {
+      const r = await fetch(URL_SIMPAN, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF }, body: JSON.stringify(data) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.pesan || (j.errors ? Object.values(j.errors).flat().join(' ') : j.message) || `HTTP ${r.status}`);
+      $('al-sync').hidden = false;
+      // Ganti nama sub mengubah id simpulnya ("aid|nama sub").
+      if (data.aksi === 'sub') n = { ...n, id: `${String(n.id).split('|')[0]}|${String(data.nama || '').trim()}`, label: String(data.nama || '').trim() || '(tanpa sub aktivitas)' };
+      // Gambar ulang alur dari master, lalu isi ulang modal dengan nilai terbaru.
+      const x = jejak[jejak.length - 1];
+      if (x) await muat(x.jenis, x.id, x.label);
+      await bukaEdit(n);
+      modal().querySelector('#al-modal-isi').insertAdjacentHTML('afterbegin', `<div class="al-msg ok">${esc(j.pesan)}</div>`);
+    } catch (e) {
+      isi.insertAdjacentHTML('afterbegin', `<div class="al-msg err">${esc(e.message)}</div>`);
+    }
+  }
+
+  // ------------------------------------------------------------ perbesar / perkecil
+  function aturPenuh(penuh) {
+    $('al-wadah').classList.toggle('penuh', penuh);
+    document.body.classList.toggle('al-terkunci', penuh);
+    const b = $('al-penuh');
+    b.setAttribute('aria-pressed', String(penuh));
+    b.title = penuh ? 'Kembali ke ukuran biasa (Esc)' : 'Perbesar diagram memenuhi layar (Esc untuk kembali)';
+    b.querySelector('.material-symbols-outlined').textContent = penuh ? 'close_fullscreen' : 'open_in_full';
+    b.querySelector('span:last-child').textContent = penuh ? 'Perkecil' : 'Perbesar';
+    try { sessionStorage.setItem('al-penuh', penuh ? '1' : ''); } catch (e) { /* sesi tidak tersedia */ }
+    gambar();
+  }
+  $('al-penuh').addEventListener('click', () => aturPenuh(!$('al-wadah').classList.contains('penuh')));
+  document.addEventListener('keydown', (e) => {
+    // Esc menutup modal dulu (bawaan dialog); bila tidak ada modal terbuka, keluar dari mode perbesar.
+    const dlg = document.getElementById('al-modal');
+    if (e.key === 'Escape' && $('al-wadah').classList.contains('penuh') && !(dlg && dlg.open)) aturPenuh(false);
+  });
+  try { if (sessionStorage.getItem('al-penuh') === '1') aturPenuh(true); } catch (e) { /* sesi tidak tersedia */ }
 
   if (AWAL) muat(AWAL.jenis, String(AWAL.id));
 })();
