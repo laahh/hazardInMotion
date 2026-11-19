@@ -80,6 +80,9 @@
   .dr-pl > summary::before { content: '▸'; color: #8a939c; transition: transform .15s; }
   .dr-pl[open] > summary::before { transform: rotate(90deg); }
   .dr-pl-row::before { content: ''; }
+  .dr-pl-luar { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(0, 0, 0, .15); }
+  .dr-pl-luar > summary { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin-bottom: 8px; font-size: 13px; cursor: pointer; }
+  .dr-pl-luar > summary b { color: #6b4fbb; }
   .dr-pl-row.kepala { padding: 0 12px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #595c5e; }
   .dr-pl-row.kosong { border: 1px dashed rgba(0, 0, 0, .15); border-radius: 12px; margin-bottom: 6px; color: #595c5e; }
   .dr-pl .r, .dr-pl-row .r { text-align: right; font-variant-numeric: tabular-nums; }
@@ -912,7 +915,7 @@
         const L = hiraCache[td.dataset.hira] || [], d = L[0];
         if (!d) { td.innerHTML = '<span class="dr-mute">-</span>'; return; }
         td.innerHTML = `<button type="button" class="dr-hira" aria-haspopup="dialog" title="Lihat dokumen HIRA">
-            <b>${DR.esc(d.idh)}</b>${d.ada ? ` · rev ${DR.esc(d.rev)}` : ''}${L.length > 1 ? ` <span class="dr-hira-n">+${L.length - 1}</span>` : ''}
+            <span><b>${DR.esc(d.idh)}</b>${d.ada ? ` · rev ${DR.esc(d.rev)}` : ''}${L.length > 1 ? ` <span class="dr-hira-n">+${L.length - 1}</span>` : ''}</span>
             <small>${DR.esc(d.ada ? (d.dept || '-') : 'tidak ada di HIRA master')}</small></button>`;
         td.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); bukaHira(td.dataset.hira, td.dataset.bahaya || ''); });
       });
@@ -977,10 +980,60 @@
       JENIS_SAP.filter(([k]) => jenis[k]).map(([k, t, c]) => `<span style="--c:${c};width:${(100 * jenis[k] / n).toFixed(1)}%" title="${t} ${jenis[k]}"></span>`).join('')}</div>`;
   }
 
+  const kunciPelapor = (sid, nama) => sid || 'nama:' + String(nama || '').trim().toLowerCase();
+
   /**
-   * Laporan SAP minggu ini per PJA pelapornya (respons data.pja dari server), HANYA PJA hasil mapping detail lokasi ini
-   * (kolom PJA di tabel). PJA mapping yang tidak melapor tetap ditampilkan; laporan dari personil PJA lain / non-PJA
-   * cukup disebut jumlahnya. Tiap PJA bisa dibuka untuk komposisi jenis laporan dan daftar pelapornya.
+   * Kelompok PJA dari laporan oleh pelapor yang BUKAN personil PJA mapping lokasi ini. Dihitung ulang dari data.laporan
+   * (bukan memakai data.pja apa adanya) agar pelapor yang juga anggota PJA mapping tidak muncul dua kali.
+   * Keanggotaan sid → PJA diambil dari data.pja (penugasan aktif m_pja_emp, sudah dihitung server).
+   */
+  function kelompokLuar(data, sidMilik, idMilik) {
+    const anggota = new Map();
+    data.pja.forEach((g) => g.pelapor.forEach((o) => {
+      const k = kunciPelapor(o.sid, o.nama);
+      if (!anggota.has(k)) anggota.set(k, []);
+      anggota.get(k).push({ g, kategori: o.kategori });
+    }));
+    const hasil = new Map();
+    (data.laporan || []).forEach((x) => {
+      const k = kunciPelapor(x.sid, x.pelapor);
+      if (sidMilik.has(k)) return;
+      const daftar = (anggota.get(k) || []).filter((a) => !idMilik.has(a.g.id));
+      (daftar.length ? daftar : [{ g: { id: '', nama: 'Bukan personil PJA', tipe: '' }, kategori: '' }]).forEach(({ g, kategori }) => {
+        if (!hasil.has(g.id)) hasil.set(g.id, { id: g.id, nama: g.nama, tipe: g.tipe, n: 0, jenis: {}, lolos: 0, belum_closed: 0, oak_stop: 0, orang: new Map() });
+        const h = hasil.get(g.id), lolos = x.pemetaan === 'lolos' ? 1 : 0;
+        if (!h.orang.has(k)) h.orang.set(k, { sid: x.sid || '', nama: x.pelapor, kategori, n: 0, jenis: {}, lolos: 0 });
+        [h, h.orang.get(k)].forEach((o) => { o.n++; o.jenis[x.jenis] = (o.jenis[x.jenis] || 0) + 1; o.lolos += lolos; });
+        h.belum_closed += x.belum_closed ? 1 : 0;
+        h.oak_stop += x.oak_stop ? 1 : 0;
+      });
+    });
+    return [...hasil.values()]
+      .map(({ orang, ...h }) => ({ ...h, pelapor: [...orang.values()].sort((p, q) => q.n - p.n || String(p.nama).localeCompare(String(q.nama))) }))
+      .sort((p, q) => (p.id === '') - (q.id === '') || q.n - p.n || String(p.nama).localeCompare(String(q.nama)));
+  }
+
+  /** Satu baris PJA (bisa dibuka → komposisi jenis + daftar pelapor). */
+  function barisPjaPelapor(g) {
+    const tag = g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '';
+    const masalah = [g.belum_closed && `${DR.fmt(g.belum_closed)} belum closed`, g.oak_stop && `${DR.fmt(g.oak_stop)} OAK Stop`].filter(Boolean).join(' · ') || '<span class="dr-mute">-</span>';
+    const isi = `<div class="dr-pl-isi">
+        <div>${JENIS_SAP.filter(([k]) => g.jenis[k]).map(([k, t, c]) => `<span class="dr-pl-chip"><i style="--c:${c}"></i>${t} <b>${DR.fmt(g.jenis[k])}</b> <span class="dr-mute">${pctI(g.jenis[k], g.n)}</span></span>`).join('')}</div>
+        <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:640px"><thead><tr><th>Pelapor</th><th>Kategori</th><th class="r">Laporan</th><th style="min-width:160px">Komposisi</th><th class="r">Mengidentifikasi HIRA</th></tr></thead><tbody>${
+          g.pelapor.map((o) => `<tr><td><b>${DR.esc(o.nama || '-')}</b>${o.sid ? `<br><span class="dr-mute">${DR.esc(o.sid)}</span>` : ''}</td><td>${DR.esc(o.kategori || '-')}</td>
+            <td class="r">${DR.fmt(o.n)}</td><td>${barJenis(o.jenis, o.n)}</td><td class="r">${pctI(o.lolos, o.n)}</td></tr>`).join('')}</tbody></table></div></div>`;
+    return `<details class="dr-pl"><summary>
+        <span><b>${DR.esc(g.nama)}</b>${tag}</span><span class="r"><b>${DR.fmt(g.n)}</b></span><span class="r">${DR.fmt(g.pelapor.length)}</span>
+        <span>${barJenis(g.jenis, g.n)}</span><span class="r">${pctI(g.lolos, g.n)}</span><span>${masalah}</span></summary>${isi}</details>`;
+  }
+
+  const KEPALA_PJA_PELAPOR = '<div class="dr-pl-row kepala"><span>PJA pelapor</span><span class="r">Laporan</span><span class="r">Pelapor</span><span>Komposisi jenis</span><span class="r">Identifikasi HIRA</span><span>Bermasalah</span></div>';
+
+  /**
+   * Laporan SAP minggu ini per PJA pelapornya, dua bagian:
+   *   1. PJA hasil mapping detail lokasi ini (kolom PJA di tabel) — yang tidak melapor tetap tampil 0.
+   *   2. PJA lain (dan pelapor non-PJA) yang melaporkan di detail lokasi ini, terpisah dari bagian utama.
+   * Tiap PJA bisa dibuka untuk komposisi jenis laporan dan daftar pelapornya.
    */
   function pjaPelapor(data, pemilik) {
     if (!Array.isArray(data.pja)) return '';
@@ -988,26 +1041,26 @@
     const G = data.pja.filter((g) => idMilik.has(g.id));
     const ada = new Set(G.map((g) => g.id));
     const diam = pemilik.filter(([id]) => !ada.has(id));
-    // Laporan oleh pelapor yang bukan personil PJA mapping (dihitung per laporan, bukan per PJA).
-    const sidMilik = new Set(G.flatMap((g) => g.pelapor.map((o) => o.sid || 'nama:' + String(o.nama).trim().toLowerCase())));
-    const luar = (data.laporan || []).filter((x) => !sidMilik.has(x.sid || 'nama:' + String(x.pelapor).trim().toLowerCase())).length;
-    const tag = (g) => (g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '');
-    const masalah = (g) => [g.belum_closed && `${DR.fmt(g.belum_closed)} belum closed`, g.oak_stop && `${DR.fmt(g.oak_stop)} OAK Stop`].filter(Boolean).join(' · ') || '<span class="dr-mute">-</span>';
-    const isi = (g) => `<div class="dr-pl-isi">
-        <div>${JENIS_SAP.filter(([k]) => g.jenis[k]).map(([k, t, c]) => `<span class="dr-pl-chip"><i style="--c:${c}"></i>${t} <b>${DR.fmt(g.jenis[k])}</b> <span class="dr-mute">${pctI(g.jenis[k], g.n)}</span></span>`).join('')}</div>
-        <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:640px"><thead><tr><th>Pelapor</th><th>Kategori</th><th class="r">Laporan</th><th style="min-width:160px">Komposisi</th><th class="r">Mengidentifikasi HIRA</th></tr></thead><tbody>${
-          g.pelapor.map((o) => `<tr><td><b>${DR.esc(o.nama || '-')}</b>${o.sid ? `<br><span class="dr-mute">${DR.esc(o.sid)}</span>` : ''}</td><td>${DR.esc(o.kategori || '-')}</td>
-            <td class="r">${DR.fmt(o.n)}</td><td>${barJenis(o.jenis, o.n)}</td><td class="r">${pctI(o.lolos, o.n)}</td></tr>`).join('')}</tbody></table></div></div>`;
-    const baris = G.map((g) => `<details class="dr-pl"><summary>
-        <span><b>${DR.esc(g.nama)}</b>${tag(g)}</span><span class="r"><b>${DR.fmt(g.n)}</b></span><span class="r">${DR.fmt(g.pelapor.length)}</span>
-        <span>${barJenis(g.jenis, g.n)}</span><span class="r">${pctI(g.lolos, g.n)}</span><span>${masalah(g)}</span></summary>${isi(g)}</details>`).join('')
+    const sidMilik = new Set(G.flatMap((g) => g.pelapor.map((o) => kunciPelapor(o.sid, o.nama))));
+    const nMilik = (data.laporan || []).filter((x) => sidMilik.has(kunciPelapor(x.sid, x.pelapor))).length;
+    const nLuar = (data.laporan || []).length - nMilik;
+    const LG = nLuar ? kelompokLuar(data, sidMilik, idMilik) : [];
+    const nPjaLuar = LG.filter((g) => g.id !== '').length;
+
+    const utama = G.map(barisPjaPelapor).join('')
       + diam.map(([, nama]) => `<div class="dr-pl-row kosong"><span><b>${DR.esc(nama)}</b></span><span class="r">0</span><span class="r">0</span><span class="dr-mute" style="grid-column:span 3">Tidak ada laporan di detail lokasi ini minggu ini</span></div>`).join('');
+    const bagianLuar = LG.length ? `<details class="dr-pl-luar"${nPjaLuar <= 8 ? ' open' : ''}>
+        <summary><b>PJA lain yang melaporkan di lokasi ini · ${DR.fmt(nPjaLuar)} PJA${LG.some((g) => g.id === '') ? ' + pelapor non-PJA' : ''}</b>
+          <span class="dr-mute">${DR.fmt(nLuar)} laporan oleh personil di luar PJA lokasi ini</span></summary>
+        ${KEPALA_PJA_PELAPOR}${LG.map(barisPjaPelapor).join('')}</details>` : '';
+
     return `<div class="dr-pl-wrap">
         <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(G.length)} dari ${DR.fmt(pemilik.length)} PJA</b>
-          <span class="dr-mute">${DR.fmt((data.laporan || []).length - luar)} laporan oleh personil PJA lokasi ini${luar ? ` · ${DR.fmt(luar)} laporan lain dari personil di luar mapping (tidak dirinci)` : ''}</span>
+          <span class="dr-mute">${DR.fmt(nMilik)} laporan oleh personil PJA lokasi ini</span>
           <span class="dr-pl-leg">${JENIS_SAP.map(([, t, c]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</span></div>
-        ${pemilik.length ? `<div class="dr-pl-row kepala"><span>PJA pelapor</span><span class="r">Laporan</span><span class="r">Pelapor</span><span>Komposisi jenis</span><span class="r">Identifikasi HIRA</span><span>Bermasalah</span></div>${baris}` : ''}
-        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">Hanya PJA hasil mapping detail lokasi ini. PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp); pelapor yang terdaftar di dua PJA lokasi ini dihitung di keduanya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
+        ${pemilik.length ? KEPALA_PJA_PELAPOR + utama : ''}
+        ${bagianLuar}
+        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Bagian "PJA lain" hanya berisi pelapor yang bukan personil PJA lokasi ini; pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
   }
 
   function isiSap(data) {
