@@ -22,6 +22,9 @@ class DrmSapDetailLokasi
 
     private const CACHE_DETIK = 600;
 
+    /** Naikkan bila bentuk respons berubah agar cache lama tidak terpakai. */
+    private const VERSI_CACHE = 2;
+
     public function __construct(private readonly RfidClickHouseClient $ch)
     {
     }
@@ -32,7 +35,7 @@ class DrmSapDetailLokasi
      */
     public function ambil(int $dl, string $grup, CarbonImmutable $dari, CarbonImmutable $sampai): array
     {
-        $kunci = sprintf('peta-risiko:sap-dl:%d:%s:%s:%s', $dl, $dari->toDateString(), $sampai->toDateString(), md5($grup));
+        $kunci = sprintf('peta-risiko:sap-dl:v%d:%d:%s:%s:%s', self::VERSI_CACHE, $dl, $dari->toDateString(), $sampai->toDateString(), md5($grup));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($dl, $grup, $dari, $sampai));
     }
@@ -46,7 +49,7 @@ SELECT toString(`date time`) AS waktu, jenis_data AS jenis,
        ifNull(ketidaksesuaian, \'\') AS k, ifNull(subketidaksesuaian, \'\') AS sk,
        ifNull(`aktivitas  OBS`, \'\') AS obs, ifNull(`aktivitas pekerjaan OAK`, \'\') AS oak, ifNull(`sub aktivitas pekerjaan OAK`, \'\') AS oak_sub,
        ifNull(`hasil OAK`, \'\') AS hasil_oak, ifNull(status, \'\') AS status,
-       substring(ifNull(deskripsi, \'\'), 1, 400) AS deskripsi, ifNull(pelapor, \'\') AS pelapor,
+       substring(ifNull(deskripsi, \'\'), 1, 400) AS deskripsi, ifNull(pelapor, \'\') AS pelapor, ifNull(kode_sid_pelapor, \'\') AS sid,
        ifNull(toString(toDate(tanggal_janji)), \'\') AS janji
 FROM obds.ch_rfid_sap_cuti_all_site
 WHERE `id detail lokasi` = '.$dl.'
@@ -92,6 +95,7 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
                 'status' => (string) $r['status'],
                 'hasil_oak' => (string) $r['hasil_oak'],
                 'pelapor' => (string) $r['pelapor'],
+                'sid' => (string) $r['sid'],
                 'janji' => in_array((string) $r['janji'], ['', '1970-01-01'], true) ? '' : (string) $r['janji'],
                 'belum_closed' => $belum,
                 'oak_stop' => $stop,
@@ -102,7 +106,88 @@ LIMIT '.(self::MAKS_BARIS + 1), 60);
             ];
         }
 
-        return ['dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(), 'laporan' => $laporan, 'ringkas' => $ringkas, 'terpotong' => $terpotong];
+        $pja = self::perPja($laporan, $this->anggotaPja(array_column($laporan, 'sid')));
+
+        return ['dari' => $dari->toDateString(), 'sampai' => $sampai->toDateString(), 'laporan' => $laporan, 'ringkas' => $ringkas, 'pja' => $pja, 'terpotong' => $terpotong];
+    }
+
+    /**
+     * Laporan dikelompokkan per PJA pelapornya (penugasan aktif m_pja_emp). Pelapor anggota beberapa PJA dihitung
+     * di setiap PJA-nya; pelapor yang bukan personil PJA mana pun masuk kelompok id '' (paling akhir).
+     *
+     * @param  list<array<string, mixed>>  $laporan
+     * @param  array<string, list<array{id: string, nama: string, tipe: string, kategori: string}>>  $anggota  sid → PJA
+     * @return list<array<string, mixed>>
+     */
+    public static function perPja(array $laporan, array $anggota): array
+    {
+        $bukan = [['id' => '', 'nama' => 'Bukan personil PJA', 'tipe' => '', 'kategori' => '']];
+        $grup = [];
+        foreach ($laporan as $l) {
+            $sid = (string) ($l['sid'] ?? '');
+            $kunciOrang = $sid !== '' ? $sid : 'nama:'.mb_strtolower(trim((string) $l['pelapor']));
+            $lolos = (int) ($l['pemetaan'] === 'lolos');
+            foreach ($anggota[$sid] ?? $bukan as $p) {
+                $g = $grup[$p['id']] ?? ['id' => $p['id'], 'nama' => $p['nama'], 'tipe' => $p['tipe'], 'n' => 0, 'jenis' => [],
+                    'lolos' => 0, 'belum_closed' => 0, 'oak_stop' => 0, 'pelapor' => []];
+                $o = $g['pelapor'][$kunciOrang] ?? ['sid' => $sid, 'nama' => (string) $l['pelapor'], 'kategori' => $p['kategori'], 'n' => 0, 'jenis' => [], 'lolos' => 0];
+                $o = self::tambahLaporan($o, (string) $l['jenis'], $lolos);
+                $g = self::tambahLaporan($g, (string) $l['jenis'], $lolos);
+                $g['belum_closed'] += (int) $l['belum_closed'];
+                $g['oak_stop'] += (int) $l['oak_stop'];
+                $g['pelapor'][$kunciOrang] = $o;
+                $grup[$p['id']] = $g;
+            }
+        }
+        $hasil = array_map(function (array $g): array {
+            $orang = array_values($g['pelapor']);
+            usort($orang, fn ($a, $b) => $b['n'] <=> $a['n'] ?: strcmp($a['nama'], $b['nama']));
+
+            return [...$g, 'pelapor' => $orang];
+        }, array_values($grup));
+        usort($hasil, fn ($a, $b) => ($a['id'] === '') <=> ($b['id'] === '') ?: $b['n'] <=> $a['n'] ?: strcmp($a['nama'], $b['nama']));
+
+        return $hasil;
+    }
+
+    /** @param  array<string, mixed>  $x */
+    private static function tambahLaporan(array $x, string $jenis, int $lolos): array
+    {
+        $x['n']++;
+        $x['jenis'][$jenis] = ($x['jenis'][$jenis] ?? 0) + 1;
+        $x['lolos'] += $lolos;
+
+        return $x;
+    }
+
+    /**
+     * PJA aktif tiap SID pelapor (m_pja_emp → bep_vw_safety_all_karyawan), sama seperti personil di snapshot.
+     *
+     * @param  list<string>  $sid
+     * @return array<string, list<array{id: string, nama: string, tipe: string, kategori: string}>>
+     */
+    private function anggotaPja(array $sid): array
+    {
+        $sid = array_values(array_unique(array_filter(array_map('strval', $sid), fn ($s) => $s !== '')));
+        if ($sid === []) {
+            return [];
+        }
+        $daftar = implode(', ', array_map([RfidClickHouseClient::class, 'quote'], $sid));
+        $rows = $this->ch->select('
+SELECT k.kode_sid AS sid, toString(pe.id_pja) AS id, ifNull(pj.name, \'\') AS nama, ifNull(t.name, \'\') AS tipe, ifNull(c.name, \'\') AS kategori
+FROM (SELECT DISTINCT toInt64(id_pja) AS id_pja, toInt64(id_employee) AS id_emp, id_pja_type, category_id
+      FROM obds.m_pja_emp WHERE is_active = 1) pe
+JOIN (SELECT toInt64(id) AS id, any(kode_sid) AS kode_sid FROM obds.bep_vw_safety_all_karyawan
+      GROUP BY id HAVING kode_sid IN ('.$daftar.')) k ON k.id = pe.id_emp
+LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja GROUP BY id) pj ON pj.id = pe.id_pja
+LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_type GROUP BY id) t ON t.id = pe.id_pja_type
+LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_category GROUP BY id) c ON c.id = pe.category_id', 60);
+        $peta = [];
+        foreach ($rows as $r) {
+            $peta[(string) $r['sid']][] = ['id' => (string) $r['id'], 'nama' => (string) $r['nama'], 'tipe' => (string) $r['tipe'], 'kategori' => (string) $r['kategori']];
+        }
+
+        return $peta;
     }
 
     /**

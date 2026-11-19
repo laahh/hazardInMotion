@@ -56,6 +56,35 @@
 
 @section('content')
 <style>
+  /* PJA yang melaporkan di satu detail lokasi (tab Group Lokasi) */
+  .dr-pl-wrap { margin-bottom: 16px; }
+  .dr-pl-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin-bottom: 8px; font-size: 13px; }
+  .dr-pl-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: #595c5e; }
+  .dr-pl-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
+  .dr-pl { border: 1px solid rgba(0, 0, 0, .08); border-radius: 12px; background: #fff; margin-bottom: 6px; }
+  .dr-pl > summary, .dr-pl-row { display: grid; grid-template-columns: 18px minmax(200px, 2.2fr) 70px 70px minmax(140px, 1.6fr) 110px minmax(120px, 1fr); gap: 4px 12px;
+    align-items: center; padding: 10px 12px; font-size: 13px; list-style: none; }
+  .dr-pl > summary { cursor: pointer; border-radius: 12px; }
+  .dr-pl > summary::-webkit-details-marker { display: none; }
+  .dr-pl > summary:hover, .dr-pl > summary:focus-visible { background: #f7f8fe; outline: none; }
+  .dr-pl > summary::before { content: '▸'; color: #8a939c; transition: transform .15s; }
+  .dr-pl[open] > summary::before { transform: rotate(90deg); }
+  .dr-pl-row::before { content: ''; }
+  .dr-pl-row.kepala { padding: 0 12px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #595c5e; }
+  .dr-pl-row.kosong { border: 1px dashed rgba(0, 0, 0, .15); border-radius: 12px; margin-bottom: 6px; color: #595c5e; }
+  .dr-pl .r, .dr-pl-row .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .dr-pl-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; margin-left: 4px; background: #eef1fd; color: #3952bc; }
+  .dr-pl-tag.milik { background: #e6f4ea; color: #1e7a3c; }
+  .dr-pl-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #eef0f2; }
+  .dr-pl-bar span { background: var(--c); }
+  .dr-pl-isi { padding: 4px 12px 12px 42px; }
+  .dr-pl-chip { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; border-radius: 999px; background: #f5f7f9; font-size: 12px; margin: 0 6px 6px 0; }
+  .dr-pl-chip i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+  @media (max-width: 900px) {
+    .dr-pl > summary, .dr-pl-row { grid-template-columns: 18px minmax(0, 1fr) 60px; }
+    .dr-pl > summary > :nth-child(n+3), .dr-pl-row > :nth-child(n+3) { display: none; }
+  }
+
   /* Treemap kelompok aktivitas */
   .dr-tm-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: stretch; }
   .dr-tm { position: relative; height: 420px; border-radius: 14px; overflow: hidden; background: #f5f7f9; }
@@ -785,7 +814,7 @@
           <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`
           + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:12px 16px 16px 40px">
               <div data-belum="${DR.esc(d)}" data-pja-id="${DR.esc(pja[0].id)}" style="margin-bottom:16px"><span class="dr-mute">Memuat bahaya-risiko yang belum tercover SAP…</span></div>
-              <div data-sap="${DR.esc(d)}"><span class="dr-mute">Memuat laporan SAP…</span></div></td></tr>` : '');
+              <div data-sap="${DR.esc(d)}" data-pemilik="${DR.esc(JSON.stringify(pja.map((p) => [String(p.id), p.nama])))}"><span class="dr-mute">Memuat laporan SAP…</span></div></td></tr>` : '');
       }).join('')
         || `<tr><td colspan="8" class="pr-empty">Tidak ada detail lokasi ${DR.esc(state.grup)}${state.site === 'ALL' ? '' : ' di ' + DR.esc(state.site)} yang punya baris baseline${M.beranda.dl ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`)
       + (kosongan ? `<tr><td colspan="8" class="dr-mute" style="font-size:12px">${kosongan} detail lokasi lain di grup ini tidak punya baris pada level risiko terpilih.</td></tr>` : '')
@@ -859,12 +888,55 @@
 
   function muatSap(d, w, td) {
     const kunci = `${d}|${w}`;
-    const tulis = (data) => { if (td.isConnected) td.innerHTML = isiSap(data); };
+    let pemilik = [];
+    try { pemilik = JSON.parse(td.dataset.pemilik || '[]'); } catch (e) { pemilik = []; }
+    const tulis = (data) => { if (td.isConnected) td.innerHTML = pjaPelapor(data, pemilik) + isiSap(data); };
     if (sapCache[kunci]) { tulis(sapCache[kunci]); return; }
     fetch(URL_SAP.replace('__DL__', encodeURIComponent(d)) + '?w=' + w, { headers: { Accept: 'application/json' } })
       .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j))))
       .then((data) => { sapCache[kunci] = data; tulis(data); })
       .catch((e) => { if (td.isConnected) td.innerHTML = `<span class="br-red">${DR.esc((e && e.pesan) || 'Gagal memuat laporan SAP.')}</span>`; });
+  }
+
+  // ------------------------------------------------------------ PJA yang melaporkan di satu detail lokasi
+  const JENIS_SAP = [['HAZARD', 'Hazard', '#d9822b'], ['INSPEKSI', 'Inspeksi', '#3b7dd8'], ['OBSERVASI', 'Observasi', '#2e9e6b'], ['OBSERVASI AREA KRITIS', 'OAK', '#7a5cc7']];
+
+  function barJenis(jenis, n) {
+    return `<div class="dr-pl-bar" role="img" aria-label="${JENIS_SAP.filter(([k]) => jenis[k]).map(([k, t]) => `${t} ${jenis[k]}`).join(', ')}">${
+      JENIS_SAP.filter(([k]) => jenis[k]).map(([k, t, c]) => `<span style="--c:${c};width:${(100 * jenis[k] / n).toFixed(1)}%" title="${t} ${jenis[k]}"></span>`).join('')}</div>`;
+  }
+
+  /**
+   * Laporan SAP minggu ini dikelompokkan per PJA pelapornya (respons data.pja dari server). PJA pemilik detail lokasi
+   * yang tidak melapor tetap ditampilkan agar terlihat siapa yang belum mengisi. Tiap PJA bisa dibuka untuk
+   * komposisi jenis laporan dan daftar pelapornya.
+   */
+  function pjaPelapor(data, pemilik) {
+    const G = data.pja;
+    if (!Array.isArray(G)) return '';
+    const idMilik = new Set(pemilik.map(([id]) => id));
+    const ada = new Set(G.map((g) => g.id));
+    const diam = pemilik.filter(([id]) => !ada.has(id));
+    const nPja = G.filter((g) => g.id !== '').length;
+    const tag = (g) => (idMilik.has(g.id) ? '<span class="dr-pl-tag milik">PJA lokasi ini</span>' : '')
+      + (g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '');
+    const masalah = (g) => [g.belum_closed && `${DR.fmt(g.belum_closed)} belum closed`, g.oak_stop && `${DR.fmt(g.oak_stop)} OAK Stop`].filter(Boolean).join(' · ') || '<span class="dr-mute">-</span>';
+    const urut = [...G.filter((g) => idMilik.has(g.id)), ...G.filter((g) => !idMilik.has(g.id))];
+    const isi = (g) => `<div class="dr-pl-isi">
+        <div>${JENIS_SAP.filter(([k]) => g.jenis[k]).map(([k, t, c]) => `<span class="dr-pl-chip"><i style="--c:${c}"></i>${t} <b>${DR.fmt(g.jenis[k])}</b> <span class="dr-mute">${pctI(g.jenis[k], g.n)}</span></span>`).join('')}</div>
+        <div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:640px"><thead><tr><th>Pelapor</th><th>Kategori</th><th class="r">Laporan</th><th style="min-width:160px">Komposisi</th><th class="r">Mengidentifikasi HIRA</th></tr></thead><tbody>${
+          g.pelapor.map((o) => `<tr><td><b>${DR.esc(o.nama || '-')}</b>${o.sid ? `<br><span class="dr-mute">${DR.esc(o.sid)}</span>` : ''}</td><td>${DR.esc(o.kategori || '-')}</td>
+            <td class="r">${DR.fmt(o.n)}</td><td>${barJenis(o.jenis, o.n)}</td><td class="r">${pctI(o.lolos, o.n)}</td></tr>`).join('')}</tbody></table></div></div>`;
+    const baris = urut.map((g) => `<details class="dr-pl"><summary>
+        <span><b>${DR.esc(g.nama)}</b>${tag(g)}</span><span class="r"><b>${DR.fmt(g.n)}</b></span><span class="r">${DR.fmt(g.pelapor.length)}</span>
+        <span>${barJenis(g.jenis, g.n)}</span><span class="r">${pctI(g.lolos, g.n)}</span><span>${masalah(g)}</span></summary>${isi(g)}</details>`).join('')
+      + diam.map(([, nama]) => `<div class="dr-pl-row kosong"><span><b>${DR.esc(nama)}</b><span class="dr-pl-tag milik">PJA lokasi ini</span></span><span class="r">0</span><span class="r">0</span><span class="dr-mute" style="grid-column:span 3">Tidak ada laporan di detail lokasi ini minggu ini</span></div>`).join('');
+    return `<div class="dr-pl-wrap">
+        <div class="dr-pl-head"><b>PJA yang melaporkan · ${DR.fmt(nPja)} PJA${G.some((g) => g.id === '') ? ' + pelapor non-PJA' : ''}</b>
+          <span class="dr-mute">${DR.fmt(pemilik.length - diam.length)} dari ${DR.fmt(pemilik.length)} PJA lokasi ini melapor</span>
+          <span class="dr-pl-leg">${JENIS_SAP.map(([, t, c]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</span></div>
+        ${G.length || diam.length ? `<div class="dr-pl-row kepala"><span>PJA pelapor</span><span class="r">Laporan</span><span class="r">Pelapor</span><span>Komposisi jenis</span><span class="r">Identifikasi HIRA</span><span>Bermasalah</span></div>${baris}` : ''}
+        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya, jadi jumlahnya bisa melebihi total laporan. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
   }
 
   function isiSap(data) {
