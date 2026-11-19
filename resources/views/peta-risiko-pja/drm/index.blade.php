@@ -813,6 +813,7 @@
           <td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
           <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`
           + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:12px 16px 16px 40px">
+              <div data-pjalap><span class="dr-mute">Memuat PJA yang melaporkan…</span></div>
               <div data-belum="${DR.esc(d)}" data-pja-id="${DR.esc(pja[0].id)}" style="margin-bottom:16px"><span class="dr-mute">Memuat bahaya-risiko yang belum tercover SAP…</span></div>
               <div data-sap="${DR.esc(d)}" data-pemilik="${DR.esc(JSON.stringify(pja.map((p) => [String(p.id), p.nama])))}"><span class="dr-mute">Memuat laporan SAP…</span></div></td></tr>` : '');
       }).join('')
@@ -890,12 +891,22 @@
     const kunci = `${d}|${w}`;
     let pemilik = [];
     try { pemilik = JSON.parse(td.dataset.pemilik || '[]'); } catch (e) { pemilik = []; }
-    const tulis = (data) => { if (td.isConnected) td.innerHTML = pjaPelapor(data, pemilik) + isiSap(data); };
+    // Urutan rincian: komposisi PJA pelapor → bahaya belum tercover → daftar laporan.
+    const kotakPja = td.parentElement && td.parentElement.querySelector('[data-pjalap]');
+    const tulis = (data) => {
+      if (!td.isConnected) return;
+      if (kotakPja) kotakPja.innerHTML = pjaPelapor(data, pemilik);
+      td.innerHTML = kotakPja ? isiSap(data) : pjaPelapor(data, pemilik) + isiSap(data);
+    };
     if (sapCache[kunci]) { tulis(sapCache[kunci]); return; }
     fetch(URL_SAP.replace('__DL__', encodeURIComponent(d)) + '?w=' + w, { headers: { Accept: 'application/json' } })
       .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j))))
       .then((data) => { sapCache[kunci] = data; tulis(data); })
-      .catch((e) => { if (td.isConnected) td.innerHTML = `<span class="br-red">${DR.esc((e && e.pesan) || 'Gagal memuat laporan SAP.')}</span>`; });
+      .catch((e) => {
+        if (!td.isConnected) return;
+        if (kotakPja) kotakPja.innerHTML = '';
+        td.innerHTML = `<span class="br-red">${DR.esc((e && e.pesan) || 'Gagal memuat laporan SAP.')}</span>`;
+      });
   }
 
   // ------------------------------------------------------------ PJA yang melaporkan di satu detail lokasi
