@@ -876,7 +876,7 @@
       const lvTag = (lv) => `<span class="dr-lv lv-${DR.esc(lv)}">${DR.esc(lv || '-')}</span>`;
       const tabel = (L, alasan) => `<div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:1000px"><thead><tr><th>Risiko awal</th><th>Kelompok aktivitas</th><th style="min-width:220px">Aktivitas HIRA · sub aktivitas</th><th style="min-width:150px">HIRA</th><th style="min-width:220px">Bahaya - risiko</th>${alasan ? '<th>Masalah</th>' : '<th>Residual</th>'}</tr></thead><tbody>${
         L.slice().sort((a, b) => (urutLv[a.n1] ?? 9) - (urutLv[b.n1] ?? 9) || String(namaKel[a.kel]).localeCompare(String(namaKel[b.kel])) || String(a.an).localeCompare(String(b.an)) || String(a.bn).localeCompare(String(b.bn)))
-          .map((x) => `<tr><td>${lvTag(x.n1)}</td><td>${DR.esc(namaKel[x.kel] || x.kel)}</td><td>${DR.esc(x.an)}${x.sn && x.sn !== x.an ? `<br><span class="dr-mute">${DR.esc(x.sn)}</span>` : ''}</td><td data-hira="${DR.esc(x.hid)}"><span class="dr-mute">…</span></td><td><b>${DR.esc(x.bn)}</b></td>
+          .map((x) => `<tr><td>${lvTag(x.n1)}</td><td>${DR.esc(namaKel[x.kel] || x.kel)}</td><td>${DR.esc(x.an)}${x.sn && x.sn !== x.an ? `<br><span class="dr-mute">${DR.esc(x.sn)}</span>` : ''}</td><td data-hira="${DR.esc(x.hid)}" data-bahaya="${DR.esc(x.bn)}"><span class="dr-mute">…</span></td><td><b>${DR.esc(x.bn)}</b></td>
             <td>${alasan ? [x.m & 4 && 'belum closed', x.m & 8 && 'berulang', x.m & 16 && 'OAK Stop', x.m & 32 && 'butir OAK tidak sesuai'].filter(Boolean).join(', ') : lvTag(x.n2)}</td></tr>`).join('')}</tbody></table></div>`;
       const lv = state.lv === 'ALL' ? 'semua level' : 'Significant + High';
       el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;margin-bottom:8px;font-size:13px">
@@ -914,16 +914,15 @@
         td.innerHTML = `<button type="button" class="dr-hira" aria-haspopup="dialog" title="Lihat dokumen HIRA">
             <b>${DR.esc(d.idh)}</b>${d.ada ? ` · rev ${DR.esc(d.rev)}` : ''}${L.length > 1 ? ` <span class="dr-hira-n">+${L.length - 1}</span>` : ''}
             <small>${DR.esc(d.ada ? (d.dept || '-') : 'tidak ada di HIRA master')}</small></button>`;
-        td.querySelector('button').addEventListener('click', () => bukaHira(td.dataset.hira, td.closest('tr')));
+        td.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); bukaHira(td.dataset.hira, td.dataset.bahaya || ''); });
       });
     }).catch((e) => {
       el.querySelectorAll('td[data-hira]').forEach((td) => { td.innerHTML = `<span class="br-red" title="${DR.esc(e.message)}">gagal</span>`; });
     });
   }
 
-  function bukaHira(hid, tr) {
+  function bukaHira(hid, bahaya) {
     const L = hiraCache[hid] || [], d = dialogItem(), isi = d.querySelector('#dr-item-isi');
-    const bahaya = tr ? (tr.querySelector('td:nth-child(5) b') || {}).textContent || '' : '';
     d.querySelector('#dr-item-judul').textContent = `Asal HIRA${bahaya ? ' · ' + bahaya : ''}`;
     const baris = (k, v) => (v ? `<tr><th style="width:170px">${k}</th><td>${v}</td></tr>` : '');
     isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
@@ -1227,16 +1226,17 @@
         const rinci = [nObs && `${DR.fmt(nObs)} Obs`, nOak && `${DR.fmt(nOak)} OAK`, nKet && `${DR.fmt(nKet)} Ketidaksesuaian`].filter(Boolean).join(' · ');
         const sap = b.st === 'T' ? '<span class="dr-sap-tidak">Tidak ada SAP</span>'
           : `<span class="dr-sap-ada">Ada · ${DR.fmt(nObs + nOak + nKet)} laporan</span>${rinci ? `<small>${rinci}</small>` : ''}`;
-        return `<tr><td>${DR.esc(b.t[1] || '-')}</td><td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${+b.inc > 0 ? `<div><span class="dr-tanda ungu">insiden 12 bln (${DR.fmt(+b.inc)})</span></div>` : ''}</td>
+        return `<tr><td>${DR.esc(b.t[1] || '-')}</td><td data-hira="${DR.esc(b.hid)}" data-bahaya="${DR.esc(b.t[2] || '')}"><span class="dr-mute">…</span></td><td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${+b.inc > 0 ? `<div><span class="dr-tanda ungu">insiden 12 bln (${DR.fmt(+b.inc)})</span></div>` : ''}</td>
           <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
           <td><span class="dr-st ${b.st}">${STATUS_SAP[b.st]}</span>${alasan ? `<div>${alasan}</div>` : ''}</td>
           <td>${sap}${b.st === 'T' ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td></tr>
-          <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="5"></td></tr>`;
+          <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="6"></td></tr>`;
       }).join('');
       td.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:8px;font-size:13px"><b>${DR.fmt(baris.length)} bahaya-risiko · ${wk}</b>
           <span style="color:#a07a00">● ${DR.fmt(n.G)} ada gap</span><span style="color:#b42318">● ${DR.fmt(n.T)} tidak teridentifikasi</span><span style="color:#1a7f37">● ${DR.fmt(n.K)} terkontrol</span></div>
-        <div class="dr-scroll"><table class="pr-tbl dr-tbl dr-st-tbl" style="min-width:900px"><thead><tr><th>Sub aktivitas</th><th style="min-width:240px">Bahaya - risiko</th><th>Risiko awal</th><th>Status SAP ${wk}</th><th>SAP ${wk}</th></tr></thead><tbody>${isi}</tbody></table></div>`;
+        <div class="dr-scroll"><table class="pr-tbl dr-tbl dr-st-tbl" style="min-width:1040px"><thead><tr><th>Sub aktivitas</th><th style="min-width:150px">HIRA</th><th style="min-width:240px">Bahaya - risiko</th><th>Risiko awal</th><th>Status SAP ${wk}</th><th>SAP ${wk}</th></tr></thead><tbody>${isi}</tbody></table></div>`;
       td.querySelectorAll('.dr-sap-btn').forEach((btn) => btn.addEventListener('click', (e) => { e.stopPropagation(); bukaSapBahaya({ kel: baris[+btn.dataset.i].kel, hid: baris[+btn.dataset.i].hid }, btn); }));
+      isiHira(td, baris.map((b) => String(b.hid)));
     } catch (e) {
       if (td.isConnected) td.innerHTML = `<span class="br-red">${DR.esc(e.message || 'Gagal memuat rincian.')}</span>`;
     }
