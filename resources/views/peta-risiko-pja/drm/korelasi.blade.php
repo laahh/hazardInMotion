@@ -11,7 +11,7 @@
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Peta Risiko PJA</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Alur baseline</span></p>
   <h1 class="pr-title">Alur baseline: dari aktivitas sampai PJA</h1>
-  <p class="pr-sub">Baca dari kiri ke kanan: aktivitas HIRA dipecah menjadi sub aktivitas dan bahaya-risiko, ditangkap SAP lewat label, berlaku di grup lokasi, diwarisi detail lokasi, lalu menjadi tanggung jawab PJA. Arahkan kursor ke kotak untuk menyorot jalurnya; klik untuk menaikkan jalurnya ke atas setiap kolom (klik lagi atau Esc untuk kembali); klik dua kali untuk menjadikannya fokus.</p>
+  <p class="pr-sub">Baca dari kiri ke kanan: aktivitas HIRA dipecah menjadi sub aktivitas dan bahaya-risiko, ditangkap SAP lewat label, berlaku di grup lokasi, diwarisi detail lokasi, lalu menjadi tanggung jawab PJA. Arahkan kursor ke kotak untuk menyorot jalurnya; klik untuk menaikkan seluruh jalurnya ke atas setiap kolom dan menguncinya (klik kotak lain untuk ganti, klik lagi atau Esc untuk melepas); klik dua kali untuk menjadikannya fokus.</p>
 @endsection
 
 @section('content')
@@ -252,9 +252,10 @@
       const t2 = el('text', { x: 14, y: 32, class: 't2' }, g);
       t2.textContent = potong(n.sub, maksHuruf + 6);
       if (STATUS[n.status]) el('circle', { cx: BW - 11, cy: H / 2, r: 5.5, fill: STATUS[n.status][0], stroke: '#fff', 'stroke-width': 1.5 }, g);
-      g.addEventListener('mouseenter', () => sorot(n.key, edges));
+      // Selama ada kotak terpilih, kursor tidak menimpa sorot jalur pilihan (yang sudah dinaikkan ke atas).
+      g.addEventListener('mouseenter', () => { if (!pilihan) sorot(n.key, edges); });
       g.addEventListener('mouseleave', () => pulihSorot());
-      g.addEventListener('focus', () => sorot(n.key, edges));
+      g.addEventListener('focus', () => { if (!pilihan) sorot(n.key, edges); });
       g.addEventListener('blur', () => pulihSorot());
       g.addEventListener('click', () => pilihJalur(n));
       g.addEventListener('dblclick', () => fokus(n));
