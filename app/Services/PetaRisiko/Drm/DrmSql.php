@@ -106,7 +106,7 @@ FROM (SELECT id, any(name) AS name, any(id_parent) AS id_parent, any(id_pja_type
              any(id_site) AS id_site, max(is_active) AS is_active
       FROM obds.m_pja GROUP BY id) p
 LEFT JOIN (SELECT id, any(name) AS name FROM obds.m_pja_type GROUP BY id) t ON t.id = p.id_pja_type
-WHERE p.is_active = 1';
+WHERE p.is_active = 1'.$this->saringPjaDikecualikan('p.name');
     }
 
     /**
@@ -909,8 +909,16 @@ umum_a AS (
 
         return 'aj AS (
   SELECT DISTINCT CRC32(concat('.$this->norm('site').', \'|\', '.$this->norm('lokasi').')) AS lk, CRC32('.$this->norm('nama_pja').') AS nk
-  FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\'
+  FROM obds.aaj_lokasi_dan_pja WHERE ifNull(nama_pja, \'\') != \'\''.$this->saringPjaDikecualikan('nama_pja').'
 )';
+    }
+
+    /** Syarat SQL: nama PJA tidak mengandung kata di config `pja_dikecualikan` (mis. Inspektor / Inspector). */
+    private function saringPjaDikecualikan(string $kolom): string
+    {
+        $kata = array_values(array_filter(array_map('strval', (array) ($this->cfg['pja_dikecualikan'] ?? []))));
+
+        return $kata === [] ? '' : ' AND NOT multiSearchAnyCaseInsensitiveUTF8(ifNull('.$kolom.', \'\'), ['.$this->daftar($kata).'])';
     }
 
     /**

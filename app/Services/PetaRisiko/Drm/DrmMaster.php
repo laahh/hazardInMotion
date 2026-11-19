@@ -439,12 +439,27 @@ final class DrmMaster
         if (isset($this->data['lokasiPja'])) {
             $lp = [];
             foreach ($this->data['lokasiPja'] as [$site, $lokasi, $pja]) {
+                if (self::pjaDikecualikan((string) $pja, $cfg)) {
+                    continue;
+                }
                 $lp[self::crcLokasi($site, $lokasi).'|'.self::crc($pja)] = sprintf('[%d,%d]', self::crcLokasi($site, $lokasi), self::crc($pja));
             }
             $lit['lp'] = self::json('['.implode(',', $lp).']', 'Array(Tuple(UInt32, UInt32))');
         }
 
         return $lit;
+    }
+
+    /** PJA yang namanya mengandung kata di config `pja_dikecualikan` (mis. Inspektor) tidak ikut dashboard. */
+    public static function pjaDikecualikan(string $nama, array $cfg): bool
+    {
+        foreach ((array) ($cfg['pja_dikecualikan'] ?? []) as $kata) {
+            if ($kata !== '' && mb_stripos($nama, (string) $kata) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ------------------------------------------------------------ util

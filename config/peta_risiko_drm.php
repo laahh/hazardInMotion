@@ -276,6 +276,13 @@ return [
     /* Status SAP yang tidak dihitung sama sekali. */
     'status_buang' => ['DELETED', 'BUKAN TEMUAN'],
 
+    /*
+    | PJA yang tidak ikut dashboard (keputusan user 19 Nov 2026): nama mengandung salah satu kata ini (tanpa beda
+    | huruf besar/kecil) dibuang dari mapping lokasi → PJA saat sync, jadi tidak punya detail lokasi / baris.
+    | "inspektor" dan "inspector" = PJA Inspektor/Inspector (Mining, Safety, HSE).
+    */
+    'pja_dikecualikan' => ['inspektor', 'inspector'],
+
     /* Observasi yang deskripsi/umpan balik/tindakannya berisi frasa ini (huruf kecil) tidak dihitung sebagai deteksi. */
     'obs_tanpa_aktivitas' => ['tidak ada aktivitas'],
 
