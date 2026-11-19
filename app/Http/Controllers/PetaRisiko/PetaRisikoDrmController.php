@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\PetaRisiko;
 
 use App\Http\Controllers\Controller;
+use App\Services\PetaRisiko\Drm\DrmHiraSumber;
 use App\Services\PetaRisiko\Drm\DrmRepository;
 use App\Services\PetaRisiko\Drm\DrmSapBahaya;
 use App\Services\PetaRisiko\Drm\DrmSapDetailLokasi;
@@ -62,6 +63,19 @@ class PetaRisikoDrmController extends Controller
      * Laporan SAP satu detail lokasi untuk minggu ke-w snapshot (0 = minggu terbaru), dengan keterangan
      * pemetaan master DRM 2.1. Dipanggil saat baris detail lokasi di tab Group Lokasi dibuka.
      */
+    /** Asal HIRA (dokumen id_hira_master, revisi, departemen, aktivitas spesifik) untuk daftar baris baseline ?ri=1,2,3. */
+    public function hiraSumber(Request $request, DrmHiraSumber $hira): JsonResponse
+    {
+        $v = $request->validate(['ri' => ['required', 'string', 'max:3000', 'regex:/^[0-9,]+$/']]);
+        try {
+            return response()->json(['baris' => $hira->untuk(array_map('intval', explode(',', $v['ri'])))]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['pesan' => 'Data HIRA tidak bisa dimuat dari ClickHouse saat ini. Coba lagi beberapa saat.'], 503);
+        }
+    }
+
     public function sapDetailLokasi(Request $request, string $dl, DrmSapDetailLokasi $sap): JsonResponse
     {
         $meta = $this->repo->meta();

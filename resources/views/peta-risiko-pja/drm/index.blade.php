@@ -56,6 +56,16 @@
 
 @section('content')
 <style>
+  /* Kolom HIRA (asal dokumen) di tabel bahaya detail lokasi */
+  .dr-hira { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; max-width: 190px; padding: 4px 8px; border: 1px solid rgba(57, 82, 188, .2);
+    border-radius: 8px; background: #f7f8fe; color: #2c2f31; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+  .dr-hira:hover, .dr-hira:focus-visible { border-color: #3952bc; outline: none; }
+  .dr-hira small { max-width: 172px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #595c5e; font-size: 11px; }
+  .dr-hira-n { color: #3952bc; font-weight: 700; }
+  .dr-hira-dok { margin-bottom: 14px; }
+  .dr-hira-dok-k { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 14px; }
+  .dr-hira-dok th { text-align: left; color: #595c5e; font-weight: 600; }
+
   /* PJA yang melaporkan di satu detail lokasi (tab Group Lokasi) */
   .dr-pl-wrap { margin-bottom: 16px; }
   .dr-pl-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin-bottom: 8px; font-size: 13px; }
@@ -850,7 +860,7 @@
       const k = urai(kd[0])[w] || 0, s = urai(sp[0])[w] || 0;
       const m = (s & (4 | 8 | 16 | 32)) | (k & 16);
       hasil.n++;
-      const baris = { kel, an: b[B.aktivitas], sn: b[B.sub], bn: b[B.bahaya], n1: b[B.n1], n2: b[B.n2], m };
+      const baris = { hid: String(hid), kel, an: b[B.aktivitas], sn: b[B.sub], bn: b[B.bahaya], n1: b[B.n1], n2: b[B.n2], m };
       if (m) hasil.bm.push(baris); else if (!((k & 1) || (s & 2))) hasil.none.push(baris);
     });
     return hasil;
@@ -864,9 +874,9 @@
       const namaKel = Object.fromEntries([['X', 'Belum terpetakan'], ...M.proses.map((p) => [p.kode, p.nama])]);
       const urutLv = { Significant: 0, High: 1, Medium: 2, Low: 3 };
       const lvTag = (lv) => `<span class="dr-lv lv-${DR.esc(lv)}">${DR.esc(lv || '-')}</span>`;
-      const tabel = (L, alasan) => `<div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:880px"><thead><tr><th>Risiko awal</th><th>Kelompok aktivitas</th><th style="min-width:220px">Aktivitas HIRA · sub aktivitas</th><th style="min-width:220px">Bahaya - risiko</th>${alasan ? '<th>Masalah</th>' : '<th>Residual</th>'}</tr></thead><tbody>${
+      const tabel = (L, alasan) => `<div class="dr-scroll"><table class="pr-tbl dr-tbl" style="min-width:1000px"><thead><tr><th>Risiko awal</th><th>Kelompok aktivitas</th><th style="min-width:220px">Aktivitas HIRA · sub aktivitas</th><th style="min-width:150px">HIRA</th><th style="min-width:220px">Bahaya - risiko</th>${alasan ? '<th>Masalah</th>' : '<th>Residual</th>'}</tr></thead><tbody>${
         L.slice().sort((a, b) => (urutLv[a.n1] ?? 9) - (urutLv[b.n1] ?? 9) || String(namaKel[a.kel]).localeCompare(String(namaKel[b.kel])) || String(a.an).localeCompare(String(b.an)) || String(a.bn).localeCompare(String(b.bn)))
-          .map((x) => `<tr><td>${lvTag(x.n1)}</td><td>${DR.esc(namaKel[x.kel] || x.kel)}</td><td>${DR.esc(x.an)}${x.sn && x.sn !== x.an ? `<br><span class="dr-mute">${DR.esc(x.sn)}</span>` : ''}</td><td><b>${DR.esc(x.bn)}</b></td>
+          .map((x) => `<tr><td>${lvTag(x.n1)}</td><td>${DR.esc(namaKel[x.kel] || x.kel)}</td><td>${DR.esc(x.an)}${x.sn && x.sn !== x.an ? `<br><span class="dr-mute">${DR.esc(x.sn)}</span>` : ''}</td><td data-hira="${DR.esc(x.hid)}"><span class="dr-mute">…</span></td><td><b>${DR.esc(x.bn)}</b></td>
             <td>${alasan ? [x.m & 4 && 'belum closed', x.m & 8 && 'berulang', x.m & 16 && 'OAK Stop', x.m & 32 && 'butir OAK tidak sesuai'].filter(Boolean).join(', ') : lvTag(x.n2)}</td></tr>`).join('')}</tbody></table></div>`;
       const lv = state.lv === 'ALL' ? 'semua level' : 'Significant + High';
       el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;margin-bottom:8px;font-size:13px">
@@ -874,8 +884,59 @@
           <span class="dr-mute">dari ${DR.fmt(H.n)} baris baseline (${pctI(H.none.length, H.n)}) · ${wKode(w)} · ${lv}</span></div>`
         + (H.none.length ? tabel(H.none, false) : '<div class="dr-mute">Semua bahaya-risiko baseline di detail lokasi ini sudah tertangkap laporan SAP minggu ini.</div>')
         + (H.bm.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#a07a00">● ${DR.fmt(H.bm.length)} sudah tertangkap SAP tetapi laporannya bermasalah</summary>${tabel(H.bm, true)}</details>` : '')
-        + '<p class="dr-mute" style="font-size:12px;margin:8px 0 0">Baseline detail lokasi = semua baris HIRA grup lokasinya (M05), jadi sebagian baris bisa saja aktivitasnya memang tidak ada di lokasi ini.</p>';
+        + '<p class="dr-mute" style="font-size:12px;margin:8px 0 0">Baseline detail lokasi = semua baris HIRA grup lokasinya (M05), jadi sebagian baris bisa saja aktivitasnya memang tidak ada di lokasi ini. Klik kolom HIRA untuk melihat dokumen asalnya.</p>';
+      isiHira(el, [...H.none, ...H.bm].map((x) => x.hid));
     }).catch((e) => { if (el.isConnected) el.innerHTML = `<span class="br-red">${DR.esc(e.message || 'Gagal memuat data PJA.')}</span>`; });
+  }
+
+  // ------------------------------------------------------------ Asal HIRA (dokumen id_hira_master) per baris baseline
+  const URL_HIRA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.hira.sumber')) }};
+  const hiraCache = {};
+
+  /** Ambil asal HIRA untuk hid yang belum ada di cache (maks 300 per permintaan). */
+  async function muatHira(hids) {
+    const perlu = [...new Set(hids)].filter((h) => !(h in hiraCache));
+    for (let i = 0; i < perlu.length; i += 300) {
+      const potong = perlu.slice(i, i + 300);
+      const r = await fetch(`${URL_HIRA}?ri=${potong.join(',')}`, { headers: { Accept: 'application/json' } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.pesan || `Gagal memuat HIRA (HTTP ${r.status}).`);
+      potong.forEach((h) => { hiraCache[h] = (j.baris || {})[h] || []; });
+    }
+  }
+
+  /** Isi sel [data-hira] di dalam el: chip "id · rev" + departemen singkat; klik → detail dokumen. */
+  function isiHira(el, hids) {
+    muatHira(hids).then(() => {
+      el.querySelectorAll('td[data-hira]').forEach((td) => {
+        const L = hiraCache[td.dataset.hira] || [], d = L[0];
+        if (!d) { td.innerHTML = '<span class="dr-mute">-</span>'; return; }
+        td.innerHTML = `<button type="button" class="dr-hira" aria-haspopup="dialog" title="Lihat dokumen HIRA">
+            <b>${DR.esc(d.idh)}</b>${d.ada ? ` · rev ${DR.esc(d.rev)}` : ''}${L.length > 1 ? ` <span class="dr-hira-n">+${L.length - 1}</span>` : ''}
+            <small>${DR.esc(d.ada ? (d.dept || '-') : 'tidak ada di HIRA master')}</small></button>`;
+        td.querySelector('button').addEventListener('click', () => bukaHira(td.dataset.hira, td.closest('tr')));
+      });
+    }).catch((e) => {
+      el.querySelectorAll('td[data-hira]').forEach((td) => { td.innerHTML = `<span class="br-red" title="${DR.esc(e.message)}">gagal</span>`; });
+    });
+  }
+
+  function bukaHira(hid, tr) {
+    const L = hiraCache[hid] || [], d = dialogItem(), isi = d.querySelector('#dr-item-isi');
+    const bahaya = tr ? (tr.querySelector('td:nth-child(5) b') || {}).textContent || '' : '';
+    d.querySelector('#dr-item-judul').textContent = `Asal HIRA${bahaya ? ' · ' + bahaya : ''}`;
+    const baris = (k, v) => (v ? `<tr><th style="width:170px">${k}</th><td>${v}</td></tr>` : '');
+    isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
+        <div class="dr-hira-dok-k"><b>HIRA ${DR.esc(x.idh)}</b>${x.ada ? ` · rev ${DR.esc(x.rev)}` : ''}
+          ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
+          ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
+        ${x.ada ? `<table class="pr-tbl dr-tbl"><tbody>
+          ${baris('Departemen', DR.esc(x.dept))}${baris('Aktivitas spesifik', DR.esc(x.spesifik))}
+          ${baris('Aktivitas · sub', DR.esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site', DR.esc((x.site || []).join(', ')))}
+          ${baris('Bagian', DR.esc(x.bagian))}${baris('Perusahaan', DR.esc(x.perusahaan))}${baris('Klasifikasi', DR.esc(x.rutin))}${baris('Diperbarui', DR.esc(x.diperbarui))}
+        </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di mv_hira_master.</p>'}</div>`).join('')
+      || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>';
+    if (!d.open) d.showModal();
   }
 
   // ------------------------------------------------------------ Laporan SAP satu detail lokasi (dimuat saat baris dibuka)
