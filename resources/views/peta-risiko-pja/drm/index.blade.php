@@ -783,16 +783,21 @@
     $('#dr-grup-sub').textContent = diGrup
       ? 'Detail lokasi di grup ini beserta PJA-nya. Satu baris = kelompok aktivitas × bahaya di detail lokasi itu (terkontrol / hanya bermasalah / tanpa laporan). Klik nama PJA untuk membuka Beranda PJA.'
       : 'Satu baris = grup × kelompok aktivitas × bahaya unik; status dari detail lokasi grup itu saja. Satu bahaya bisa berlaku di beberapa grup, jadi jumlah antar grup bisa melebihi baseline. Klik baris untuk melihat grup itu.';
-    $('#dr-kel-judul').textContent = diGrup ? `Kelompok aktivitas · ${state.grup}` : 'Per Kelompok Aktivitas';
+    // Tab Per Kelompok Aktivitas: tabel bawah hanya kelompok yang dipilih di filter atas.
+    const diKel = state.tab === 'proses' && !!state.proses;
+    const namaKelAktif = diKel ? ((M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses) : '';
+    $('#dr-kel-judul').textContent = diGrup ? `Kelompok aktivitas · ${state.grup}` : diKel ? `Kelompok aktivitas · ${namaKelAktif}` : 'Per Kelompok Aktivitas';
     $('#dr-kel-sub').textContent = diGrup
       ? 'Kelompok aktivitas yang ada di grup lokasi ini (dari master M05); jumlah barisnya sama dengan baseline grup di kartu atas. Klik baris untuk melihat aktivitas HIRA kelompok itu di grup ini.'
-      : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA di kelompok itu.';
+      : diKel
+        ? 'Hanya kelompok aktivitas yang dipilih di filter atas; jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA kelompok ini. Ganti kelompok lewat filter Kelompok aktivitas.'
+        : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA di kelompok itu.';
     if (diGrup) {
       tabelDetailLokasi(w);
       tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekDari(ambilKunci((p.gk || [])[i], `${state.grup}|${k}`)), 'proses');
     } else {
       tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]), (p, i, g) => vekGrup(p, i, g), 'grup');
-      tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
+      tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.filter((k) => !diKel || k.kode === state.proses).map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
     }
   }
 
