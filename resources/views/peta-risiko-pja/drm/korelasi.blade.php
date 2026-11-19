@@ -11,7 +11,7 @@
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Peta Risiko PJA</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Alur baseline</span></p>
   <h1 class="pr-title">Alur baseline: dari aktivitas sampai PJA</h1>
-  <p class="pr-sub">Baca dari kiri ke kanan: aktivitas HIRA dipecah menjadi sub aktivitas dan bahaya-risiko, ditangkap SAP lewat label, berlaku di grup lokasi, diwarisi detail lokasi, lalu menjadi tanggung jawab PJA. Arahkan kursor ke kotak untuk menyorot jalurnya; klik untuk rincian, klik dua kali untuk menjadikannya fokus.</p>
+  <p class="pr-sub">Baca dari kiri ke kanan: aktivitas HIRA dipecah menjadi sub aktivitas dan bahaya-risiko, ditangkap SAP lewat label, berlaku di grup lokasi, diwarisi detail lokasi, lalu menjadi tanggung jawab PJA. Arahkan kursor ke kotak untuk menyorot jalurnya; klik untuk menaikkan jalurnya ke atas setiap kolom (klik lagi atau Esc untuk kembali); klik dua kali untuk menjadikannya fokus.</p>
 @endsection
 
 @section('content')
@@ -152,6 +152,8 @@
   const warnaSimpul = (n) => (WARNA_LABEL[n.jenis] || (KOLOM[n.kolomNama] || ['', '#64748b'])[1]);
   const tampilKolom = Object.fromEntries(Object.keys(KOLOM).map((k) => [k, true]));
   let D = null, jejak = [], posisi = {};
+  // Kotak yang diklik: jalurnya (asal & tujuan) dinaikkan ke atas setiap kolom dan tetap disorot.
+  let pilihan = null, edgesKini = [];
 
   $('al-kol').innerHTML = Object.entries(KOLOM).map(([k, [nama, warna]]) =>
     `<label><input type="checkbox" data-kol="${k}" checked><span class="al-dot" style="--c:${warna}"></span>${nama}</label>`).join('');
@@ -201,6 +203,11 @@
     // Kolom tersembunyi: sambungkan langsung kiri ↔ kanan melewati simpul yang disembunyikan.
     const edges = jembatan(D.edge, ada);
     const per = tataLetak(kolom, nodes, edges);
+    if (pilihan && !ada.has(pilihan)) pilihan = null;
+    const diJalur = pilihan ? jalur(pilihan, edges).on : null;
+    // Simpul di jalur pilihan naik ke atas kolom (urutan relatif tetap; sort stabil).
+    if (diJalur) per.forEach((L) => L.sort((a, b) => Number(diJalur.has(b.key)) - Number(diJalur.has(a.key))));
+    edgesKini = edges;
     const lebarKanvas = $('al-kanvas').clientWidth || 1000;
     const W = Math.max(LEBAR_MIN, Math.floor((lebarKanvas - 20) / Math.max(1, kolom.length)));
     const BW = W - 36, tinggi = ATAS + Math.max(1, ...per.map((L) => L.length)) * (H + GAP) + 20;
@@ -220,7 +227,8 @@
       t.textContent = KOLOM[k][0];
       const s = el('text', { x, y: 48, class: 'al-kepala-sub' }, svg);
       const lebih = (D.potong || {})[k === 'label' ? 'label' : k] || 0;
-      s.textContent = `${per[c].length}${lebih ? ' ditampilkan · +' + lebih + ' lainnya' : ''}`;
+      const nJalur = diJalur ? per[c].filter((x) => diJalur.has(x.key)).length : 0;
+      s.textContent = `${per[c].length}${lebih ? ' ditampilkan · +' + lebih + ' lainnya' : ''}${diJalur ? ` · ${nJalur} di jalur` : ''}`;
     });
 
     // Garis dulu (di bawah kotak).
@@ -245,13 +253,14 @@
       t2.textContent = potong(n.sub, maksHuruf + 6);
       if (STATUS[n.status]) el('circle', { cx: BW - 11, cy: H / 2, r: 5.5, fill: STATUS[n.status][0], stroke: '#fff', 'stroke-width': 1.5 }, g);
       g.addEventListener('mouseenter', () => sorot(n.key, edges));
-      g.addEventListener('mouseleave', () => svg.classList.remove('sorot'));
+      g.addEventListener('mouseleave', () => pulihSorot());
       g.addEventListener('focus', () => sorot(n.key, edges));
-      g.addEventListener('blur', () => svg.classList.remove('sorot'));
-      g.addEventListener('click', () => { detail(n.key, edges); if (modeEdit) bukaEdit(n); });
+      g.addEventListener('blur', () => pulihSorot());
+      g.addEventListener('click', () => pilihJalur(n));
       g.addEventListener('dblclick', () => fokus(n));
-      g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); fokus(n); } else if (ev.key === ' ') { ev.preventDefault(); detail(n.key, edges); } });
+      g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); fokus(n); } else if (ev.key === ' ') { ev.preventDefault(); pilihJalur(n); } });
     });
+    if (pilihan) sorot(pilihan, edges);
   }
 
   /** Relasi setelah kolom disembunyikan: simpul tersembunyi dilewati (A → tersembunyi → B menjadi A → B). */
@@ -268,8 +277,29 @@
     return [...hasil.values()];
   }
 
-  /** Sorot seluruh jalur: ke kiri (asal) dan ke kanan (tujuan) dari simpul. */
-  function sorot(key, edges) {
+  /** Klik kotak: jalurnya naik ke atas & tetap disorot; klik lagi kotak yang sama untuk kembali. */
+  function pilihJalur(n) {
+    pilihan = pilihan === n.key ? null : n.key;
+    gambar();
+    $('al-kanvas').scrollTo({ top: 0, behavior: 'smooth' });
+    detail(n.key, edgesKini);
+    if (modeEdit) bukaEdit(n);
+  }
+
+  function lepasPilihan() {
+    if (!pilihan) return false;
+    pilihan = null;
+    gambar();
+    return true;
+  }
+
+  /** Setelah kursor pergi: kembali ke sorot pilihan (bila ada) atau tanpa sorot. */
+  function pulihSorot() {
+    if (pilihan && posisi[pilihan]) sorot(pilihan, edgesKini); else $('al-svg').classList.remove('sorot');
+  }
+
+  /** Simpul & relasi di jalur sebuah simpul: ke kiri (asal) dan ke kanan (tujuan). */
+  function jalur(key, edges) {
     const masuk = {}, keluar = {};
     edges.forEach((e) => { (masuk[e.to] ||= []).push(e); (keluar[e.from] ||= []).push(e); });
     const on = new Set([key]), eOn = new Set();
@@ -280,6 +310,12 @@
     });
     jalan(key, masuk);
     jalan(key, keluar);
+    return { on, eOn };
+  }
+
+  /** Sorot seluruh jalur simpul. */
+  function sorot(key, edges) {
+    const { on, eOn } = jalur(key, edges);
     const svg = $('al-svg');
     svg.classList.add('sorot');
     svg.querySelectorAll('.al-n').forEach((g) => g.classList.toggle('on', on.has(g.dataset.key)));
@@ -325,6 +361,7 @@
       if (!r.ok) throw new Error(d.pesan || `HTTP ${r.status}`);
       d.node.forEach((n) => { n.kolomNama = d.kolom[n.kolom]; });
       D = d;
+      pilihan = null;
       const pusat = d.node.find((n) => n.key === d.pusat);
       const i = jejak.findIndex((x) => x.jenis === jenis && x.id === id);
       jejak = i >= 0 ? jejak.slice(0, i + 1) : [...jejak, { jenis, id, label: pusat ? pusat.label : (label || id) }].slice(-8);
@@ -500,6 +537,9 @@
     }
   }
 
+  // Klik area kosong diagram melepas pilihan jalur.
+  $('al-svg').addEventListener('click', (e) => { if (e.target === $('al-svg')) lepasPilihan(); });
+
   // ------------------------------------------------------------ perbesar / perkecil
   function aturPenuh(penuh) {
     $('al-wadah').classList.toggle('penuh', penuh);
@@ -516,7 +556,10 @@
   document.addEventListener('keydown', (e) => {
     // Esc menutup modal dulu (bawaan dialog); bila tidak ada modal terbuka, keluar dari mode perbesar.
     const dlg = document.getElementById('al-modal');
-    if (e.key === 'Escape' && $('al-wadah').classList.contains('penuh') && !(dlg && dlg.open)) aturPenuh(false);
+    if (e.key !== 'Escape' || (dlg && dlg.open)) return;
+    // Esc: lepas pilihan jalur dulu, baru keluar dari mode perbesar.
+    if (lepasPilihan()) return;
+    if ($('al-wadah').classList.contains('penuh')) aturPenuh(false);
   });
   try { if (sessionStorage.getItem('al-penuh') === '1') aturPenuh(true); } catch (e) { /* sesi tidak tersedia */ }
 
