@@ -25,6 +25,30 @@ final class DrmMasterBarisUnggah
     {
     }
 
+    /**
+     * Label yang sudah ada di master per jenis (sumber dropdown Excel, sama dengan saran isian di halaman master),
+     * unik menurut kunci pencocokan sync, terurut.
+     *
+     * @return array<string, list<string>>  OBS / OAK / KET → label
+     */
+    public function daftarLabel(): array
+    {
+        $hasil = [];
+        foreach (self::BANYAK as $j) {
+            $unik = [];
+            foreach (DB::table('drm_master_baris')->where('aktif', true)->pluck(DrmMasterDb::KOLOM_LABEL[$j]) as $isi) {
+                foreach (DrmMasterDb::pisahLabel($isi) as $l) {
+                    $unik[$this->kunci($j, $l)] ??= $l;
+                }
+            }
+            $daftar = array_values($unik);
+            sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[$j] = $daftar;
+        }
+
+        return $hasil;
+    }
+
     /** @return array<int, string> gid => nama grup lokasi aktif */
     public function grupAktif(): array
     {

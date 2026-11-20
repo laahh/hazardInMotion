@@ -131,13 +131,36 @@ class DrmMasterBarisUnggahTest extends TestCase
         $this->assertSame('Port and Barging Operation Dept.', $u->ekspor(['dep' => 'Port and Barging Operation Dept.'], $hira)[0]['dept_hira']);
     }
 
+    public function test_kolom_item_sumber_punya_dropdown_label_master(): void
+    {
+        [$u, , $path] = $this->unduh();
+
+        $this->assertSame(['OBS' => ['Cast Off Tongkang'], 'OAK' => [], 'KET' => ['Bahaya Biologi / Berlubang', 'Rambu / Tidak ada rambu']], $u->daftarLabel());
+        $x = IOFactory::load($path);
+        $daftar = $x->getSheetByName(DrmMasterBarisExcel::SHEET_LABEL);
+        $this->assertSame(['Item Sumber Observasi', 'Cast Off Tongkang'], [$daftar->getCell('A1')->getValue(), $daftar->getCell('A2')->getValue()]);
+        $this->assertSame('Rambu / Tidak ada rambu', $daftar->getCell('C3')->getValue());
+
+        // Dropdown di kolom Observasi & Ketidaksesuaian (OAK tanpa label → tanpa dropdown), bergaya informasi (tidak menolak isian lain).
+        $kunci = array_keys(DrmMasterBarisExcel::KOLOM);
+        $kol = fn (string $k) => Coordinate::stringFromColumnIndex(array_search($k, $kunci, true) + 1);
+        $s = $x->getSheetByName(DrmMasterBarisExcel::SHEET);
+        $v = $s->getDataValidation($kol('OBS').'2');
+        $this->assertSame('list', $v->getType());
+        $this->assertSame("'Daftar label'!\$A\$2:\$A\$2", $v->getFormula1());
+        $this->assertSame('information', $v->getErrorStyle());
+        $this->assertFalse($v->getShowErrorMessage());
+        $this->assertTrue($s->dataValidationExists($kol('KET').'3'));
+        $this->assertFalse($s->dataValidationExists($kol('OAK').'2'));
+    }
+
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */
     private function unduh(): array
     {
         $u = app(DrmMasterBarisUnggah::class);
         $x = new DrmMasterBarisExcel();
 
-        return [$u, $x, $this->berkas[] = $x->tulis($u->ekspor([], []), array_values($u->grupAktif()))];
+        return [$u, $x, $this->berkas[] = $x->tulis($u->ekspor([], []), array_values($u->grupAktif()), $u->daftarLabel())];
     }
 
     /** Ubah sel baris data ke-$n (1 = baris data pertama) berdasarkan kunci kolom, seperti diedit di Excel. */

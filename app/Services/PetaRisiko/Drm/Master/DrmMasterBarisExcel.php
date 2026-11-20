@@ -43,6 +43,7 @@ final class DrmMasterBarisExcel
         'Kolom ID baris dan Versi jangan diubah. Kolom bertanda (info) hanya informasi dan diabaikan saat unggah.',
         'Yang bisa diedit: Aktivitas, Sub aktivitas, Bahaya - risiko, Item Sumber Observasi, Item Sumber OAK, Item Sumber Ketidaksesuaian.',
         'Item Sumber: satu label per baris di dalam sel (Alt+Enter untuk baris baru). Sel dikosongkan = semua label di kolom itu dihapus.',
+        'Kolom Item Sumber punya dropdown berisi label yang sudah ada di master (sheet "Daftar label"). Memilih dari dropdown MENGGANTI isi sel; untuk menambah label, ketik di baris baru (Alt+Enter) atau salin dari sheet "Daftar label". Label baru di luar daftar tetap boleh.',
         'Item Sumber Ketidaksesuaian ditulis "ketidaksesuaian / sub ketidaksesuaian" (dipisah spasi-garis miring-spasi).',
         'Site MARINE dan EKSPLORASI ditentukan departemen HIRA (Shipping / Port and Barging Operation -> MARINE, Geology and Exploration -> EKSPLORASI); site lain lewat grup lokasi.',
         'Mengubah teks Bahaya bisa membuat nilai risiko HIRA (kekerapan × konsekuensi) tidak tercocok lagi; pratinjau unggah memberi peringatan.',
@@ -53,9 +54,10 @@ final class DrmMasterBarisExcel
     /**
      * @param  list<array<string, mixed>>  $baris  sudah tersaring; kunci sesuai KOLOM (nilai banyak = list<string>)
      * @param  list<string>  $grupAda  nama grup lokasi aktif (sheet bantuan)
+     * @param  array<string, list<string>>  $daftarLabel  OBS / OAK / KET → label yang sudah ada (dropdown Item Sumber)
      * @return string path berkas sementara .xlsx
      */
-    public function tulis(array $baris, array $grupAda): string
+    public function tulis(array $baris, array $grupAda, array $daftarLabel = []): string
     {
         $x = new Spreadsheet();
         $s = $x->getActiveSheet()->setTitle(self::SHEET);
@@ -94,12 +96,51 @@ final class DrmMasterBarisExcel
             $g->setCellValueExplicit('A'.($i + 2), $n, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
         }
         $g->getColumnDimension('A')->setWidth(45);
+        $this->dropdownLabel($x, $s, $daftarLabel, max(2, $akhir));
         $x->setActiveSheetIndex(0);
 
         $path = tempnam(sys_get_temp_dir(), 'mbx').'.xlsx';
         (new Xlsx($x))->save($path);
 
         return $path;
+    }
+
+    /** Judul sheet daftar label (sumber dropdown Item Sumber). */
+    public const SHEET_LABEL = 'Daftar label';
+
+    /**
+     * Dropdown Item Sumber seperti saran isian di halaman master: daftar label yang sudah ada di sheet "Daftar label",
+     * validasi data bergaya INFORMASI tanpa pesan galat → memilih dari daftar mengisi sel, mengetik label baru atau
+     * beberapa label (Alt+Enter, satu per baris) tetap diterima. Kecocokan label tetap diperiksa saat unggah.
+     *
+     * @param  array<string, list<string>>  $daftarLabel
+     */
+    private function dropdownLabel(Spreadsheet $x, \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $s, array $daftarLabel, int $akhir): void
+    {
+        $jenis = ['OBS' => 'Item Sumber Observasi', 'OAK' => 'Item Sumber OAK', 'KET' => 'Item Sumber Ketidaksesuaian'];
+        $kunci = array_keys(self::KOLOM);
+        $d = $x->createSheet()->setTitle(self::SHEET_LABEL);
+        $i = 0;
+        foreach ($jenis as $j => $judul) {
+            $kolD = Coordinate::stringFromColumnIndex(++$i);
+            $daftar = array_values($daftarLabel[$j] ?? []);
+            $d->setCellValue($kolD.'1', $judul)->getStyle($kolD.'1')->getFont()->setBold(true);
+            $d->getColumnDimension($kolD)->setWidth(55);
+            foreach ($daftar as $n => $l) {
+                $d->setCellValueExplicit($kolD.($n + 2), $l, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            }
+            if ($daftar === []) {
+                continue;
+            }
+            $kol = Coordinate::stringFromColumnIndex(array_search($j, $kunci, true) + 1);
+            $v = (new \PhpOffice\PhpSpreadsheet\Cell\DataValidation())
+                ->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST)
+                ->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_INFORMATION)
+                ->setAllowBlank(true)->setShowDropDown(true)->setShowErrorMessage(false)->setShowInputMessage(true)
+                ->setPromptTitle($judul)->setPrompt('Pilih dari daftar, atau ketik label. Beberapa label: satu per baris (Alt+Enter).')
+                ->setFormula1("'".self::SHEET_LABEL."'!\$".$kolD.'$2:$'.$kolD.'$'.(count($daftar) + 1));
+            $s->setDataValidation($kol.'2:'.$kol.$akhir, $v);
+        }
     }
 
     /**
