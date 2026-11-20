@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\PetaRisiko;
 
 use App\Http\Controllers\Controller;
+use App\Services\PetaRisiko\Drm\DrmHiraSumber;
 use App\Services\PetaRisiko\Drm\DrmMaster;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use Illuminate\Contracts\View\View;
@@ -48,22 +49,52 @@ final class PetaRisikoMasterBarisController extends Controller
         $baris = DB::table('drm_master_baris')->where('aktif', true)
             ->orderBy('aktivitas')->orderBy('sub')->orderBy('ri')->get()->all();
         $label = $this->labelHalaman($baris, $kolom);
+        [$hira, $hiraGagal] = $this->hiraAsal($baris);
         $rows = array_map(fn ($b) => [
             'ri' => (int) $b->ri,
             'a' => (string) $b->aktivitas,
             's' => (string) ($b->sub ?? ''),
             'b' => (string) $b->bahaya,
             'kb' => (string) ($b->kb ?? ''),
+            // Dokumen HIRA asal baris (id_hira_master master) + departemennya, dokumen yang teks bahayanya cocok dulu.
+            'h' => $hira[(int) $b->ri] ?? [],
             'OBS' => $label[(int) $b->ri]['OBS'] ?? [],
             'OAK' => $label[(int) $b->ri]['OAK'] ?? [],
             'KET' => $label[(int) $b->ri]['KET'] ?? [],
         ], $baris);
+        $departemen = array_values(array_unique(array_filter(array_merge(...array_map(fn ($r) => array_column($r['h'], 'dept'), $rows) ?: [[]]))));
+        sort($departemen);
 
         // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.
         return view('peta-risiko-pja.drm.master-baris', array_merge($data, [
             'terisi' => true,
             'rows' => $rows,
+            'departemen' => $departemen,
+            'hiraGagal' => $hiraGagal,
         ], $this->saran($kolom)));
+    }
+
+    /**
+     * Departemen asal tiap baris dari dokumen HIRA-nya (obds.mv_hira_master, cadangan tabel mentah hira_master).
+     * ClickHouse tidak terjangkau → halaman tetap tampil tanpa kolom departemen terisi.
+     *
+     * @param  list<object>  $baris
+     * @return array{0: array<int, list<array{idh: int, rev: int, dept: string, aktif: bool, cocok: bool, ada: bool, kosong: bool}>>, 1: bool}
+     */
+    private function hiraAsal(array $baris): array
+    {
+        try {
+            $hasil = app(DrmHiraSumber::class)->untukBaris($baris);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [[], true];
+        }
+
+        return [array_map(fn ($daftar) => array_map(fn ($d) => [
+            'idh' => (int) $d['idh'], 'rev' => (int) ($d['rev'] ?? 0), 'dept' => (string) ($d['dept'] ?? ''), 'aktif' => (bool) ($d['aktif'] ?? false),
+            'cocok' => (bool) $d['cocok'], 'ada' => (bool) $d['ada'], 'kosong' => (bool) ($d['kosong'] ?? false),
+        ], $daftar), $hasil), false];
     }
 
     /** Tambah satu label ke baris: jenis OBS / OAK (teks) atau KET (ketidaksesuaian + subketidaksesuaian). */

@@ -56,6 +56,14 @@
   .mb-ubah { display: inline-block; margin-top: 6px; font-size: 11.5px; font-weight: 600; color: #3952bc; text-decoration: none; }
   .mb-ubah:hover { text-decoration: underline; }
   .mb-scroll { overflow-x: auto; }
+  /* Departemen asal HIRA */
+  .mb-tbl td.dep { min-width: 170px; max-width: 230px; }
+  .mb-dep { display: block; font-weight: 600; font-size: 12.5px; line-height: 1.35; }
+  .mb-dep + .mb-dep { margin-top: 4px; }
+  .mb-hid { display: block; margin-top: 2px; font-size: 11px; color: #8a8d90; }
+  .mb-hid b { font-weight: 600; color: #595c5e; }
+  .mb-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 700; vertical-align: 1px; }
+  .mb-tag.cocok { background: #e9f7ee; color: #146c34; } .mb-tag.kosong { background: #fff7e6; color: #8a5300; } .mb-tag.hilang { background: #fdecef; color: #9b1c31; }
 </style>
 
 @if (session('pesan'))
@@ -63,6 +71,10 @@
 @endif
 @if ($errors->any())
   <div class="mb-banner err"><span class="material-symbols-outlined">error</span><div>{!! implode('<br>', array_map('e', $errors->all())) !!}</div></div>
+@endif
+
+@if ($siap && $terisi && ($hiraGagal ?? false))
+  <div class="mb-banner warn"><span class="material-symbols-outlined">cloud_off</span><div>Departemen asal HIRA belum bisa dimuat (ClickHouse tidak terjangkau). Kolom departemen kosong; coba muat ulang beberapa saat lagi.</div></div>
 @endif
 
 @if (! $siap || ! $terisi)
@@ -94,6 +106,12 @@
         <option value="KET">Tanpa label Ketidaksesuaian</option>
         <option value="SEMUA">Tanpa label sama sekali</option>
       </select>
+      <select id="mb-f-dep" aria-label="Departemen asal HIRA" style="max-width:280px">
+        <option value="">Semua departemen</option>
+        @foreach ($departemen as $d)
+          <option value="{{ $d }}">{{ $d }}</option>
+        @endforeach
+      </select>
       <button class="mb-btn sek" type="button" id="mb-reset">Reset filter</button>
       @if ($bolehUbah)
         <a class="mb-btn sek" href="{{ route('peta-risiko-pja.master.index', ['t' => 'baris', 'tambah' => 1]) }}"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah baris HIRA</a>
@@ -108,7 +126,7 @@
     <div class="mb-scroll">
       <table class="mb-tbl" id="mb-tabel" style="width:100%">
         <thead><tr>
-          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko terkait</th>
+          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko terkait</th><th>Departemen <small style="text-transform:none;letter-spacing:0;font-weight:500">(asal HIRA)</small></th>
           <th>Item Sumber Observasi</th><th>Item Sumber OAK</th><th>Item Sumber Ketidaksesuaian</th>
         </tr></thead>
         <tbody></tbody>
@@ -184,6 +202,21 @@
     },
   });
 
+  /**
+   * Departemen asal baris: dari dokumen HIRA (id_hira_master master). Dokumen yang teks bahayanya cocok = sumber
+   * atribut risiko saat sync (tag "cocok"); "kosong" = header HIRA ada tetapi tanpa isi; "tidak ada" = ID tidak ditemukan.
+   */
+  function kolomDep(d) {
+    if (!d.length) return '<div class="mb-kosong">Tanpa ID HIRA</div>';
+    const perDept = {};
+    d.forEach((x) => { const k = x.ada ? (x.dept || '(tanpa departemen)') : '(ID HIRA tidak ditemukan)'; (perDept[k] ||= []).push(x); });
+    return Object.keys(perDept).map((dep) => '<span class="mb-dep">' + esc(dep) + '</span>' + perDept[dep].map((x) =>
+      '<span class="mb-hid">HIRA <b>' + x.idh + '</b>' + (x.ada ? ' · rev ' + x.rev + (x.aktif ? '' : ' · nonaktif') : '')
+        + (x.cocok ? '<span class="mb-tag cocok" title="Teks bahaya baris ini ada di dokumen HIRA ini">cocok</span>' : '')
+        + (x.kosong ? '<span class="mb-tag kosong" title="Dokumen HIRA ada tetapi belum berisi bahaya/site (tidak ada di mv_hira_master)">kosong</span>' : '')
+        + (!x.ada ? '<span class="mb-tag hilang">tidak ada</span>' : '') + '</span>').join('')).join('');
+  }
+
   const tabel = new DataTable('#mb-tabel', {
     data: ROWS,
     deferRender: true,
@@ -204,25 +237,29 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
+      { data: 'h', className: 'dep', render: (d, type) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') : kolomDep(d) },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
 
   const fKb = document.getElementById('mb-f-kb');
   const fKosong = document.getElementById('mb-f-kosong');
+  const fDep = document.getElementById('mb-f-dep');
   DataTable.ext.search.push((settings, _data, idx) => {
     if (settings.nTable.id !== 'mb-tabel') return true;
     const r = ROWS[idx];
     if (fKb.value && r.kb !== fKb.value) return false;
+    if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
     const k = fKosong.value;
     if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
     if (k) return !r[k].length;
     return true;
   });
-  [fKb, fKosong].forEach((el) => el.addEventListener('change', () => tabel.draw()));
+  [fKb, fKosong, fDep].forEach((el) => el.addEventListener('change', () => tabel.draw()));
   document.getElementById('mb-reset').addEventListener('click', () => {
     fKb.value = '';
     fKosong.value = '';
+    fDep.value = '';
     tabel.search('').order([0, 'asc']).page(0).draw();
   });
   document.getElementById('mb-tabel').addEventListener('submit', (e) => {

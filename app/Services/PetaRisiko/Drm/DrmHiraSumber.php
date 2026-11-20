@@ -42,6 +42,25 @@ class DrmHiraSumber
     }
 
     /**
+     * Semua baris master sekaligus (halaman Master per Baris), tanpa batas MAKS_BARIS: dokumen HIRA asal tiap baris
+     * dengan departemennya. Satu query ClickHouse untuk semua id_hira_master, di-cache (lihat dokumen()).
+     *
+     * @param  iterable<object{ri: int|string, idh: ?string, bahaya: ?string}>  $baris  baris drm_master_baris
+     * @return array<int, list<array<string, mixed>>>  ri → dokumen HIRA (cocok teks bahaya dulu)
+     */
+    public function untukBaris(iterable $baris): array
+    {
+        $daftar = [];
+        foreach ($baris as $b) {
+            $daftar[] = ['ri' => (int) $b->ri, 'bahaya' => (string) ($b->bahaya ?? ''), 'idh' => self::pisahIdh((string) ($b->idh ?? ''))];
+        }
+        $idh = array_values(array_unique(array_merge(...array_column($daftar, 'idh') ?: [[]])));
+        sort($idh);
+
+        return self::cocokkan($daftar, $this->dokumen($idh));
+    }
+
+    /**
      * @param  list<array{ri: int, bahaya: string, idh: list<int>}>  $baris
      * @param  array<int, array<string, mixed>>  $dokumen  id_hira_master → header + 'bahaya' (teks cause)
      * @return array<int, list<array<string, mixed>>>
