@@ -5,12 +5,17 @@ namespace App\Http\Controllers\PetaRisiko;
 use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmHiraSumber;
 use App\Services\PetaRisiko\Drm\DrmMaster;
+use App\Services\PetaRisiko\Drm\Master\DrmMasterBarisExcel;
+use App\Services\PetaRisiko\Drm\Master\DrmMasterBarisUnggah;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Master per baris (acuan utama, keputusan user 18 Nov 2026): tiap baris HIRA (aktivitas · sub · bahaya-risiko) dengan
@@ -22,6 +27,8 @@ use Illuminate\Support\Facades\Schema;
  */
 final class PetaRisikoMasterBarisController extends Controller
 {
+    private const KUNCI_UNGGAH = 'peta-risiko:unggah-baris:';
+
     public function __construct(private readonly DrmMasterDb $db)
     {
     }
@@ -50,6 +57,7 @@ final class PetaRisikoMasterBarisController extends Controller
             ->orderBy('aktivitas')->orderBy('sub')->orderBy('ri')->get()->all();
         $label = $this->labelHalaman($baris, $kolom);
         [$hira, $hiraGagal] = $this->hiraAsal($baris);
+        $terakhir = $this->terakhirDiubah();
         $rows = array_map(fn ($b) => [
             'ri' => (int) $b->ri,
             'a' => (string) $b->aktivitas,
@@ -58,11 +66,14 @@ final class PetaRisikoMasterBarisController extends Controller
             'kb' => (string) ($b->kb ?? ''),
             // Dokumen HIRA asal baris (id_hira_master master) + departemennya, dokumen yang teks bahayanya cocok dulu.
             'h' => $hira[(int) $b->ri] ?? [],
+            // Departemen koreksi baseline (kosong = ikut HIRA) dan perubahan terakhir [nama, waktu].
+            'dk' => (string) ($b->departemen ?? ''),
+            'u' => $terakhir[(int) $b->ri] ?? null,
             'OBS' => $label[(int) $b->ri]['OBS'] ?? [],
             'OAK' => $label[(int) $b->ri]['OAK'] ?? [],
             'KET' => $label[(int) $b->ri]['KET'] ?? [],
         ], $baris);
-        $departemen = array_values(array_unique(array_filter(array_merge(...array_map(fn ($r) => array_column($r['h'], 'dept'), $rows) ?: [[]]))));
+        $departemen = array_values(array_unique(array_filter(array_merge(...array_map(fn ($r) => [...array_column($r['h'], 'dept'), $r['dk']], $rows) ?: [[]]))));
         sort($departemen);
 
         // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.
@@ -72,6 +83,96 @@ final class PetaRisikoMasterBarisController extends Controller
             'departemen' => $departemen,
             'hiraGagal' => $hiraGagal,
         ], $this->saran($kolom)));
+    }
+
+    /** Unduh Excel baris master, disaring sama dengan halaman (risiko, label kosong, departemen, kata cari). */
+    public function unduh(Request $request, DrmMasterBarisUnggah $unggah, DrmMasterBarisExcel $excel): BinaryFileResponse|RedirectResponse
+    {
+        abort_unless(DrmMasterDb::terisi(), 404);
+        $filter = $request->validate([
+            'kb' => ['nullable', 'in:Significant,High,Medium,Low'], 'kosong' => ['nullable', 'in:OBS,OAK,KET,SEMUA'],
+            'dep' => ['nullable', 'string', 'max:150'], 'q' => ['nullable', 'string', 'max:200'],
+        ]);
+        try {
+            $baris = DB::table('drm_master_baris')->where('aktif', true)->get(['ri', 'idh', 'bahaya'])->all();
+            $rows = $unggah->ekspor($filter, $this->hiraAsal($baris)[0]);
+            $path = $excel->tulis($rows, array_values($unggah->grupAktif()));
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['unduh' => $e->getMessage()]);
+        }
+
+        return response()->download($path, 'master-baris-'.now()->format('Ymd-His').'.xlsx')->deleteFileAfterSend();
+    }
+
+    /** Unggah Excel → pratinjau perubahan (belum disimpan), disimpan sementara 30 menit untuk dikonfirmasi. */
+    public function unggah(Request $request, DrmMasterBarisUnggah $unggah, DrmMasterBarisExcel $excel): RedirectResponse
+    {
+        abort_unless(DrmMasterDb::terisi(), 404);
+        abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
+        $request->validate(['berkas' => ['required', 'file', 'mimes:xlsx', 'max:10240']]);
+        $file = $request->file('berkas');
+        try {
+            $pratinjau = $unggah->pratinjau($excel->baca($file->getRealPath()));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['berkas' => 'Berkas tidak bisa dibaca: '.$e->getMessage()]);
+        }
+        $token = Str::random(32);
+        Cache::put(self::KUNCI_UNGGAH.$token, ['user' => $request->user()?->getAuthIdentifier(), 'berkas' => mb_substr($file->getClientOriginalName(), 0, 80),
+            'dibuat' => now()->toIso8601String(), 'pratinjau' => $pratinjau], now()->addMinutes(30));
+
+        return redirect()->route('peta-risiko-pja.master.baris.pratinjau', $token);
+    }
+
+    public function pratinjau(Request $request, string $token): View
+    {
+        $data = $this->ambilUnggahan($request, $token);
+
+        return view('peta-risiko-pja.drm.master-baris-unggah', [...$data, 'token' => $token, 'bolehUbah' => $this->bolehUbah($request)]);
+    }
+
+    /** Terapkan unggahan yang sudah dipratinjau: satu transaksi, setiap baris dicatat di riwayat. */
+    public function terapkan(Request $request, string $token, DrmMasterBarisUnggah $unggah): RedirectResponse
+    {
+        abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
+        $data = $this->ambilUnggahan($request, $token);
+        $hasil = $unggah->terapkan($data['pratinjau'], $data['berkas']);
+        Cache::forget(self::KUNCI_UNGGAH.$token);
+        $pesan = $hasil['diubah'].' baris diperbarui dari '.$data['berkas'].'.'
+            .($hasil['dilewati'] ? ' '.count($hasil['dilewati']).' baris dilewati karena berubah sejak pratinjau (ID '.implode(', ', $hasil['dilewati']).').' : '')
+            .' Berlaku setelah php artisan peta-risiko:sync berikutnya.';
+
+        return redirect()->route('peta-risiko-pja.master.baris.index')->with('pesan', $pesan);
+    }
+
+    /** @return array<string, mixed> unggahan milik pengguna ini (404 bila kedaluwarsa / milik orang lain) */
+    private function ambilUnggahan(Request $request, string $token): array
+    {
+        $data = Cache::get(self::KUNCI_UNGGAH.$token);
+        abort_if($data === null, 404, 'Pratinjau unggahan sudah kedaluwarsa (30 menit). Unggah ulang berkasnya.');
+        abort_unless((string) $data['user'] === (string) $request->user()?->getAuthIdentifier(), 403);
+
+        return $data;
+    }
+
+    /**
+     * Perubahan terakhir per baris dari riwayat (tabel drm_master_baris, kunci = ri).
+     *
+     * @return array<int, array{0: string, 1: string}>  ri → [nama pengguna, waktu]
+     */
+    private function terakhirDiubah(): array
+    {
+        $id = DB::table('drm_master_log')->where('tabel', 'drm_master_baris')->groupBy('kunci')->selectRaw('max(id) AS id');
+        $hasil = [];
+        foreach (DB::table('drm_master_log')->whereIn('id', $id)->get(['kunci', 'user_nama', 'dibuat']) as $l) {
+            // Kunci non-angka = catatan ringkasan unggahan ("berkas: …"), bukan satu baris.
+            if (ctype_digit((string) $l->kunci)) {
+                $hasil[(int) $l->kunci] = [(string) ($l->user_nama ?? ''), \Carbon\Carbon::parse($l->dibuat)->translatedFormat('d M Y H:i')];
+            }
+        }
+
+        return $hasil;
     }
 
     /**

@@ -1,0 +1,360 @@
+<?php
+
+namespace App\Services\PetaRisiko\Drm\Master;
+
+use App\Services\PetaRisiko\Drm\DrmMaster;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
+
+/**
+ * Isian master per baris (bisa diedit) ↔ Excel: data unduhan tersaring, pratinjau perubahan dari berkas unggahan,
+ * dan penerapan dalam satu transaksi + drm_master_log (aksi 'unggah', siapa, sebelum → sesudah, nama berkas).
+ * Hanya mode kolom (label di item_sumber_* drm_master_baris).
+ */
+final class DrmMasterBarisUnggah
+{
+    public const SKALAR = ['aktivitas', 'sub', 'bahaya', 'kb', 'departemen'];
+
+    public const BANYAK = ['grup', 'OBS', 'OAK', 'KET'];
+
+    public const LEVEL = ['Significant', 'High', 'Medium', 'Low'];
+
+    private const PANJANG = ['aktivitas' => 500, 'sub' => 500, 'bahaya' => 1000, 'departemen' => 150];
+
+    public function __construct(private readonly DrmMasterDb $db)
+    {
+    }
+
+    public static function adaKolomDepartemen(): bool
+    {
+        return Schema::hasColumn('drm_master_baris', 'departemen');
+    }
+
+    /** @return array<int, string> gid => nama grup lokasi aktif */
+    public function grupAktif(): array
+    {
+        return DB::table('drm_master_grup')->where('aktif', true)->orderBy('nama')->pluck('nama', 'gid')->map(fn ($n) => (string) $n)->all();
+    }
+
+    /**
+     * Isian semua baris aktif saat ini: ri => [aktivitas, sub, bahaya, kb, departemen, grup[], OBS[], OAK[], KET[], aid, idh].
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function isianDb(?array $ri = null): array
+    {
+        if (! DrmMasterDb::labelDiBaris()) {
+            throw new RuntimeException('Master belum memakai kolom label per baris (jalankan peta-risiko:master-db --isi-label-baris).');
+        }
+        $grupNama = DB::table('drm_master_grup')->pluck('nama', 'gid')->all();
+        $grupPerRi = [];
+        $q = DB::table('drm_master_grup_baris');
+        if ($ri !== null) {
+            $q->whereIn('ri', $ri);
+        }
+        foreach ($q->get(['gid', 'ri']) as $g) {
+            if (isset($grupNama[$g->gid])) {
+                $grupPerRi[(int) $g->ri][] = (string) $grupNama[$g->gid];
+            }
+        }
+        $dep = self::adaKolomDepartemen();
+        $q = DB::table('drm_master_baris')->where('aktif', true);
+        if ($ri !== null) {
+            $q->whereIn('ri', $ri);
+        }
+        $hasil = [];
+        foreach ($q->orderBy('aktivitas')->orderBy('sub')->orderBy('ri')->get() as $b) {
+            $g = $grupPerRi[(int) $b->ri] ?? [];
+            sort($g);
+            $hasil[(int) $b->ri] = [
+                'ri' => (int) $b->ri, 'aid' => (int) ($b->aid ?? 0), 'idh' => (string) ($b->idh ?? ''),
+                'aktivitas' => (string) $b->aktivitas, 'sub' => (string) ($b->sub ?? ''), 'bahaya' => (string) $b->bahaya,
+                'kb' => (string) ($b->kb ?? ''), 'departemen' => $dep ? (string) ($b->departemen ?? '') : '',
+                'grup' => array_values(array_unique($g)),
+                'OBS' => DrmMasterDb::pisahLabel($b->{DrmMasterDb::KOLOM_LABEL['OBS']} ?? ''),
+                'OAK' => DrmMasterDb::pisahLabel($b->{DrmMasterDb::KOLOM_LABEL['OAK']} ?? ''),
+                'KET' => DrmMasterDb::pisahLabel($b->{DrmMasterDb::KOLOM_LABEL['KET']} ?? ''),
+            ];
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Baris untuk berkas unduhan, disaring sama dengan halaman (kb, label kosong, departemen, kata cari).
+     *
+     * @param  array{kb?: string, kosong?: string, dep?: string, q?: string}  $filter
+     * @param  array<int, list<array<string, mixed>>>  $hira  ri → dokumen HIRA (DrmHiraSumber::untukBaris), boleh kosong
+     * @return list<array<string, mixed>>
+     */
+    public function ekspor(array $filter, array $hira): array
+    {
+        $kelompok = DB::table('drm_master_aktivitas as a')->leftJoin('drm_master_kelompok as k', 'k.kode', '=', 'a.kelompok')
+            ->pluck('k.nama', 'a.aid')->all();
+        $kata = array_filter(preg_split('/\s+/', mb_strtolower(trim((string) ($filter['q'] ?? '')))) ?: []);
+        $hasil = [];
+        foreach ($this->isianDb() as $ri => $b) {
+            $deptHira = array_values(array_unique(array_filter(array_column($hira[$ri] ?? [], 'dept'))));
+            $deptEfektif = $b['departemen'] !== '' ? [$b['departemen']] : $deptHira;
+            if (($filter['kb'] ?? '') !== '' && $b['kb'] !== $filter['kb']) {
+                continue;
+            }
+            $k = (string) ($filter['kosong'] ?? '');
+            if (($k === 'SEMUA' && ($b['OBS'] || $b['OAK'] || $b['KET'])) || (in_array($k, ['OBS', 'OAK', 'KET'], true) && $b[$k])) {
+                continue;
+            }
+            if (($filter['dep'] ?? '') !== '' && ! in_array($filter['dep'], $deptEfektif, true)) {
+                continue;
+            }
+            $teks = mb_strtolower(implode(' ', [$ri, $b['aktivitas'], $b['sub'], $b['bahaya'], $b['kb'], implode(' ', $deptEfektif), $b['idh'],
+                implode(' ', $b['grup']), implode(' ', $b['OBS']), implode(' ', $b['OAK']), implode(' ', $b['KET'])]));
+            foreach ($kata as $w) {
+                if (! str_contains($teks, $w)) {
+                    continue 2;
+                }
+            }
+            $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'kelompok' => (string) ($kelompok[$b['aid']] ?? ''),
+                'versi' => DrmMasterBarisExcel::versi($b)];
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Bandingkan isi berkas dengan database. Tidak menyimpan apa pun.
+     *
+     * @param  list<array<string, mixed>>  $berkas  hasil DrmMasterBarisExcel::baca
+     * @return array{ubah: list<array<string, mixed>>, galat: list<array<string, mixed>>, konflik: list<array<string, mixed>>, tetap: int, total: int}
+     */
+    public function pratinjau(array $berkas): array
+    {
+        $ri = array_values(array_filter(array_map(fn ($r) => ctype_digit((string) ($r['ri'] ?? '')) ? (int) $r['ri'] : 0, $berkas)));
+        $db = $this->isianDb($ri === [] ? [0] : $ri);
+        $grup = array_change_key_case(array_flip($this->grupAktif()), CASE_LOWER);
+        $grupNama = $this->grupAktif();
+        $dep = self::adaKolomDepartemen();
+        $hasil = ['ubah' => [], 'galat' => [], 'konflik' => [], 'tetap' => 0, 'total' => count($berkas)];
+        $sudah = [];
+
+        foreach ($berkas as $r) {
+            $id = ctype_digit((string) ($r['ri'] ?? '')) ? (int) $r['ri'] : 0;
+            $label = ['baris' => (int) $r['baris'], 'ri' => $id];
+            if ($id === 0 || ! isset($db[$id])) {
+                $hasil['galat'][] = [...$label, 'pesan' => 'ID baris tidak dikenal (baris baru tidak bisa ditambah lewat Excel).'];
+
+                continue;
+            }
+            if (isset($sudah[$id])) {
+                $hasil['galat'][] = [...$label, 'pesan' => 'ID baris ini muncul lebih dari sekali di berkas.'];
+
+                continue;
+            }
+            $sudah[$id] = true;
+            $lama = $db[$id];
+            $label['aktivitas'] = $lama['aktivitas'];
+            $label['bahaya'] = $lama['bahaya'];
+            if (($r['versi'] ?? '') !== '' && $r['versi'] !== DrmMasterBarisExcel::versi($lama)) {
+                $hasil['konflik'][] = [...$label, 'pesan' => 'Baris sudah diubah orang lain setelah berkas diunduh. Unduh ulang lalu edit lagi.'];
+
+                continue;
+            }
+
+            [$baru, $galat, $peringatan] = $this->isianBaru($r, $lama, $grup, $grupNama, $dep);
+            if ($galat !== []) {
+                $hasil['galat'][] = [...$label, 'pesan' => implode(' ', $galat)];
+
+                continue;
+            }
+            $ubah = $this->beda($lama, $baru);
+            if ($ubah === []) {
+                $hasil['tetap']++;
+
+                continue;
+            }
+            $hasil['ubah'][] = [...$label, 'ubah' => $ubah, 'peringatan' => array_values(array_intersect_key($peringatan, $ubah)),
+                'baru' => $baru, 'versiDb' => DrmMasterBarisExcel::versi($lama)];
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Terapkan hasil pratinjau. Baris yang berubah di database sejak pratinjau (versi beda) dilewati.
+     *
+     * @return array{diubah: int, dilewati: list<int>}
+     */
+    public function terapkan(array $pratinjau, string $namaBerkas): array
+    {
+        $ri = array_column($pratinjau['ubah'], 'ri');
+        if ($ri === []) {
+            return ['diubah' => 0, 'dilewati' => []];
+        }
+        $user = Auth::user()?->getAuthIdentifier();
+
+        return DB::transaction(function () use ($pratinjau, $ri, $namaBerkas, $user) {
+            $db = $this->isianDb($ri);
+            $gid = array_change_key_case(array_flip($this->grupAktif()), CASE_LOWER);
+            $diubah = 0;
+            $dilewati = [];
+            foreach ($pratinjau['ubah'] as $u) {
+                $lama = $db[$u['ri']] ?? null;
+                if ($lama === null || DrmMasterBarisExcel::versi($lama) !== $u['versiDb']) {
+                    $dilewati[] = (int) $u['ri'];
+
+                    continue;
+                }
+                $this->simpanBaris((int) $u['ri'], $lama, $u['baru'], $u['ubah'], $gid, $user);
+                $sebelum = $sesudah = [];
+                foreach ($u['ubah'] as $k => $_) {
+                    $sebelum[$k] = is_array($lama[$k]) ? implode("\n", $lama[$k]) : $lama[$k];
+                    $sesudah[$k] = is_array($u['baru'][$k]) ? implode("\n", $u['baru'][$k]) : $u['baru'][$k];
+                }
+                $this->db->catat('drm_master_baris', (string) $u['ri'], 'unggah', $sebelum, $sesudah + ['berkas' => $namaBerkas]);
+                $diubah++;
+            }
+            $this->db->catat('drm_master_baris', mb_substr('berkas: '.$namaBerkas, 0, 100), 'unggah', null, [
+                'berkas' => $namaBerkas, 'baris diubah' => $diubah, 'dilewati (berubah sejak pratinjau)' => count($dilewati),
+                'tidak berubah' => (int) $pratinjau['tetap'], 'galat' => count($pratinjau['galat']), 'konflik' => count($pratinjau['konflik']),
+            ]);
+
+            return ['diubah' => $diubah, 'dilewati' => $dilewati];
+        });
+    }
+
+    /**
+     * Isian dari satu baris berkas, divalidasi. Kolom yang tidak ada di berkas = tidak diubah.
+     *
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: array<string, string>}
+     */
+    private function isianBaru(array $r, array $lama, array $grup, array $grupNama, bool $dep): array
+    {
+        $baru = $lama;
+        $galat = [];
+        foreach (self::SKALAR as $k) {
+            if (! array_key_exists($k, $r) || ($k === 'departemen' && ! $dep)) {
+                continue;
+            }
+            $v = trim(preg_replace('/\s+/u', ' ', (string) $r[$k]));
+            if (in_array($k, ['aktivitas', 'bahaya'], true) && $v === '') {
+                $galat[] = ucfirst($k).' tidak boleh kosong.';
+            }
+            if (isset(self::PANJANG[$k]) && mb_strlen($v) > self::PANJANG[$k]) {
+                $galat[] = ucfirst($k).' maksimal '.self::PANJANG[$k].' karakter.';
+            }
+            $baru[$k] = $v;
+        }
+        if ($baru['kb'] !== '') {
+            $cocok = array_values(array_filter(self::LEVEL, fn ($l) => strcasecmp($l, $baru['kb']) === 0));
+            if ($cocok === []) {
+                $galat[] = 'Risiko awal harus Significant, High, Medium, atau Low.';
+            } else {
+                $baru['kb'] = $cocok[0];
+            }
+        }
+        if (array_key_exists('grup', $r)) {
+            $daftar = [];
+            foreach (preg_split('/\r\n|\r|\n/', (string) $r['grup']) ?: [] as $g) {
+                $g = trim($g);
+                if ($g === '') {
+                    continue;
+                }
+                $gid = $grup[mb_strtolower($g)] ?? null;
+                if ($gid === null) {
+                    $galat[] = 'Grup lokasi "'.$g.'" tidak ada di master.';
+                } else {
+                    $daftar[] = $grupNama[$gid];
+                }
+            }
+            $daftar = array_values(array_unique($daftar));
+            sort($daftar);
+            $baru['grup'] = $daftar;
+        }
+        foreach (['OBS', 'OAK', 'KET'] as $j) {
+            if (! array_key_exists($j, $r)) {
+                continue;
+            }
+            $baru[$j] = DrmMasterDb::pisahLabel((string) $r[$j]);
+            foreach ($baru[$j] as $l) {
+                if ($j === 'KET' && in_array('', DrmMasterDb::pisahKet($l), true)) {
+                    $galat[] = 'Ketidaksesuaian "'.$l.'" harus berformat "ketidaksesuaian / sub ketidaksesuaian".';
+                }
+                if (mb_strlen($l) > 500) {
+                    $galat[] = 'Label '.$j.' maksimal 500 karakter.';
+                }
+            }
+        }
+        $peringatan = [
+            'bahaya' => 'Teks bahaya diubah: nilai risiko HIRA (kekerapan × konsekuensi) bisa tidak tercocok lagi saat sync.',
+            'aktivitas' => 'Aktivitas diubah: kelompok aktivitas tetap mengikuti ID aktivitas baris ini.',
+            'grup' => 'Grup lokasi diubah: site tempat baris ini dihitung ikut berubah setelah sync.',
+        ];
+
+        return [$baru, $galat, $peringatan];
+    }
+
+    /** @return array<string, array<string, mixed>> kolom berubah → {dari, ke} (skalar) atau {tambah, hapus} (banyak) */
+    private function beda(array $lama, array $baru): array
+    {
+        $ubah = [];
+        foreach (self::SKALAR as $k) {
+            if ($lama[$k] !== $baru[$k]) {
+                $ubah[$k] = ['dari' => $lama[$k], 'ke' => $baru[$k]];
+            }
+        }
+        foreach (self::BANYAK as $k) {
+            $kunci = fn (string $v) => $this->kunci($k, $v);
+            $a = array_combine(array_map($kunci, $lama[$k]), $lama[$k]) ?: [];
+            $b = array_combine(array_map($kunci, $baru[$k]), $baru[$k]) ?: [];
+            $tambah = array_values(array_diff_key($b, $a));
+            $hapus = array_values(array_diff_key($a, $b));
+            if ($tambah !== [] || $hapus !== []) {
+                $ubah[$k] = ['tambah' => $tambah, 'hapus' => $hapus];
+            }
+        }
+
+        return $ubah;
+    }
+
+    /** Kunci pencocokan sama dengan sync: OBS/OAK normTeks, Ketidaksesuaian norm "k / sk", grup huruf kecil. */
+    private function kunci(string $jenis, string $v): string
+    {
+        return match ($jenis) {
+            'KET' => (fn ($p) => DrmMaster::norm($p[0]).' / '.DrmMaster::norm($p[1]))(DrmMasterDb::pisahKet($v)),
+            'OBS', 'OAK' => DrmMaster::normTeks($v),
+            default => mb_strtolower(trim($v)),
+        };
+    }
+
+    private function simpanBaris(int $ri, array $lama, array $baru, array $ubah, array $gid, mixed $user): void
+    {
+        $kolom = [];
+        foreach (self::SKALAR as $k) {
+            if (isset($ubah[$k])) {
+                $kolom[$k] = $k === 'departemen' ? ($baru[$k] === '' ? null : $baru[$k]) : $baru[$k];
+            }
+        }
+        foreach (['OBS', 'OAK', 'KET'] as $j) {
+            if (isset($ubah[$j])) {
+                $kolom[DrmMasterDb::KOLOM_LABEL[$j]] = implode("\n", $baru[$j]);
+            }
+        }
+        if ($kolom !== []) {
+            DB::table('drm_master_baris')->where('ri', $ri)->update($kolom + ['diubah_oleh' => $user, 'updated_at' => now()]);
+        }
+        if (isset($ubah['grup'])) {
+            $hapus = array_values(array_filter(array_map(fn ($n) => $gid[mb_strtolower($n)] ?? null, $ubah['grup']['hapus'])));
+            if ($hapus !== []) {
+                DB::table('drm_master_grup_baris')->where('ri', $ri)->whereIn('gid', $hapus)->delete();
+            }
+            $sekarang = now();
+            foreach ($ubah['grup']['tambah'] as $n) {
+                if (isset($gid[mb_strtolower($n)])) {
+                    DB::table('drm_master_grup_baris')->insert(['gid' => $gid[mb_strtolower($n)], 'ri' => $ri, 'diubah_oleh' => $user,
+                        'created_at' => $sekarang, 'updated_at' => $sekarang]);
+                }
+            }
+        }
+    }
+}

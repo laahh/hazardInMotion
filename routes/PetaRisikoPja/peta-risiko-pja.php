@@ -31,6 +31,11 @@ Route::prefix('peta-risiko-pja')
         // Master per baris (Item Sumber OBS / OAK / Ketidaksesuaian per baris HIRA) — acuan utama, didaftarkan sebelum /{tabel}.
         Route::prefix('master/baris')->name('master.baris.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoMasterBarisController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            // Excel: unduh baris tersaring → edit → unggah → pratinjau → terapkan (riwayat di drm_master_log).
+            Route::get('/unduh', 'unduh')->middleware('throttle:20,1')->name('unduh');
+            Route::post('/unggah', 'unggah')->middleware('throttle:20,1')->name('unggah');
+            Route::get('/unggah/{token}', 'pratinjau')->where('token', '[A-Za-z0-9]{32}')->name('pratinjau');
+            Route::post('/unggah/{token}/terapkan', 'terapkan')->where('token', '[A-Za-z0-9]{32}')->middleware('throttle:20,1')->name('terapkan');
             Route::post('/{ri}/label', 'tambah')->whereNumber('ri')->middleware('throttle:120,1')->name('tambah');
             Route::post('/label/{jenis}/{id}/hapus', 'hapus')->where(['jenis' => 'teks|label|OBS|OAK|KET'])->whereNumber('id')->middleware('throttle:120,1')->name('hapus');
         });

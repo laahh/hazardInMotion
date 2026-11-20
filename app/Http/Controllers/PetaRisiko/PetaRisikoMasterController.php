@@ -179,9 +179,26 @@ class PetaRisikoMasterController extends Controller
     {
         abort_unless(DrmMasterDb::siap(), 404);
 
+        // Filter riwayat: tabel, kunci (mis. ID baris), nama pengguna, aksi (tambah / ubah / hapus / unggah).
+        $f = $request->validate([
+            'tabel' => ['nullable', 'string', 'max:40'], 'kunci' => ['nullable', 'string', 'max:100'],
+            'user' => ['nullable', 'string', 'max:150'], 'aksi' => ['nullable', 'string', 'max:20'],
+        ]);
+        $q = DB::table('drm_master_log')->orderByDesc('id');
+        foreach (['tabel', 'kunci', 'aksi'] as $k) {
+            if (($f[$k] ?? '') !== '') {
+                $q->where($k, $f[$k]);
+            }
+        }
+        if (($f['user'] ?? '') !== '') {
+            $q->where('user_nama', 'like', '%'.addcslashes($f['user'], '%_\\').'%');
+        }
+
         return view('peta-risiko-pja.drm.master-log', [
-            'log' => DB::table('drm_master_log')->orderByDesc('id')->paginate(50),
+            'log' => $q->paginate(50)->withQueryString(),
             'semua' => DrmMasterSkema::semua(),
+            'filter' => $f,
+            'aksiAda' => DB::table('drm_master_log')->distinct()->orderBy('aksi')->pluck('aksi')->all(),
         ]);
     }
 

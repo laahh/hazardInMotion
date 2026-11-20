@@ -63,6 +63,11 @@
   .mb-hid { display: block; margin-top: 2px; font-size: 11px; color: #8a8d90; }
   .mb-hid b { font-weight: 600; color: #595c5e; }
   .mb-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 700; vertical-align: 1px; }
+  .mb-tag.koreksi { background: #eef1fd; color: #3952bc; margin-left: 0; }
+  .mb-oleh { display: block; margin-top: 4px; font-size: 11px; color: #8a8d90; }
+  .mb-oleh a { color: #3952bc; text-decoration: none; } .mb-oleh a:hover { text-decoration: underline; }
+  .mb-unggah { display: inline-flex; align-items: center; gap: 6px; }
+  .mb-unggah input[type=file] { font-size: 12.5px; max-width: 230px; }
   .mb-tag.cocok { background: #e9f7ee; color: #146c34; } .mb-tag.kosong { background: #fff7e6; color: #8a5300; } .mb-tag.hilang { background: #fdecef; color: #9b1c31; }
 </style>
 
@@ -113,6 +118,14 @@
         @endforeach
       </select>
       <button class="mb-btn sek" type="button" id="mb-reset">Reset filter</button>
+      <a class="mb-btn sek" id="mb-unduh" href="{{ route('peta-risiko-pja.master.baris.unduh') }}" title="Unduh baris yang sedang tersaring (filter + kata cari) sebagai Excel"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh Excel</a>
+      @if ($bolehUbah)
+        <form class="mb-unggah" method="post" action="{{ route('peta-risiko-pja.master.baris.unggah') }}" enctype="multipart/form-data">
+          @csrf
+          <input type="file" name="berkas" accept=".xlsx" required aria-label="Berkas Excel hasil unduhan yang sudah diedit">
+          <button class="mb-btn" type="submit"><span class="material-symbols-outlined" style="font-size:18px">upload</span> Unggah Excel</button>
+        </form>
+      @endif
       @if ($bolehUbah)
         <a class="mb-btn sek" href="{{ route('peta-risiko-pja.master.index', ['t' => 'baris', 'tambah' => 1]) }}"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah baris HIRA</a>
       @endif
@@ -156,6 +169,8 @@
   const URL_TAMBAH = @json(route('peta-risiko-pja.master.baris.tambah', ['ri' => 0]));
   const URL_HAPUS = @json(route('peta-risiko-pja.master.baris.hapus', ['jenis' => 'OBS', 'id' => 0]));
   const URL_UBAH = @json(route('peta-risiko-pja.master.index', ['t' => 'baris', 'ubah' => 0]));
+  const URL_UNDUH = @json(route('peta-risiko-pja.master.baris.unduh'));
+  const URL_RIWAYAT = @json(route('peta-risiko-pja.master.log', ['tabel' => 'drm_master_baris']));
   const TURUNAN = @json(\App\Services\PetaRisiko\Drm\Master\DrmMasterDb::SUMBER_TURUNAN_OAK);
   const JENIS = {
     OBS: { nama: 'Observasi', dl: 'mb-obs', ph: 'Jenis kegiatan observasi' },
@@ -206,8 +221,11 @@
    * Departemen asal baris: dari dokumen HIRA (id_hira_master master). Dokumen yang teks bahayanya cocok = sumber
    * atribut risiko saat sync (tag "cocok"); "kosong" = header HIRA ada tetapi tanpa isi; "tidak ada" = ID tidak ditemukan.
    */
-  function kolomDep(d) {
-    if (!d.length) return '<div class="mb-kosong">Tanpa ID HIRA</div>';
+  function kolomDep(d, r) {
+    // Koreksi baseline menimpa departemen HIRA (HIRA sendiri tidak diubah).
+    const koreksi = r && r.dk ? '<span class="mb-dep">' + esc(r.dk) + ' <span class="mb-tag koreksi" title="Departemen hasil koreksi baseline; departemen HIRA di bawahnya hanya informasi">koreksi baseline</span></span>' : '';
+    if (!d.length) return koreksi || '<div class="mb-kosong">Tanpa ID HIRA</div>';
+    if (koreksi) return koreksi + '<div style="opacity:.6;margin-top:4px">' + kolomDep(d, null) + '</div>';
     const perDept = {};
     d.forEach((x) => { const k = x.ada ? (x.dept || '(tanpa departemen)') : '(ID HIRA tidak ditemukan)'; (perDept[k] ||= []).push(x); });
     return Object.keys(perDept).map((dep) => '<span class="mb-dep">' + esc(dep) + '</span>' + perDept[dep].map((x) =>
@@ -233,11 +251,12 @@
     },
     columns: [
       { data: 'a', className: 'hira', render: (d, type, r) => type !== 'display' ? d + ' ' + r.ri
-          : esc(d) + '<small>ID ' + r.ri + '</small>' + (BOLEH ? '<a class="mb-ubah" href="' + esc(urlUbah(r.ri)) + '">Ubah baris</a>' : '') },
+          : esc(d) + '<small>ID ' + r.ri + '</small>' + (BOLEH ? '<a class="mb-ubah" href="' + esc(urlUbah(r.ri)) + '">Ubah baris</a>' : '')
+            + (r.u ? '<span class="mb-oleh">Diubah ' + esc(r.u[1]) + ' oleh ' + esc(r.u[0] || '-') + ' · <a href="' + esc(URL_RIWAYAT + '&kunci=' + r.ri) + '">riwayat</a></span>' : '') },
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      { data: 'h', className: 'dep', render: (d, type) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') : kolomDep(d) },
+      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? (r.dk + ' ' + d.map((x) => x.dept + ' ' + x.idh).join(' ')) : kolomDep(d, r) },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
@@ -249,7 +268,7 @@
     if (settings.nTable.id !== 'mb-tabel') return true;
     const r = ROWS[idx];
     if (fKb.value && r.kb !== fKb.value) return false;
-    if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
+    if (fDep.value && (r.dk ? r.dk !== fDep.value : !r.h.some((x) => x.dept === fDep.value))) return false;
     const k = fKosong.value;
     if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
     if (k) return !r[k].length;
@@ -261,6 +280,15 @@
     fKosong.value = '';
     fDep.value = '';
     tabel.search('').order([0, 'asc']).page(0).draw();
+  });
+  // Unduh Excel mengikuti filter + kata cari yang sedang aktif (disaring ulang di server dengan aturan yang sama).
+  document.getElementById('mb-unduh').addEventListener('click', (e) => {
+    const q = new URLSearchParams();
+    if (fKb.value) q.set('kb', fKb.value);
+    if (fKosong.value) q.set('kosong', fKosong.value);
+    if (fDep.value) q.set('dep', fDep.value);
+    if (tabel.search()) q.set('q', tabel.search());
+    e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });
   document.getElementById('mb-tabel').addEventListener('submit', (e) => {
     const pesan = e.target.dataset.konfirmasi;

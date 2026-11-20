@@ -19,10 +19,29 @@
       if ($json === null) return '—';
       $d = json_decode($json, true) ?: [];
       unset($d['created_at'], $d['updated_at'], $d['diubah_oleh']);
-      return collect($d)->map(fn ($v, $k) => $k.': '.(is_bool($v) ? ($v ? 'ya' : 'tidak') : (is_array($v) ? json_encode($v) : $v)))->implode(' · ');
+      // Nilai banyak baris (label, grup lokasi) dipisah " | " supaya terbaca dalam satu sel.
+      return collect($d)->map(fn ($v, $k) => $k.': '.(is_bool($v) ? ($v ? 'ya' : 'tidak') : (is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : str_replace("\n", ' | ', (string) $v))))->implode(' · ');
   };
 @endphp
 <div class="pr-card">
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 20px;border-bottom:1px solid rgba(171,173,175,.2)">
+    <select name="tabel" aria-label="Tabel" style="padding:8px 12px;border-radius:999px;border:1px solid rgba(171,173,175,.45);font-size:13px">
+      <option value="">Semua tabel</option>
+      @foreach ($namaTabel as $t => $n)
+        <option value="{{ $t }}" @selected(($filter['tabel'] ?? '') === $t)>{{ $n }}</option>
+      @endforeach
+    </select>
+    <input type="text" name="kunci" value="{{ $filter['kunci'] ?? '' }}" placeholder="Kunci / ID baris" aria-label="Kunci" style="padding:8px 12px;border-radius:999px;border:1px solid rgba(171,173,175,.45);font-size:13px;width:150px">
+    <input type="text" name="user" value="{{ $filter['user'] ?? '' }}" placeholder="Nama pengguna" aria-label="Pengguna" style="padding:8px 12px;border-radius:999px;border:1px solid rgba(171,173,175,.45);font-size:13px;width:180px">
+    <select name="aksi" aria-label="Aksi" style="padding:8px 12px;border-radius:999px;border:1px solid rgba(171,173,175,.45);font-size:13px">
+      <option value="">Semua aksi</option>
+      @foreach ($aksiAda as $a)
+        <option value="{{ $a }}" @selected(($filter['aksi'] ?? '') === $a)>{{ $a }}</option>
+      @endforeach
+    </select>
+    <button type="submit" class="pr-back" style="cursor:pointer">Saring</button>
+    @if (array_filter($filter))<a class="pr-back" href="{{ route('peta-risiko-pja.master.log') }}">Reset</a>@endif
+  </form>
   <div class="dr-scroll">
     <table class="pr-tbl dr-tbl">
       <thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>Tabel · kunci</th><th>Sebelum</th><th>Sesudah</th></tr></thead>
