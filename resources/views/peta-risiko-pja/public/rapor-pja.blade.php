@@ -69,6 +69,9 @@
       .mini { display: flex; height: 8px; min-width: 80px; border-radius: 999px; overflow: hidden; background: var(--none-soft); }
       .mini i { display: block; height: 100%; }
       tr.saya td { background: var(--brand-soft); }
+      #cov-tbl.tutup tr.lebih { display: none; }
+      .btn-lihat[hidden] { display: none; }
+      .btn-lihat { width: 100%; margin-top: .65rem; padding: .65rem 1rem; font-size: .85rem; color: var(--brand); }
       td small { display: block; color: var(--muted); font-size: .74rem; }
       .pecah { font-size: .74rem; color: var(--muted); white-space: nowrap; }
       .leg { border-radius: 12px; padding: .65rem .75rem; background: var(--c-soft); }
@@ -189,8 +192,9 @@
          <div class="ringkas" id="cov-ringkas"></div>
          <div class="tbl-wrap"><table>
             <thead><tr><th>Lokasi · detail lokasi</th><th class="r">Laporan</th><th class="r">Oleh tim PJA</th><th>Porsi</th></tr></thead>
-            <tbody id="cov-tbl"></tbody>
+            <tbody id="cov-tbl" class="tutup"></tbody>
          </table></div>
+         <button type="button" class="btn btn-secondary btn-lihat" id="cov-lihat" aria-controls="cov-tbl" aria-expanded="false" hidden></button>
          <p class="more" id="cov-more"></p>
       </section>
 
@@ -324,7 +328,8 @@
       }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Belum ada baris baseline untuk PJA ini.</td></tr>';
    }
 
-   var COV_MAKS = 60;
+   // Tabel coverage dilipat: hanya COV_RINGKAS baris teratas (tanpa laporan didahulukan), tombol untuk semua.
+   var COV_RINGKAS = 5;
    function ringkas(id, isi) {
       $(id).innerHTML = isi.map(function (x) { return '<div><span>' + x[0] + '</span><b>' + x[1] + '</b><em>' + x[2] + '</em></div>'; }).join('');
    }
@@ -340,12 +345,16 @@
          ['Laporan di area PJA', fmt(c.laporan), fmt(c.laporanTim) + ' oleh tim PJA (' + pct(c.laporanTim, c.laporan) + ')'],
          ['Tanpa laporan', fmt(c.dl - c.dlAda), 'detail lokasi perlu dikunjungi'],
       ]);
-      var tampil = c.daftar.slice(0, COV_MAKS);
-      $('cov-tbl').innerHTML = tampil.map(function (d) {
+      $('cov-tbl').innerHTML = c.daftar.map(function (d, i) {
          var porsi = d.semua ? '<div class="mini" title="Tim PJA ' + pct(d.tim, d.semua) + ' · luar PJA ' + pct(d.semua - d.tim, d.semua) + '"><i style="width:' + (100 * d.tim / d.semua).toFixed(1) + '%;background:var(--ok)"></i><i style="width:' + (100 * (d.semua - d.tim) / d.semua).toFixed(1) + '%;background:#93c5fd"></i></div>' : '<span class="chip chip-bm">tanpa laporan</span>';
-         return '<tr><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r">' + fmt(d.semua) + '</td><td class="r">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td>' + porsi + '</td></tr>';
+         return '<tr' + (i >= COV_RINGKAS ? ' class="lebih"' : '') + '><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r">' + fmt(d.semua) + '</td><td class="r">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td>' + porsi + '</td></tr>';
       }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Belum ada detail lokasi untuk PJA ini.</td></tr>';
-      $('cov-more').innerHTML = (c.daftar.length > tampil.length ? 'Menampilkan ' + tampil.length + ' dari ' + fmt(c.daftar.length) + ' detail lokasi (yang tanpa laporan didahulukan). ' : '')
+      var lihat = $('cov-lihat'), banyak = c.daftar.length > COV_RINGKAS;
+      $('cov-tbl').classList.add('tutup');
+      lihat.hidden = !banyak;
+      lihat.setAttribute('aria-expanded', 'false');
+      lihat.innerHTML = '<span class="material-symbols-outlined">expand_more</span> Lihat semua ' + fmt(c.daftar.length) + ' detail lokasi';
+      $('cov-more').innerHTML = (banyak ? 'Ditampilkan ' + COV_RINGKAS + ' detail lokasi yang paling perlu perhatian (tanpa laporan / tanpa laporan tim PJA didahulukan). ' : '')
          + 'Porsi: <span style="color:var(--ok);font-weight:700">■</span> oleh tim PJA (personil PJA ini + PJA Mitra-nya) · <span style="color:#93c5fd;font-weight:700">■</span> dari luar PJA.';
    }
 
@@ -410,6 +419,12 @@
       $('gap').innerHTML = r.gap.total ? daftarAkt(r.gap, '', true) : '';
    }
 
+   $('cov-lihat').addEventListener('click', function () {
+      var tbl = $('cov-tbl'), buka = tbl.classList.toggle('tutup') === false, n = tbl.querySelectorAll('tr').length;
+      this.setAttribute('aria-expanded', String(buka));
+      this.innerHTML = buka ? '<span class="material-symbols-outlined">expand_less</span> Sembunyikan, tampilkan ' + COV_RINGKAS + ' teratas'
+         : '<span class="material-symbols-outlined">expand_more</span> Lihat semua ' + fmt(n) + ' detail lokasi';
+   });
    $('form-cari').addEventListener('submit', function (e) { e.preventDefault(); cari(); });
    $('pja-pilih').addEventListener('change', function (e) { if (sidAktif) cari(e.target.value); });
    if ($('sid').value.trim()) cari();
