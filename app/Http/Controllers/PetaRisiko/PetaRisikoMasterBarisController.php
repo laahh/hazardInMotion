@@ -95,7 +95,7 @@ final class PetaRisikoMasterBarisController extends Controller
         try {
             $baris = DB::table('drm_master_baris')->where('aktif', true)->get(['ri', 'idh', 'bahaya'])->all();
             $rows = $unggah->ekspor($filter, $this->hiraAsal($baris)[0]);
-            $path = $excel->tulis($rows, array_values($unggah->grupAktif()), $unggah->daftarLabel());
+            $path = $excel->tulis($rows, $unggah->daftarLabel());
         } catch (\RuntimeException $e) {
             return back()->withErrors(['unduh' => $e->getMessage()]);
         }

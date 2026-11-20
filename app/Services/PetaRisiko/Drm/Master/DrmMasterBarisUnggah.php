@@ -288,7 +288,20 @@ final class DrmMasterBarisUnggah
             if (! array_key_exists($k, $r)) {
                 continue;
             }
-            $v = trim(preg_replace('/\s+/u', ' ', (string) $r[$k]));
+            // Satu sheet: nilai diulang di setiap baris label ID yang sama → daftar nilai berbeda. Nilai yang sama dengan
+            // database diabaikan; tepat satu nilai lain = perubahan; lebih dari satu = galat (tidak jelas mana yang benar).
+            $nilai = array_values(array_unique(array_map(fn ($x) => trim(preg_replace('/\s+/u', ' ', (string) $x)), (array) $r[$k])));
+            // Baris label baru biasanya hanya diisi ID · Jenis · Label: sel kosong diabaikan bila baris lain ID ini berisi.
+            if (count($nilai) > 1) {
+                $nilai = array_values(array_filter($nilai, fn ($x) => $x !== ''));
+            }
+            $lain = array_values(array_filter($nilai, fn ($x) => $x !== $lama[$k]));
+            if (count($lain) > 1) {
+                $galat[] = ucfirst($k).' diisi berbeda di beberapa baris label ID ini ("'.implode('" / "', $lain).'"); samakan.';
+
+                continue;
+            }
+            $v = $lain[0] ?? $lama[$k];
             if (in_array($k, ['aktivitas', 'bahaya'], true) && $v === '') {
                 $galat[] = ucfirst($k).' tidak boleh kosong.';
             }
