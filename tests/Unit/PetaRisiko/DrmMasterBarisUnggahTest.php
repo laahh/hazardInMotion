@@ -13,8 +13,9 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 /**
- * Master per baris lewat Excel: unduh → edit → unggah → pratinjau → terapkan + riwayat. Yang bisa diedit: aktivitas,
- * sub aktivitas, bahaya, dan tiga Item Sumber. SELALU SQLite memori di koneksi tersendiri (bukan database bersama).
+ * Master per baris lewat Excel: unduh → edit → unggah → pratinjau → terapkan + riwayat. Sheet "Master baris" untuk
+ * aktivitas / sub / bahaya, sheet "Label" satu label per baris (menambah label = menambah baris, tidak menimpa).
+ * SELALU SQLite memori di koneksi tersendiri (bukan database bersama).
  */
 class DrmMasterBarisUnggahTest extends TestCase
 {
@@ -43,7 +44,7 @@ class DrmMasterBarisUnggahTest extends TestCase
                 'umum' => false, 'idh' => '8332', 'aktif' => true, 'item_sumber_observasi' => 'Cast Off Tongkang', 'item_sumber_oak' => '',
                 'item_sumber_ketidaksesuaian' => "Bahaya Biologi / Berlubang\nRambu / Tidak ada rambu", 'created_at' => $kini, 'updated_at' => $kini],
             ['ri' => 2, 'aid' => 1, 'aktivitas' => 'Barging Batubara', 'sub' => 'Penambatan', 'bahaya' => 'Tali putus', 'kb' => 'Significant',
-                'umum' => false, 'idh' => '', 'aktif' => true, 'item_sumber_observasi' => '', 'item_sumber_oak' => '', 'item_sumber_ketidaksesuaian' => '',
+                'umum' => false, 'idh' => '', 'aktif' => true, 'item_sumber_observasi' => '', 'item_sumber_oak' => 'Barging / Langsung', 'item_sumber_ketidaksesuaian' => '',
                 'created_at' => $kini, 'updated_at' => $kini],
         ]);
         DB::table('drm_master_grup_baris')->insert(['gid' => 2, 'ri' => 1]);
@@ -60,43 +61,84 @@ class DrmMasterBarisUnggahTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_unduh_edit_unggah_terapkan_dan_tercatat_di_riwayat(): void
+    public function test_sheet_label_satu_label_per_baris_dengan_dropdown(): void
+    {
+        [, , $path] = $this->unduh();
+        $x = IOFactory::load($path);
+        $s = $x->getSheetByName(DrmMasterBarisExcel::SHEET_ITEM);
+
+        // Baris 1: 1 Observasi + 2 Ketidaksesuaian = 3 baris; baris 2: 1 OAK.
+        $this->assertSame([
+            ['ID baris', 'Aktivitas · Bahaya (info)', 'Jenis', 'Label'],
+            ['1', 'Barging Batubara · Tergelincir di tongkang', 'Observasi', 'Cast Off Tongkang'],
+            ['1', 'Barging Batubara · Tergelincir di tongkang', 'Ketidaksesuaian', 'Bahaya Biologi / Berlubang'],
+            ['1', 'Barging Batubara · Tergelincir di tongkang', 'Ketidaksesuaian', 'Rambu / Tidak ada rambu'],
+            ['2', 'Barging Batubara · Tali putus', 'OAK', 'Barging / Langsung'],
+        ], $s->rangeToArray('A1:D5'));
+        // Dropdown Jenis (ketat) dan Label (mengikuti Jenis, label baru boleh), juga di baris kosong untuk menambah.
+        $jenis = $s->getDataValidation('C2');
+        $this->assertSame(['list', 'stop', '"Observasi,OAK,Ketidaksesuaian"'], [$jenis->getType(), $jenis->getErrorStyle(), $jenis->getFormula1()]);
+        $label = $s->getDataValidation('D2');
+        $this->assertSame(['list', 'information'], [$label->getType(), $label->getErrorStyle()]);
+        $this->assertStringContainsString('INDIRECT(', $label->getFormula1());
+        $this->assertTrue($s->dataValidationExists('D500'));
+        $this->assertNotNull($x->getNamedRange('L_KET'));
+        $this->assertSame('Rambu / Tidak ada rambu', $x->getSheetByName(DrmMasterBarisExcel::SHEET_LABEL)->getCell('C3')->getValue());
+    }
+
+    public function test_menambah_label_lewat_baris_baru_tidak_menimpa_label_lama(): void
     {
         [$u, $x, $path] = $this->unduh();
-        // Edit seperti user: sub aktivitas & bahaya dikoreksi, label Observasi ditambah, satu label Ketidaksesuaian dihapus.
-        // Kolom info (risiko awal, grup lokasi) yang diubah di Excel diabaikan. Baris 2 tidak diubah.
-        $this->ubahSel($path, 1, ['sub' => 'Pemuatan batubara', 'bahaya' => 'Tergelincir di dek tongkang', 'kb' => 'Low', 'grup' => 'Jetty/Port',
-            'OBS' => "Cast Off Tongkang\nPenambatan tongkang", 'KET' => 'Bahaya Biologi / Berlubang']);
+        $this->ubahSel($path, 1, ['sub' => 'Pemuatan batubara', 'kb' => 'Low']); // kb = info, diabaikan
+        // Tambah 2 label OAK untuk baris 1 (baris baru), hapus satu Ketidaksesuaian. Baris 2 tidak disentuh.
+        $this->aturLabel($path, [
+            ['1', 'Observasi', 'Cast Off Tongkang'],
+            ['1', 'Ketidaksesuaian', 'Bahaya Biologi / Berlubang'],
+            ['1', 'OAK', 'Barging / Langsung - Pelepasan Tongkang'],
+            ['1', 'OAK', 'Barging / CCV Barging'],
+            ['2', 'OAK', 'Barging / Langsung'],
+        ]);
 
         $p = $u->pratinjau($x->baca($path));
         $this->assertSame([2, 1, 1, 0, 0], [$p['total'], count($p['ubah']), $p['tetap'], count($p['galat']), count($p['konflik'])]);
         $ubah = $p['ubah'][0]['ubah'];
-        $this->assertSame(['sub', 'bahaya', 'OBS', 'KET'], array_keys($ubah));
-        $this->assertSame(['dari' => 'Pemuatan', 'ke' => 'Pemuatan batubara'], $ubah['sub']);
-        $this->assertSame(['tambah' => ['Penambatan tongkang'], 'hapus' => []], $ubah['OBS']);
+        $this->assertSame(['sub', 'OAK', 'KET'], array_keys($ubah));
+        $this->assertSame(['tambah' => ['Barging / Langsung - Pelepasan Tongkang', 'Barging / CCV Barging'], 'hapus' => []], $ubah['OAK']);
         $this->assertSame(['tambah' => [], 'hapus' => ['Rambu / Tidak ada rambu']], $ubah['KET']);
-        $this->assertStringContainsString('Teks bahaya diubah', implode(' ', $p['ubah'][0]['peringatan']));
 
-        $this->assertSame(['diubah' => 1, 'dilewati' => []], $u->terapkan($p, 'mapping-marine.xlsx'));
+        $this->assertSame(['diubah' => 1, 'dilewati' => []], $u->terapkan($p, 'label-baru.xlsx'));
         $b = DB::table('drm_master_baris')->where('ri', 1)->first();
-        $this->assertSame(['Pemuatan batubara', 'Tergelincir di dek tongkang', 'High'], [$b->sub, $b->bahaya, $b->kb]);
-        $this->assertSame("Cast Off Tongkang\nPenambatan tongkang", $b->item_sumber_observasi);
+        $this->assertSame(['Pemuatan batubara', 'High'], [$b->sub, $b->kb]);
+        $this->assertSame('Cast Off Tongkang', $b->item_sumber_observasi);
+        $this->assertSame("Barging / Langsung - Pelepasan Tongkang\nBarging / CCV Barging", $b->item_sumber_oak);
         $this->assertSame('Bahaya Biologi / Berlubang', $b->item_sumber_ketidaksesuaian);
-        $this->assertSame([2], DB::table('drm_master_grup_baris')->where('ri', 1)->pluck('gid')->map(fn ($v) => (int) $v)->all());
 
         // Riwayat: satu catatan per baris (siapa, sebelum → sesudah, berkas) + satu ringkasan unggahan.
         $log = DB::table('drm_master_log')->where('aksi', 'unggah')->orderBy('id')->get();
         $this->assertCount(2, $log);
         $this->assertSame(['1', 'Budi Editor', 7], [$log[0]->kunci, $log[0]->user_nama, (int) $log[0]->user_id]);
-        $this->assertSame('Tergelincir di tongkang', json_decode($log[0]->sebelum, true)['bahaya']);
-        $this->assertSame('mapping-marine.xlsx', json_decode($log[0]->sesudah, true)['berkas']);
-        $this->assertSame(1, json_decode($log[1]->sesudah, true)['baris diubah']);
+        $this->assertSame('', json_decode($log[0]->sebelum, true)['OAK']);
+        $this->assertSame('label-baru.xlsx', json_decode($log[0]->sesudah, true)['berkas']);
+    }
+
+    public function test_id_tidak_ada_di_sheet_label_tidak_diubah_dan_penanda_kosong_menghapus_semua(): void
+    {
+        [$u, $x, $path] = $this->unduh();
+        // Baris 1 tidak muncul di sheet Label → labelnya tetap; baris 2 hanya penanda kosong → semua labelnya dihapus.
+        $this->aturLabel($path, [['2', '', '']]);
+
+        $p = $u->pratinjau($x->baca($path));
+        $this->assertSame([2], array_column($p['ubah'], 'ri'));
+        $this->assertSame(['tambah' => [], 'hapus' => ['Barging / Langsung']], $p['ubah'][0]['ubah']['OAK']);
+        $u->terapkan($p, 'x.xlsx');
+        $this->assertSame('Cast Off Tongkang', DB::table('drm_master_baris')->where('ri', 1)->value('item_sumber_observasi'));
+        $this->assertSame('', DB::table('drm_master_baris')->where('ri', 2)->value('item_sumber_oak'));
     }
 
     public function test_konflik_bila_baris_diubah_orang_lain_setelah_diunduh(): void
     {
         [$u, $x, $path] = $this->unduh();
-        $this->ubahSel($path, 1, ['OAK' => 'Barging / Langsung']);
+        $this->aturLabel($path, [['1', 'OAK', 'Barging / Baru'], ['2', 'OAK', 'Barging / Langsung']]);
         DB::table('drm_master_baris')->where('ri', 1)->update(['item_sumber_oak' => 'Barging / CCV']); // diubah orang lain
 
         $p = $u->pratinjau($x->baca($path));
@@ -108,14 +150,20 @@ class DrmMasterBarisUnggahTest extends TestCase
     public function test_galat_divalidasi_dan_baris_dilewati(): void
     {
         [$u, $x, $path] = $this->unduh();
-        $this->ubahSel($path, 1, ['bahaya' => '', 'KET' => 'Tanpa garis miring']);
-        $this->ubahSel($path, 2, ['ri' => '999']);
+        $this->ubahSel($path, 2, ['bahaya' => '']);
+        $this->aturLabel($path, [
+            ['1', 'Ketidaksesuaian', 'Tanpa garis miring'],
+            ['1', 'Lain-lain', 'Apa saja'],
+            ['abc', 'OAK', 'x'],
+            ['999', 'OAK', 'y'],
+        ]);
 
         $p = $u->pratinjau($x->baca($path));
         $this->assertSame([], $p['ubah']);
         $pesan = implode(' | ', array_column($p['galat'], 'pesan'));
+        $this->assertStringContainsString('Jenis "Lain-lain" tidak dikenal', $pesan);
+        $this->assertStringContainsString('ID baris kosong / bukan angka', $pesan);
         $this->assertStringContainsString('Bahaya tidak boleh kosong', $pesan);
-        $this->assertStringContainsString('ketidaksesuaian / sub ketidaksesuaian', $pesan);
         $this->assertStringContainsString('ID baris tidak dikenal', $pesan);
     }
 
@@ -125,33 +173,11 @@ class DrmMasterBarisUnggahTest extends TestCase
         $hira = [1 => [['dept' => 'Port and Barging Operation Dept.']]];
 
         $this->assertSame([1], array_column($u->ekspor(['dep' => 'Port and Barging Operation Dept.'], $hira), 'ri'));
-        $this->assertSame([2], array_column($u->ekspor(['kosong' => 'SEMUA'], $hira), 'ri'));
+        $this->assertSame([2], array_column($u->ekspor(['kosong' => 'OBS'], $hira), 'ri'));
         $this->assertSame([2], array_column($u->ekspor(['kb' => 'Significant'], $hira), 'ri'));
         $this->assertSame([1], array_column($u->ekspor(['q' => 'tongkang biologi'], $hira), 'ri'));
-        $this->assertSame('Port and Barging Operation Dept.', $u->ekspor(['dep' => 'Port and Barging Operation Dept.'], $hira)[0]['dept_hira']);
-    }
-
-    public function test_kolom_item_sumber_punya_dropdown_label_master(): void
-    {
-        [$u, , $path] = $this->unduh();
-
-        $this->assertSame(['OBS' => ['Cast Off Tongkang'], 'OAK' => [], 'KET' => ['Bahaya Biologi / Berlubang', 'Rambu / Tidak ada rambu']], $u->daftarLabel());
-        $x = IOFactory::load($path);
-        $daftar = $x->getSheetByName(DrmMasterBarisExcel::SHEET_LABEL);
-        $this->assertSame(['Item Sumber Observasi', 'Cast Off Tongkang'], [$daftar->getCell('A1')->getValue(), $daftar->getCell('A2')->getValue()]);
-        $this->assertSame('Rambu / Tidak ada rambu', $daftar->getCell('C3')->getValue());
-
-        // Dropdown di kolom Observasi & Ketidaksesuaian (OAK tanpa label → tanpa dropdown), bergaya informasi (tidak menolak isian lain).
-        $kunci = array_keys(DrmMasterBarisExcel::KOLOM);
-        $kol = fn (string $k) => Coordinate::stringFromColumnIndex(array_search($k, $kunci, true) + 1);
-        $s = $x->getSheetByName(DrmMasterBarisExcel::SHEET);
-        $v = $s->getDataValidation($kol('OBS').'2');
-        $this->assertSame('list', $v->getType());
-        $this->assertSame("'Daftar label'!\$A\$2:\$A\$2", $v->getFormula1());
-        $this->assertSame('information', $v->getErrorStyle());
-        $this->assertFalse($v->getShowErrorMessage());
-        $this->assertTrue($s->dataValidationExists($kol('KET').'3'));
-        $this->assertFalse($s->dataValidationExists($kol('OAK').'2'));
+        $this->assertSame(['OBS' => ['Cast Off Tongkang'], 'OAK' => ['Barging / Langsung'], 'KET' => ['Bahaya Biologi / Berlubang', 'Rambu / Tidak ada rambu']],
+            $u->daftarLabel());
     }
 
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */
@@ -163,7 +189,7 @@ class DrmMasterBarisUnggahTest extends TestCase
         return [$u, $x, $this->berkas[] = $x->tulis($u->ekspor([], []), array_values($u->grupAktif()), $u->daftarLabel())];
     }
 
-    /** Ubah sel baris data ke-$n (1 = baris data pertama) berdasarkan kunci kolom, seperti diedit di Excel. */
+    /** Ubah sel sheet Master baris, baris data ke-$n (1 = pertama), seperti diedit di Excel. */
     private function ubahSel(string $path, int $n, array $nilai): void
     {
         $x = IOFactory::load($path);
@@ -171,6 +197,18 @@ class DrmMasterBarisUnggahTest extends TestCase
         $kunci = array_keys(DrmMasterBarisExcel::KOLOM);
         foreach ($nilai as $k => $v) {
             $s->setCellValue(Coordinate::stringFromColumnIndex(array_search($k, $kunci, true) + 1).($n + 1), $v);
+        }
+        (new Xlsx($x))->save($path);
+    }
+
+    /** Ganti seluruh isi sheet Label dengan baris [ID, Jenis, Label], seperti user menambah / menghapus baris. */
+    private function aturLabel(string $path, array $baris): void
+    {
+        $x = IOFactory::load($path);
+        $s = $x->getSheetByName(DrmMasterBarisExcel::SHEET_ITEM);
+        $s->removeRow(2, max(1, $s->getHighestRow() - 1));
+        foreach ($baris as $i => [$ri, $jenis, $label]) {
+            $s->fromArray([[$ri, '', $jenis, $label]], null, 'A'.($i + 2), true);
         }
         (new Xlsx($x))->save($path);
     }

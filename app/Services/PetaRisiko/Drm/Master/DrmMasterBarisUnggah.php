@@ -144,12 +144,13 @@ final class DrmMasterBarisUnggah
      */
     public function pratinjau(array $berkas): array
     {
-        $ri = array_values(array_filter(array_map(fn ($r) => ctype_digit((string) ($r['ri'] ?? '')) ? (int) $r['ri'] : 0, $berkas)));
+        [$rows, $galatLabel] = self::gabungLabel($berkas);
+        $ri = array_values(array_filter(array_map(fn ($r) => ctype_digit((string) ($r['ri'] ?? '')) ? (int) $r['ri'] : 0, $rows)));
         $db = $this->isianDb($ri === [] ? [0] : $ri);
-        $hasil = ['ubah' => [], 'galat' => [], 'konflik' => [], 'tetap' => 0, 'total' => count($berkas)];
+        $hasil = ['ubah' => [], 'galat' => $galatLabel[0] ?? [], 'konflik' => [], 'tetap' => 0, 'total' => count($rows)];
         $sudah = [];
 
-        foreach ($berkas as $r) {
+        foreach ($rows as $r) {
             $id = ctype_digit((string) ($r['ri'] ?? '')) ? (int) $r['ri'] : 0;
             $label = ['baris' => (int) $r['baris'], 'ri' => $id];
             if ($id === 0 || ! isset($db[$id])) {
@@ -166,6 +167,11 @@ final class DrmMasterBarisUnggah
             $lama = $db[$id];
             $label['aktivitas'] = $lama['aktivitas'];
             $label['bahaya'] = $lama['bahaya'];
+            if (isset($galatLabel[$id])) {
+                $hasil['galat'][] = [...$label, 'pesan' => implode(' ', array_column($galatLabel[$id], 'pesan'))];
+
+                continue;
+            }
             if (($r['versi'] ?? '') !== '' && $r['versi'] !== DrmMasterBarisExcel::versi($lama)) {
                 $hasil['konflik'][] = [...$label, 'pesan' => 'Baris sudah diubah orang lain setelah berkas diunduh. Unduh ulang lalu edit lagi.'];
 
@@ -189,6 +195,42 @@ final class DrmMasterBarisUnggah
         }
 
         return $hasil;
+    }
+
+    /**
+     * Gabungkan sheet Master baris dengan sheet Label: ID yang muncul di sheet Label mendapat isian OBS / OAK / KET
+     * persis dari sheet itu (teks satu label per baris); ID yang hanya ada di sheet Label ikut diproses (tanpa cek versi).
+     *
+     * @param  array{baris: list<array<string, mixed>>, label?: array<int, array<string, mixed>>, galatLabel?: list<array<string, mixed>>}  $berkas
+     * @return array{0: list<array<string, mixed>>, 1: array<int, list<array<string, mixed>>>}  [baris, galat label per ri (0 = tanpa ID)]
+     */
+    public static function gabungLabel(array $berkas): array
+    {
+        $label = $berkas['label'] ?? [];
+        $rows = [];
+        $ada = [];
+        foreach ($berkas['baris'] ?? [] as $r) {
+            $id = ctype_digit((string) ($r['ri'] ?? '')) ? (int) $r['ri'] : 0;
+            if (isset($label[$id])) {
+                foreach (self::BANYAK as $j) {
+                    $r[$j] = implode("\n", $label[$id][$j]);
+                }
+            }
+            $ada[$id] = true;
+            $rows[] = $r;
+        }
+        foreach ($label as $id => $l) {
+            if (! isset($ada[$id])) {
+                $rows[] = ['baris' => (int) $l['baris'], 'ri' => (string) $id, 'OBS' => implode("\n", $l['OBS']), 'OAK' => implode("\n", $l['OAK']),
+                    'KET' => implode("\n", $l['KET'])];
+            }
+        }
+        $galat = [];
+        foreach ($berkas['galatLabel'] ?? [] as $g) {
+            $galat[(int) $g['ri']][] = $g;
+        }
+
+        return [$rows, $galat];
     }
 
     /**
