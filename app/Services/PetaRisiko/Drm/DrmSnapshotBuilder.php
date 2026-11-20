@@ -189,7 +189,8 @@ class DrmSnapshotBuilder
                 'grup' => array_values(isset($d['master']) ? $d['master']->data['grup'] : array_unique(array_column($d['dl'], 'grp'))),
                 'grupDl' => $this->jumlahDlPerGrup($dl),
                 'proses' => $this->daftarProses($cfg),
-                'pja' => array_values(array_map(fn ($p) => [...$this->ringkasPja($p, $cakupan, $berkas[$p['id']]), 'tm' => $statTemuan[$p['id']]], $pjaBc)),
+                'pja' => array_values(array_map(fn ($p) => [...$this->ringkasPja($p, $cakupan, $berkas[$p['id']]), 'tm' => $statTemuan[$p['id']]],
+                    array_filter($pjaBc, fn ($p) => ! DrmMaster::pjaDikecualikan((string) $p['nama'], $cfg)))),
                 'kolomAkt' => self::KOLOM_AKT,
                 'kolomBahaya' => self::KOLOM_BAHAYA,
                 'beranda' => $beranda,
@@ -245,12 +246,16 @@ class DrmSnapshotBuilder
             // berkas PJA (bukan meta.json). Angka ringkasan tidak berubah; opsi ini hanya menambah volume.
             $ringkas = $b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden'], false, true);
             $berkas[$id]['beranda']['rincian'] = $ringkas['rincian']['u'];
-            $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds), 'dls' => $dlIds,
-                ...array_diff_key($ringkas, self::BERAT_PER_PJA + ['rincian' => 1])];
-            // $idDl, bukan $d: $d = data sync (master dipakai ringkasUnik di bawah).
             foreach ($dlIds as $idDl) {
                 $kamusDl[$idDl] ??= [(string) ($dl[$idDl]['site'] ?? ''), (string) ($dl[$idDl]['lokasi'] ?? ''), (string) ($dl[$idDl]['detlok'] ?? ''), (string) ($dl[$idDl]['grp'] ?? '')];
             }
+            // PJA dikecualikan (config pja_dikecualikan, mis. Inspektor): berkasnya tetap lengkap untuk Rapor PJA publik,
+            // tetapi tidak masuk daftar PJA dashboard (Beranda PJA, Semua PJA, PJA mapping detail lokasi).
+            if (DrmMaster::pjaDikecualikan((string) $info['nama'], $cfg)) {
+                continue;
+            }
+            $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds), 'dls' => $dlIds,
+                ...array_diff_key($ringkas, self::BERAT_PER_PJA + ['rincian' => 1])];
         }
 
         [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null);

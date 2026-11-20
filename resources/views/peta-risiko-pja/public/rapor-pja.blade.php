@@ -57,7 +57,20 @@
       .skor-ket { color: var(--muted); font-size: .85rem; line-height: 1.45; padding-bottom: .2rem; }
       .bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--none-soft); margin: 1rem 0 .75rem; }
       .bar i { display: block; height: 100%; transition: width .5s ease; }
-      .legenda { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+      .legenda { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+      .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+      .c-laten { --c: #7e3fb3; --c-soft: #f5effb; }
+      /* Ringkasan coverage & personil */
+      .ringkas { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .5rem; margin-bottom: .9rem; }
+      .ringkas div { border-radius: 12px; padding: .65rem .75rem; background: #f8fafc; border: 1px solid var(--line); }
+      .ringkas span { display: block; font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+      .ringkas b { display: block; margin-top: .2rem; font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+      .ringkas em { font-style: normal; font-size: .74rem; color: var(--muted); }
+      .mini { display: flex; height: 8px; min-width: 80px; border-radius: 999px; overflow: hidden; background: var(--none-soft); }
+      .mini i { display: block; height: 100%; }
+      tr.saya td { background: var(--brand-soft); }
+      td small { display: block; color: var(--muted); font-size: .74rem; }
+      .pecah { font-size: .74rem; color: var(--muted); white-space: nowrap; }
       .leg { border-radius: 12px; padding: .65rem .75rem; background: var(--c-soft); }
       .leg span { display: flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
       .leg span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
@@ -117,7 +130,7 @@
       @media (max-width: 560px) {
          .preview-grid { grid-template-columns: 1fr; }
          .row { flex-direction: column; }
-         .legenda { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+         .legenda { grid-template-columns: 1fr; }
          .hero-body { padding: 1.4rem 1.15rem 1.2rem; }
       }
    </style>
@@ -129,7 +142,7 @@
       <div class="hero-body">
          <span class="badge"><span class="material-symbols-outlined" style="font-size:15px">lock_open</span> Tanpa login</span>
          <h1>Rapor PJA</h1>
-         <p class="lead">Masukkan SID Anda untuk melihat performa PJA tempat Anda ditugaskan: berapa bahaya-risiko yang sudah terkontrol, temuan SAP yang masih open, dan bahaya-risiko yang belum ditemukan lewat SAP.</p>
+         <p class="lead">Masukkan SID Anda untuk melihat performa PJA tempat Anda ditugaskan: berapa bahaya-risiko yang sudah teridentifikasi &amp; terkontrol, coverage SAP di area PJA, pencapaian SAP personil PJA, temuan yang masih open, dan bahaya-risiko yang belum ditemukan lewat SAP.</p>
       </div>
    </div>
 
@@ -174,12 +187,12 @@
          <div class="bar" id="bar" role="img"></div>
          <div class="legenda" id="legenda"></div>
 
-         <p class="sub-h">Tren terkontrol penuh · Significant + High</p>
+         <p class="sub-h">Tren teridentifikasi &amp; terkontrol · Significant + High</p>
          <div class="tren" id="tren"></div>
 
          <p class="sub-h">Rincian per tingkat risiko awal</p>
          <div class="tbl-wrap"><table>
-            <thead><tr><th>Risiko awal</th><th class="r">Baris</th><th class="r">Terkontrol penuh</th><th class="r">Sebagian</th><th class="r">Bermasalah</th><th class="r">Belum ditemukan</th></tr></thead>
+            <thead><tr><th>Risiko awal</th><th class="r">Bahaya</th><th class="r">Terkontrol</th><th class="r">Ada Gap</th><th class="r">Open Risk</th></tr></thead>
             <tbody id="tbl-level"></tbody>
          </table></div>
 
@@ -188,13 +201,33 @@
       </section>
 
       <section class="card">
-         <h2 class="card-title"><span class="num">3</span> Temuan SAP open di area PJA <small id="temuan-n"></small></h2>
+         <h2 class="card-title"><span class="num">3</span> Coverage area <small id="cov-n"></small></h2>
+         <div class="ringkas" id="cov-ringkas"></div>
+         <div class="tbl-wrap"><table>
+            <thead><tr><th>Lokasi · detail lokasi</th><th class="r">Laporan</th><th class="r">Oleh tim PJA</th><th>Porsi</th></tr></thead>
+            <tbody id="cov-tbl"></tbody>
+         </table></div>
+         <p class="more" id="cov-more"></p>
+      </section>
+
+      <section class="card">
+         <h2 class="card-title"><span class="num">4</span> Pencapaian SAP personil PJA <small id="ps-n"></small></h2>
+         <div class="ringkas" id="ps-ringkas"></div>
+         <div class="tbl-wrap"><table>
+            <thead><tr><th>Personil</th><th class="r">SAP 14 hari</th><th class="r">7 hari</th><th class="r">%SAP BeARC</th><th>Target vs realisasi</th><th>Status</th></tr></thead>
+            <tbody id="ps-tbl"></tbody>
+         </table></div>
+         <p class="more">SAP 14 hari = laporan Hazard, Inspeksi, OBS, OAK, dan Coaching. %SAP dan target dari BeARC minggu terakhir (Coaching · OBS/OAK · Inspeksi · Hazard).</p>
+      </section>
+
+      <section class="card">
+         <h2 class="card-title"><span class="num">5</span> Temuan SAP open di area PJA <small id="temuan-n"></small></h2>
          <div class="list" id="temuan"></div>
          <p class="more" id="temuan-more"></p>
       </section>
 
       <section class="card">
-         <h2 class="card-title"><span class="num">4</span> Bahaya-risiko yang belum ditemukan <small id="belum-n"></small></h2>
+         <h2 class="card-title"><span class="num">6</span> Bahaya-risiko yang belum teridentifikasi (Open Risk) <small id="belum-n"></small></h2>
          <div class="alert alert-info" style="margin-bottom:.85rem">
             <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">info</span>
             Bahaya-risiko Significant/High di baseline HIRA area PJA ini yang <strong>tidak tertangkap laporan SAP</strong> sama sekali pada minggu ini. Prioritaskan pengawasan dan pelaporan di sini.
@@ -202,7 +235,7 @@
          <div id="belum"></div>
          <p class="more" id="belum-more"></p>
 
-         <p class="sub-h" id="gap-h">Sudah ditemukan tetapi masih bermasalah</p>
+         <p class="sub-h" id="gap-h">Teridentifikasi tetapi ada gap (belum closed / berulang / OAK Stop)</p>
          <div id="gap"></div>
       </section>
    </div>
@@ -272,6 +305,8 @@
       }
       $('identitas').style.display = '';
       performa(r);
+      coverage(r.coverage);
+      personilPja(r.personilPja);
       temuan(r.temuan);
       belum(r);
       $('hasil').classList.add('is-visible');
@@ -279,29 +314,32 @@
    }
 
    function performa(r) {
-      var u = r.ringkas.utama, bm = u.gaponly;
+      // Status sama dengan kartu Beranda PJA (gabungan antar detail lokasi): Terkontrol / Ada Gap / Open Risk.
+      var u = r.ringkas.utama;
       var awal = r.periode.minggu;
       $('periode').textContent = 'Minggu ' + tglPendek(awal) + ' – ' + tglPendek(geser(awal, 6)) + (r.periode.berjalan ? ' (berjalan)' : '');
-      $('skor').textContent = pct(u.full, u.tot);
-      $('skor').style.color = !u.tot ? 'var(--muted)' : u.full / u.tot >= 0.6 ? 'var(--ok)' : u.full / u.tot >= 0.3 ? 'var(--part)' : 'var(--bm)';
-      $('skor-ket').innerHTML = 'bahaya-risiko <b>Significant + High</b> terkontrol penuh menurut SAP<br>'
-         + fmt(u.full) + ' dari ' + fmt(u.tot) + ' baris · ' + fmt(r.pja.dl) + ' detail lokasi · ' + fmt(r.pja.personil) + ' personil';
-      var bagian = [['ok', u.full, 'Terkontrol penuh', 'semua detail lokasi'], ['part', u.part, 'Sebagian', 'sebagian lokasi'], ['bm', bm, 'Bermasalah', 'belum closed / berulang'], ['none', u.none, 'Belum ditemukan', 'tanpa laporan SAP']];
+      $('skor').textContent = pct(u.idk, u.tot);
+      $('skor').style.color = !u.tot ? 'var(--muted)' : u.idk / u.tot >= 0.6 ? 'var(--ok)' : u.idk / u.tot >= 0.3 ? 'var(--part)' : 'var(--bm)';
+      $('skor-ket').innerHTML = 'bahaya-risiko <b>Significant + High</b> teridentifikasi &amp; terkontrol menurut SAP<br>'
+         + fmt(u.idk) + ' dari ' + fmt(u.tot) + ' bahaya · ' + fmt(r.pja.dl) + ' detail lokasi · ' + fmt(r.pja.personil) + ' personil';
+      var bagian = [['ok', u.idk, 'Teridentifikasi & Terkontrol', 'terdeteksi SAP, tidak bermasalah'], ['part', u.idg, 'Teridentifikasi - Ada Gap', 'belum closed / berulang / OAK Stop'], ['bm', u.tid, 'Tidak Teridentifikasi (Open Risk)', 'tanpa laporan SAP']];
       $('bar').innerHTML = bagian.map(function (b) { return '<i style="width:' + (u.tot ? (100 * b[1] / u.tot).toFixed(2) : 0) + '%;background:var(--' + b[0] + ')"></i>'; }).join('');
       $('bar').setAttribute('aria-label', bagian.map(function (b) { return b[2] + ' ' + pct(b[1], u.tot); }).join(', '));
-      $('legenda').innerHTML = bagian.map(function (b) { return '<div class="leg c-' + b[0] + '"><span>' + b[2] + '</span><b>' + fmt(b[1]) + '</b><em>' + pct(b[1], u.tot) + ' · ' + b[3] + '</em></div>'; }).join('');
+      $('legenda').innerHTML = bagian.map(function (b) { return '<div class="leg c-' + b[0] + '"><span>' + esc(b[2]) + '</span><b>' + fmt(b[1]) + '</b><em>' + pct(b[1], u.tot) + ' · ' + b[3] + '</em></div>'; }).join('')
+         + '<div class="chips" style="grid-column:1/-1"><span class="chip" style="background:#f5effb;color:#7e3fb3" title="Tidak teridentifikasi, tetapi pernah terkait insiden 12 bulan terakhir">Risiko laten: ' + fmt(u.laten) + '</span>'
+         + '<span class="chip chip-ok" title="Teridentifikasi & terkontrol dan risiko residual HIRA lebih rendah dari risiko awal">Risiko turun kategori: ' + fmt(u.turun) + '</span></div>';
 
       var maks = r.tren.length - 1;
       $('tren').innerHTML = r.tren.map(function (t, i) {
-         var x = t.tot ? t.full / t.tot : 0;
-         return '<div class="' + (i === maks ? 'akhir' : '') + '" title="Minggu ' + tglPendek(t.minggu) + ': ' + fmt(t.full) + ' dari ' + fmt(t.tot) + ' terkontrol penuh"><b>' + Math.round(100 * x) + '%</b><div class="tb"><i style="height:' + (100 * x).toFixed(1) + '%"></i></div><span>' + tglPendek(t.minggu) + '</span></div>';
+         var n = t.idk == null ? t.full : t.idk, x = t.tot ? n / t.tot : 0;
+         return '<div class="' + (i === maks ? 'akhir' : '') + '" title="Minggu ' + tglPendek(t.minggu) + ': ' + fmt(n) + ' dari ' + fmt(t.tot) + ' teridentifikasi & terkontrol"><b>' + Math.round(100 * x) + '%</b><div class="tb"><i style="height:' + (100 * x).toFixed(1) + '%"></i></div><span>' + tglPendek(t.minggu) + '</span></div>';
       }).join('');
 
       $('tbl-level').innerHTML = ['Significant', 'High', 'Medium', 'Low'].map(function (l) {
          var x = r.ringkas[l];
          if (!x || !x.tot) return '';
-         return '<tr><td>' + lv(l) + '</td><td class="r">' + fmt(x.tot) + '</td><td class="r"><b>' + fmt(x.full) + '</b> <span style="color:var(--muted)">' + pct(x.full, x.tot) + '</span></td><td class="r">' + fmt(x.part) + '</td><td class="r">' + fmt(x.gaponly) + '</td><td class="r">' + fmt(x.none) + '</td></tr>';
-      }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Belum ada baris baseline untuk PJA ini.</td></tr>';
+         return '<tr><td>' + lv(l) + '</td><td class="r">' + fmt(x.tot) + '</td><td class="r"><b>' + fmt(x.idk) + '</b> <span style="color:var(--muted)">' + pct(x.idk, x.tot) + '</span></td><td class="r">' + fmt(x.idg) + '</td><td class="r">' + fmt(x.tid) + '</td></tr>';
+      }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Belum ada baris baseline untuk PJA ini.</td></tr>';
 
       var o = r.orang, mx = Math.max.apply(null, [1].concat(o.harian));
       var bearc = !o.bearc ? '<span class="chip chip-muted">Tidak ada data</span>'
@@ -311,6 +349,56 @@
          + '<div class="spark" style="margin-top:.4rem" title="' + esc(o.harian.join(', ')) + '">' + o.harian.map(function (n) { return n ? '<i style="height:' + (100 * n / mx).toFixed(0) + '%"></i>' : '<i class="z"></i>'; }).join('') + '</div></div>'
          + '<div><span>Status BeARC minggu lalu</span><strong style="margin-top:.35rem">' + bearc + '</strong>'
          + (o.kategori ? '<span style="margin-top:.65rem">Peran di PJA</span><strong>' + esc(o.kategori) + '</strong>' : '') + '</div>';
+   }
+
+   var COV_MAKS = 60;
+   function ringkas(id, isi) {
+      $(id).innerHTML = isi.map(function (x) { return '<div><span>' + x[0] + '</span><b>' + x[1] + '</b><em>' + x[2] + '</em></div>'; }).join('');
+   }
+
+   /** Coverage area: detail lokasi PJA yang dilaporkan SAP (jendela hari) dan porsi laporan oleh tim PJA sendiri. */
+   function coverage(c) {
+      if (!c) { $('cov-ringkas').innerHTML = ''; $('cov-tbl').innerHTML = ''; return; }
+      $('cov-n').textContent = c.jendela + ' hari terakhir';
+      ringkas('cov-ringkas', [
+         ['Detail lokasi terlapor', pct(c.dlAda, c.dl), fmt(c.dlAda) + ' dari ' + fmt(c.dl) + ' detail lokasi ada laporan SAP'],
+         ['Dilaporkan tim PJA', pct(c.dlTim, c.dl), fmt(c.dlTim) + ' detail lokasi dilaporkan personil PJA ini'],
+         ['Laporan di area PJA', fmt(c.laporan), fmt(c.laporanTim) + ' oleh tim PJA (' + pct(c.laporanTim, c.laporan) + ')'],
+         ['Tanpa laporan', fmt(c.dl - c.dlAda), 'detail lokasi perlu dikunjungi'],
+      ]);
+      var tampil = c.daftar.slice(0, COV_MAKS);
+      $('cov-tbl').innerHTML = tampil.map(function (d) {
+         var porsi = d.semua ? '<div class="mini" title="Tim PJA ' + pct(d.tim, d.semua) + ' · luar PJA ' + pct(d.semua - d.tim, d.semua) + '"><i style="width:' + (100 * d.tim / d.semua).toFixed(1) + '%;background:var(--ok)"></i><i style="width:' + (100 * (d.semua - d.tim) / d.semua).toFixed(1) + '%;background:#93c5fd"></i></div>' : '<span class="chip chip-bm">tanpa laporan</span>';
+         return '<tr><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r">' + fmt(d.semua) + '</td><td class="r">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td>' + porsi + '</td></tr>';
+      }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Belum ada detail lokasi untuk PJA ini.</td></tr>';
+      $('cov-more').innerHTML = (c.daftar.length > tampil.length ? 'Menampilkan ' + tampil.length + ' dari ' + fmt(c.daftar.length) + ' detail lokasi (yang tanpa laporan didahulukan). ' : '')
+         + 'Porsi: <span style="color:var(--ok);font-weight:700">■</span> oleh tim PJA (personil PJA ini + PJA Mitra-nya) · <span style="color:#93c5fd;font-weight:700">■</span> dari luar PJA.';
+   }
+
+   /** Pencapaian SAP personil PJA: laporan 14 hari + BeARC minggu terakhir (target vs realisasi). */
+   function personilPja(p) {
+      if (!p) { $('ps-ringkas').innerHTML = ''; $('ps-tbl').innerHTML = ''; return; }
+      $('ps-n').textContent = fmt(p.total) + ' personil';
+      ringkas('ps-ringkas', [
+         ['Personil PJA', fmt(p.total), fmt(p.bc) + ' BC · ' + fmt(p.total - p.bc) + ' Mitra'],
+         ['Aktif lapor 7 hari', fmt(p.aktif7), fmt(p.tanpaLaporan) + ' tanpa laporan 14 hari'],
+         ['Rata-rata %SAP', p.rataPersen == null ? '–' : p.rataPersen.toLocaleString('id-ID') + '%', fmt(p.capai) + ' dari ' + fmt(p.adaBearc) + ' mencapai 100%'],
+         ['Banned SAP', fmt(p.banned), 'minggu BeARC terakhir'],
+      ]);
+      var JENIS = [['coach', 'Coaching'], ['obs', 'OBS/OAK'], ['ins', 'Inspeksi'], ['hzr', 'Hazard']];
+      $('ps-tbl').innerHTML = p.daftar.map(function (o) {
+         var b = o.bearc;
+         var tr = !b ? '<span class="pecah">–</span>' : JENIS.filter(function (j) { return b.target[j[0]] || b.real[j[0]]; }).map(function (j) {
+            var ok = b.real[j[0]] >= b.target[j[0]];
+            return '<span class="pecah" style="color:' + (ok ? '#047857' : '#b91c1c') + '">' + j[1] + ' ' + fmt(b.real[j[0]]) + '/' + fmt(b.target[j[0]]) + '</span>';
+         }).join('<br>') || '<span class="pecah">tanpa target</span>';
+         var status = !b ? '<span class="chip chip-muted">Tidak ada data</span>' : b.banned ? '<span class="chip chip-bm">Banned SAP</span>'
+            : b.persen != null && b.persen >= 100 ? '<span class="chip chip-ok">Tercapai</span>' : '<span class="chip chip-muted">Belum tercapai</span>';
+         var info = [o.perusahaan, o.bc ? 'BC' : 'Mitra' + (o.pjaMitra ? ' · ' + o.pjaMitra : ''), o.peran].filter(Boolean).join(' · ');
+         return '<tr class="' + (o.saya ? 'saya' : '') + '"><td><b>' + esc(o.nama || '–') + '</b>' + (o.saya ? ' <span class="chip chip-brand">Anda</span>' : '') + '<small>' + esc(info) + '</small></td>'
+            + '<td class="r"><b>' + fmt(o.tot) + '</b><small>' + o.aktif + '/14 hari aktif</small></td><td class="r">' + (o.tot7 ? fmt(o.tot7) : '<span style="color:var(--bm)">0</span>') + '</td>'
+            + '<td class="r">' + (!b || b.persen == null ? '–' : Math.round(b.persen) + '%') + '</td><td>' + tr + '</td><td>' + status + '</td></tr>';
+      }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Tidak ada personil terdaftar.</td></tr>';
    }
 
    function temuan(t) {
@@ -342,7 +430,7 @@
    function belum(r) {
       var tampilBelum = r.belum.aktivitas.reduce(function (s, a) { return s + a.baris.length; }, 0);
       $('belum-n').textContent = fmt(r.belum.total) + ' baris';
-      $('belum').innerHTML = daftarAkt(r.belum, 'Semua bahaya-risiko Significant/High sudah tertangkap laporan SAP minggu ini.', false);
+      $('belum').innerHTML = daftarAkt(r.belum, 'Semua bahaya-risiko Significant/High sudah teridentifikasi laporan SAP minggu ini.', false);
       $('belum-more').textContent = r.belum.total > tampilBelum ? 'Menampilkan ' + tampilBelum + ' dari ' + fmt(r.belum.total) + ' baris (prioritas: Significant dan yang pernah insiden).' : '';
       $('gap-h').style.display = r.gap.total ? '' : 'none';
       $('gap').innerHTML = r.gap.total ? daftarAkt(r.gap, '', true) : '';

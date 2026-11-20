@@ -224,6 +224,17 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertStringNotContainsString('AND t.site =', $sql->aktivitasDetailLokasi());
     }
 
+    public function test_pja_inspektor_tidak_masuk_dashboard_tetapi_berkasnya_tetap_ada(): void
+    {
+        $snap = $this->susun(true);
+
+        $this->assertSame(['10'], array_map('strval', array_column($snap['meta']['pja'], 'id')));
+        $this->assertSame(['10'], array_column($snap['meta']['beranda']['mgmt'], 'id'));
+        $this->assertArrayHasKey('12', $snap['pja']);
+        $this->assertArrayHasKey('beranda', $snap['pja']['12']);
+        $this->assertSame(['201'], array_column($snap['pja']['12']['lokasi'], 'dl'));
+    }
+
     private function master(): DrmMaster
     {
         return DrmMaster::dariArray([
@@ -248,8 +259,7 @@ class DrmSnapshotBuilderTest extends TestCase
     }
 
     /** @return array{meta: array<string, mixed>, pja: array<string, array<string, mixed>>} */
-    private function susun(): array
-
+    private function susun(bool $inspektor = false): array
     {
         $baris = fn (string $minggu, string $status, string $n1, string $nf, string $kf, string $cf, int $n, int $laten = 0) => [
             'jenis' => 'SITE', 'kunci' => 'LMO', 'minggu' => $minggu, 'status' => $status,
@@ -319,6 +329,12 @@ class DrmSnapshotBuilderTest extends TestCase
                     'temuan_open' => '0', 'temuan_jendela' => '0', 'terakhir' => '1970-01-01'],
             ],
         ];
+
+        if ($inspektor) {
+            // PJA Inspektor di detail lokasi 201: dikecualikan dari dashboard, berkasnya tetap ada untuk Rapor PJA.
+            $data['pja'][] = ['id' => '12', 'nama' => 'Inspektor Mining LMO', 'parent' => '0', 'tipe' => 'BC', 'id_site' => '1'];
+            $data['dl'][2]['pja'] = ['12'];
+        }
 
         return (new DrmSnapshotBuilder(new RfidClickHouseClient()))
             ->susun($data, CarbonImmutable::parse(self::SAMPAI), config('peta_risiko_drm'));

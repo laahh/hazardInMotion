@@ -116,6 +116,8 @@ final class DrmRaporPja
             'belum' => $this->barisStatus($r['rincian']['u'] ?? [], $hira, $w, 'T'),
             'gap' => $this->barisStatus($r['rincian']['u'] ?? [], $hira, $w, 'G'),
             'temuan' => $this->temuan($berkas, $sid),
+            'coverage' => $this->coverage($berkas, (int) ($cfg['jendela_hari'] ?? 28)),
+            'personilPja' => $this->personilPja($berkas, $sid),
             'insiden' => count(array_filter($berkas['insiden'] ?? [], fn ($i) => (string) $i['tanggal'] >= $tgl->subYear()->toDateString())),
         ];
     }
@@ -163,8 +165,11 @@ final class DrmRaporPja
             'tot' => (int) ($v[$kolom['tot']] ?? 0), 'full' => (int) ($v[$kolom['full']] ?? 0), 'part' => (int) ($v[$kolom['part']] ?? 0),
             'gaponly' => (int) ($v[$kolom['gaponly']] ?? 0), 'none' => (int) ($v[$kolom['none']] ?? 0),
             'closed' => (int) ($v[$kolom['closed']] ?? 0), 'ulang' => (int) ($v[$kolom['ulang']] ?? 0), 'stop' => (int) ($v[$kolom['stop']] ?? 0),
+            // Status kartu KPI Beranda (gabungan antar detail lokasi, G > K > T).
+            'idk' => (int) ($v[$kolom['idk']] ?? 0), 'idg' => (int) ($v[$kolom['idg']] ?? 0), 'tid' => (int) ($v[$kolom['tid']] ?? 0),
+            'turun' => (int) ($v[$kolom['turun']] ?? 0), 'laten' => (int) ($v[$kolom['laten']] ?? 0),
         ];
-        $hasil = ['utama' => array_fill_keys(['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop'], 0)];
+        $hasil = ['utama' => array_fill_keys(['tot', 'full', 'part', 'gaponly', 'none', 'closed', 'ulang', 'stop', 'idk', 'idg', 'tid', 'turun', 'laten'], 0)];
         foreach (self::LEVEL as $lv) {
             $hasil[$lv] = $ambil($perLevel[$lv] ?? []);
             if (in_array($lv, self::LEVEL_UTAMA, true)) {
@@ -187,7 +192,7 @@ final class DrmRaporPja
         $hasil = [];
         for ($i = min(count($minggu) - 1, $mulai + self::TREN_MINGGU - 1); $i >= $mulai; $i--) {
             $r = $this->ringkasLevel($w[$i] ?? [])['utama'];
-            $hasil[] = ['minggu' => $minggu[$i], 'tot' => $r['tot'], 'full' => $r['full']];
+            $hasil[] = ['minggu' => $minggu[$i], 'tot' => $r['tot'], 'full' => $r['full'], 'idk' => $r['idk']];
         }
 
         return $hasil;
@@ -282,6 +287,103 @@ final class DrmRaporPja
         ];
     }
 
+    /**
+     * Coverage area: laporan SAP (jendela_hari terakhir) per detail lokasi PJA, sama dengan Beranda PJA poin c.
+     * semua = semua pelapor di detail lokasi itu; tim = personil PJA ini + PJA Mitra anaknya (kolom dedicated).
+     *
+     * @return array<string, mixed>
+     */
+    private function coverage(array $berkas, int $jendela): array
+    {
+        $cov = [];
+        foreach ($berkas['coverage'] ?? [] as $c) {
+            $cov[(string) $c['dl']] = ['semua' => (int) ($c['semua'] ?? 0), 'tim' => (int) ($c['dedicated'] ?? 0)];
+        }
+        $daftar = [];
+        foreach ($berkas['lokasi'] ?? [] as $l) {
+            $c = $cov[(string) $l['dl']] ?? ['semua' => 0, 'tim' => 0];
+            $daftar[] = ['lokasi' => (string) $l['lokasi'], 'detlok' => (string) $l['detlok'], 'grup' => (string) ($l['grp'] ?? ''), ...$c];
+        }
+        // Yang paling perlu perhatian dulu: tanpa laporan, lalu tanpa laporan tim PJA, lalu laporan paling sedikit.
+        usort($daftar, fn ($a, $b) => [$a['semua'] > 0, $a['tim'] > 0, $a['semua']] <=> [$b['semua'] > 0, $b['tim'] > 0, $b['semua']]
+            ?: strcmp($a['lokasi'].$a['detlok'], $b['lokasi'].$b['detlok']));
+
+        return [
+            'jendela' => $jendela,
+            'dl' => count($daftar),
+            'dlAda' => count(array_filter($daftar, fn ($d) => $d['semua'] > 0)),
+            'dlTim' => count(array_filter($daftar, fn ($d) => $d['tim'] > 0)),
+            'laporan' => array_sum(array_column($daftar, 'semua')),
+            'laporanTim' => array_sum(array_column($daftar, 'tim')),
+            'daftar' => $daftar,
+        ];
+    }
+
+    /**
+     * Pencapaian SAP personil PJA (BC + Mitra anak), sama dengan Beranda PJA poin a–b: laporan SAP 14 hari
+     * (Hazard, Inspeksi, OBS, OAK, Coaching) dan BeARC minggu terakhir (%SAP, target vs realisasi, banned).
+     * Halaman publik: SID orang lain tidak dikirim; hanya baris milik SID pencari yang ditandai.
+     *
+     * @return array<string, mixed>
+     */
+    private function personilPja(array $berkas, string $sid): array
+    {
+        $bearc = [];
+        foreach ($berkas['bearc'] ?? [] as $x) {
+            $k = strtoupper((string) $x['sid']);
+            if (! isset($bearc[$k]) || (string) $x['mulai'] > (string) $bearc[$k]['mulai']) {
+                $bearc[$k] = $x;
+            }
+        }
+        $orang = [];
+        foreach ($berkas['personil'] ?? [] as $p) {
+            $k = strtoupper((string) ($p['sid'] ?? ''));
+            if ($k === '') {
+                continue;
+            }
+            $orang[$k] ??= ['nama' => (string) $p['nama'], 'perusahaan' => (string) $p['perusahaan'], 'bc' => false, 'kat' => [],
+                'pja' => [], 'harian' => array_map('intval', (array) ($p['harian'] ?? []))];
+            $orang[$k]['bc'] = $orang[$k]['bc'] || (bool) ($p['bc'] ?? false);
+            if (trim((string) ($p['kategori'] ?? '')) !== '') {
+                $orang[$k]['kat'][trim((string) $p['kategori'])] = true;
+            }
+            if (! ($p['bc'] ?? false) && (string) ($p['pja'] ?? '') !== '') {
+                $orang[$k]['pja'][(string) $p['pja']] = true;
+            }
+        }
+        $daftar = [];
+        foreach ($orang as $k => $o) {
+            $h = $o['harian'];
+            $b = $bearc[$k] ?? null;
+            $daftar[] = [
+                'saya' => $k === $sid, 'nama' => $o['nama'], 'perusahaan' => $o['perusahaan'], 'bc' => $o['bc'],
+                'peran' => implode(', ', array_keys($o['kat'])), 'pjaMitra' => implode(', ', array_keys($o['pja'])),
+                'harian' => $h, 'tot' => array_sum($h), 'tot7' => array_sum(array_slice($h, -7)), 'aktif' => count(array_filter($h)),
+                'bearc' => $b === null ? null : [
+                    'mulai' => (string) $b['mulai'], 'persen' => $b['persen'] === null ? null : (float) $b['persen'],
+                    'banned' => (bool) (int) ($b['banned_sap'] ?? 0),
+                    'target' => array_map('intval', ['coach' => $b['t_coach'] ?? 0, 'obs' => $b['t_obs'] ?? 0, 'ins' => $b['t_ins'] ?? 0, 'hzr' => $b['t_hzr'] ?? 0]),
+                    'real' => array_map('intval', ['coach' => $b['n_coach'] ?? 0, 'obs' => $b['n_obs'] ?? 0, 'ins' => $b['n_ins'] ?? 0, 'hzr' => $b['n_hzr'] ?? 0]),
+                ],
+            ];
+        }
+        usort($daftar, fn ($a, $b) => [$b['saya'], $b['tot']] <=> [$a['saya'], $a['tot']] ?: strcmp($a['nama'], $b['nama']));
+        $persen = array_values(array_filter(array_map(fn ($d) => $d['bearc']['persen'] ?? null, $daftar), fn ($x) => $x !== null));
+
+        return [
+            'total' => count($daftar),
+            'bc' => count(array_filter($daftar, fn ($d) => $d['bc'])),
+            'aktif7' => count(array_filter($daftar, fn ($d) => $d['tot7'] > 0)),
+            'tanpaLaporan' => count(array_filter($daftar, fn ($d) => $d['tot'] === 0)),
+            'laporan' => array_sum(array_column($daftar, 'tot')),
+            'rataPersen' => $persen === [] ? null : round(array_sum($persen) / count($persen), 1),
+            'capai' => count(array_filter($persen, fn ($x) => $x >= 100)),
+            'adaBearc' => count($persen),
+            'banned' => count(array_filter($daftar, fn ($d) => $d['bearc']['banned'] ?? false)),
+            'daftar' => $daftar,
+        ];
+    }
+
     // ------------------------------------------------------------ indeks SID → PJA
 
     /**
@@ -295,7 +397,7 @@ final class DrmRaporPja
         if (! is_file($meta)) {
             return ['sid' => []];
         }
-        $kunci = 'drm-rapor-pja:'.filemtime($meta);
+        $kunci = 'drm-rapor-pja:v2:'.filemtime($meta);
         try {
             return Cache::remember($kunci, now()->addDays(2), fn () => $this->bangunIndeks($meta));
         } catch (Throwable $e) {
@@ -321,6 +423,7 @@ final class DrmRaporPja
                 continue;
             }
             $id = basename($file, '.json');
+            // Termasuk PJA yang dikecualikan dari dashboard (mis. Inspektor): di rapor publik tetap muncul.
             $pja = ['id' => $id, 'nama' => (string) ($berkas['info']['nama'] ?? ''), 'site' => (string) ($berkas['info']['site'] ?? '')];
             foreach ($berkas['personil'] ?? [] as $p) {
                 $s = self::normSid((string) ($p['sid'] ?? ''));

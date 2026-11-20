@@ -439,9 +439,6 @@ final class DrmMaster
         if (isset($this->data['lokasiPja'])) {
             $lp = [];
             foreach ($this->data['lokasiPja'] as [$site, $lokasi, $pja]) {
-                if (self::pjaDikecualikan((string) $pja, $cfg)) {
-                    continue;
-                }
                 $lp[self::crcLokasi($site, $lokasi).'|'.self::crc($pja)] = sprintf('[%d,%d]', self::crcLokasi($site, $lokasi), self::crc($pja));
             }
             $lit['lp'] = self::json('['.implode(',', $lp).']', 'Array(Tuple(UInt32, UInt32))');
@@ -450,7 +447,10 @@ final class DrmMaster
         return $lit;
     }
 
-    /** PJA yang namanya mengandung kata di config `pja_dikecualikan` (mis. Inspektor) tidak ikut dashboard. */
+    /**
+     * PJA yang namanya mengandung kata di config `pja_dikecualikan` (mis. Inspektor) tidak ikut dashboard (daftar PJA,
+     * Beranda PJA, Semua PJA). Berkasnya tetap dibuat saat sync agar tetap muncul di Rapor PJA publik.
+     */
     public static function pjaDikecualikan(string $nama, array $cfg): bool
     {
         foreach ((array) ($cfg['pja_dikecualikan'] ?? []) as $kata) {
