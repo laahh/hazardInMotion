@@ -79,6 +79,12 @@
       .leg span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
       .leg b { display: block; margin-top: .2rem; font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
       .leg em { font-style: normal; font-size: .75rem; color: var(--muted); }
+      .legenda.dua { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .leg-klik { border: 2px solid transparent; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .2s, box-shadow .2s; }
+      .leg-klik:hover { border-color: var(--c); }
+      .leg-klik[aria-expanded="true"] { border-color: var(--c); box-shadow: 0 6px 18px -10px var(--c); }
+      .leg-klik:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+      .leg-klik i { display: flex; align-items: center; gap: .2rem; margin-top: .35rem; font-style: normal; font-size: .74rem; font-weight: 700; color: var(--c); }
       .c-ok { --c: var(--ok); --c-soft: var(--ok-soft); } .c-part { --c: var(--part); --c-soft: var(--part-soft); }
       .c-bm { --c: var(--bm); --c-soft: var(--bm-soft); } .c-none { --c: var(--none); --c-soft: var(--none-soft); }
       .sub-h { margin: 1.25rem 0 .55rem; font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -209,23 +215,31 @@
          <p class="more">SAP 14 hari = laporan Hazard, Inspeksi, OBS, OAK, dan Coaching. %SAP dan target dari BeARC minggu terakhir (Coaching · OBS/OAK · Inspeksi · Hazard).</p>
       </section>
 
+      <!-- Ada Gap (+ temuan SAP open) dan Open Risk digabung: klik salah satu kartu untuk menampilkan rinciannya. -->
       <section class="card">
-         <h2 class="card-title"><span class="num">5</span> Temuan SAP open di area PJA <small id="temuan-n"></small></h2>
-         <div class="list" id="temuan"></div>
-         <p class="more" id="temuan-more"></p>
-      </section>
-
-      <section class="card">
-         <h2 class="card-title"><span class="num">6</span> Bahaya-risiko yang belum teridentifikasi (Open Risk) <small id="belum-n"></small></h2>
-         <div class="alert alert-info" style="margin-bottom:.85rem">
-            <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">info</span>
-            Bahaya-risiko Significant/High di baseline HIRA area PJA ini yang <strong>tidak tertangkap laporan SAP</strong> sama sekali pada minggu ini. Prioritaskan pengawasan dan pelaporan di sini.
+         <h2 class="card-title"><span class="num">5</span> Bahaya-risiko perlu tindakan <small>Significant + High</small></h2>
+         <div class="legenda dua" role="group" aria-label="Pilih rincian">
+            <button type="button" class="leg leg-klik c-part" id="st-gap" data-panel="panel-gap" aria-expanded="false" aria-controls="panel-gap"></button>
+            <button type="button" class="leg leg-klik c-bm" id="st-open" data-panel="panel-open" aria-expanded="false" aria-controls="panel-open"></button>
          </div>
-         <div id="belum"></div>
-         <p class="more" id="belum-more"></p>
+         <p class="more" id="st-hint">Klik salah satu kartu untuk melihat rinciannya.</p>
 
-         <p class="sub-h" id="gap-h">Teridentifikasi tetapi ada gap (belum closed / berulang / OAK Stop)</p>
-         <div id="gap"></div>
+         <div class="panel-st" id="panel-gap" hidden>
+            <p class="sub-h">Teridentifikasi tetapi ada gap (belum closed / berulang / OAK Stop)</p>
+            <div id="gap"></div>
+            <p class="sub-h">Temuan SAP open di area PJA <span id="temuan-n" style="text-transform:none;letter-spacing:0"></span></p>
+            <div class="list" id="temuan"></div>
+            <p class="more" id="temuan-more"></p>
+         </div>
+
+         <div class="panel-st" id="panel-open" hidden>
+            <div class="alert alert-info" style="margin:1rem 0 .85rem">
+               <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">info</span>
+               Bahaya-risiko Significant/High di baseline HIRA area PJA ini yang <strong>tidak tertangkap laporan SAP</strong> sama sekali pada minggu ini. Prioritaskan pengawasan dan pelaporan di sini.
+            </div>
+            <div id="belum"></div>
+            <p class="more" id="belum-more"></p>
+         </div>
       </section>
    </div>
 
@@ -431,17 +445,35 @@
       }).join('');
    }
 
+   /** Kartu gabungan Ada Gap (+ temuan SAP open) & Open Risk; rincian tampil saat kartunya diklik. */
    function belum(r) {
+      var u = r.ringkas.utama, tutupIkon = '<i><span class="material-symbols-outlined" style="font-size:16px">expand_more</span> Lihat rincian</i>';
+      $('st-gap').innerHTML = '<span>Teridentifikasi - Ada Gap</span><b>' + fmt(r.gap.total) + '</b><em>' + pct(r.gap.total, u.tot) + ' · belum closed / berulang / OAK Stop · ' + fmt(r.temuan.total) + ' temuan open</em>' + tutupIkon;
+      $('st-open').innerHTML = '<span>Tidak Teridentifikasi (Open Risk)</span><b>' + fmt(r.belum.total) + '</b><em>' + pct(r.belum.total, u.tot) + ' · tanpa laporan SAP</em>' + tutupIkon;
       var tampilBelum = r.belum.aktivitas.reduce(function (s, a) { return s + a.baris.length; }, 0);
-      $('belum-n').textContent = fmt(r.belum.total) + ' baris';
       $('belum').innerHTML = daftarAkt(r.belum, 'Semua bahaya-risiko Significant/High sudah teridentifikasi laporan SAP minggu ini.', false);
       $('belum-more').textContent = r.belum.total > tampilBelum ? 'Menampilkan ' + tampilBelum + ' dari ' + fmt(r.belum.total) + ' baris (prioritas: Significant dan yang pernah insiden).' : '';
-      $('gap-h').style.display = r.gap.total ? '' : 'none';
-      $('gap').innerHTML = r.gap.total ? daftarAkt(r.gap, '', true) : '';
+      $('gap').innerHTML = daftarAkt(r.gap, 'Tidak ada bahaya-risiko Significant/High yang ada gap minggu ini.', true);
+      pilihStatus(null);
+   }
+
+   /** Buka satu panel rincian (null = tutup semua). Klik kartu yang sedang terbuka menutupnya. */
+   function pilihStatus(id) {
+      ['st-gap', 'st-open'].forEach(function (k) {
+         var btn = $(k), buka = k === id;
+         btn.setAttribute('aria-expanded', String(buka));
+         $(btn.dataset.panel).hidden = !buka;
+         var ikon = btn.querySelector('i');
+         if (ikon) ikon.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px">' + (buka ? 'expand_less' : 'expand_more') + '</span> ' + (buka ? 'Tutup rincian' : 'Lihat rincian');
+      });
+      $('st-hint').hidden = id !== null;
    }
 
    pasangLipat('cov-lihat', 'cov-tbl');
    pasangLipat('ps-lihat', 'ps-tbl');
+   ['st-gap', 'st-open'].forEach(function (k) {
+      $(k).addEventListener('click', function () { pilihStatus(this.getAttribute('aria-expanded') === 'true' ? null : k); });
+   });
    $('form-cari').addEventListener('submit', function (e) { e.preventDefault(); cari(); });
    $('pja-pilih').addEventListener('change', function (e) { if (sidAktif) cari(e.target.value); });
    if ($('sid').value.trim()) cari();
