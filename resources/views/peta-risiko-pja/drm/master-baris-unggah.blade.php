@@ -15,8 +15,8 @@
 @section('content')
 @php
   $p = $pratinjau;
-  $nama = ['aktivitas' => 'Aktivitas', 'sub' => 'Sub aktivitas', 'bahaya' => 'Bahaya - risiko', 'kb' => 'Risiko awal', 'departemen' => 'Departemen baseline',
-      'grup' => 'Grup lokasi', 'OBS' => 'Item Sumber Observasi', 'OAK' => 'Item Sumber OAK', 'KET' => 'Item Sumber Ketidaksesuaian'];
+  $nama = ['aktivitas' => 'Aktivitas', 'sub' => 'Sub aktivitas', 'bahaya' => 'Bahaya - risiko',
+      'OBS' => 'Item Sumber Observasi', 'OAK' => 'Item Sumber OAK', 'KET' => 'Item Sumber Ketidaksesuaian'];
   $kosong = fn ($v) => $v === '' ? '(kosong)' : $v;
 @endphp
 <style>

@@ -27,12 +27,11 @@ final class DrmMasterBarisExcel
         'aktivitas' => ['Aktivitas', 30, true],
         'sub' => ['Sub aktivitas', 30, true],
         'bahaya' => ['Bahaya - risiko', 40, true],
-        'kb' => ['Risiko awal', 13, true],
-        'departemen' => ['Departemen baseline (koreksi)', 28, true],
+        'kb' => ['Risiko awal (info)', 13, false],
         'dept_hira' => ['Departemen HIRA (info)', 28, false],
         'idh' => ['ID HIRA (info)', 14, false],
         'kelompok' => ['Kelompok aktivitas (info)', 24, false],
-        'grup' => ['Grup lokasi', 28, true],
+        'grup' => ['Grup lokasi (info)', 28, false],
         'OBS' => ['Item Sumber Observasi', 40, true],
         'OAK' => ['Item Sumber OAK', 45, true],
         'KET' => ['Item Sumber Ketidaksesuaian', 45, true],
@@ -42,11 +41,10 @@ final class DrmMasterBarisExcel
     public const PETUNJUK = [
         'Edit langsung di sheet "Master baris", lalu unggah kembali di halaman Master per Baris → Unggah Excel.',
         'Kolom ID baris dan Versi jangan diubah. Kolom bertanda (info) hanya informasi dan diabaikan saat unggah.',
-        'Grup lokasi dan Item Sumber: satu nilai per baris di dalam sel (Alt+Enter untuk baris baru). Sel dikosongkan = semua nilai di kolom itu dihapus.',
+        'Yang bisa diedit: Aktivitas, Sub aktivitas, Bahaya - risiko, Item Sumber Observasi, Item Sumber OAK, Item Sumber Ketidaksesuaian.',
+        'Item Sumber: satu label per baris di dalam sel (Alt+Enter untuk baris baru). Sel dikosongkan = semua label di kolom itu dihapus.',
         'Item Sumber Ketidaksesuaian ditulis "ketidaksesuaian / sub ketidaksesuaian" (dipisah spasi-garis miring-spasi).',
-        'Grup lokasi harus nama grup yang sudah ada di master (lihat sheet "Grup lokasi"). Grup lokasi menentukan di site mana baris dihitung.',
-        'Risiko awal: Significant, High, Medium, atau Low.',
-        'Departemen baseline: isi bila departemen HIRA salah (mis. HIRA tercatat Mining padahal Marine). Kosong = mengikuti departemen HIRA.',
+        'Site MARINE dan EKSPLORASI ditentukan departemen HIRA (Shipping / Port and Barging Operation -> MARINE, Geology and Exploration -> EKSPLORASI); site lain lewat grup lokasi.',
         'Mengubah teks Bahaya bisa membuat nilai risiko HIRA (kekerapan × konsekuensi) tidak tercocok lagi; pratinjau unggah memberi peringatan.',
         'Baris yang tidak ada di file tidak diubah. Baris yang diubah orang lain setelah file diunduh dilewati (konflik): unduh ulang lalu edit lagi.',
         'Perubahan dicatat di Riwayat (siapa, kapan, sebelum → sesudah) dan berlaku pada php artisan peta-risiko:sync berikutnya.',
@@ -148,7 +146,7 @@ final class DrmMasterBarisExcel
     public static function versi(array $isian): string
     {
         $kanon = [];
-        foreach (['aktivitas', 'sub', 'bahaya', 'kb', 'departemen', 'grup', 'OBS', 'OAK', 'KET'] as $k) {
+        foreach (['aktivitas', 'sub', 'bahaya', 'OBS', 'OAK', 'KET'] as $k) {
             $v = $isian[$k] ?? '';
             if (is_array($v)) {
                 $v = array_map(fn ($x) => mb_strtolower(trim((string) $x)), $v);

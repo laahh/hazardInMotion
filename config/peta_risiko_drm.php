@@ -283,6 +283,18 @@ return [
     */
     'pja_dikecualikan' => ['inspektor', 'inspector'],
 
+    /*
+    | Site per departemen HIRA (keputusan user 20 Nov 2026), hanya untuk site di sini; site lain tetap lewat lokasi
+    | (grup lokasi → detail lokasi). Baris baseline yang departemen dokumen HIRA-nya (mv_hira_master, dokumen yang sama
+    | dengan atribut risiko) ada di daftar dihitung di site itu SAJA: status SAP tetap dinilai dari detail lokasi
+    | tempat baris berada (mis. jetty di LMO), tetapi ringkasan site (Overview, kartu, matriks) memasukkannya ke site
+    | ini dan mengeluarkannya dari site lokasinya. Nama departemen dicocokkan tanpa beda huruf besar/kecil.
+    */
+    'site_per_departemen' => [
+        'MARINE' => ['Shipping Dept.', 'Port and Barging Operation Dept.'],
+        'EKSPLORASI' => ['Geology and Exploration Dept.'],
+    ],
+
     /* Observasi yang deskripsi/umpan balik/tindakannya berisi frasa ini (huruf kecil) tidak dihitung sebagai deteksi. */
     'obs_tanpa_aktivitas' => ['tidak ada aktivitas'],
 

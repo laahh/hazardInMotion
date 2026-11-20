@@ -13,8 +13,8 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 /**
- * Master per baris lewat Excel: unduh → edit → unggah → pratinjau → terapkan + riwayat. SELALU SQLite memori di koneksi
- * tersendiri, tidak pernah database dari .env (database bersama).
+ * Master per baris lewat Excel: unduh → edit → unggah → pratinjau → terapkan + riwayat. Yang bisa diedit: aktivitas,
+ * sub aktivitas, bahaya, dan tiga Item Sumber. SELALU SQLite memori di koneksi tersendiri (bukan database bersama).
  */
 class DrmMasterBarisUnggahTest extends TestCase
 {
@@ -31,8 +31,7 @@ class DrmMasterBarisUnggahTest extends TestCase
         $this->koneksiAsal = (string) config('database.default');
         config(['database.connections.uji_drm' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         DB::setDefaultConnection('uji_drm');
-        foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_18_120000_add_item_sumber_to_drm_master_baris_table',
-            '2026_11_20_100000_add_departemen_to_drm_master_baris_table'] as $m) {
+        foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_18_120000_add_item_sumber_to_drm_master_baris_table'] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
         $kini = now();
@@ -63,68 +62,59 @@ class DrmMasterBarisUnggahTest extends TestCase
 
     public function test_unduh_edit_unggah_terapkan_dan_tercatat_di_riwayat(): void
     {
-        $u = app(DrmMasterBarisUnggah::class);
-        $x = new DrmMasterBarisExcel();
-        $hira = [1 => [['dept' => 'Mining Technology Dept.']]];
-        $path = $this->simpan($x->tulis($u->ekspor([], $hira), array_values($u->grupAktif())));
-
-        // Edit seperti user: departemen dikoreksi ke Marine, grup dipindah ke Jetty/Port, label Observasi ditambah,
-        // satu label Ketidaksesuaian dihapus. Baris 2 tidak diubah.
-        $this->ubahSel($path, 1, ['departemen' => 'Marine Dept.', 'grup' => 'jetty/port',
+        [$u, $x, $path] = $this->unduh();
+        // Edit seperti user: sub aktivitas & bahaya dikoreksi, label Observasi ditambah, satu label Ketidaksesuaian dihapus.
+        // Kolom info (risiko awal, grup lokasi) yang diubah di Excel diabaikan. Baris 2 tidak diubah.
+        $this->ubahSel($path, 1, ['sub' => 'Pemuatan batubara', 'bahaya' => 'Tergelincir di dek tongkang', 'kb' => 'Low', 'grup' => 'Jetty/Port',
             'OBS' => "Cast Off Tongkang\nPenambatan tongkang", 'KET' => 'Bahaya Biologi / Berlubang']);
 
         $p = $u->pratinjau($x->baca($path));
         $this->assertSame([2, 1, 1, 0, 0], [$p['total'], count($p['ubah']), $p['tetap'], count($p['galat']), count($p['konflik'])]);
         $ubah = $p['ubah'][0]['ubah'];
-        $this->assertSame(['dari' => '', 'ke' => 'Marine Dept.'], $ubah['departemen']);
-        $this->assertSame(['tambah' => ['Jetty/Port'], 'hapus' => ['Loading Point']], $ubah['grup']);
+        $this->assertSame(['sub', 'bahaya', 'OBS', 'KET'], array_keys($ubah));
+        $this->assertSame(['dari' => 'Pemuatan', 'ke' => 'Pemuatan batubara'], $ubah['sub']);
         $this->assertSame(['tambah' => ['Penambatan tongkang'], 'hapus' => []], $ubah['OBS']);
         $this->assertSame(['tambah' => [], 'hapus' => ['Rambu / Tidak ada rambu']], $ubah['KET']);
-        $this->assertStringContainsString('site tempat baris ini dihitung', implode(' ', $p['ubah'][0]['peringatan']));
+        $this->assertStringContainsString('Teks bahaya diubah', implode(' ', $p['ubah'][0]['peringatan']));
 
-        $hasil = $u->terapkan($p, 'mapping-marine.xlsx');
-        $this->assertSame(['diubah' => 1, 'dilewati' => []], $hasil);
+        $this->assertSame(['diubah' => 1, 'dilewati' => []], $u->terapkan($p, 'mapping-marine.xlsx'));
         $b = DB::table('drm_master_baris')->where('ri', 1)->first();
-        $this->assertSame('Marine Dept.', $b->departemen);
+        $this->assertSame(['Pemuatan batubara', 'Tergelincir di dek tongkang', 'High'], [$b->sub, $b->bahaya, $b->kb]);
         $this->assertSame("Cast Off Tongkang\nPenambatan tongkang", $b->item_sumber_observasi);
         $this->assertSame('Bahaya Biologi / Berlubang', $b->item_sumber_ketidaksesuaian);
-        $this->assertSame([1], DB::table('drm_master_grup_baris')->where('ri', 1)->pluck('gid')->map(fn ($v) => (int) $v)->all());
+        $this->assertSame([2], DB::table('drm_master_grup_baris')->where('ri', 1)->pluck('gid')->map(fn ($v) => (int) $v)->all());
 
         // Riwayat: satu catatan per baris (siapa, sebelum → sesudah, berkas) + satu ringkasan unggahan.
         $log = DB::table('drm_master_log')->where('aksi', 'unggah')->orderBy('id')->get();
         $this->assertCount(2, $log);
         $this->assertSame(['1', 'Budi Editor', 7], [$log[0]->kunci, $log[0]->user_nama, (int) $log[0]->user_id]);
-        $this->assertSame('Loading Point', json_decode($log[0]->sebelum, true)['grup']);
+        $this->assertSame('Tergelincir di tongkang', json_decode($log[0]->sebelum, true)['bahaya']);
         $this->assertSame('mapping-marine.xlsx', json_decode($log[0]->sesudah, true)['berkas']);
         $this->assertSame(1, json_decode($log[1]->sesudah, true)['baris diubah']);
     }
 
     public function test_konflik_bila_baris_diubah_orang_lain_setelah_diunduh(): void
     {
-        $u = app(DrmMasterBarisUnggah::class);
-        $x = new DrmMasterBarisExcel();
-        $path = $this->simpan($x->tulis($u->ekspor([], []), array_values($u->grupAktif())));
-        $this->ubahSel($path, 1, ['kb' => 'Medium']);
+        [$u, $x, $path] = $this->unduh();
+        $this->ubahSel($path, 1, ['OAK' => 'Barging / Langsung']);
         DB::table('drm_master_baris')->where('ri', 1)->update(['item_sumber_oak' => 'Barging / CCV']); // diubah orang lain
 
         $p = $u->pratinjau($x->baca($path));
         $this->assertSame([], $p['ubah']);
         $this->assertSame(1, $p['konflik'][0]['ri']);
-        $this->assertSame('High', DB::table('drm_master_baris')->where('ri', 1)->value('kb'));
+        $this->assertSame('Barging / CCV', DB::table('drm_master_baris')->where('ri', 1)->value('item_sumber_oak'));
     }
 
     public function test_galat_divalidasi_dan_baris_dilewati(): void
     {
-        $u = app(DrmMasterBarisUnggah::class);
-        $x = new DrmMasterBarisExcel();
-        $path = $this->simpan($x->tulis($u->ekspor([], []), array_values($u->grupAktif())));
-        $this->ubahSel($path, 1, ['grup' => 'Grup Tidak Ada', 'KET' => 'Tanpa garis miring']);
-        $this->ubahSel($path, 2, ['ri' => '999', 'kb' => 'Sedang']);
+        [$u, $x, $path] = $this->unduh();
+        $this->ubahSel($path, 1, ['bahaya' => '', 'KET' => 'Tanpa garis miring']);
+        $this->ubahSel($path, 2, ['ri' => '999']);
 
         $p = $u->pratinjau($x->baca($path));
         $this->assertSame([], $p['ubah']);
         $pesan = implode(' | ', array_column($p['galat'], 'pesan'));
-        $this->assertStringContainsString('Grup lokasi "Grup Tidak Ada" tidak ada di master', $pesan);
+        $this->assertStringContainsString('Bahaya tidak boleh kosong', $pesan);
         $this->assertStringContainsString('ketidaksesuaian / sub ketidaksesuaian', $pesan);
         $this->assertStringContainsString('ID baris tidak dikenal', $pesan);
     }
@@ -132,21 +122,22 @@ class DrmMasterBarisUnggahTest extends TestCase
     public function test_unduhan_mengikuti_filter_halaman(): void
     {
         $u = app(DrmMasterBarisUnggah::class);
-        $hira = [1 => [['dept' => 'Mining Technology Dept.']]];
+        $hira = [1 => [['dept' => 'Port and Barging Operation Dept.']]];
 
-        $this->assertSame([1], array_column($u->ekspor(['dep' => 'Mining Technology Dept.'], $hira), 'ri'));
+        $this->assertSame([1], array_column($u->ekspor(['dep' => 'Port and Barging Operation Dept.'], $hira), 'ri'));
         $this->assertSame([2], array_column($u->ekspor(['kosong' => 'SEMUA'], $hira), 'ri'));
         $this->assertSame([2], array_column($u->ekspor(['kb' => 'Significant'], $hira), 'ri'));
         $this->assertSame([1], array_column($u->ekspor(['q' => 'tongkang biologi'], $hira), 'ri'));
-        // Departemen koreksi baseline menggantikan departemen HIRA untuk filter.
-        DB::table('drm_master_baris')->where('ri', 1)->update(['departemen' => 'Marine Dept.']);
-        $this->assertSame([], $u->ekspor(['dep' => 'Mining Technology Dept.'], $hira));
-        $this->assertSame([1], array_column($u->ekspor(['dep' => 'Marine Dept.'], $hira), 'ri'));
+        $this->assertSame('Port and Barging Operation Dept.', $u->ekspor(['dep' => 'Port and Barging Operation Dept.'], $hira)[0]['dept_hira']);
     }
 
-    private function simpan(string $path): string
+    /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */
+    private function unduh(): array
     {
-        return $this->berkas[] = $path;
+        $u = app(DrmMasterBarisUnggah::class);
+        $x = new DrmMasterBarisExcel();
+
+        return [$u, $x, $this->berkas[] = $x->tulis($u->ekspor([], []), array_values($u->grupAktif()))];
     }
 
     /** Ubah sel baris data ke-$n (1 = baris data pertama) berdasarkan kunci kolom, seperti diedit di Excel. */

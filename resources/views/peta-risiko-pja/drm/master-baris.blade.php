@@ -63,7 +63,6 @@
   .mb-hid { display: block; margin-top: 2px; font-size: 11px; color: #8a8d90; }
   .mb-hid b { font-weight: 600; color: #595c5e; }
   .mb-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 700; vertical-align: 1px; }
-  .mb-tag.koreksi { background: #eef1fd; color: #3952bc; margin-left: 0; }
   .mb-oleh { display: block; margin-top: 4px; font-size: 11px; color: #8a8d90; }
   .mb-oleh a { color: #3952bc; text-decoration: none; } .mb-oleh a:hover { text-decoration: underline; }
   .mb-unggah { display: inline-flex; align-items: center; gap: 6px; }
@@ -221,11 +220,8 @@
    * Departemen asal baris: dari dokumen HIRA (id_hira_master master). Dokumen yang teks bahayanya cocok = sumber
    * atribut risiko saat sync (tag "cocok"); "kosong" = header HIRA ada tetapi tanpa isi; "tidak ada" = ID tidak ditemukan.
    */
-  function kolomDep(d, r) {
-    // Koreksi baseline menimpa departemen HIRA (HIRA sendiri tidak diubah).
-    const koreksi = r && r.dk ? '<span class="mb-dep">' + esc(r.dk) + ' <span class="mb-tag koreksi" title="Departemen hasil koreksi baseline; departemen HIRA di bawahnya hanya informasi">koreksi baseline</span></span>' : '';
-    if (!d.length) return koreksi || '<div class="mb-kosong">Tanpa ID HIRA</div>';
-    if (koreksi) return koreksi + '<div style="opacity:.6;margin-top:4px">' + kolomDep(d, null) + '</div>';
+  function kolomDep(d) {
+    if (!d.length) return '<div class="mb-kosong">Tanpa ID HIRA</div>';
     const perDept = {};
     d.forEach((x) => { const k = x.ada ? (x.dept || '(tanpa departemen)') : '(ID HIRA tidak ditemukan)'; (perDept[k] ||= []).push(x); });
     return Object.keys(perDept).map((dep) => '<span class="mb-dep">' + esc(dep) + '</span>' + perDept[dep].map((x) =>
@@ -256,7 +252,7 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? (r.dk + ' ' + d.map((x) => x.dept + ' ' + x.idh).join(' ')) : kolomDep(d, r) },
+      { data: 'h', className: 'dep', render: (d, type) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') : kolomDep(d) },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
@@ -268,7 +264,7 @@
     if (settings.nTable.id !== 'mb-tabel') return true;
     const r = ROWS[idx];
     if (fKb.value && r.kb !== fKb.value) return false;
-    if (fDep.value && (r.dk ? r.dk !== fDep.value : !r.h.some((x) => x.dept === fDep.value))) return false;
+    if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
     const k = fKosong.value;
     if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
     if (k) return !r[k].length;

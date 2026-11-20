@@ -258,7 +258,8 @@ class DrmSnapshotBuilder
                 ...array_diff_key($ringkas, self::BERAT_PER_PJA + ['rincian' => 1])];
         }
 
-        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null);
+        $rute = self::ruteSite($hira, $cfg);
+        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null, $rute);
 
         return [
             'minggu' => $b->minggu(),
@@ -272,6 +273,8 @@ class DrmSnapshotBuilder
             'lamaHari' => (int) $cfg['beranda']['lokasi_lama_hari'],
             'kolomMgmt' => DrmBeranda::KOLOM_MGMT,
             'mgmt' => $mgmt,
+            // hid => site untuk baris yang site-nya ditentukan departemen HIRA (config site_per_departemen); dipakai modal SAP.
+            'ruteSite' => (object) $rute,
             // dl => [site, lokasi, detail lokasi, grup lokasi] untuk tabel detail lokasi di tab Group Lokasi.
             'dl' => (object) $kamusDl,
             // id aktivitas HIRA => [nama aktivitas, kelompok aktivitas] untuk rincian baris kelompok.
@@ -295,18 +298,23 @@ class DrmSnapshotBuilder
      * @param  array<string, mixed>  $idx
      * @return array{0: array<string, array<string, mixed>>, 1: array<string, mixed>}  [ringkasan, rincian baris per status]
      */
-    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null): array
+    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null, array $rute = []): array
     {
         $cakupan = ['ALL' => []];
         foreach ($dl as $id => $d) {
             $cakupan['ALL'][] = (string) $id;
             $cakupan[(string) $d['site']][] = (string) $id;
         }
+        foreach (array_unique($rute) as $site) {
+            $cakupan[$site] ??= [];
+        }
         $buang = array_flip(['kgTot', 'u4', 'kelTot', 'kelGap', 'lama', 'insiden']);
         $hasil = $lingkup = $hidDipakai = [];
         foreach ($cakupan as $kunci => $ids) {
-            $berkas = $b->berkas($ids, $hidPerDl, $hira, $dl, $idx, []);
-            $r = $b->ringkasMgmt($ids, $hidPerDl, $hira, $berkas, [], true, true);
+            // Site per departemen: pasangan (DL, bahaya) per cakupan site disesuaikan (lihat pasanganSite).
+            [$ids, $pasangan] = $kunci === 'ALL' || $rute === [] ? [$ids, $hidPerDl] : self::pasanganSite((string) $kunci, $dl, $hidPerDl, $rute);
+            $berkas = $b->berkas($ids, $pasangan, $hira, $dl, $idx, []);
+            $r = $b->ringkasMgmt($ids, $pasangan, $hira, $berkas, [], true, true);
             $lingkup[$kunci] = $r['rincian'];
             foreach ($r['rincian']['u'] as $baris) {
                 $hidDipakai[$baris[1]] = true;
@@ -314,7 +322,7 @@ class DrmSnapshotBuilder
             unset($r['rincian']);
             $ada = [];
             foreach ($ids as $d) {
-                foreach ($hidPerDl[$d] ?? [] as $hid) {
+                foreach ($pasangan[$d] ?? [] as $hid) {
                     $ada[$hid] = true;
                 }
             }
@@ -344,6 +352,57 @@ class DrmSnapshotBuilder
         }
 
         return [$hasil, ['minggu' => $b->minggu(), 'teks' => (object) $teks, 'lingkup' => $lingkup]];
+    }
+
+    /**
+     * Rute site per departemen (config site_per_departemen): hid → SITE untuk baris yang departemen HIRA-nya terdaftar.
+     *
+     * @param  array<string, array<string, mixed>>  $hira
+     * @return array<string, string>
+     */
+    public static function ruteSite(array $hira, array $cfg): array
+    {
+        $peta = [];
+        foreach ((array) ($cfg['site_per_departemen'] ?? []) as $site => $daftar) {
+            foreach ((array) $daftar as $dept) {
+                $peta[mb_strtolower(trim((string) $dept))] = strtoupper(trim((string) $site));
+            }
+        }
+        $rute = [];
+        foreach ($peta === [] ? [] : $hira as $hid => $h) {
+            $site = $peta[mb_strtolower(trim((string) ($h['dept'] ?? '')))] ?? null;
+            if ($site !== null) {
+                $rute[(string) $hid] = $site;
+            }
+        }
+
+        return $rute;
+    }
+
+    /**
+     * Pasangan (DL → bahaya) untuk cakupan satu site dengan rute departemen: bahaya yang dirutekan ke site lain
+     * dikeluarkan dari DL site ini; bahaya yang dirutekan ke site ini ikut dari DL mana pun tempatnya berada (status
+     * tetap dinilai dari laporan di DL itu). Bahaya tanpa rute tetap mengikuti site DL-nya.
+     *
+     * @param  array<string, array<string, mixed>>  $dl
+     * @param  array<string, list<string>>  $hidPerDl
+     * @param  array<string, string>  $rute
+     * @return array{0: list<string>, 1: array<string, list<string>>}  [DL cakupan, pasangan]
+     */
+    public static function pasanganSite(string $site, array $dl, array $hidPerDl, array $rute): array
+    {
+        $ids = $pasangan = [];
+        foreach ($dl as $id => $d) {
+            $id = (string) $id;
+            $diSite = strtoupper((string) $d['site']) === strtoupper($site);
+            $sisa = array_values(array_filter($hidPerDl[$id] ?? [], fn ($h) => isset($rute[(string) $h]) ? $rute[(string) $h] === strtoupper($site) : $diSite));
+            if ($diSite || $sisa !== []) {
+                $ids[] = $id;
+                $pasangan[$id] = $sisa;
+            }
+        }
+
+        return [$ids, $pasangan];
     }
 
     // ------------------------------------------------------------ cakupan

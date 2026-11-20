@@ -66,14 +66,13 @@ final class PetaRisikoMasterBarisController extends Controller
             'kb' => (string) ($b->kb ?? ''),
             // Dokumen HIRA asal baris (id_hira_master master) + departemennya, dokumen yang teks bahayanya cocok dulu.
             'h' => $hira[(int) $b->ri] ?? [],
-            // Departemen koreksi baseline (kosong = ikut HIRA) dan perubahan terakhir [nama, waktu].
-            'dk' => (string) ($b->departemen ?? ''),
+            // Perubahan terakhir [nama, waktu] dari riwayat.
             'u' => $terakhir[(int) $b->ri] ?? null,
             'OBS' => $label[(int) $b->ri]['OBS'] ?? [],
             'OAK' => $label[(int) $b->ri]['OAK'] ?? [],
             'KET' => $label[(int) $b->ri]['KET'] ?? [],
         ], $baris);
-        $departemen = array_values(array_unique(array_filter(array_merge(...array_map(fn ($r) => [...array_column($r['h'], 'dept'), $r['dk']], $rows) ?: [[]]))));
+        $departemen = array_values(array_unique(array_filter(array_merge(...array_map(fn ($r) => array_column($r['h'], 'dept'), $rows) ?: [[]]))));
         sort($departemen);
 
         // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.

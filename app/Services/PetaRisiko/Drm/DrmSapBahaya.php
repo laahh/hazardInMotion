@@ -40,7 +40,7 @@ class DrmSapBahaya
     /** $pja diisi = cakupan hanya detail lokasi PJA itu (tab Beranda PJA), di samping filter site / grup. */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v9:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v10:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w, $pja));
     }
@@ -55,7 +55,12 @@ class DrmSapBahaya
     {
         // Cakupan PJA: detail lokasi dari berkas PJA di snapshot (null = tanpa batas PJA).
         $dlPja = $pja === '' ? null : array_flip(array_map('strval', array_column(($this->repo->pja($pja) ?? [])['lokasi'] ?? [], 'dl')));
-        ['dl' => $kamusDl, 'minggu' => $minggu, 'sampai' => $sampaiData] = $this->kamus();
+        ['dl' => $kamusDl, 'minggu' => $minggu, 'sampai' => $sampaiData] = $kamus = $this->kamus();
+        // Site per departemen (config site_per_departemen): hanya untuk cakupan site (bukan tab grup / PJA), sama dengan
+        // ringkasan site di snapshot — baris yang dirutekan dinilai dari DL mana pun tempatnya, dan keluar dari site lain.
+        $rute = (array) ($kamus['rute'] ?? []);
+        $pakaiRute = $site !== 'ALL' && $grup === '' && $pja === '' && $rute !== [];
+        $ruteSite = $pakaiRute ? ($rute[(string) $hid] ?? null) : null;
         $master = DrmMaster::muat();
         $m = $master->data;
         $cfg = $master->cfgEfektif((array) config('peta_risiko_drm'));
@@ -74,7 +79,8 @@ class DrmSapBahaya
         }
         $dl = [];
         foreach ($kamusDl as $id => [$s, $lokasi, $detlok, $g]) {
-            if (($site === 'ALL' || $s === $site) && isset($grupMemuat[$g]) && ($grup === '' || $g === $grup)
+            $siteCocok = ! $pakaiRute ? ($site === 'ALL' || $s === $site) : ($ruteSite !== null ? $ruteSite === strtoupper($site) : $s === $site);
+            if ($siteCocok && isset($grupMemuat[$g]) && ($grup === '' || $g === $grup)
                 && ($dlPja === null || isset($dlPja[(string) $id]))) {
                 $dl[(int) $id] = [$s, $lokasi, $detlok, $g];
             }
@@ -236,7 +242,7 @@ GROUP BY task', 60);
      */
     public function item(int $hid, string $kel, string $site, string $grup, int $w, string $sumber, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-item:v10:%d:%s:%s:%s:%d:%s:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, $pja, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-item:v11:%d:%s:%s:%s:%d:%s:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $sumber, $pja, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, function () use ($hid, $kel, $site, $grup, $w, $sumber, $pja) {
             $p = $this->persiapan($hid, $kel, $site, $grup, $w, $pja);
@@ -414,13 +420,14 @@ GROUP BY kc ORDER BY n DESC LIMIT 500';
      */
     private function kamus(): array
     {
-        return Cache::remember('peta-risiko:kamus-dl:'.(int) @filemtime($this->repo->pathMeta()), 3600, function () {
+        return Cache::remember('peta-risiko:kamus-dl:v2:'.(int) @filemtime($this->repo->pathMeta()), 3600, function () {
             $meta = $this->repo->meta() ?? [];
 
             return [
                 'dl' => (array) ($meta['beranda']['dl'] ?? []),
                 'minggu' => (array) ($meta['beranda']['minggu'] ?? []),
                 'sampai' => (string) ($meta['sampai'] ?? now()->toDateString()),
+                'rute' => array_map('strval', (array) ($meta['beranda']['ruteSite'] ?? [])),
             ];
         });
     }

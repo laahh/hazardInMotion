@@ -78,7 +78,7 @@ GROUP BY site ORDER BY n DESC';
         return $this->prelude().'
 SELECT toString(h.hid) AS hid, h.a AS a, h.an AS an, h.sn AS sn, h.bn AS bn, h.p AS p, h.sites AS sites, h.grp AS grp,
        h.k1 AS k1, h.c1 AS c1, h.n1 AS n1, h.k2 AS k2, h.c2 AS c2, h.n2 AS n2,
-       substring(h.kt, 1, 700) AS kt, h.faktor AS faktor, h.aspek AS aspek, h.proses AS proses,
+       substring(h.kt, 1, 700) AS kt, h.faktor AS faktor, h.aspek AS aspek, h.proses AS proses, h.dept AS dept,
        h.hid IN (SELECT hid FROM ma) AS di_a,
        (h.a, h.s) IN (SELECT a, s FROM mb) AS di_b,
        h.hid IN (SELECT hid FROM mtx) AS di_d
@@ -744,6 +744,7 @@ hraw AS (
          JSONExtractString(c, \'risiko_residual\', \'kekerapan\') AS k2, JSONExtractString(c, \'risiko_residual\', \'konsekuensi\') AS c2,
          JSONExtractString(c, \'risiko_residual\', \'nilai\') AS n2,
          JSONExtractString(c, \'faktor_4m1e\') AS faktor, JSONExtractString(c, \'aspek\') AS aspek,
+         trim(ifNull(h.departemen, \'\')) AS dept,
          arrayStringConcat(arrayMap(x -> concat(JSONExtractString(x, \'tipe_pengendalian\'), \': \', JSONExtractString(x, \'pengendalian_dilakukan\')),
                                     JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' | \') AS kt,
          arrayStringConcat(arrayMap(x -> JSONExtractString(x, \'pengendalian_dilakukan\'), JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' \') AS kd,
@@ -760,7 +761,9 @@ hm AS (
          groupUniqArrayArray(r.st) AS sites,
          argMax(r.k1, r.sc) AS k1, argMax(r.c1, r.sc) AS c1, argMax(r.n1, r.sc) AS n1,
          argMax(r.k2, r.sc) AS k2, argMax(r.c2, r.sc) AS c2, argMax(r.n2, r.sc) AS n2,
-         argMax(r.kt, r.sc) AS kt, argMax(r.kd, r.sc) AS kd, argMax(r.faktor, r.sc) AS faktor, argMax(r.aspek, r.sc) AS aspek
+         argMax(r.kt, r.sc) AS kt, argMax(r.kd, r.sc) AS kd, argMax(r.faktor, r.sc) AS faktor, argMax(r.aspek, r.sc) AS aspek,
+         -- Departemen dokumen HIRA yang sama dengan atribut risiko (aktif & terburuk dulu); dipakai aturan site per departemen.
+         argMax(r.dept, r.sc) AS dept
   FROM (SELECT hid, bc, arrayJoin(idh) AS i FROM mh0) m
   JOIN hraw r ON r.idh = m.i AND r.bc = m.bc
   GROUP BY m.hid
@@ -770,7 +773,7 @@ hira AS (
   SELECT m.hid AS hid, toString(m.aid) AS a, toString(m.hid) AS s, lowerUTF8(x.bn) AS b,
          x.an AS an, x.sn AS sn, x.bn AS bn, x.p AS p, x.sites AS sites,
          x.k1 AS k1, x.c1 AS c1, if(m.kb = \'\', x.n1, m.kb) AS n1, x.k2 AS k2, x.c2 AS c2, x.n2 AS n2,
-         x.kt AS kt, x.kd AS kd, x.faktor AS faktor, x.aspek AS aspek,
+         x.kt AS kt, x.kd AS kd, x.faktor AS faktor, x.aspek AS aspek, x.dept AS dept,
          g.grp AS grp, m.kel AS proses, m.umum AS umum
   FROM mh0 m LEFT JOIN hm x ON x.hid = m.hid LEFT JOIN hg g ON g.hid = m.hid
 ),
