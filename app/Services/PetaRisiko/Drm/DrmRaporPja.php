@@ -290,7 +290,7 @@ final class DrmRaporPja
     /**
      * Coverage area per minggu kalender Minggu–Sabtu (minggu yang sama dengan Performa PJA): laporan SAP per detail
      * lokasi PJA. semua = semua pelapor di detail lokasi itu; tim = personil PJA ini + PJA Mitra anaknya.
-     * Sumber: kolom `mg` coverage snapshot ("awal minggu:semua:tim,…"). Snapshot lama tanpa `mg` → jendela hari
+     * Sumber: kolom `minggu_cov` coverage snapshot ("awal minggu:semua:tim,…"). Snapshot lama tanpa `minggu_cov` → jendela hari
      * (semua / dedicated, sama dengan Beranda PJA poin c), ditandai 'perMinggu' => false.
      *
      * @return array<string, mixed>
@@ -298,7 +298,7 @@ final class DrmRaporPja
     private function coverage(array $berkas, string $awalMinggu, int $jendela): array
     {
         $baris = $berkas['coverage'] ?? [];
-        $perMinggu = $baris !== [] && array_key_exists('mg', $baris[0]);
+        $perMinggu = $baris !== [] && array_key_exists('minggu_cov', $baris[0]);
         $cov = [];
         foreach ($baris as $c) {
             if (! $perMinggu) {
@@ -306,7 +306,7 @@ final class DrmRaporPja
 
                 continue;
             }
-            foreach (array_filter(explode(',', (string) $c['mg'])) as $m) {
+            foreach (array_filter(explode(',', (string) $c['minggu_cov'])) as $m) {
                 [$awal, $semua, $tim] = array_pad(explode(':', $m), 3, '0');
                 if ($awal === $awalMinggu) {
                     $cov[(string) $c['dl']] = ['semua' => (int) $semua, 'tim' => (int) $tim];

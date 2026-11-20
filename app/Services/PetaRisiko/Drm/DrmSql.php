@@ -667,9 +667,10 @@ cw AS (
   LEFT JOIN lap l ON l.dl = d.dl
   GROUP BY pl.pja_id, d.dl, l.ws
 )
--- semua / dedicated = jendela hari (Beranda PJA poin c). mg = per minggu 4 minggu terakhir "awal:semua:tim,…" (Rapor PJA).
+-- semua / dedicated = jendela hari (Beranda PJA poin c). minggu_cov = per minggu 4 minggu terakhir "awal:semua:tim,…"
+-- (Rapor PJA). Jangan beri alias `mg`: sudah dipakai literal master grup lokasi di prelude (ClickHouse Code 179).
 SELECT pja, dl, sum(s_win) AS semua, sum(d_win) AS dedicated,
-       arrayStringConcat(groupArrayIf(concat(toString(ws), \':\', toString(s_wk), \':\', toString(d_wk)), s_wk > 0), \',\') AS mg
+       arrayStringConcat(groupArrayIf(concat(toString(ws), \':\', toString(s_wk), \':\', toString(d_wk)), s_wk > 0), \',\') AS minggu_cov
 FROM cw
 GROUP BY pja, dl';
     }

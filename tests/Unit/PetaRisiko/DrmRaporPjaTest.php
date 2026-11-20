@@ -133,8 +133,8 @@ class DrmRaporPjaTest extends TestCase
                 ['sid' => 'U8WAP', 'mulai' => '2026-11-08', 'persen' => 80, 'banned_sap' => 0, 'status_banned' => '',
                     't_coach' => 1, 'n_coach' => 1, 't_obs' => 4, 'n_obs' => 3, 't_ins' => 2, 'n_ins' => 1, 't_hzr' => 2, 'n_hzr' => 2],
             ],
-            // semua/dedicated = 28 hari; mg = per minggu Minggu–Sabtu. Rapor memakai minggu terpilih (8 Nov): 5 laporan, 3 oleh tim.
-            'coverage' => [['pja' => '77', 'dl' => '10', 'semua' => 12, 'dedicated' => 7, 'mg' => '2026-11-01:7:4,2026-11-08:5:3']],
+            // semua/dedicated = 28 hari; minggu_cov = per minggu Minggu–Sabtu. Rapor memakai minggu terpilih (8 Nov): 5 laporan, 3 oleh tim.
+            'coverage' => [['pja' => '77', 'dl' => '10', 'semua' => 12, 'dedicated' => 7, 'minggu_cov' => '2026-11-01:7:4,2026-11-08:5:3']],
             'temuan' => [['dl' => '10', 'tanggal' => '2026-11-16', 'jenis' => 'HAZARD', 'ket' => 'Bahaya Eletrikal', 'subket' => 'Panel terbuka',
                 'deskripsi' => 'Panel listrik tanpa barikade', 'status' => 'OPEN', 'pic' => 'X', 'pelapor' => ' Budi ', 'nilai' => '', 'janji' => '2026-11-30', 'aktivitas' => []]],
             'temuanTotal' => 1,
