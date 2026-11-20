@@ -178,6 +178,27 @@ class DrmMasterBarisUnggahTest extends TestCase
             $u->daftarLabel());
     }
 
+    public function test_site_per_baris_dari_grup_lokasi_dan_departemen_marine(): void
+    {
+        DB::table('drm_master_dl')->insert([
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'detail' => 'Front', 'gid' => 2, 'aktif' => true],
+            ['site' => 'BMO 1', 'lokasi' => 'Pit B', 'detail' => 'Front', 'gid' => 2, 'aktif' => true],
+            ['site' => 'GMO', 'lokasi' => 'Pit C', 'detail' => 'Lama', 'gid' => 2, 'aktif' => false],
+        ]);
+        DB::table('drm_master_grup_baris')->insert(['gid' => 2, 'ri' => 2]);
+        $u = app(DrmMasterBarisUnggah::class);
+
+        // Grup lokasi → detail lokasi aktif → site.
+        $this->assertSame([1 => ['BMO 1', 'LMO'], 2 => ['BMO 1', 'LMO']], $u->sitePerBaris([]));
+        // Departemen HIRA (dokumen yang cocok) Port and Barging Operation → hanya MARINE.
+        $hira = [1 => [['dept' => 'Port and Barging Operation Dept.', 'cocok' => true]], 2 => [['dept' => 'Shipping Dept.', 'cocok' => false]]];
+        $this->assertSame([1 => ['MARINE'], 2 => ['BMO 1', 'LMO']], $u->sitePerBaris($hira));
+
+        $this->assertSame([1], array_column($u->ekspor(['site' => 'MARINE'], $hira), 'ri'));
+        $this->assertSame([2], array_column($u->ekspor(['site' => 'LMO'], $hira), 'ri'));
+        $this->assertSame("BMO 1\nLMO", $u->ekspor(['site' => 'LMO'], $hira)[0]['site']);
+    }
+
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */
     private function unduh(): array
     {

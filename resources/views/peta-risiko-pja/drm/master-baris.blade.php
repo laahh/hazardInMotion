@@ -63,6 +63,8 @@
   .mb-hid { display: block; margin-top: 2px; font-size: 11px; color: #8a8d90; }
   .mb-hid b { font-weight: 600; color: #595c5e; }
   .mb-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 700; vertical-align: 1px; }
+  .mb-site { display: block; margin-top: 6px; font-size: 11px; color: #595c5e; }
+  .mb-site b { font-weight: 600; color: #3952bc; }
   .mb-oleh { display: block; margin-top: 4px; font-size: 11px; color: #8a8d90; }
   .mb-oleh a { color: #3952bc; text-decoration: none; } .mb-oleh a:hover { text-decoration: underline; }
   .mb-unggah { display: inline-flex; align-items: center; gap: 6px; }
@@ -109,6 +111,12 @@
         <option value="OAK">Tanpa label OAK</option>
         <option value="KET">Tanpa label Ketidaksesuaian</option>
         <option value="SEMUA">Tanpa label sama sekali</option>
+      </select>
+      <select id="mb-f-site" aria-label="Site">
+        <option value="">Semua site</option>
+        @foreach ($site as $st)
+          <option value="{{ $st }}">{{ $st }}</option>
+        @endforeach
       </select>
       <select id="mb-f-dep" aria-label="Departemen asal HIRA" style="max-width:280px">
         <option value="">Semua departemen</option>
@@ -252,7 +260,9 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      { data: 'h', className: 'dep', render: (d, type) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') : kolomDep(d) },
+      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ')
+          : kolomDep(d) + '<span class="mb-site" title="Site tempat baris ini dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA)">Site: '
+            + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>' },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
@@ -260,21 +270,24 @@
   const fKb = document.getElementById('mb-f-kb');
   const fKosong = document.getElementById('mb-f-kosong');
   const fDep = document.getElementById('mb-f-dep');
+  const fSite = document.getElementById('mb-f-site');
   DataTable.ext.search.push((settings, _data, idx) => {
     if (settings.nTable.id !== 'mb-tabel') return true;
     const r = ROWS[idx];
     if (fKb.value && r.kb !== fKb.value) return false;
     if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
+    if (fSite.value && !r.st.includes(fSite.value)) return false;
     const k = fKosong.value;
     if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
     if (k) return !r[k].length;
     return true;
   });
-  [fKb, fKosong, fDep].forEach((el) => el.addEventListener('change', () => tabel.draw()));
+  [fKb, fKosong, fDep, fSite].forEach((el) => el.addEventListener('change', () => tabel.draw()));
   document.getElementById('mb-reset').addEventListener('click', () => {
     fKb.value = '';
     fKosong.value = '';
     fDep.value = '';
+    fSite.value = '';
     tabel.search('').order([0, 'asc']).page(0).draw();
   });
   // Unduh Excel mengikuti filter + kata cari yang sedang aktif (disaring ulang di server dengan aturan yang sama).
@@ -283,6 +296,7 @@
     if (fKb.value) q.set('kb', fKb.value);
     if (fKosong.value) q.set('kosong', fKosong.value);
     if (fDep.value) q.set('dep', fDep.value);
+    if (fSite.value) q.set('site', fSite.value);
     if (tabel.search()) q.set('q', tabel.search());
     e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });

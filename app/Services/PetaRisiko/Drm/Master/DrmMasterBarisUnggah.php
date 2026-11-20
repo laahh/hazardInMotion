@@ -49,6 +49,46 @@ final class DrmMasterBarisUnggah
         return $hasil;
     }
 
+    /**
+     * Site tempat tiap baris dihitung, aturannya sama dengan sync: grup lokasi baris → detail lokasi master (drm_master_dl)
+     * → site; kecuali departemen HIRA di config site_per_departemen (mis. Port and Barging Operation → MARINE) yang
+     * hanya masuk site itu. Departemen = dokumen HIRA yang teks bahayanya cocok (sama dengan sumber atribut risiko).
+     *
+     * @param  array<int, list<array<string, mixed>>>  $hira  ri → dokumen HIRA (dept, cocok)
+     * @return array<int, list<string>>  ri → site terurut
+     */
+    public function sitePerBaris(array $hira): array
+    {
+        $siteGrup = [];
+        foreach (DB::table('drm_master_dl')->where('aktif', true)->select('gid', 'site')->distinct()->get() as $d) {
+            $siteGrup[(int) $d->gid][(string) $d->site] = true;
+        }
+        $hasil = [];
+        foreach (DB::table('drm_master_grup_baris')->get(['gid', 'ri']) as $g) {
+            $hasil[(int) $g->ri] = ($hasil[(int) $g->ri] ?? []) + ($siteGrup[(int) $g->gid] ?? []);
+        }
+        $rute = [];
+        foreach ((array) config('peta_risiko_drm.site_per_departemen', []) as $site => $daftar) {
+            foreach ((array) $daftar as $dept) {
+                $rute[mb_strtolower(trim((string) $dept))] = strtoupper(trim((string) $site));
+            }
+        }
+        foreach ($rute === [] ? [] : $hira as $ri => $dok) {
+            $cocok = array_values(array_filter($dok, fn ($d) => ! empty($d['cocok'])));
+            $site = $rute[mb_strtolower(trim((string) ($cocok[0]['dept'] ?? '')))] ?? null;
+            if ($site !== null) {
+                $hasil[(int) $ri] = [$site => true];
+            }
+        }
+
+        return array_map(function (array $s) {
+            $s = array_keys($s);
+            sort($s);
+
+            return array_map('strval', $s);
+        }, $hasil);
+    }
+
     /** @return array<int, string> gid => nama grup lokasi aktif */
     public function grupAktif(): array
     {
@@ -109,10 +149,15 @@ final class DrmMasterBarisUnggah
         $kelompok = DB::table('drm_master_aktivitas as a')->leftJoin('drm_master_kelompok as k', 'k.kode', '=', 'a.kelompok')
             ->pluck('k.nama', 'a.aid')->all();
         $kata = array_filter(preg_split('/\s+/', mb_strtolower(trim((string) ($filter['q'] ?? '')))) ?: []);
+        $sitePer = $this->sitePerBaris($hira);
         $hasil = [];
         foreach ($this->isianDb() as $ri => $b) {
             $deptHira = array_values(array_unique(array_filter(array_column($hira[$ri] ?? [], 'dept'))));
+            $site = $sitePer[$ri] ?? [];
             if (($filter['kb'] ?? '') !== '' && $b['kb'] !== $filter['kb']) {
+                continue;
+            }
+            if (($filter['site'] ?? '') !== '' && ! in_array($filter['site'], $site, true)) {
                 continue;
             }
             $k = (string) ($filter['kosong'] ?? '');
@@ -129,7 +174,7 @@ final class DrmMasterBarisUnggah
                     continue 2;
                 }
             }
-            $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'kelompok' => (string) ($kelompok[$b['aid']] ?? ''),
+            $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'site' => implode("\n", $site), 'kelompok' => (string) ($kelompok[$b['aid']] ?? ''),
                 'versi' => DrmMasterBarisExcel::versi($b)];
         }
 
