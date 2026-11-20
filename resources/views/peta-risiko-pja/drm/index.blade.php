@@ -794,16 +794,22 @@
     document.querySelectorAll('#dr-tren .br-wc').forEach((c) => c.addEventListener('click', () => { state.w = +c.dataset.w; $('#dr-w').value = state.w; render(); }));
 
     const diGrup = state.tab === 'grup';
-    $('#dr-grup-judul').textContent = diGrup ? `Detail lokasi · ${state.grup}` : 'Per Group Lokasi';
+    const namaKelTm = state.tab === 'site' && state.kelMx ? ((M.proses.find((p) => p.kode === state.kelMx) || {}).nama || state.kelMx) : '';
+    $('#dr-grup-judul').textContent = diGrup ? `Detail lokasi · ${state.grup}` : namaKelTm ? `Per Group Lokasi · ${namaKelTm}` : 'Per Group Lokasi';
     $('#dr-grup-sub').textContent = diGrup
       ? 'Detail lokasi di grup ini beserta PJA-nya. Satu baris = kelompok aktivitas × bahaya di detail lokasi itu (terkontrol / hanya bermasalah / tanpa laporan). Klik nama PJA untuk membuka Beranda PJA.'
-      : 'Satu baris = grup × kelompok aktivitas × bahaya unik; status dari detail lokasi grup itu saja. Satu bahaya bisa berlaku di beberapa grup, jadi jumlah antar grup bisa melebihi baseline. Klik baris untuk melihat grup itu.';
+      : (namaKelTm ? `Hanya baris kelompok ${namaKelTm} (dipilih di treemap). ` : '') + 'Satu baris = grup × kelompok aktivitas × bahaya unik; status dari detail lokasi grup itu saja. Satu bahaya bisa berlaku di beberapa grup, jadi jumlah antar grup bisa melebihi baseline. Klik baris untuk melihat grup itu.';
     // Tab Per Kelompok Aktivitas: tabel bawah hanya kelompok yang dipilih di filter atas.
-    const diKel = state.tab === 'proses' && !!state.proses;
-    const namaKelAktif = diKel ? ((M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses) : '';
+    // Tab Overview: kelompok yang diklik di treemap ikut memfilter tabel bawah (sama dengan matriks).
+    const kelTm = state.tab === 'site' ? state.kelMx : '';
+    const kelPilih = state.tab === 'proses' ? state.proses : kelTm;
+    const diKel = !!kelPilih;
+    const namaKelAktif = diKel ? ((M.proses.find((p) => p.kode === kelPilih) || {}).nama || kelPilih) : '';
     $('#dr-kel-judul').textContent = diGrup ? `Kelompok aktivitas · ${state.grup}` : diKel ? `Kelompok aktivitas · ${namaKelAktif}` : 'Per Kelompok Aktivitas';
     $('#dr-kel-sub').textContent = diGrup
       ? 'Kelompok aktivitas yang ada di grup lokasi ini (dari master M05); jumlah barisnya sama dengan baseline grup di kartu atas. Klik baris untuk melihat aktivitas HIRA kelompok itu di grup ini.'
+      : kelTm
+        ? 'Hanya kelompok yang dipilih di treemap; jumlah barisnya sama dengan angka "dari … bahaya" di kotak treemap. Klik aktivitas untuk melihat bahaya-risikonya. Klik kotak treemap yang sama (atau ✕ di matriks) untuk melepas filter.'
       : diKel
         ? 'Hanya kelompok aktivitas yang dipilih di filter atas; jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA kelompok ini. Ganti kelompok lewat filter Kelompok aktivitas.'
         : '25 kelompok aktivitas master DRM 2.1 (M02); jumlah barisnya sama dengan baseline di kartu atas. Klik baris untuk melihat aktivitas HIRA di kelompok itu.';
@@ -811,8 +817,10 @@
       tabelDetailLokasi(w);
       tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.map((k) => [k.kode, k.nama]), (p, i, k) => vekDari(ambilKunci((p.gk || [])[i], `${state.grup}|${k}`)), 'proses');
     } else {
-      tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]), (p, i, g) => vekGrup(p, i, g), 'grup');
-      tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.filter((k) => !diKel || k.kode === state.proses).map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
+      // Kelompok dari treemap: per grup = baris kelompok itu di grup tersebut (gk "grup|kel").
+      tabelCakupan('#dr-tbl-grup', 'Group Lokasi', M.grup.map((g) => [g, g]),
+        kelTm ? (p, i, g) => vekDari(ambilKunci((p.gk || [])[i], `${g}|${kelTm}`)) : (p, i, g) => vekGrup(p, i, g), 'grup');
+      tabelCakupan('#dr-tbl-proses', 'Kelompok aktivitas', M.proses.filter((k) => !diKel || k.kode === kelPilih).map((k) => [k.kode, k.nama]), (p, i, k) => vekKel(p, i, k), 'proses');
     }
   }
 
@@ -1285,7 +1293,8 @@
     // Skala PERINGKAT (bukan min–maks): satu kelompok ekstrem tidak membuat yang lain pucat seragam; nilai sama = warna sama.
     const urutOpen = [...new Set(items.map((i) => Math.round(i.open * 1000)))].sort((a, b) => a - b);
     const skala = (x) => (urutOpen.length < 2 ? 0.5 : urutOpen.indexOf(Math.round(x * 1000)) / (urutOpen.length - 1));
-    const pilih = (k) => { state.kelMx = state.kelMx === k ? '' : k; render(); };
+    // Kelompok terpilih langsung dibuka di tabel Kelompok Aktivitas (aktivitas & bahayanya kelihatan).
+    const pilih = (k) => { state.kelMx = state.kelMx === k ? '' : k; if (state.kelMx) state.kbuka[k] = true; render(); };
     const kls = (k) => `${state.kelMx === k ? ' on' : ''}${state.kelMx && state.kelMx !== k ? ' redup' : ''}`;
     const ket = (b) => `${b.nama}: ${DR.fmt(b.t)} bahaya · Terkontrol ${DR.fmt(b.idk)} · Ada Gap ${DR.fmt(b.idg)} · Open Risk ${DR.fmt(b.tid)} (${DR.pct(b.tid, b.t)})`;
 
@@ -1362,7 +1371,9 @@
    * Status sama dengan kartu KPI (K terkontrol, G ada gap, T tidak teridentifikasi) dan jumlah laporan SAP minggu itu.
    */
   async function isiBahayaAktivitas(td) {
-    const [kel, ...sisa] = td.dataset.aktIsi.split('|'), nama = sisa.join('|');
+    const [kel, aid] = td.dataset.aktIsi.split('|'), nama = td.dataset.aktNama || '';
+    // Baris dicocokkan lewat ID aktivitas master (teks[10]); snapshot lama tanpa ID: lewat teks aktivitas HIRA.
+    const milikAktivitas = (t) => (t.length > 10 ? String(t[10]) === aid : t[0] === nama);
     try {
       const R = await muatRincian();
       if (!td.isConnected) return;
@@ -1374,7 +1385,7 @@
         : L.u.map(([k, hid, lv, inc, tr, kode, gap, vol]) => ({ kel: k, hid, lv, inc, tr, kode, gap, vol }));
       // Aktivitas dicocokkan lewat kelompok + nama aktivitas di teks rincian.
       const urutSt = { G: 0, T: 1, K: 2 }, urutLv = { Significant: 0, High: 1, Medium: 2, Low: 3 };
-      const baris = sumber.filter((b) => b.kel === kel && (!lvBoleh || lvBoleh.has(b.lv)) && (R.teks[b.hid] || [])[0] === nama)
+      const baris = sumber.filter((b) => b.kel === kel && (!lvBoleh || lvBoleh.has(b.lv)) && milikAktivitas(R.teks[b.hid] || []))
         .map((b) => ({ ...b, t: R.teks[b.hid] || ['', '', '', '', ''], st: b.kode[state.w] || 'T' }))
         .sort((a, b) => urutSt[a.st] - urutSt[b.st] || (urutLv[a.lv] ?? 9) - (urutLv[b.lv] ?? 9) || String(a.t[2]).localeCompare(String(b.t[2])));
       if (!baris.length) { td.innerHTML = '<span class="dr-mute">Tidak ada bahaya-risiko aktivitas ini pada filter terpilih.</span>'; return; }
@@ -1410,14 +1421,14 @@
     const diGrup = state.tab === 'grup';
     const vek = (p, i, a) => vekDari(ambilKunci(diGrup ? (p.gka || [])[i] : (p.akt || [])[i], diGrup ? `${state.grup}|${a}` : a));
     const L = Object.entries(M.beranda.akt).filter(([, x]) => x[1] === kel)
-      .map(([a, x]) => ({ nama: x[0], v: jumlahF(P, (p) => vek(p, w, a)), v0: w + 1 < NW ? jumlahF(P, (p) => vek(p, w + 1, a)) : null }))
+      .map(([a, x]) => ({ a, nama: x[0], v: jumlahF(P, (p) => vek(p, w, a)), v0: w + 1 < NW ? jumlahF(P, (p) => vek(p, w + 1, a)) : null }))
       .filter((r) => r.v.t).sort((a, b) => (b.v.t - b.v.full) - (a.v.t - a.v.full) || b.v.t - a.v.t);
     state.abuka ||= {};
     // Aktivitas bisa dibuka: bahaya-risikonya dengan status SAP, jenis gap, dan laporan SAP (dimuat dari rincian.json).
-    const isi = L.map(({ nama, v, v0 }) => {
-      const kunci = `${kel}|${nama}`, buka = !!state.abuka[kunci];
-      return `<tr class="br-sub br-akt${buka ? ' open' : ''}" data-akt="${DR.esc(kunci)}" style="cursor:pointer"><td style="padding-left:40px"><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} bahaya-risiko ${DR.esc(nama)}">▸</button>${DR.esc(nama)}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`
-        + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:6px 16px 14px 64px" data-akt-isi="${DR.esc(kunci)}"><span class="dr-mute">Memuat bahaya-risiko…</span></td></tr>` : '');
+    const isi = L.map(({ a, nama, v, v0 }) => {
+      const kunci = `${kel}|${a}`, buka = !!state.abuka[kunci];
+      return `<tr class="br-sub br-akt${buka ? ' open' : ''}" data-akt="${DR.esc(kunci)}" style="cursor:pointer"><td style="padding-left:40px"><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} bahaya-risiko ${DR.esc(nama || '(tanpa nama aktivitas)')}">▸</button>${DR.esc(nama || '(tanpa nama aktivitas)')}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`
+        + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:6px 16px 14px 64px" data-akt-isi="${DR.esc(kunci)}" data-akt-nama="${DR.esc(nama)}"><span class="dr-mute">Memuat bahaya-risiko…</span></td></tr>` : '');
     }).join('')
       || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${adaUnik() && M.beranda.ringkas.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
     const tautan = diGrup || state.tab !== 'proses' || state.proses !== kel

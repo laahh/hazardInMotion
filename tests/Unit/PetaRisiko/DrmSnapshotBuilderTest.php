@@ -164,9 +164,12 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertSame(strlen($rincian[0][5]), strlen($rincian[0][8]));
         // Teks rincian membawa sel matriks risiko awal & residual (indeks kekerapan × 5 + konsekuensi, -1 bila tak dikenal).
         foreach ((array) $snap['rincian']['teks'] as $t) {
-            $this->assertCount(10, $t);
+            $this->assertCount(11, $t);
             $this->assertTrue(is_int($t[8]) && $t[8] >= -1 && $t[8] < 25 && is_int($t[9]) && $t[9] >= -1 && $t[9] < 25);
         }
+        // Indeks 10 = ID aktivitas master: aktivitas di tabel Kelompok Aktivitas dicocokkan lewat ID, bukan teks HIRA.
+        $teks = (array) $snap['rincian']['teks'];
+        $this->assertSame(['loading ob', 'loading ob', 'dumping'], [$teks['1'][10], $teks['2'][10], $teks['3'][10]]);
         // Fixture hid 1: awal Mungkin (2) × Minor (1) = 11, residual Langka (4) × Minor (1) = 21.
         $this->assertSame([11, 21], array_slice(((array) $snap['rincian']['teks'])['1'], 8, 2));
         $this->assertEqualsCanonicalizing(['1', '2', '3'], array_unique(array_map(fn ($r) => (string) $r[1], $rincian)));

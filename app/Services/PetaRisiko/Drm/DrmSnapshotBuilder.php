@@ -341,14 +341,16 @@ class DrmSnapshotBuilder
         // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi, risiko residual,
         //   jumlah label OBS (M11), OAK (M12), Hazard (M09) di master yang menandai baris ini]. Jumlah label = MAPPING,
         //   tidak bergantung pada ada / tidaknya laporan (kolom Item Sumber di modal Baseline), sel matriks 5x5 risiko awal &
-        //   residual (kekerapan × 5 + konsekuensi, -1 bila tidak dikenal) untuk daftar bahaya per sel matriks].
+        //   residual (kekerapan × 5 + konsekuensi, -1 bila tidak dikenal) untuk daftar bahaya per sel matriks, ID aktivitas master].
         $nLabel = $this->jumlahLabelPerBaris($master);
         $teks = [];
         foreach (array_keys($hidDipakai) as $hid) {
             $h = $hira[$hid] ?? [];
             $teks[$hid] = [(string) ($h['an'] ?? ''), (string) ($h['sn'] ?? ''), (string) ($h['bn'] ?? ''), (string) ($h['p'] ?? ''), (string) ($h['n2'] ?? ''),
                 $nLabel['obs'][$hid] ?? 0, $nLabel['oak'][$hid] ?? 0, $nLabel['ket'][$hid] ?? 0,
-                DrmBeranda::sel((string) ($h['k1'] ?? ''), (string) ($h['c1'] ?? '')) ?? -1, DrmBeranda::sel((string) ($h['k2'] ?? ''), (string) ($h['c2'] ?? '')) ?? -1];
+                DrmBeranda::sel((string) ($h['k1'] ?? ''), (string) ($h['c1'] ?? '')) ?? -1, DrmBeranda::sel((string) ($h['k2'] ?? ''), (string) ($h['c2'] ?? '')) ?? -1,
+                // ID aktivitas master: pencocokan baris ke aktivitas di tabel Kelompok Aktivitas (teks aktivitas HIRA bisa beda antar dokumen).
+                (string) ($h['a'] ?? '')];
         }
 
         return [$hasil, ['minggu' => $b->minggu(), 'teks' => (object) $teks, 'lingkup' => $lingkup]];
