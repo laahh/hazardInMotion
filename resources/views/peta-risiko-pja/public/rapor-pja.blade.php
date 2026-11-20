@@ -86,18 +86,8 @@
       td.r, th.r { text-align: right; }
       .lv { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .72rem; font-weight: 700; color: #fff; background: var(--lv); white-space: nowrap; }
       .lv-Significant { --lv: #b3261e; } .lv-High { --lv: #d0640c; } .lv-Medium { --lv: #c28f12; } .lv-Low { --lv: #2f7d4f; }
-      .tren { display: flex; align-items: flex-end; gap: .4rem; height: 92px; }
-      .tren div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .25rem; height: 100%; min-width: 0; }
-      .tren .tb { flex: 1; width: 100%; display: flex; align-items: flex-end; background: var(--none-soft); border-radius: 6px; overflow: hidden; }
-      .tren .tb i { display: block; width: 100%; background: var(--ok); border-radius: 6px 6px 0 0; }
-      .tren .akhir .tb i { background: var(--brand); }
-      .tren span { font-size: .68rem; color: var(--muted); font-weight: 600; white-space: nowrap; }
-      .tren b { font-size: .7rem; font-weight: 700; }
 
       /* Personal */
-      .spark { display: flex; align-items: flex-end; gap: 2px; height: 34px; }
-      .spark i { flex: 1; background: var(--brand); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; }
-      .spark i.z { background: #e2e8f0; }
       .chip { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 999px; font-size: .74rem; font-weight: 700; }
       .chip-ok { background: var(--ok-soft); color: #047857; } .chip-bm { background: var(--bm-soft); color: #b91c1c; }
       .chip-muted { background: var(--none-soft); color: #475569; } .chip-brand { background: var(--brand-soft); color: var(--brand); }
@@ -187,17 +177,11 @@
          <div class="bar" id="bar" role="img"></div>
          <div class="legenda" id="legenda"></div>
 
-         <p class="sub-h">Tren teridentifikasi &amp; terkontrol · Significant + High</p>
-         <div class="tren" id="tren"></div>
-
          <p class="sub-h">Rincian per tingkat risiko awal</p>
          <div class="tbl-wrap"><table>
             <thead><tr><th>Risiko awal</th><th class="r">Bahaya</th><th class="r">Terkontrol</th><th class="r">Ada Gap</th><th class="r">Open Risk</th></tr></thead>
             <tbody id="tbl-level"></tbody>
          </table></div>
-
-         <p class="sub-h">Aktivitas SAP Anda</p>
-         <div class="preview-grid" id="personal"></div>
       </section>
 
       <section class="card">
@@ -333,26 +317,11 @@
          + '<div class="chips" style="grid-column:1/-1"><span class="chip" style="background:#f5effb;color:#7e3fb3" title="Tidak teridentifikasi, tetapi pernah terkait insiden 12 bulan terakhir">Risiko laten: ' + fmt(u.laten) + '</span>'
          + '<span class="chip chip-ok" title="Teridentifikasi & terkontrol dan risiko residual HIRA lebih rendah dari risiko awal">Risiko turun kategori: ' + fmt(u.turun) + '</span></div>';
 
-      var maks = r.tren.length - 1;
-      $('tren').innerHTML = r.tren.map(function (t, i) {
-         var n = t.idk == null ? t.full : t.idk, x = t.tot ? n / t.tot : 0;
-         return '<div class="' + (i === maks ? 'akhir' : '') + '" title="Minggu ' + tglPendek(t.minggu) + ': ' + fmt(n) + ' dari ' + fmt(t.tot) + ' teridentifikasi & terkontrol"><b>' + Math.round(100 * x) + '%</b><div class="tb"><i style="height:' + (100 * x).toFixed(1) + '%"></i></div><span>' + tglPendek(t.minggu) + '</span></div>';
-      }).join('');
-
       $('tbl-level').innerHTML = ['Significant', 'High', 'Medium', 'Low'].map(function (l) {
          var x = r.ringkas[l];
          if (!x || !x.tot) return '';
          return '<tr><td>' + lv(l) + '</td><td class="r">' + fmt(x.tot) + '</td><td class="r"><b>' + fmt(x.idk) + '</b> <span style="color:var(--muted)">' + pct(x.idk, x.tot) + '</span></td><td class="r">' + fmt(x.idg) + '</td><td class="r">' + fmt(x.tid) + '</td></tr>';
       }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Belum ada baris baseline untuk PJA ini.</td></tr>';
-
-      var o = r.orang, mx = Math.max.apply(null, [1].concat(o.harian));
-      var bearc = !o.bearc ? '<span class="chip chip-muted">Tidak ada data</span>'
-         : o.bearc.banned ? '<span class="chip chip-bm">Banned SAP</span>'
-         : '<span class="chip chip-ok">' + (o.bearc.persen == null ? 'Achieve dihitung' : Math.round(o.bearc.persen) + '% · achieve') + '</span>';
-      $('personal').innerHTML = '<div><span>Laporan SAP 14 hari</span><strong>' + fmt(o.totalSap) + ' laporan</strong>'
-         + '<div class="spark" style="margin-top:.4rem" title="' + esc(o.harian.join(', ')) + '">' + o.harian.map(function (n) { return n ? '<i style="height:' + (100 * n / mx).toFixed(0) + '%"></i>' : '<i class="z"></i>'; }).join('') + '</div></div>'
-         + '<div><span>Status BeARC minggu lalu</span><strong style="margin-top:.35rem">' + bearc + '</strong>'
-         + (o.kategori ? '<span style="margin-top:.65rem">Peran di PJA</span><strong>' + esc(o.kategori) + '</strong>' : '') + '</div>';
    }
 
    var COV_MAKS = 60;
