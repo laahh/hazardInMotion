@@ -281,6 +281,8 @@ final class DrmRaporPja
                 'tanggal' => (string) $t['tanggal'], 'jenis' => (string) $t['jenis'], 'lokasi' => $detlok[(string) $t['dl']] ?? '',
                 'ket' => (string) $t['ket'], 'subket' => (string) $t['subket'], 'deskripsi' => (string) $t['deskripsi'],
                 'status' => (string) $t['status'], 'janji' => (string) $t['janji'],
+                // Nomor tasklist SAP (snapshot sebelum 20 Nov 2026 belum memuatnya → '').
+                'task' => (string) ($t['task'] ?? ''),
                 'lewat' => $t['janji'] !== '' && (string) $t['janji'] < $hariIni,
                 'milikSaya' => $nama !== '' && mb_strtolower(trim((string) ($t['pelapor'] ?? ''))) === $nama,
             ], array_slice($berkas['temuan'] ?? [], 0, self::TEMUAN_MAKS)),

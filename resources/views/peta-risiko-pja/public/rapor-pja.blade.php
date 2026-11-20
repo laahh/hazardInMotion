@@ -141,6 +141,26 @@
          .row { flex-direction: column; }
          .legenda { grid-template-columns: 1fr; }
          .hero-body { padding: 1.4rem 1.15rem 1.2rem; }
+         .card { padding: 1.1rem .9rem; }
+         .ringkas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+         .ringkas b { font-size: 1.05rem; }
+         /* Tabel jadi kartu per baris: label di kiri (data-label), nilai di kanan; tanpa geser ke samping. */
+         .tbl-wrap { overflow: visible; }
+         .tbl-kartu thead { display: none; }
+         .tbl-kartu, .tbl-kartu tbody, .tbl-kartu tr, .tbl-kartu td { display: block; width: 100%; }
+         .tbl-kartu tr[hidden], tbody.tutup tr.lebih { display: none; }
+         .tbl-kartu tr:not(.grp) { border: 1px solid var(--line); border-radius: 12px; padding: .55rem .75rem; margin-bottom: .5rem; }
+         .tbl-kartu tr.saya { border-color: rgba(57, 82, 188, .35); background: var(--brand-soft); }
+         .tbl-kartu tr.saya td { background: transparent; }
+         .tbl-kartu td { border: 0; padding: .2rem 0; text-align: left; overflow-wrap: anywhere; }
+         .tbl-kartu td[data-label] { position: relative; padding-left: 46%; text-align: right; min-height: 1.5rem; }
+         .tbl-kartu td[data-label]::before { content: attr(data-label); position: absolute; left: 0; top: .3rem; width: 44%; text-align: left;
+            font-size: .68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+         .tbl-kartu td:first-child:not([data-label]) { padding-bottom: .35rem; margin-bottom: .2rem; border-bottom: 1px dashed var(--line); }
+         .tbl-kartu td .mini { margin-left: auto; margin-top: .35rem; }
+         .tbl-kartu tr.grp { margin: .85rem 0 .5rem; }
+         .tbl-kartu tr.grp td { border-radius: 12px; }
+         .tbl-kartu .pecah { white-space: normal; }
       }
    </style>
 </head>
@@ -197,7 +217,7 @@
          <div class="legenda" id="legenda"></div>
 
          <p class="sub-h">Rincian per tingkat risiko awal</p>
-         <div class="tbl-wrap"><table>
+         <div class="tbl-wrap"><table class="tbl-kartu">
             <thead><tr><th>Risiko awal</th><th class="r">Bahaya</th><th class="r">Terkontrol</th><th class="r">Ada Gap</th><th class="r">Open Risk</th></tr></thead>
             <tbody id="tbl-level"></tbody>
          </table></div>
@@ -206,7 +226,7 @@
       <section class="card">
          <h2 class="card-title"><span class="num">3</span> Coverage area <small id="cov-n"></small></h2>
          <div class="ringkas" id="cov-ringkas"></div>
-         <div class="tbl-wrap"><table>
+         <div class="tbl-wrap"><table class="tbl-kartu">
             <thead><tr><th>Lokasi · detail lokasi</th><th class="r">Laporan</th><th class="r">Oleh tim PJA</th><th>Porsi</th></tr></thead>
             <tbody id="cov-tbl" class="tutup"></tbody>
          </table></div>
@@ -217,7 +237,7 @@
       <section class="card">
          <h2 class="card-title"><span class="num">4</span> Pencapaian SAP personil PJA <small id="ps-n"></small></h2>
          <div class="ringkas" id="ps-ringkas"></div>
-         <div class="tbl-wrap"><table>
+         <div class="tbl-wrap"><table class="tbl-kartu">
             <thead><tr><th>Personil</th><th class="r">SAP 14 hari</th><th class="r">7 hari</th><th class="r">%SAP BeARC</th><th>Target vs realisasi</th><th>Status</th></tr></thead>
             <tbody id="ps-tbl"></tbody>
          </table></div>
@@ -349,7 +369,7 @@
       $('tbl-level').innerHTML = ['Significant', 'High', 'Medium', 'Low'].map(function (l) {
          var x = r.ringkas[l];
          if (!x || !x.tot) return '';
-         return '<tr><td>' + lv(l) + '</td><td class="r">' + fmt(x.tot) + '</td><td class="r"><b>' + fmt(x.idk) + '</b> <span style="color:var(--muted)">' + pct(x.idk, x.tot) + '</span></td><td class="r">' + fmt(x.idg) + '</td><td class="r">' + fmt(x.tid) + '</td></tr>';
+         return '<tr><td>' + lv(l) + '</td><td class="r" data-label="Bahaya">' + fmt(x.tot) + '</td><td class="r" data-label="Terkontrol"><b>' + fmt(x.idk) + '</b> <span style="color:var(--muted)">' + pct(x.idk, x.tot) + '</span></td><td class="r" data-label="Ada Gap">' + fmt(x.idg) + '</td><td class="r" data-label="Open Risk">' + fmt(x.tid) + '</td></tr>';
       }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Belum ada baris baseline untuk PJA ini.</td></tr>';
    }
 
@@ -394,7 +414,7 @@
       ]);
       $('cov-tbl').innerHTML = c.daftar.map(function (d, i) {
          var porsi = d.semua ? '<div class="mini" title="Tim PJA ' + pct(d.tim, d.semua) + ' · luar PJA ' + pct(d.semua - d.tim, d.semua) + '"><i style="width:' + (100 * d.tim / d.semua).toFixed(1) + '%;background:var(--ok)"></i><i style="width:' + (100 * (d.semua - d.tim) / d.semua).toFixed(1) + '%;background:#93c5fd"></i></div>' : '<span class="chip chip-bm">tanpa laporan</span>';
-         return '<tr' + kelasLipat(i) + '><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r">' + fmt(d.semua) + '</td><td class="r">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td>' + porsi + '</td></tr>';
+         return '<tr' + kelasLipat(i) + '><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r" data-label="Laporan">' + fmt(d.semua) + '</td><td class="r" data-label="Oleh tim PJA">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td data-label="Porsi">' + porsi + '</td></tr>';
       }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Belum ada detail lokasi untuk PJA ini.</td></tr>';
       lipat('cov-tbl', 'cov-lihat', c.daftar.length, 'detail lokasi');
       $('cov-more').innerHTML = (c.daftar.length > BARIS_RINGKAS ? 'Ditampilkan ' + BARIS_RINGKAS + ' detail lokasi yang paling perlu perhatian (tanpa laporan / tanpa laporan tim PJA didahulukan). ' : '')
@@ -446,8 +466,8 @@
             : b.persen != null && b.persen >= 100 ? '<span class="chip chip-ok">Tercapai</span>' : '<span class="chip chip-muted">Belum tercapai</span>';
          var info = [o.perusahaan, o.bc ? 'BC' : 'Mitra' + (o.pjaMitra ? ' · ' + o.pjaMitra : ''), o.peran].filter(Boolean).join(' · ');
          return '<tr class="' + (o.saya ? 'saya' : '') + '" data-g="' + gi + '"' + (sembunyi ? ' hidden' : '') + '><td><b>' + esc(o.nama || '–') + '</b>' + (o.saya ? ' <span class="chip chip-brand">Anda</span>' : '') + '<small>' + esc(info) + '</small></td>'
-            + '<td class="r"><b>' + fmt(o.tot) + '</b><small>' + o.aktif + '/14 hari aktif</small></td><td class="r">' + (o.tot7 ? fmt(o.tot7) : '<span style="color:var(--bm)">0</span>') + '</td>'
-            + '<td class="r">' + (!b || b.persen == null ? '–' : Math.round(b.persen) + '%') + '</td><td>' + tr + '</td><td>' + status + '</td></tr>';
+            + '<td class="r" data-label="SAP 14 hari"><b>' + fmt(o.tot) + '</b><small>' + o.aktif + '/14 hari aktif</small></td><td class="r" data-label="7 hari">' + (o.tot7 ? fmt(o.tot7) : '<span style="color:var(--bm)">0</span>') + '</td>'
+            + '<td class="r" data-label="%SAP BeARC">' + (!b || b.persen == null ? '–' : Math.round(b.persen) + '%') + '</td><td data-label="Target vs realisasi">' + tr + '</td><td data-label="Status">' + status + '</td></tr>';
    }
 
    /** Buka / tutup personil satu PJA child. */
@@ -469,6 +489,7 @@
       $('temuan').innerHTML = t.daftar.length ? t.daftar.map(function (x) {
          return '<div class="item"><div class="item-top"><span class="chip chip-muted">' + esc(x.jenis) + '</span><span>' + tgl(x.tanggal) + '</span>'
             + (x.milikSaya ? '<span class="chip chip-brand">Laporan Anda</span>' : '')
+            + (x.task ? '<span class="chip chip-brand" title="Nomor tasklist SAP">Task ' + esc(x.task) + '</span>' : '')
             + (x.janji ? (x.lewat ? '<span class="chip chip-bm">Lewat janji ' + tglPendek(x.janji) + '</span>' : '<span>janji ' + tglPendek(x.janji) + '</span>') : '')
             + '<span style="margin-left:auto">' + esc(x.status) + '</span></div>'
             + '<div class="item-judul">' + esc(x.ket) + (x.subket ? ' · ' + esc(x.subket) : '') + '</div>'

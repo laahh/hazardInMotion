@@ -475,7 +475,7 @@ SELECT toString(`id detail lokasi`) AS dl, toString(toDate(`date time`)) AS tang
        ifNull(ketidaksesuaian, \'\') AS ket, ifNull(subketidaksesuaian, \'\') AS subket,
        substring(ifNull(deskripsi, \'\'), 1, 300) AS deskripsi, ifNull(status, \'\') AS status,
        ifNull(pic, \'\') AS pic, ifNull(pelapor, \'\') AS pelapor, ifNull(toString(nilai_resiko), \'\') AS nilai,
-       ifNull(toString(toDate(tanggal_janji)), \'\') AS janji,
+       ifNull(toString(toDate(tanggal_janji)), \'\') AS janji, ifNull(s.task, \'\') AS task,
        arrayMap(x -> x, ifNull(mx.aktivitas, [])) AS aktivitas
 FROM obds.ch_rfid_sap_cuti_all_site s
 LEFT JOIN (
@@ -486,7 +486,9 @@ WHERE s.jenis_data IN (\'HAZARD\', \'INSPEKSI\')
   AND s.`id detail lokasi` IN (SELECT dl FROM dl)
   AND ifNull(s.status, \'\') NOT IN ('.$this->daftar($this->cfg['status_buang']).')
   AND ifNull(s.status, \'\') NOT IN ('.$selesai.')
-ORDER BY tanggal DESC';
+ORDER BY tanggal DESC
+-- Satu temuan = satu task (nomor tasklist): ch_rfid memuat baris kembar per task.
+LIMIT 1 BY task';
     }
 
     /** Insiden valid + root cause + aktivitas HIRA di detail lokasinya yang paling cocok dengan teks insiden. */

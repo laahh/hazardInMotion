@@ -89,6 +89,7 @@ class DrmRaporPjaTest extends TestCase
         $this->assertSame(1, $r['temuan']['total']);
         $this->assertTrue($r['temuan']['daftar'][0]['milikSaya']);
         $this->assertSame('Pit A · Front 1', $r['temuan']['daftar'][0]['lokasi']);
+        $this->assertSame('9808576', $r['temuan']['daftar'][0]['task']);
     }
 
     public function test_endpoint_publik_tanpa_login(): void
@@ -140,7 +141,7 @@ class DrmRaporPjaTest extends TestCase
             // semua/dedicated = 28 hari; minggu_cov = per minggu Minggu–Sabtu. Rapor memakai minggu terpilih (8 Nov): 5 laporan, 3 oleh tim.
             'coverage' => [['pja' => '77', 'dl' => '10', 'semua' => 12, 'dedicated' => 7, 'minggu_cov' => '2026-11-01:7:4,2026-11-08:5:3']],
             'temuan' => [['dl' => '10', 'tanggal' => '2026-11-16', 'jenis' => 'HAZARD', 'ket' => 'Bahaya Eletrikal', 'subket' => 'Panel terbuka',
-                'deskripsi' => 'Panel listrik tanpa barikade', 'status' => 'OPEN', 'pic' => 'X', 'pelapor' => ' Budi ', 'nilai' => '', 'janji' => '2026-11-30', 'aktivitas' => []]],
+                'deskripsi' => 'Panel listrik tanpa barikade', 'task' => '9808576', 'status' => 'OPEN', 'pic' => 'X', 'pelapor' => ' Budi ', 'nilai' => '', 'janji' => '2026-11-30', 'aktivitas' => []]],
             'temuanTotal' => 1,
             'insiden' => [],
             'sorot' => [],
