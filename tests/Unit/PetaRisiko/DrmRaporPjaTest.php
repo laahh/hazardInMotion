@@ -74,6 +74,10 @@ class DrmRaporPjaTest extends TestCase
         $this->assertSame('PJA MITRA UJI', $pp['daftar'][1]['pjaMitra']);
         $this->assertArrayNotHasKey('sid', $pp['daftar'][1]);
         $this->assertSame([80.0, 0, 1], [$pp['rataPersen'], $pp['capai'], $pp['adaBearc']]);
+        // Kelompok: PJA utama dulu, lalu PJA child (Mitra); daftar terurut mengikuti kelompok.
+        $this->assertSame([['PJA UJI', true, 1, 5], ['PJA MITRA UJI', false, 1, 0]],
+            array_map(fn ($g) => [$g['nama'], $g['utama'], $g['n'], $g['laporan']], $pp['grup']));
+        $this->assertSame(['', 'PJA MITRA UJI'], array_column($pp['daftar'], 'grup'));
 
         $this->assertSame(1, $r['belum']['total']);
         $this->assertSame('Pengisian bahan bakar', $r['belum']['aktivitas'][0]['nama']);

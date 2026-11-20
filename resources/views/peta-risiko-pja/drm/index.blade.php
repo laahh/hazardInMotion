@@ -422,7 +422,7 @@
         ${kartu('#a07a00', 'part', 'idg', 'Teridentifikasi - Ada Gap', 'Bermasalah di minimal satu detail lokasi: belum closed, berulang, atau OAK Stop', false)}
         ${kartu('#b42318', 'none', 'tid', 'Tidak Teridentifikasi (Open Risk)', 'Tidak ada laporan SAP di semua detail lokasinya', false)}
         ${kartu('#7e3fb3', 'laten', 'laten', 'Risiko Laten (pernah incident, kini blind spot SAP)', 'Tidak teridentifikasi, tetapi terkait insiden 12 bulan terakhir di salah satu detail lokasinya', false)}
-        ${kartu('#1a7f37', 'turun', 'turun', 'Risiko Turun Kategori (Berhasil Dikontrol)', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal', true)}
+        ${kartu('#1a7f37', 'turun', 'turun', 'Resiko Turun', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal', true)}
       </div>${catatanSync}`;
   }
 

@@ -383,7 +383,26 @@ final class DrmRaporPja
                 ],
             ];
         }
-        usort($daftar, fn ($a, $b) => [$b['saya'], $b['tot']] <=> [$a['saya'], $a['tot']] ?: strcmp($a['nama'], $b['nama']));
+        // Urutan tampil: PJA utama dulu, lalu tiap PJA child (Mitra) per nama; di dalam kelompok "Anda" lalu laporan terbanyak.
+        // Personil di beberapa PJA child masuk kelompok child pertama (nama terurut); anggota PJA utama selalu di utama.
+        foreach ($daftar as &$d) {
+            $mitra = array_filter(array_map('trim', explode(',', $d['pjaMitra'])));
+            sort($mitra);
+            $d['grup'] = $d['bc'] || $mitra === [] ? '' : (string) $mitra[0];
+        }
+        unset($d);
+        usort($daftar, fn ($a, $b) => [$a['grup'] !== '', $a['grup'], ! $a['saya'], -$a['tot']] <=> [$b['grup'] !== '', $b['grup'], ! $b['saya'], -$b['tot']]
+            ?: strcmp($a['nama'], $b['nama']));
+        $grup = [];
+        foreach ($daftar as $d) {
+            $g = &$grup[$d['grup']];
+            $g ??= ['nama' => $d['grup'] === '' ? (string) ($berkas['info']['nama'] ?? 'PJA utama') : $d['grup'], 'utama' => $d['grup'] === '',
+                'n' => 0, 'laporan' => 0, 'aktif7' => 0];
+            $g['n']++;
+            $g['laporan'] += $d['tot'];
+            $g['aktif7'] += (int) ($d['tot7'] > 0);
+            unset($g);
+        }
         $persen = array_values(array_filter(array_map(fn ($d) => $d['bearc']['persen'] ?? null, $daftar), fn ($x) => $x !== null));
 
         return [
@@ -396,6 +415,8 @@ final class DrmRaporPja
             'capai' => count(array_filter($persen, fn ($x) => $x >= 100)),
             'adaBearc' => count($persen),
             'banned' => count(array_filter($daftar, fn ($d) => $d['bearc']['banned'] ?? false)),
+            // Kelompok berurutan (utama → child); daftar sudah terurut mengikuti kelompok ini (kunci 'grup', '' = utama).
+            'grup' => array_values($grup),
             'daftar' => $daftar,
         ];
     }

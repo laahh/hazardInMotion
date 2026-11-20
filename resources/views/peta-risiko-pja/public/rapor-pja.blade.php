@@ -70,6 +70,16 @@
       .mini i { display: block; height: 100%; }
       tr.saya td { background: var(--brand-soft); }
       tbody.tutup tr.lebih { display: none; }
+      /* Kelompok personil: PJA utama lalu PJA child (Mitra), judul child bisa diklik untuk membuka personilnya. */
+      tr.grp td { background: #f8fafc; border-bottom: 1px solid var(--line); padding: 0; }
+      tr.grp.utama td { background: var(--brand-soft); }
+      .grp-btn { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; padding: .6rem .5rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; cursor: pointer; }
+      .grp-btn:disabled { cursor: default; }
+      .grp-btn b { font-size: .86rem; }
+      .grp-btn em { font-style: normal; font-size: .75rem; color: var(--muted); }
+      .grp-btn .material-symbols-outlined { margin-left: auto; color: var(--muted); font-size: 20px; transition: transform .2s; }
+      .grp-btn[aria-expanded="true"] .material-symbols-outlined { transform: rotate(180deg); }
+      .grp-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
       .btn-lihat[hidden] { display: none; }
       .btn-lihat { width: 100%; margin-top: .65rem; padding: .65rem 1rem; font-size: .85rem; color: var(--brand); }
       td small { display: block; color: var(--muted); font-size: .74rem; }
@@ -209,7 +219,7 @@
          <div class="ringkas" id="ps-ringkas"></div>
          <div class="tbl-wrap"><table>
             <thead><tr><th>Personil</th><th class="r">SAP 14 hari</th><th class="r">7 hari</th><th class="r">%SAP BeARC</th><th>Target vs realisasi</th><th>Status</th></tr></thead>
-            <tbody id="ps-tbl" class="tutup"></tbody>
+            <tbody id="ps-tbl"></tbody>
          </table></div>
          <button type="button" class="btn btn-secondary btn-lihat" id="ps-lihat" aria-controls="ps-tbl" aria-expanded="false" hidden></button>
          <p class="more">SAP 14 hari = laporan Hazard, Inspeksi, OBS, OAK, dan Coaching. %SAP dan target dari BeARC minggu terakhir (Coaching · OBS/OAK · Inspeksi · Hazard).</p>
@@ -391,6 +401,7 @@
          + 'Porsi: <span style="color:var(--ok);font-weight:700">■</span> oleh tim PJA (personil PJA ini + PJA Mitra-nya) · <span style="color:#93c5fd;font-weight:700">■</span> dari luar PJA.';
    }
 
+   var JENIS = [['coach', 'Coaching'], ['obs', 'OBS/OAK'], ['ins', 'Inspeksi'], ['hzr', 'Hazard']];
    /** Pencapaian SAP personil PJA: laporan 14 hari + BeARC minggu terakhir (target vs realisasi). */
    function personilPja(p) {
       if (!p) { $('ps-ringkas').innerHTML = ''; $('ps-tbl').innerHTML = ''; return; }
@@ -401,8 +412,31 @@
          ['Rata-rata %SAP', p.rataPersen == null ? '–' : p.rataPersen.toLocaleString('id-ID') + '%', fmt(p.capai) + ' dari ' + fmt(p.adaBearc) + ' mencapai 100%'],
          ['Banned SAP', fmt(p.banned), 'minggu BeARC terakhir'],
       ]);
-      var JENIS = [['coach', 'Coaching'], ['obs', 'OBS/OAK'], ['ins', 'Inspeksi'], ['hzr', 'Hazard']];
-      $('ps-tbl').innerHTML = p.daftar.map(function (o, i) {
+      // Kelompok: PJA utama (selalu terbuka) → tiap PJA child + personilnya (tertutup, kecuali yang memuat "Anda").
+      var grup = p.grup || [{ nama: '', utama: true }], idxGrup = {}, grupLama = null, html = '';
+      grup.forEach(function (g, i) { idxGrup[g.utama ? '' : g.nama] = i; });
+      var bukaAwal = {};
+      p.daftar.forEach(function (o) { if (o.saya) bukaAwal[idxGrup[o.grup || ''] || 0] = true; });
+      var judul = function (g, i) {
+         var buka = g.utama || !!bukaAwal[i];
+         return '<tr class="grp' + (g.utama ? ' utama' : '') + '"><td colspan="6"><button type="button" class="grp-btn" data-g="' + i + '" aria-expanded="' + buka + '"' + (g.utama ? ' disabled' : '') + '>'
+            + '<span class="chip ' + (g.utama ? 'chip-brand' : 'chip-muted') + '">' + (g.utama ? 'PJA utama' : 'PJA child') + '</span><b>' + esc(g.nama) + '</b>'
+            + '<em>' + fmt(g.n) + ' personil · ' + fmt(g.laporan) + ' laporan 14 hari · ' + fmt(g.aktif7) + ' aktif 7 hari</em>'
+            + (g.utama ? '' : '<span class="material-symbols-outlined">expand_more</span>') + '</button></td></tr>';
+      };
+      p.daftar.forEach(function (o) {
+         var gi = idxGrup[o.grup || ''] || 0;
+         if (gi !== grupLama) { html += judul(grup[gi], gi); grupLama = gi; }
+         html += baris(o, gi, !grup[gi].utama && !bukaAwal[gi]);
+      });
+      $('ps-tbl').innerHTML = html || '<tr><td colspan="6" style="color:var(--muted)">Tidak ada personil terdaftar.</td></tr>';
+      var nChild = grup.filter(function (g) { return !g.utama; }).length, btn = $('ps-lihat');
+      btn.hidden = nChild === 0;
+      btn.dataset.nChild = nChild;
+      teksSemuaChild();
+   }
+
+   function baris(o, gi, sembunyi) {
          var b = o.bearc;
          var tr = !b ? '<span class="pecah">–</span>' : JENIS.filter(function (j) { return b.target[j[0]] || b.real[j[0]]; }).map(function (j) {
             var ok = b.real[j[0]] >= b.target[j[0]];
@@ -411,12 +445,23 @@
          var status = !b ? '<span class="chip chip-muted">Tidak ada data</span>' : b.banned ? '<span class="chip chip-bm">Banned SAP</span>'
             : b.persen != null && b.persen >= 100 ? '<span class="chip chip-ok">Tercapai</span>' : '<span class="chip chip-muted">Belum tercapai</span>';
          var info = [o.perusahaan, o.bc ? 'BC' : 'Mitra' + (o.pjaMitra ? ' · ' + o.pjaMitra : ''), o.peran].filter(Boolean).join(' · ');
-         return '<tr class="' + (o.saya ? 'saya' : '') + (i >= BARIS_RINGKAS ? ' lebih' : '') + '"><td><b>' + esc(o.nama || '–') + '</b>' + (o.saya ? ' <span class="chip chip-brand">Anda</span>' : '') + '<small>' + esc(info) + '</small></td>'
+         return '<tr class="' + (o.saya ? 'saya' : '') + '" data-g="' + gi + '"' + (sembunyi ? ' hidden' : '') + '><td><b>' + esc(o.nama || '–') + '</b>' + (o.saya ? ' <span class="chip chip-brand">Anda</span>' : '') + '<small>' + esc(info) + '</small></td>'
             + '<td class="r"><b>' + fmt(o.tot) + '</b><small>' + o.aktif + '/14 hari aktif</small></td><td class="r">' + (o.tot7 ? fmt(o.tot7) : '<span style="color:var(--bm)">0</span>') + '</td>'
             + '<td class="r">' + (!b || b.persen == null ? '–' : Math.round(b.persen) + '%') + '</td><td>' + tr + '</td><td>' + status + '</td></tr>';
-      }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Tidak ada personil terdaftar.</td></tr>';
-      // Baris "Anda" selalu paling atas, jadi tetap terlihat saat tabel dilipat.
-      lipat('ps-tbl', 'ps-lihat', p.daftar.length, 'personil');
+   }
+
+   /** Buka / tutup personil satu PJA child. */
+   function bukaGrup(gi, buka) {
+      var tb = $('ps-tbl'), btn = tb.querySelector('.grp-btn[data-g="' + gi + '"]');
+      if (!btn || btn.disabled) return;
+      btn.setAttribute('aria-expanded', String(buka));
+      tb.querySelectorAll('tr[data-g="' + gi + '"]').forEach(function (tr) { tr.hidden = !buka; });
+   }
+   function teksSemuaChild() {
+      var btn = $('ps-lihat'), semuaBuka = ![].some.call($('ps-tbl').querySelectorAll('.grp-btn:not([disabled])'), function (b) { return b.getAttribute('aria-expanded') !== 'true'; });
+      btn.setAttribute('aria-expanded', String(semuaBuka));
+      btn.innerHTML = semuaBuka ? '<span class="material-symbols-outlined">expand_less</span> Tutup semua PJA child'
+         : '<span class="material-symbols-outlined">expand_more</span> Buka semua ' + fmt(+btn.dataset.nChild) + ' PJA child';
    }
 
    function temuan(t) {
@@ -470,7 +515,17 @@
    }
 
    pasangLipat('cov-lihat', 'cov-tbl');
-   pasangLipat('ps-lihat', 'ps-tbl');
+   $('ps-tbl').addEventListener('click', function (e) {
+      var btn = e.target.closest('.grp-btn');
+      if (!btn || btn.disabled) return;
+      bukaGrup(btn.dataset.g, btn.getAttribute('aria-expanded') !== 'true');
+      teksSemuaChild();
+   });
+   $('ps-lihat').addEventListener('click', function () {
+      var buka = this.getAttribute('aria-expanded') !== 'true';
+      $('ps-tbl').querySelectorAll('.grp-btn:not([disabled])').forEach(function (b) { bukaGrup(b.dataset.g, buka); });
+      teksSemuaChild();
+   });
    ['st-gap', 'st-open'].forEach(function (k) {
       $(k).addEventListener('click', function () { pilihStatus(this.getAttribute('aria-expanded') === 'true' ? null : k); });
    });
