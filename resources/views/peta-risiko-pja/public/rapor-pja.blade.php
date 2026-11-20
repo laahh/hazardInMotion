@@ -69,7 +69,7 @@
       .mini { display: flex; height: 8px; min-width: 80px; border-radius: 999px; overflow: hidden; background: var(--none-soft); }
       .mini i { display: block; height: 100%; }
       tr.saya td { background: var(--brand-soft); }
-      #cov-tbl.tutup tr.lebih { display: none; }
+      tbody.tutup tr.lebih { display: none; }
       .btn-lihat[hidden] { display: none; }
       .btn-lihat { width: 100%; margin-top: .65rem; padding: .65rem 1rem; font-size: .85rem; color: var(--brand); }
       td small { display: block; color: var(--muted); font-size: .74rem; }
@@ -203,8 +203,9 @@
          <div class="ringkas" id="ps-ringkas"></div>
          <div class="tbl-wrap"><table>
             <thead><tr><th>Personil</th><th class="r">SAP 14 hari</th><th class="r">7 hari</th><th class="r">%SAP BeARC</th><th>Target vs realisasi</th><th>Status</th></tr></thead>
-            <tbody id="ps-tbl"></tbody>
+            <tbody id="ps-tbl" class="tutup"></tbody>
          </table></div>
+         <button type="button" class="btn btn-secondary btn-lihat" id="ps-lihat" aria-controls="ps-tbl" aria-expanded="false" hidden></button>
          <p class="more">SAP 14 hari = laporan Hazard, Inspeksi, OBS, OAK, dan Coaching. %SAP dan target dari BeARC minggu terakhir (Coaching · OBS/OAK · Inspeksi · Hazard).</p>
       </section>
 
@@ -328,8 +329,30 @@
       }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Belum ada baris baseline untuk PJA ini.</td></tr>';
    }
 
-   // Tabel coverage dilipat: hanya COV_RINGKAS baris teratas (tanpa laporan didahulukan), tombol untuk semua.
-   var COV_RINGKAS = 5;
+   // Tabel panjang (coverage, personil) dilipat: hanya BARIS_RINGKAS baris teratas, tombol untuk menampilkan semua.
+   var BARIS_RINGKAS = 5;
+   var kelasLipat = function (i) { return i >= BARIS_RINGKAS ? ' class="lebih"' : ''; };
+   var teksLipat = function (buka, n, satuan) {
+      return buka ? '<span class="material-symbols-outlined">expand_less</span> Sembunyikan, tampilkan ' + BARIS_RINGKAS + ' teratas'
+         : '<span class="material-symbols-outlined">expand_more</span> Lihat semua ' + fmt(n) + ' ' + satuan;
+   };
+   /** Setelah tabel diisi: lipat lagi, tombol hanya muncul bila baris > BARIS_RINGKAS. */
+   function lipat(tbodyId, btnId, n, satuan) {
+      var btn = $(btnId);
+      $(tbodyId).classList.add('tutup');
+      btn.hidden = n <= BARIS_RINGKAS;
+      btn.dataset.n = n;
+      btn.dataset.satuan = satuan;
+      btn.setAttribute('aria-expanded', 'false');
+      btn.innerHTML = teksLipat(false, n, satuan);
+   }
+   function pasangLipat(btnId, tbodyId) {
+      $(btnId).addEventListener('click', function () {
+         var buka = $(tbodyId).classList.toggle('tutup') === false;
+         this.setAttribute('aria-expanded', String(buka));
+         this.innerHTML = teksLipat(buka, +this.dataset.n, this.dataset.satuan);
+      });
+   }
    function ringkas(id, isi) {
       $(id).innerHTML = isi.map(function (x) { return '<div><span>' + x[0] + '</span><b>' + x[1] + '</b><em>' + x[2] + '</em></div>'; }).join('');
    }
@@ -347,14 +370,10 @@
       ]);
       $('cov-tbl').innerHTML = c.daftar.map(function (d, i) {
          var porsi = d.semua ? '<div class="mini" title="Tim PJA ' + pct(d.tim, d.semua) + ' · luar PJA ' + pct(d.semua - d.tim, d.semua) + '"><i style="width:' + (100 * d.tim / d.semua).toFixed(1) + '%;background:var(--ok)"></i><i style="width:' + (100 * (d.semua - d.tim) / d.semua).toFixed(1) + '%;background:#93c5fd"></i></div>' : '<span class="chip chip-bm">tanpa laporan</span>';
-         return '<tr' + (i >= COV_RINGKAS ? ' class="lebih"' : '') + '><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r">' + fmt(d.semua) + '</td><td class="r">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td>' + porsi + '</td></tr>';
+         return '<tr' + kelasLipat(i) + '><td>' + esc(d.detlok || '–') + '<small>' + esc(d.lokasi) + (d.grup ? ' · ' + esc(d.grup) : '') + '</small></td><td class="r">' + fmt(d.semua) + '</td><td class="r">' + fmt(d.tim) + (d.semua ? ' <span class="pecah">' + pct(d.tim, d.semua) + '</span>' : '') + '</td><td>' + porsi + '</td></tr>';
       }).join('') || '<tr><td colspan="4" style="color:var(--muted)">Belum ada detail lokasi untuk PJA ini.</td></tr>';
-      var lihat = $('cov-lihat'), banyak = c.daftar.length > COV_RINGKAS;
-      $('cov-tbl').classList.add('tutup');
-      lihat.hidden = !banyak;
-      lihat.setAttribute('aria-expanded', 'false');
-      lihat.innerHTML = '<span class="material-symbols-outlined">expand_more</span> Lihat semua ' + fmt(c.daftar.length) + ' detail lokasi';
-      $('cov-more').innerHTML = (banyak ? 'Ditampilkan ' + COV_RINGKAS + ' detail lokasi yang paling perlu perhatian (tanpa laporan / tanpa laporan tim PJA didahulukan). ' : '')
+      lipat('cov-tbl', 'cov-lihat', c.daftar.length, 'detail lokasi');
+      $('cov-more').innerHTML = (c.daftar.length > BARIS_RINGKAS ? 'Ditampilkan ' + BARIS_RINGKAS + ' detail lokasi yang paling perlu perhatian (tanpa laporan / tanpa laporan tim PJA didahulukan). ' : '')
          + 'Porsi: <span style="color:var(--ok);font-weight:700">■</span> oleh tim PJA (personil PJA ini + PJA Mitra-nya) · <span style="color:#93c5fd;font-weight:700">■</span> dari luar PJA.';
    }
 
@@ -369,7 +388,7 @@
          ['Banned SAP', fmt(p.banned), 'minggu BeARC terakhir'],
       ]);
       var JENIS = [['coach', 'Coaching'], ['obs', 'OBS/OAK'], ['ins', 'Inspeksi'], ['hzr', 'Hazard']];
-      $('ps-tbl').innerHTML = p.daftar.map(function (o) {
+      $('ps-tbl').innerHTML = p.daftar.map(function (o, i) {
          var b = o.bearc;
          var tr = !b ? '<span class="pecah">–</span>' : JENIS.filter(function (j) { return b.target[j[0]] || b.real[j[0]]; }).map(function (j) {
             var ok = b.real[j[0]] >= b.target[j[0]];
@@ -378,10 +397,12 @@
          var status = !b ? '<span class="chip chip-muted">Tidak ada data</span>' : b.banned ? '<span class="chip chip-bm">Banned SAP</span>'
             : b.persen != null && b.persen >= 100 ? '<span class="chip chip-ok">Tercapai</span>' : '<span class="chip chip-muted">Belum tercapai</span>';
          var info = [o.perusahaan, o.bc ? 'BC' : 'Mitra' + (o.pjaMitra ? ' · ' + o.pjaMitra : ''), o.peran].filter(Boolean).join(' · ');
-         return '<tr class="' + (o.saya ? 'saya' : '') + '"><td><b>' + esc(o.nama || '–') + '</b>' + (o.saya ? ' <span class="chip chip-brand">Anda</span>' : '') + '<small>' + esc(info) + '</small></td>'
+         return '<tr class="' + (o.saya ? 'saya' : '') + (i >= BARIS_RINGKAS ? ' lebih' : '') + '"><td><b>' + esc(o.nama || '–') + '</b>' + (o.saya ? ' <span class="chip chip-brand">Anda</span>' : '') + '<small>' + esc(info) + '</small></td>'
             + '<td class="r"><b>' + fmt(o.tot) + '</b><small>' + o.aktif + '/14 hari aktif</small></td><td class="r">' + (o.tot7 ? fmt(o.tot7) : '<span style="color:var(--bm)">0</span>') + '</td>'
             + '<td class="r">' + (!b || b.persen == null ? '–' : Math.round(b.persen) + '%') + '</td><td>' + tr + '</td><td>' + status + '</td></tr>';
       }).join('') || '<tr><td colspan="6" style="color:var(--muted)">Tidak ada personil terdaftar.</td></tr>';
+      // Baris "Anda" selalu paling atas, jadi tetap terlihat saat tabel dilipat.
+      lipat('ps-tbl', 'ps-lihat', p.daftar.length, 'personil');
    }
 
    function temuan(t) {
@@ -419,12 +440,8 @@
       $('gap').innerHTML = r.gap.total ? daftarAkt(r.gap, '', true) : '';
    }
 
-   $('cov-lihat').addEventListener('click', function () {
-      var tbl = $('cov-tbl'), buka = tbl.classList.toggle('tutup') === false, n = tbl.querySelectorAll('tr').length;
-      this.setAttribute('aria-expanded', String(buka));
-      this.innerHTML = buka ? '<span class="material-symbols-outlined">expand_less</span> Sembunyikan, tampilkan ' + COV_RINGKAS + ' teratas'
-         : '<span class="material-symbols-outlined">expand_more</span> Lihat semua ' + fmt(n) + ' detail lokasi';
-   });
+   pasangLipat('cov-lihat', 'cov-tbl');
+   pasangLipat('ps-lihat', 'ps-tbl');
    $('form-cari').addEventListener('submit', function (e) { e.preventDefault(); cari(); });
    $('pja-pilih').addEventListener('change', function (e) { if (sidAktif) cari(e.target.value); });
    if ($('sid').value.trim()) cari();
