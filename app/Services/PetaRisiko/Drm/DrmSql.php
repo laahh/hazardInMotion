@@ -653,14 +653,25 @@ orang AS (
   UNION DISTINCT
   SELECT DISTINCT parent_num, sid FROM orang_pja WHERE parent_num != 0
 ),
+-- ws = minggu kalender Minggu–Sabtu (toStartOfWeek mode 0, sama dengan minggu Beranda); dw = di dalam jendela hari.
 lap AS (
-  SELECT dl, sid, count() AS n FROM sap WHERE d >= t_win GROUP BY dl, sid
+  SELECT dl, sid, toStartOfWeek(d, 0) AS ws, toUInt8(d >= t_win) AS dw, count() AS n
+  FROM sap WHERE d >= least(t_win, toStartOfWeek(t_end, 0) - 21) GROUP BY dl, sid, ws, dw
+),
+cw AS (
+  SELECT toString(pl.pja_id) AS pja, toString(d.dl) AS dl, l.ws AS ws,
+         sumIf(l.n, l.dw = 1) AS s_win, sumIf(l.n, l.dw = 1 AND (pl.pja_id, l.sid) IN (SELECT pja_id, sid FROM orang)) AS d_win,
+         sumIf(l.n, l.ws >= toStartOfWeek(t_end, 0) - 21) AS s_wk,
+         sumIf(l.n, l.ws >= toStartOfWeek(t_end, 0) - 21 AND (pl.pja_id, l.sid) IN (SELECT pja_id, sid FROM orang)) AS d_wk
+  FROM pjadl pl JOIN dl d ON d.dl = pl.dl
+  LEFT JOIN lap l ON l.dl = d.dl
+  GROUP BY pl.pja_id, d.dl, l.ws
 )
-SELECT toString(pl.pja_id) AS pja, toString(d.dl) AS dl, sum(l.n) AS semua,
-       sumIf(l.n, (pl.pja_id, l.sid) IN (SELECT pja_id, sid FROM orang)) AS dedicated
-FROM pjadl pl JOIN dl d ON d.dl = pl.dl
-LEFT JOIN lap l ON l.dl = d.dl
-GROUP BY pl.pja_id, d.dl';
+-- semua / dedicated = jendela hari (Beranda PJA poin c). mg = per minggu 4 minggu terakhir "awal:semua:tim,…" (Rapor PJA).
+SELECT pja, dl, sum(s_win) AS semua, sum(d_win) AS dedicated,
+       arrayStringConcat(groupArrayIf(concat(toString(ws), \':\', toString(s_wk), \':\', toString(d_wk)), s_wk > 0), \',\') AS mg
+FROM cw
+GROUP BY pja, dl';
     }
 
     // ------------------------------------------------------------------ CTE

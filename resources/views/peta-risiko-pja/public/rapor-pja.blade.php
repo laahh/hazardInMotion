@@ -252,7 +252,11 @@
    var pct = function (a, b) { return b ? (100 * a / b).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%' : '–'; };
    var tgl = function (s) { return s ? new Date(s + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '–'; };
    var tglPendek = function (s) { return new Date(s + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }); };
-   var geser = function (s, n) { var d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+   // Tanggal lokal (bukan toISOString/UTC: di WITA tengah malam lokal = hari sebelumnya di UTC, akhir minggu jadi Jumat).
+   var geser = function (s, n) {
+      var d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+   };
    var lv = function (l) { return '<span class="lv lv-' + esc(l) + '">' + esc(l) + '</span>'; };
    var sidAktif = '';
 
@@ -359,7 +363,8 @@
    /** Coverage area: detail lokasi PJA yang dilaporkan SAP (jendela hari) dan porsi laporan oleh tim PJA sendiri. */
    function coverage(c) {
       if (!c) { $('cov-ringkas').innerHTML = ''; $('cov-tbl').innerHTML = ''; return; }
-      $('cov-n').textContent = c.jendela + ' hari terakhir';
+      // Per minggu Minggu–Sabtu (sama dengan Performa PJA); snapshot lama: jendela hari.
+      $('cov-n').textContent = c.perMinggu ? 'Minggu ' + tglPendek(c.minggu) + ' – ' + tglPendek(geser(c.minggu, 6)) : c.jendela + ' hari terakhir';
       ringkas('cov-ringkas', [
          ['Detail lokasi terlapor', pct(c.dlAda, c.dl), fmt(c.dlAda) + ' dari ' + fmt(c.dl) + ' detail lokasi ada laporan SAP'],
          ['Dilaporkan tim PJA', pct(c.dlTim, c.dl), fmt(c.dlTim) + ' detail lokasi dilaporkan personil PJA ini'],

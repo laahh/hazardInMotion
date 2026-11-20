@@ -116,7 +116,7 @@ final class DrmRaporPja
             'belum' => $this->barisStatus($r['rincian']['u'] ?? [], $hira, $w, 'T'),
             'gap' => $this->barisStatus($r['rincian']['u'] ?? [], $hira, $w, 'G'),
             'temuan' => $this->temuan($berkas, $sid),
-            'coverage' => $this->coverage($berkas, (int) ($cfg['jendela_hari'] ?? 28)),
+            'coverage' => $this->coverage($berkas, (string) $minggu[$w], (int) ($cfg['jendela_hari'] ?? 28)),
             'personilPja' => $this->personilPja($berkas, $sid),
             'insiden' => count(array_filter($berkas['insiden'] ?? [], fn ($i) => (string) $i['tanggal'] >= $tgl->subYear()->toDateString())),
         ];
@@ -288,16 +288,30 @@ final class DrmRaporPja
     }
 
     /**
-     * Coverage area: laporan SAP (jendela_hari terakhir) per detail lokasi PJA, sama dengan Beranda PJA poin c.
-     * semua = semua pelapor di detail lokasi itu; tim = personil PJA ini + PJA Mitra anaknya (kolom dedicated).
+     * Coverage area per minggu kalender Minggu–Sabtu (minggu yang sama dengan Performa PJA): laporan SAP per detail
+     * lokasi PJA. semua = semua pelapor di detail lokasi itu; tim = personil PJA ini + PJA Mitra anaknya.
+     * Sumber: kolom `mg` coverage snapshot ("awal minggu:semua:tim,…"). Snapshot lama tanpa `mg` → jendela hari
+     * (semua / dedicated, sama dengan Beranda PJA poin c), ditandai 'perMinggu' => false.
      *
      * @return array<string, mixed>
      */
-    private function coverage(array $berkas, int $jendela): array
+    private function coverage(array $berkas, string $awalMinggu, int $jendela): array
     {
+        $baris = $berkas['coverage'] ?? [];
+        $perMinggu = $baris !== [] && array_key_exists('mg', $baris[0]);
         $cov = [];
-        foreach ($berkas['coverage'] ?? [] as $c) {
-            $cov[(string) $c['dl']] = ['semua' => (int) ($c['semua'] ?? 0), 'tim' => (int) ($c['dedicated'] ?? 0)];
+        foreach ($baris as $c) {
+            if (! $perMinggu) {
+                $cov[(string) $c['dl']] = ['semua' => (int) ($c['semua'] ?? 0), 'tim' => (int) ($c['dedicated'] ?? 0)];
+
+                continue;
+            }
+            foreach (array_filter(explode(',', (string) $c['mg'])) as $m) {
+                [$awal, $semua, $tim] = array_pad(explode(':', $m), 3, '0');
+                if ($awal === $awalMinggu) {
+                    $cov[(string) $c['dl']] = ['semua' => (int) $semua, 'tim' => (int) $tim];
+                }
+            }
         }
         $daftar = [];
         foreach ($berkas['lokasi'] ?? [] as $l) {
@@ -309,6 +323,8 @@ final class DrmRaporPja
             ?: strcmp($a['lokasi'].$a['detlok'], $b['lokasi'].$b['detlok']));
 
         return [
+            'perMinggu' => $perMinggu,
+            'minggu' => $awalMinggu,
             'jendela' => $jendela,
             'dl' => count($daftar),
             'dlAda' => count(array_filter($daftar, fn ($d) => $d['semua'] > 0)),

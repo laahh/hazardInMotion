@@ -63,6 +63,7 @@ class DrmRaporPjaTest extends TestCase
         $c = $r['coverage'];
         $this->assertSame([2, 1, 1, 5, 3], [$c['dl'], $c['dlAda'], $c['dlTim'], $c['laporan'], $c['laporanTim']]);
         $this->assertSame('Front 2', $c['daftar'][0]['detlok']);
+        $this->assertSame([true, '2026-11-08'], [$c['perMinggu'], $c['minggu']]);
 
         // Pencapaian SAP personil: baris sendiri di atas, SID orang lain tidak dikirim (halaman publik).
         $pp = $r['personilPja'];
@@ -132,7 +133,8 @@ class DrmRaporPjaTest extends TestCase
                 ['sid' => 'U8WAP', 'mulai' => '2026-11-08', 'persen' => 80, 'banned_sap' => 0, 'status_banned' => '',
                     't_coach' => 1, 'n_coach' => 1, 't_obs' => 4, 'n_obs' => 3, 't_ins' => 2, 'n_ins' => 1, 't_hzr' => 2, 'n_hzr' => 2],
             ],
-            'coverage' => [['pja' => '77', 'dl' => '10', 'semua' => 5, 'dedicated' => 3]],
+            // semua/dedicated = 28 hari; mg = per minggu Minggu–Sabtu. Rapor memakai minggu terpilih (8 Nov): 5 laporan, 3 oleh tim.
+            'coverage' => [['pja' => '77', 'dl' => '10', 'semua' => 12, 'dedicated' => 7, 'mg' => '2026-11-01:7:4,2026-11-08:5:3']],
             'temuan' => [['dl' => '10', 'tanggal' => '2026-11-16', 'jenis' => 'HAZARD', 'ket' => 'Bahaya Eletrikal', 'subket' => 'Panel terbuka',
                 'deskripsi' => 'Panel listrik tanpa barikade', 'status' => 'OPEN', 'pic' => 'X', 'pelapor' => ' Budi ', 'nilai' => '', 'janji' => '2026-11-30', 'aktivitas' => []]],
             'temuanTotal' => 1,
