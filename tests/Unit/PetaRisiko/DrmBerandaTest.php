@@ -162,7 +162,8 @@ class DrmBerandaTest extends TestCase
         $this->assertStringContainsString('okts AS (SELECT toInt64(0) AS rid WHERE 0)', $spe);
         $this->assertStringContainsString('toUInt8(2 + 16 * stop + 32 * ts)', $spe);
         $this->assertStringContainsString("r.Status_Causal = 'ROOT CAUSE'", $spe);
-        $this->assertStringContainsString('max(toUInt8(l.nl >= 3)) AS ul', $spe);
+        // Berulang = bahaya-risiko temuan juga root cause insiden (lokasi mana pun) dalam 365 hari sebelumnya.
+        $this->assertStringContainsString('max(toUInt8(arrayExists(t -> t <= e.d AND t >= e.d - 365, r.tg))) AS ul', $spe);
         $this->assertStringContainsString('max(toUInt8(e.cd IS NULL)) AS op', $spe);
         $this->assertStringContainsString('parseDateTimeBestEffortUSOrNull', $spe);
 

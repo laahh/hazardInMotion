@@ -259,8 +259,11 @@ return [
     | - Satu baris = kelompok aktivitas (proses bisnis) × detail lokasi × bahaya-risiko.
     | - Periode = minggu kalender Minggu–Sabtu; status per minggu: terkontrol / gap (laporan
     |   bermasalah atau tanpa laporan). Tanpa laporan dihitung GAP, bukan aman.
-    | - Laporan bermasalah: belum closed pada akhir minggu, berulang (≥ ambang_berulang laporan
-    |   bahaya sama di detail lokasi sama dalam seminggu), OAK Stop Pekerjaan, butir checklist tidak sesuai.
+    | - Laporan bermasalah: belum closed pada akhir minggu, berulang, OAK Stop Pekerjaan, butir checklist tidak sesuai.
+    | - Berulang (keputusan user 22 Nov 2026, usulan evaluator): temuan yang polanya sama dengan penyebab insiden yang
+    |   pernah terjadi, bukan sekadar sering dilaporkan. Bahaya-risiko yang ditangkap temuan juga terpetakan dari ROOT
+    |   CAUSE (ketidaksesuaian + sub) insiden BeInvest, di lokasi mana pun, dalam berulang_insiden_hari sebelum temuan.
+    |   ambang_berulang di bawah tidak dipakai lagi oleh Beranda (sisa tampilan lama).
     | - Bahaya umum: teks bahaya sama di ≥ umum_min_kelompok kelompok dalam satu grup lokasi →
     |   ditampilkan terpisah, tidak masuk pembagi.
     */
@@ -268,6 +271,7 @@ return [
         'minggu' => 12,
         'hari' => 28,
         'ambang_berulang' => 3,
+        'berulang_insiden_hari' => 365,
         'umum_min_kelompok' => 4,
         'tekanan' => ['u4_tinggi' => 0.6, 'u4_sedang' => 0.3, 'hari_tinggi' => 5, 'beruntun_tinggi' => 3, 'hari_sedang' => 3],
         'lokasi_lama_hari' => 14,

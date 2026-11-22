@@ -11,7 +11,7 @@ use Carbon\CarbonImmutable;
  * bit jarang "indeks:bit,...":
  *   kelompok (dl|kel): 1 = kelompok terdeteksi (label Hazard/Inspeksi spesifik)
  *   spesifik (dl|hid): 2 = teridentifikasi spesifik, 4 = belum closed (status kini bukan CLOSED/DONE),
- *                      8 = berulang (≥3 laporan label sama di detail lokasi dalam minggu itu),
+ *                      8 = berulang (bahaya-risiko ini juga root cause insiden di lokasi mana pun, ≤ 365 hari sebelum temuan),
  *                      16 = OAK Stop Pekerjaan pada OAK yang labelnya (M12) dipetakan ke baris ini,
  *                      32 = butir checklist OAK Tidak Sesuai (lookup 10187) — ikut dihitung gap,
  *                      64 = (harian) insiden yang root cause-nya terpetakan ke bahaya ini.

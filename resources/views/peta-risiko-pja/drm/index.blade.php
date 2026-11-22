@@ -432,7 +432,7 @@
   const KAT_MODAL = {
     t: ['Baseline', '#3952bc', 'Semua kelompok aktivitas × bahaya-risiko unik di cakupan ini.', () => true],
     idk: ['Teridentifikasi & Terkontrol', '#1a7f37', 'Terdeteksi SAP di minimal satu detail lokasi dan tidak bermasalah di detail lokasi mana pun.', (b, c) => c === 'K'],
-    idg: ['Teridentifikasi - Ada Gap', '#a07a00', 'Bermasalah di minimal satu detail lokasi: laporan belum closed, berulang (≥3 per minggu), atau OAK Stop.', (b, c) => c === 'G'],
+    idg: ['Teridentifikasi - Ada Gap', '#a07a00', 'Bermasalah di minimal satu detail lokasi: laporan belum closed, berulang (bahaya-risikonya pernah jadi root cause insiden), atau OAK Stop.', (b, c) => c === 'G'],
     tid: ['Tidak Teridentifikasi (Open Risk)', '#b42318', 'Tidak ada laporan SAP di semua detail lokasinya.', (b, c) => c === 'T'],
     laten: ['Risiko Laten', '#7e3fb3', 'Tidak teridentifikasi, tetapi pernah terkait insiden 12 bulan terakhir di salah satu detail lokasinya (blind spot SAP).', (b, c) => c === 'T' && b.inc],
     turun: ['Risiko Turun Kategori', '#1a7f37', 'Teridentifikasi & terkontrol, dan level risiko residual HIRA lebih rendah dari risiko awal.', (b, c) => c === 'K' && b.tr],

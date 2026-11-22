@@ -95,6 +95,19 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertStringContainsString("concat(ifNull(`aktivitas pekerjaan OAK`, ''), ' / ', ifNull(`sub aktivitas pekerjaan OAK`, ''))", $status);
     }
 
+    public function test_berulang_dari_root_cause_insiden_di_lokasi_mana_pun(): void
+    {
+        $sql = $this->sql()->berandaSpesifik();
+
+        // Bukan lagi hitungan ≥3 laporan label sama per detail lokasi per minggu.
+        $this->assertStringNotContainsString('l.nl >=', $sql);
+        // Root cause insiden → bahaya lewat label M09 (CRC sama dengan label Hazard), tanpa syarat lokasi.
+        $this->assertStringContainsString('JOIN m9x m ON m.kc = r.kc', $sql);
+        $this->assertStringContainsString('FROM evh e LEFT JOIN rcb r ON r.hid = e.hid', $sql);
+        // Insiden harus terjadi sebelum temuan, dalam jendela hari (bawaan 365).
+        $this->assertStringContainsString('arrayExists(t -> t <= e.d AND t >= e.d - 365, r.tg)', $sql);
+    }
+
     public function test_normalisasi_master_sama_dengan_sisi_clickhouse(): void
     {
         $this->assertSame('workshop tyre mtn 056', DrmMaster::norm("  Workshop\tTyre   MTN 056 "));

@@ -113,4 +113,16 @@ class DrmSapBahayaTest extends TestCase
         $this->assertStringContainsString('AND kc IN (123)', $item);
         $this->assertStringContainsString('GROUP BY kc', $item);
     }
+
+    public function test_berulang_bila_ada_insiden_root_cause_sebelum_temuan_dalam_jendela(): void
+    {
+        $tgl = ['2025-12-01', '2026-06-10'];
+
+        $this->assertTrue(DrmSapBahaya::adaInsidenSebelum($tgl, '2026-11-20', 365));
+        $this->assertTrue(DrmSapBahaya::adaInsidenSebelum($tgl, '2026-06-10', 365));
+        // Insiden sesudah temuan tidak dihitung; di luar jendela juga tidak.
+        $this->assertFalse(DrmSapBahaya::adaInsidenSebelum($tgl, '2025-11-30', 365));
+        $this->assertFalse(DrmSapBahaya::adaInsidenSebelum(['2025-01-01'], '2026-11-20', 365));
+        $this->assertFalse(DrmSapBahaya::adaInsidenSebelum([], '2026-11-20', 365));
+    }
 }

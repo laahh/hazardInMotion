@@ -40,7 +40,7 @@ class DrmSapBahaya
     /** $pja diisi = cakupan hanya detail lokasi PJA itu (tab Beranda PJA), di samping filter site / grup. */
     public function ambil(int $hid, string $kel, string $site, string $grup, int $w, string $pja = ''): array
     {
-        $kunci = sprintf('peta-risiko:sap-bahaya:v10:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
+        $kunci = sprintf('peta-risiko:sap-bahaya:v11:%d:%s:%s:%s:%d:%s:%d', $hid, $kel, md5($site), md5($grup), $w, $pja, (int) @filemtime($this->repo->pathMeta()));
 
         return Cache::remember($kunci, self::CACHE_DETIK, fn () => $this->hitung($hid, $kel, $site, $grup, $w, $pja));
     }
@@ -153,21 +153,18 @@ class DrmSapBahaya
         $terpotong = count($baris) > self::MAKS_BARIS;
         $pelaporOak = $this->pelaporOak(array_slice($baris, 0, self::MAKS_BARIS), $dari, $sampai);
 
-        // Berulang = ≥ ambang laporan dengan label sama di satu detail lokasi dalam minggu itu (hanya label bahaya ini).
-        $ambang = (int) $cfg['ambang_berulang'];
-        $jumlahLabel = [];
-        foreach ($baris as $r) {
-            if ($r['cara'] === 'label') {
-                $jumlahLabel[$r['dl'].'|'.$r['isi']] = ($jumlahLabel[$r['dl'].'|'.$r['isi']] ?? 0) + 1;
-            }
-        }
+        // Berulang (sama dengan sync, DrmSql::berandaSpesifik): temuan Hazard/Inspeksi bahaya ini, dan bahaya ini juga
+        // root cause insiden (label M09) di lokasi mana pun dalam N hari sebelum temuan.
+        $hari = (int) ($cfg['beranda']['berulang_insiden_hari'] ?? 365);
+        $tglInsiden = $labelBahaya === [] ? [] : array_column($this->ch->select($this->sqlInsidenRootCause($labelBahaya, $dari->subDays($hari), $sampai, $cfg), 60), 'tgl');
+        sort($tglInsiden);
 
         $laporan = [];
         $ringkas = $kosong['ringkas'];
         foreach ($baris as $i => $r) {
             $hazard = in_array($r['jenis'], ['HAZARD', 'INSPEKSI'], true);
             $belum = $hazard && ! in_array(strtoupper((string) $r['status']), self::STATUS_SELESAI, true);
-            $ulang = $r['cara'] === 'label' && ($jumlahLabel[$r['dl'].'|'.$r['isi']] ?? 0) >= $ambang;
+            $ulang = $r['cara'] === 'label' && self::adaInsidenSebelum($tglInsiden, substr((string) $r['waktu'], 0, 10), $hari);
             $stop = (int) ($r['stop'] ?? 0) === 1;
             $tsx = (int) ($r['ts'] ?? 0) > 0;
             [$s, $lokasi, $detlok] = $dl[(int) $r['dl']] ?? ['', '', ''];
@@ -400,6 +397,52 @@ WHERE kc IN ('.implode(',', array_map('intval', $label)).')
 ORDER BY waktu DESC
 LIMIT 1 BY task
 LIMIT '.self::MAKS_HITUNG;
+    }
+
+    /**
+     * Ada insiden (tanggal Y-m-d, urut naik) pada rentang [tanggal temuan − hari, tanggal temuan]?
+     *
+     * @param  list<string>  $tglInsiden
+     */
+    public static function adaInsidenSebelum(array $tglInsiden, string $tanggal, int $hari): bool
+    {
+        $awal = CarbonImmutable::parse($tanggal)->subDays($hari)->toDateString();
+        foreach ($tglInsiden as $t) {
+            if ($t > $tanggal) {
+                return false;
+            }
+            if ($t >= $awal) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Tanggal insiden yang ROOT CAUSE-nya (ketidaksesuaian + sub) berlabel M09 bahaya ini, di lokasi mana pun.
+     * Saringan sama dengan DrmSql rci: detail lokasi insiden harus dikenal di lokasi_histori, kategori buang dikeluarkan.
+     *
+     * @param  list<int>  $label  CRC label M09
+     */
+    private function sqlInsidenRootCause(array $label, CarbonImmutable $dari, CarbonImmutable $sampai, array $cfg): string
+    {
+        $norm = fn (string $x) => "trimBoth(replaceRegexpAll(lowerUTF8(ifNull({$x}, '')), '\\\\s+', ' '))";
+        $buang = implode(', ', array_map(fn ($k) => "'".str_replace("'", "\\'", (string) $k)."'", (array) ($cfg['insiden']['kategori_buang'] ?? [])));
+
+        // Alias dalam sengaja "d": alias keluaran "tgl" (String) akan menimpa kolom tanggal di WHERE (ClickHouse).
+        return 'SELECT DISTINCT toString(d) AS tgl FROM (
+  SELECT toDate(parseDateTimeBestEffortUSOrNull(r.Tanggal_Kejadian)) AS d,
+         CRC32(concat('.$norm('r.Ketidaksesuaian').', \' / \', '.$norm('r.Sub_Ketidaksesuaian').')) AS kc
+  FROM obds.Hazard_Related_Incident AS r
+  WHERE r.Status_Causal = \'ROOT CAUSE\' AND parseDateTimeBestEffortUSOrNull(r.Tanggal_Kejadian) IS NOT NULL
+    AND ifNull(r.Kategori_Incident, \'\') NOT IN ('.($buang === '' ? "''" : $buang).')
+    AND (lower(trim(r.Site)), lower(trim(r.Lokasi)), lower(trim(r.Detail_Lokasi))) IN (
+      SELECT lower(trim(Site)), lower(trim(Lokasi)), lower(trim(`Detil Lokasi`)) FROM obds.lokasi_histori)
+)
+WHERE d >= toDate(\''.$dari->toDateString().'\') AND d <= toDate(\''.$sampai->toDateString().'\')
+  AND kc IN ('.implode(',', array_map('intval', $label)).')
+ORDER BY tgl';
     }
 
     /** @param list<int> $dl  @param list<int> $label */

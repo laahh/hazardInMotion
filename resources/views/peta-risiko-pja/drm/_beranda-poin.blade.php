@@ -402,7 +402,7 @@ window.BerandaPoin = (function () {
     const jml = (k) => aktifL.reduce((s, o) => s + o[k], 0);
     const tid = aktifL.reduce((s, o) => s + o.list.filter((x) => x.st === 'none' && x.r.inc).length, 0);
     const kartuSum = [['#b42318', 'Tidak teridentifikasi (Gap1)', jml('g1'), 'tanpa laporan SAP sama sekali'], ['#c2410c', 'Belum closed (Gap2)', jml('g2'), 'temuan belum CLOSED/DONE'],
-      ['#a07a00', 'Berulang / sistemik (Gap3)', jml('g3'), '≥' + C.M.beranda.ambangUlang + ' laporan label sama per minggu'], ['#7f1d1d', 'OAK Stop pekerjaan (Gap4)', jml('g4'), 'hasil OAK Stop'],
+      ['#a07a00', 'Berulang / sistemik (Gap3)', jml('g3'), 'bahaya-risikonya pernah jadi root cause insiden (lokasi mana pun, ' + (C.M.beranda.berulangHari || 365) + ' hari)'], ['#7f1d1d', 'OAK Stop pekerjaan (Gap4)', jml('g4'), 'hasil OAK Stop'],
       ['#1d4ed8', 'Butir OAK tidak sesuai', jml('ts'), 'checklist OAK Tidak Sesuai'], ['#7e3fb3', 'Open risk pernah insiden', tid, 'tidak teridentifikasi & terkait insiden 12 bln']];
     const sum = `<div class="pr-card-body"><div class="bp-sum">${kartuSum.map(([c, j, n, k]) => `<div style="--c:${c}"><small>${j}</small><b>${F(n)}</b><em>${k}</em></div>`).join('')}</div>
       <p class="dr-mute" style="margin:10px 0 0;font-size:12.5px">Satuan: baris kelompok aktivitas × detail lokasi × bahaya-risiko, ${wKode()}, ${C.lv === 'ALL' ? 'semua level' : 'Significant + High'}. ${L.length - aktifL.length ? `${L.length - aktifL.length} kombinasi dikecualikan karena flag nonaktif disetujui.` : ''}</p></div>`;

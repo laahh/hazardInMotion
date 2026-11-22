@@ -291,7 +291,7 @@ SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
      * Beranda PJA — bukti SPESIFIK per (detail lokasi, bahaya baseline), dijalankan per site:
      * label Hazard/Inspeksi (M09), jenis kegiatan OBS (M11), dan "aktivitas / sub" OAK (M12) yang dipetakan ke baris (CTE evr).
      * Bit: 2 = teridentifikasi spesifik, 4 = belum closed (status saat ini bukan CLOSED/DONE; REJECT terbuka),
-     * 8 = berulang (≥ ambang laporan berlabel sama di detail lokasi itu dalam minggu yang sama),
+     * 8 = berulang (bahaya-risiko temuan ini juga root cause insiden di lokasi mana pun, ≤ berulang_insiden_hari sebelumnya),
      * 16 = OAK Stop Pekerjaan pada OAK yang labelnya dipetakan ke baris ini,
      * 32 = (tidak dipakai lagi) butir checklist OAK Tidak Sesuai, 64 (harian) = insiden yang root cause-nya terpetakan ke bahaya ini.
      * v = volume per minggu "wi:obs:oak:ketidaksesuaian:item obs:item oak:item label" (laporan yang menangkap
@@ -299,15 +299,25 @@ SELECT toString(dl), \'\', \'\', \'\', toString(max(d)) FROM sap GROUP BY dl';
      */
     public function berandaSpesifik(): string
     {
-        $ulang = (int) $this->cfg['beranda']['ambang_berulang'];
         $wi = 'intDiv(dateDiff(\'day\', toStartOfWeek(d, 0), wk0), 7)';
+        $hari = (int) ($this->cfg['beranda']['berulang_insiden_hari'] ?? 365);
 
         return $this->prelude().$this->berandaDasarCte().$this->rootCauseCte().',
-lw AS (SELECT dl, k, sk, toStartOfWeek(d, 0) AS ws, sum(n) AS nl FROM sh GROUP BY dl, k, sk, ws),
+-- Berulang = temuan yang polanya sama dengan penyebab insiden yang pernah terjadi: bahaya-risiko temuan ini juga
+-- terpetakan dari ROOT CAUSE (ketidaksesuaian + sub) insiden BeInvest di LOKASI MANA PUN, dalam '.$hari.' hari sebelum
+-- temuan. Pemetaan root cause → bahaya memakai label master M09 (sama persis dengan laporan Hazard; bisa dikoreksi di master).
+rcb AS (
+  SELECT hid, groupUniqArray(tgl) AS tg FROM (
+    SELECT arrayJoin(m.rs) AS hid, r.tgl AS tgl
+    FROM (SELECT tgl, CRC32(concat('.$this->norm('k').', \' / \', '.$this->norm('sk').')) AS kc FROM rci
+          WHERE sk != \'\' AND tgl >= t_open - '.$hari.' AND tgl <= t_end) r
+    JOIN m9x m ON m.kc = r.kc
+  ) GROUP BY hid
+),
 sxw AS (
-  SELECT e.dl AS dl, e.hid AS hid, e.d AS d, max(toUInt8(e.cd IS NULL)) AS op, max(toUInt8(l.nl >= '.$ulang.')) AS ul
-  FROM (SELECT dl, k, sk, hid, d, cd, toStartOfWeek(d, 0) AS ws FROM evh) e
-  JOIN lw l ON l.dl = e.dl AND l.k = e.k AND l.sk = e.sk AND l.ws = e.ws
+  SELECT e.dl AS dl, e.hid AS hid, e.d AS d, max(toUInt8(e.cd IS NULL)) AS op,
+         max(toUInt8(arrayExists(t -> t <= e.d AND t >= e.d - '.$hari.', r.tg))) AS ul
+  FROM evh e LEFT JOIN rcb r ON r.hid = e.hid
   GROUP BY e.dl, e.hid, e.d
 ),
 dx AS (SELECT dl, hid, d, ts, stop FROM evd WHERE (dl, hid) IN (SELECT dl, hid FROM basek)),

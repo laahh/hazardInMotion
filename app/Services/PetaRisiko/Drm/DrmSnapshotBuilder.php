@@ -268,6 +268,8 @@ class DrmSnapshotBuilder
             'hari0' => $b->hari0(),
             'hari' => (int) $cfg['beranda']['hari'],
             'ambangUlang' => (int) $cfg['beranda']['ambang_berulang'],
+            // Berulang = bahaya-risiko temuan juga root cause insiden (lokasi mana pun) dalam N hari sebelumnya.
+            'berulangHari' => (int) ($cfg['beranda']['berulang_insiden_hari'] ?? 365),
             'umumMin' => (int) $cfg['beranda']['umum_min_kelompok'],
             'tekanan' => $cfg['beranda']['tekanan'],
             'lamaHari' => (int) $cfg['beranda']['lokasi_lama_hari'],
