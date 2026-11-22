@@ -123,10 +123,13 @@ final class CriticalIllnessLifestyleService
     {
         $empty = ['rows' => [], 'raw_sid_total' => 0];
 
-        if (! $this->isUp()) {
-            return $empty;
-        }
-
+        // Sengaja TIDAK di-gate oleh isUp() di sini: isUp() pakai ping cepat
+        // (timeout 3-5 detik, di-cache 20 detik) yang gampang false-negative
+        // kalau koneksi sedang sedikit lambat — sementara query asli di
+        // fetchIllnessRows()/fetchExerciseRows() sudah punya timeout sendiri
+        // (30 detik) + try/catch masing-masing. Kalau langsung di-gate di
+        // sini, 1x ping lambat bikin seluruh fitur kosong selama 20 detik
+        // walau query aslinya sebenarnya berhasil.
         try {
             return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, fn (): array => $this->buildDataset());
         } catch (Throwable $e) {
