@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\SportEvaluation;
 
 use App\Http\Controllers\Controller;
+use App\Services\SportEvaluation\CriticalIllnessLifestyleService;
 use App\Services\SportEvaluation\HealthNutritionRiskService;
 use App\Services\SportEvaluation\McuNutritionAnalyticsService;
 use App\Support\SpreadsheetExporter;
@@ -28,6 +29,7 @@ final class HealthNutritionRiskController extends Controller
     public function __construct(
         private readonly HealthNutritionRiskService $service,
         private readonly McuNutritionAnalyticsService $analytics,
+        private readonly CriticalIllnessLifestyleService $criticalIllness,
     ) {}
 
     public function index(Request $request): View
@@ -36,6 +38,7 @@ final class HealthNutritionRiskController extends Controller
 
         $data = $this->analytics->dashboard();
         $data['employeeTable'] = ['tabs' => $data['employeeTabs']];
+        $data['criticalIllness'] = $this->criticalIllness->summary();
 
         return view('evaluasi-well.health-nutrition.index', $data);
     }
@@ -120,6 +123,69 @@ final class HealthNutritionRiskController extends Controller
         }
 
         return response()->json($detail);
+    }
+
+    /**
+     * DataTables server-side untuk tab "Riwayat Penyakit Kritis" (data real
+     * ClickHouse behealth + BeWell, lihat CriticalIllnessLifestyleService).
+     */
+    public function criticalIllnessData(Request $request): JsonResponse
+    {
+        $draw = (int) $request->input('draw', 1);
+        $rows = $this->criticalIllness->rows();
+        $recordsTotal = count($rows);
+
+        $condition = trim((string) $request->input('condition', ''));
+        if ($condition !== '') {
+            $rows = array_values(array_filter($rows, static fn (array $r): bool => in_array($condition, $r['conditions'], true)));
+        }
+
+        $site = trim((string) $request->input('site', ''));
+        if ($site !== '') {
+            $rows = array_values(array_filter($rows, static fn (array $r): bool => $r['site'] === $site));
+        }
+
+        $company = trim((string) $request->input('company', ''));
+        if ($company !== '') {
+            $rows = array_values(array_filter($rows, static fn (array $r): bool => $r['perusahaan'] === $company));
+        }
+
+        $recordsFiltered = count($rows);
+
+        $search = trim((string) $request->input('search.value', ''));
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+            $rows = array_values(array_filter(
+                $rows,
+                static fn (array $r): bool => str_contains(mb_strtolower($r['nama'].' '.$r['nik'].' '.$r['kode_sid'].' '.$r['perusahaan']), $needle)
+            ));
+            $recordsFiltered = count($rows);
+        }
+
+        $start = max(0, (int) $request->input('start', 0));
+        $length = (int) $request->input('length', 10);
+        $length = $length < 1 ? 10 : min(100, $length);
+        $page = array_slice($rows, $start, $length);
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $page,
+        ]);
+    }
+
+    public function criticalIllnessEmployeeDetail(Request $request, int $id): JsonResponse
+    {
+        $this->service->logAccess('evaluasi-well.health-nutrition.critical-illness.employee-detail', ['id' => $id]);
+
+        foreach ($this->criticalIllness->rows() as $row) {
+            if ($row['id'] === $id) {
+                return response()->json($row);
+            }
+        }
+
+        return response()->json(['message' => 'Data karyawan tidak ditemukan.'], 404);
     }
 
     public function export(Request $request): JsonResponse

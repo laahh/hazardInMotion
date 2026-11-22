@@ -112,6 +112,11 @@ Route::middleware('evaluasi-well.access')
         Route::get('/health-nutrition/employees/{id}', [HealthNutritionRiskController::class, 'employeeDetail'])
             ->whereNumber('id')
             ->name('health-nutrition.employee-detail');
+        Route::get('/health-nutrition/critical-illness/data', [HealthNutritionRiskController::class, 'criticalIllnessData'])
+            ->name('health-nutrition.critical-illness.data');
+        Route::get('/health-nutrition/critical-illness/employees/{id}', [HealthNutritionRiskController::class, 'criticalIllnessEmployeeDetail'])
+            ->whereNumber('id')
+            ->name('health-nutrition.critical-illness.employee-detail');
 
         Route::get('/pvt', [SportEvaluationPvtDashboardController::class, 'index'])
             ->name('pvt.index');

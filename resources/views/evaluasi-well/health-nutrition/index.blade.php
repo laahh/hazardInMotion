@@ -317,6 +317,22 @@
   #healthNutritionTable { width: 100% !important; max-width: 100% !important; }
   #healthNutritionTable th, #healthNutritionTable td { vertical-align: middle; }
   #healthNutritionTable thead th { white-space: nowrap; font-weight: 600; }
+
+  .dt-container:has(#criticalIllnessTable) .dt-layout-row,
+  #criticalIllnessTable_wrapper .dt-layout-row {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: .75rem 0;
+  }
+  .dt-container:has(#criticalIllnessTable),
+  #criticalIllnessTable_wrapper,
+  #criticalIllnessTable { width: 100% !important; max-width: 100% !important; }
+  #criticalIllnessTable th, #criticalIllnessTable td { vertical-align: middle; }
+  #criticalIllnessTable thead th { white-space: nowrap; font-weight: 600; }
+  .hn-ci-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; background: #FEF2F2; color: #DC2626; margin: 0 4px 4px 0;
+  }
+  .hn-ci-lifestyle { font-size: 12px; color: #334155; line-height: 1.5; }
+  .hn-ci-lifestyle .text-muted-light { color: #94A3B8; }
 </style>
 @endsection
 
@@ -851,6 +867,220 @@
     });
 })();
 </script>
+<script>
+(function () {
+    var tableEl = document.querySelector('#criticalIllnessTable');
+    if (!tableEl || typeof DataTable === 'undefined') {
+        return;
+    }
+
+    var dataUrl = @json(route('evaluasi-well.health-nutrition.critical-illness.data'));
+    var detailBase = @json(url('/evaluasi-well/health-nutrition/critical-illness/employees'));
+    var conditionEl = document.querySelector('#hn-ci-condition');
+    var siteEl = document.querySelector('#hn-ci-site');
+    var companyEl = document.querySelector('#hn-ci-company');
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatNumJs(value, decimals) {
+        if (value === null || value === undefined) return '-';
+        return Number(value).toLocaleString('id-ID', { maximumFractionDigits: decimals || 0 });
+    }
+
+    function renderConditions(conditions) {
+        return (conditions || []).map(function (c) {
+            return '<span class="hn-ci-badge">' + escapeHtml(c) + '</span>';
+        }).join('');
+    }
+
+    function renderExerciseCell(exercise) {
+        if (!exercise || !exercise.has_data) {
+            return '<span class="text-xs text-secondary-light">Belum ada data</span>';
+        }
+        var html = '<div class="hn-ci-lifestyle">';
+        html += '<div>' + formatNumJs(exercise.log_count) + ' log · ' + escapeHtml(exercise.aktivitas_terakhir || '-') + '</div>';
+        html += '<div class="text-muted-light">' + formatNumJs(exercise.avg_durasi_menit, 1) + ' menit · '
+            + formatNumJs(exercise.avg_langkah) + ' langkah · ' + formatNumJs(exercise.avg_kalori) + ' kkal</div>';
+        html += '</div>';
+        return html;
+    }
+
+    function renderDietCell(diet) {
+        if (!diet || !diet.has_data) {
+            return '<span class="text-xs text-secondary-light">Belum ada log</span>';
+        }
+        var badge = diet.has_poor_diet
+            ? '<span class="hn-ci-badge" style="background:#FEF3C7;color:#B45309;">Perlu Perhatian</span>'
+            : '<span class="hn-ci-badge" style="background:#ECFDF5;color:#16A34A;">Baik</span>';
+        var html = '<div class="hn-ci-lifestyle">';
+        html += '<div>' + badge + '</div>';
+        html += '<div class="text-muted-light">' + formatNumJs(diet.avg_calories) + ' kkal/hari · '
+            + formatNumJs(diet.days_logged) + ' hari log (30 hari)</div>';
+        html += '</div>';
+        return html;
+    }
+
+    var table = new DataTable(tableEl, {
+        processing: true,
+        serverSide: true,
+        searching: true,
+        ordering: false,
+        pageLength: 10,
+        lengthMenu: [10, 25, 50],
+        autoWidth: false,
+        ajax: {
+            url: dataUrl,
+            data: function (d) {
+                d.condition = conditionEl ? conditionEl.value : '';
+                d.site = siteEl ? siteEl.value : '';
+                d.company = companyEl ? companyEl.value : '';
+            }
+        },
+        columns: [
+            { data: 'no', orderable: false },
+            {
+                data: 'nama',
+                render: function (data, type, row) {
+                    if (type !== 'display') return data;
+                    return '<div class="fw-medium">' + escapeHtml(data) + '</div>'
+                        + '<span class="text-xs text-secondary-light">' + escapeHtml(row.nik) + ' · ' + escapeHtml(row.kode_sid) + '</span>';
+                }
+            },
+            {
+                data: 'perusahaan',
+                render: function (data, type, row) {
+                    if (type !== 'display') return data;
+                    return escapeHtml(data) + '<br><span class="text-xs text-secondary-light">' + escapeHtml(row.site) + '</span>';
+                }
+            },
+            { data: 'divisi' },
+            {
+                data: 'conditions',
+                render: function (data, type) {
+                    if (type !== 'display') return (data || []).join(', ');
+                    return renderConditions(data);
+                }
+            },
+            { data: 'tanggal_terkonfirmasi', render: function (d) { return d || '-'; } },
+            {
+                data: 'exercise',
+                render: function (data, type) {
+                    if (type !== 'display') return data && data.has_data ? 'ya' : 'tidak';
+                    return renderExerciseCell(data);
+                }
+            },
+            {
+                data: 'diet',
+                render: function (data, type) {
+                    if (type !== 'display') return data && data.has_data ? 'ya' : 'tidak';
+                    return renderDietCell(data);
+                }
+            },
+            {
+                data: 'id',
+                render: function (data) {
+                    return '<button type="button" class="btn btn-sm btn-outline-primary-600 py-2 px-10 hn-ci-detail-btn" data-id="' + data + '">Detail</button>';
+                }
+            }
+        ],
+        language: {
+            processing: 'Memuat...',
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_–_END_ dari _TOTAL_ data',
+            infoEmpty: 'Tidak ada data',
+            infoFiltered: '(difilter dari _MAX_ total data)',
+            zeroRecords: 'Tidak ada karyawan untuk filter ini.',
+            paginate: { first: '«', last: '»', next: '›', previous: '‹' }
+        }
+    });
+
+    [conditionEl, siteEl, companyEl].forEach(function (el) {
+        if (el) el.addEventListener('change', function () { table.ajax.reload(); });
+    });
+
+    var detailModalEl = document.getElementById('hnCriticalIllnessDetailModal');
+    var detailModal = (detailModalEl && window.bootstrap) ? new bootstrap.Modal(detailModalEl) : null;
+    var detailBody = document.getElementById('hn-ci-detail-body');
+    var detailLoading = document.getElementById('hn-ci-detail-loading');
+
+    function renderDetail(row) {
+        var html = '<div class="row g-3">';
+        html += '<div class="col-md-5"><h6 class="text-sm fw-bold mb-8">Profil</h6>'
+            + '<p class="mb-2 text-sm"><strong>' + escapeHtml(row.nama) + '</strong><br>'
+            + escapeHtml(row.nik) + ' · ' + escapeHtml(row.kode_sid) + '</p>'
+            + '<p class="mb-0 text-sm text-secondary-light">' + escapeHtml(row.perusahaan) + ' · ' + escapeHtml(row.site) + '<br>'
+            + escapeHtml(row.divisi) + '</p>'
+            + '<div class="mt-10">' + renderConditions(row.conditions) + '</div>'
+            + '<p class="text-xs text-secondary-light mt-8 mb-0">Terkonfirmasi: ' + escapeHtml(row.tanggal_terkonfirmasi || '-')
+            + (row.tindakan ? ' · Tindakan: ' + escapeHtml(row.tindakan) : '') + '</p>'
+            + '</div>';
+
+        html += '<div class="col-md-4"><h6 class="text-sm fw-bold mb-8">Olahraga</h6>';
+        if (row.exercise && row.exercise.has_data) {
+            html += '<ul class="list-unstyled text-sm mb-0">'
+                + '<li>Jumlah log: <strong>' + formatNumJs(row.exercise.log_count) + '</strong></li>'
+                + '<li>Rata-rata durasi: <strong>' + formatNumJs(row.exercise.avg_durasi_menit, 1) + ' menit</strong></li>'
+                + '<li>Rata-rata langkah: <strong>' + formatNumJs(row.exercise.avg_langkah) + '</strong></li>'
+                + '<li>Rata-rata kalori: <strong>' + formatNumJs(row.exercise.avg_kalori) + ' kkal</strong></li>'
+                + '<li>Rata-rata denyut jantung: <strong>' + formatNumJs(row.exercise.avg_denyut_jantung) + ' bpm</strong></li>'
+                + '<li>Aktivitas terakhir: <strong>' + escapeHtml(row.exercise.aktivitas_terakhir || '-') + '</strong></li>'
+                + '</ul>';
+        } else {
+            html += '<p class="text-sm text-secondary-light mb-0">Belum ada data olahraga (Data Well Being) untuk SID ini.</p>';
+        }
+        html += '</div>';
+
+        html += '<div class="col-md-3"><h6 class="text-sm fw-bold mb-8">Makan (30 hari)</h6>';
+        if (row.diet && row.diet.has_data) {
+            html += '<ul class="list-unstyled text-sm mb-0">'
+                + '<li>Rata-rata kalori: <strong>' + formatNumJs(row.diet.avg_calories) + ' kkal/hari</strong></li>'
+                + '<li>Hari log: <strong>' + formatNumJs(row.diet.days_logged) + '</strong></li>'
+                + '<li>Status: <strong>' + (row.diet.has_poor_diet ? 'Perlu Perhatian' : 'Baik') + '</strong></li>'
+                + '</ul>';
+            if (row.diet.alert_codes && row.diet.alert_codes.length) {
+                html += '<div class="mt-8">' + row.diet.alert_codes.map(function (code) {
+                    return '<span class="hn-ci-badge" style="background:#FEF3C7;color:#B45309;">' + escapeHtml(code) + '</span>';
+                }).join('') + '</div>';
+            }
+        } else {
+            html += '<p class="text-sm text-secondary-light mb-0">Belum ada log makan BeWell dalam 30 hari terakhir.</p>';
+        }
+        html += '</div></div>';
+
+        return html;
+    }
+
+    tableEl.addEventListener('click', function (event) {
+        var btn = event.target.closest('.hn-ci-detail-btn');
+        if (!btn || !detailModal) return;
+        var id = btn.getAttribute('data-id');
+
+        detailBody.innerHTML = '';
+        detailLoading.classList.remove('d-none');
+        detailModal.show();
+
+        fetch(detailBase + '/' + id, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (res) {
+            return res.ok ? res.json() : Promise.reject();
+        }).then(function (row) {
+            detailBody.innerHTML = renderDetail(row);
+        }).catch(function () {
+            detailBody.innerHTML = '<p class="text-danger-main text-sm mb-0">Gagal memuat detail.</p>';
+        }).finally(function () {
+            detailLoading.classList.add('d-none');
+        });
+    });
+})();
+</script>
 @endsection
 
 @section('content')
@@ -968,6 +1198,11 @@
   <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#hnTabRingkasan" type="button" role="tab">
       <iconify-icon icon="solar:chart-square-linear"></iconify-icon> Ringkasan
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#hnTabKritis" type="button" role="tab">
+      <iconify-icon icon="solar:shield-cross-bold"></iconify-icon> Riwayat Penyakit Kritis
     </button>
   </li>
 </ul>
@@ -1408,6 +1643,165 @@
     </div>
   </div>
 </div>
+
+<div class="tab-pane fade" id="hnTabKritis" role="tabpanel">
+  @php
+    $ciKpi = $criticalIllness['kpi'] ?? ['total_karyawan' => 0, 'raw_sid_total' => 0, 'with_exercise' => 0, 'with_exercise_pct' => 0, 'with_diet' => 0, 'with_diet_pct' => 0, 'poor_diet' => 0, 'poor_diet_pct' => 0];
+    $ciByCondition = $criticalIllness['byCondition'] ?? [];
+    $ciFilterOptions = $criticalIllness['filterOptions'] ?? ['sites' => [], 'companies' => [], 'conditions' => []];
+    $ciUp = $criticalIllness['up'] ?? false;
+  @endphp
+
+  @unless ($ciUp)
+  <div class="alert alert-warning bg-warning-100 text-warning-600 border-warning-100 radius-8 mb-20 py-12 px-16 text-sm">
+    Koneksi ke ClickHouse (behealth) atau BeWell sedang tidak tersedia — data riwayat penyakit kritis tidak dapat ditampilkan saat ini.
+  </div>
+  @endunless
+
+  <p class="text-sm text-secondary-light mb-20">
+    Riwayat penyakit kritis TERKONFIRMASI (sumber: ClickHouse <code>behealth.clean_data_konfirmasi_penyakit_kritis</code>),
+    dipasangkan dengan ringkasan olahraga (<code>behealth.clean_data_data_well_being</code>) dan pola makan dari BeWell —
+    hanya karyawan AKTIF yang berhasil ter-matched dengan SID yang ditampilkan.
+  </p>
+
+  <div class="row gy-4 mb-20">
+    <div class="col-xxl-3 col-sm-6">
+      <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
+        <div class="card-body p-0">
+          <div class="d-flex align-items-center gap-2">
+            <span class="mb-0 w-48-px h-48-px bg-danger-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+              <iconify-icon icon="solar:shield-cross-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="mb-2 fw-medium text-secondary-light text-sm">Karyawan Riwayat Penyakit Kritis</span>
+              <h6 class="fw-semibold mb-0">{{ $fmt($ciKpi['total_karyawan']) }}</h6>
+              <span class="text-xs text-secondary-light">dari {{ $fmt($ciKpi['raw_sid_total']) }} SID terkonfirmasi di behealth</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3 col-sm-6">
+      <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
+        <div class="card-body p-0">
+          <div class="d-flex align-items-center gap-2">
+            <span class="mb-0 w-48-px h-48-px bg-success-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+              <iconify-icon icon="solar:running-round-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="mb-2 fw-medium text-secondary-light text-sm">Ada Data Olahraga</span>
+              <h6 class="fw-semibold mb-0">{{ $fmt($ciKpi['with_exercise']) }} <span class="text-xs text-secondary-light">({{ $fmt($ciKpi['with_exercise_pct'], 1) }}%)</span></h6>
+              <span class="text-xs text-secondary-light">tercatat di Data Well Being</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3 col-sm-6">
+      <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
+        <div class="card-body p-0">
+          <div class="d-flex align-items-center gap-2">
+            <span class="mb-0 w-48-px h-48-px bg-info-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+              <iconify-icon icon="solar:cup-hot-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="mb-2 fw-medium text-secondary-light text-sm">Ada Log Makan (30 hari)</span>
+              <h6 class="fw-semibold mb-0">{{ $fmt($ciKpi['with_diet']) }} <span class="text-xs text-secondary-light">({{ $fmt($ciKpi['with_diet_pct'], 1) }}%)</span></h6>
+              <span class="text-xs text-secondary-light">dari BeWell food_analyses</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3 col-sm-6">
+      <div class="card p-3 shadow-2 radius-8 border input-form-light h-100">
+        <div class="card-body p-0">
+          <div class="d-flex align-items-center gap-2">
+            <span class="mb-0 w-48-px h-48-px bg-warning-main flex-shrink-0 text-white d-flex justify-content-center align-items-center rounded-circle h6 mb-0">
+              <iconify-icon icon="solar:danger-triangle-bold" class="icon"></iconify-icon>
+            </span>
+            <div>
+              <span class="mb-2 fw-medium text-secondary-light text-sm">Pola Makan Berisiko</span>
+              <h6 class="fw-semibold mb-0">{{ $fmt($ciKpi['poor_diet']) }} <span class="text-xs text-secondary-light">({{ $fmt($ciKpi['poor_diet_pct'], 1) }}%)</span></h6>
+              <span class="text-xs text-secondary-light">dari yang punya log makan</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  @if (count($ciByCondition))
+  <div class="card radius-8 border-0 shadow-sm mb-20">
+    <div class="card-body p-24">
+      <h6 class="fw-semibold mb-12 text-sm">Komposisi Penyakit Terkonfirmasi</h6>
+      <div class="d-flex flex-wrap gap-2">
+        @foreach ($ciByCondition as $cond)
+          <span class="hn-ci-badge">{{ $cond['label'] }} — {{ $fmt($cond['total']) }} ({{ $fmt($cond['pct'], 1) }}%)</span>
+        @endforeach
+      </div>
+      <span class="text-xs text-secondary-light d-block mt-10">
+        Satu karyawan dapat memiliki lebih dari satu kondisi terkonfirmasi, sehingga total di atas bisa lebih besar dari jumlah karyawan.
+      </span>
+    </div>
+  </div>
+  @endif
+
+  <div class="card radius-8 border-0 shadow-sm">
+    <div class="card-body p-24">
+      <div class="bg-neutral-50 border radius-8 p-16 mb-20">
+        <div class="row g-3 align-items-end">
+          <div class="col-lg-3 col-md-6">
+            <label for="hn-ci-condition" class="form-label text-sm fw-medium mb-6">Penyakit Terkonfirmasi</label>
+            <select id="hn-ci-condition" class="form-select form-select-sm">
+              <option value="">Semua Kondisi</option>
+              @foreach ($ciFilterOptions['conditions'] as $cond)
+                <option value="{{ $cond }}">{{ $cond }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <label for="hn-ci-site" class="form-label text-sm fw-medium mb-6">Site</label>
+            <select id="hn-ci-site" class="form-select form-select-sm">
+              <option value="">Semua Site</option>
+              @foreach ($ciFilterOptions['sites'] as $site)
+                <option value="{{ $site }}">{{ $site }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <label for="hn-ci-company" class="form-label text-sm fw-medium mb-6">Perusahaan</label>
+            <select id="hn-ci-company" class="form-select form-select-sm">
+              <option value="">Semua Perusahaan</option>
+              @foreach ($ciFilterOptions['companies'] as $company)
+                <option value="{{ $company }}">{{ $company }}</option>
+              @endforeach
+            </select>
+          </div>
+        </div>
+        <span class="text-xs text-secondary-light d-block mt-8">Pencarian nama/NIK/SID/perusahaan tersedia lewat kotak "Cari" di atas tabel.</span>
+      </div>
+      <div class="table-responsive">
+        <table id="criticalIllnessTable" class="table bordered-table mb-0 w-100" style="width:100%">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Nama Karyawan</th>
+              <th>Perusahaan / Site</th>
+              <th>Divisi</th>
+              <th>Penyakit Terkonfirmasi</th>
+              <th>Tgl Terkonfirmasi</th>
+              <th>Olahraga</th>
+              <th>Makan</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 
 {{-- Modal Detail Karyawan --}}
@@ -1424,6 +1818,28 @@
           <p class="text-sm text-secondary-light mt-12 mb-0">Memuat detail…</p>
         </div>
         <div id="hn-detail-body"></div>
+      </div>
+      <div class="modal-footer border-top py-16 px-24">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- Modal Detail Riwayat Penyakit Kritis --}}
+<div class="modal fade" id="hnCriticalIllnessDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content radius-8 border-0 shadow-lg">
+      <div class="modal-header border-bottom py-16 px-24">
+        <h5 class="modal-title fw-bold text-lg mb-0">Detail Riwayat Penyakit Kritis</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body p-24 position-relative">
+        <div id="hn-ci-detail-loading" class="text-center py-40 d-none">
+          <div class="spinner-border text-primary-600" role="status" aria-hidden="true"></div>
+          <p class="text-sm text-secondary-light mt-12 mb-0">Memuat detail…</p>
+        </div>
+        <div id="hn-ci-detail-body"></div>
       </div>
       <div class="modal-footer border-top py-16 px-24">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
