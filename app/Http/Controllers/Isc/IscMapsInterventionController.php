@@ -13,10 +13,13 @@ use App\Services\Isc\IscHazardEmployeeLookupService;
 use App\Services\Isc\IscHazardLocationLookupService;
 use App\Services\Isc\IscHazardPjaLookupService;
 use App\Services\Isc\IscHazardReportBoardService;
+use App\Services\Isc\IscHazardReportExcelService;
 use App\Services\Isc\IscHazardSysUserLookupService;
+use App\Services\Isc\IscInterventionTaskExcelService;
 use App\Services\Isc\IscMapsInterventionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 final class IscMapsInterventionController extends Controller
@@ -30,6 +33,8 @@ final class IscMapsInterventionController extends Controller
         private readonly IscHazardSysUserLookupService $sysUsers,
         private readonly IscHazardLocationLookupService $locations,
         private readonly IscHazardPjaLookupService $pja,
+        private readonly IscInterventionTaskExcelService $taskExcel,
+        private readonly IscHazardReportExcelService $hazardExcel,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -63,6 +68,23 @@ final class IscMapsInterventionController extends Controller
             'success' => true,
             ...$this->hazardReportBoard->historicalPayload(),
         ]);
+    }
+
+    public function exportTasks(Request $request): StreamedResponse
+    {
+        $demo = $request->query('source') === 'demo';
+
+        return $this->taskExcel->download($request->user(), $demo);
+    }
+
+    public function exportHazardReportsList(): StreamedResponse
+    {
+        return $this->hazardExcel->downloadIntervened();
+    }
+
+    public function exportHazardReportsHistorical(): StreamedResponse
+    {
+        return $this->hazardExcel->downloadHistorical();
     }
 
     public function store(IscInterventionStoreRequest $request): JsonResponse

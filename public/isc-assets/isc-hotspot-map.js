@@ -10,11 +10,16 @@
   var pobExportUrl = mapEl.getAttribute("data-pob-export-url") || "";
   var postEventUrl = mapEl.getAttribute("data-post-event-url") || "";
   var postEventTrailUrl = mapEl.getAttribute("data-post-event-trail-url") || "";
+  var postEventExportUrl = mapEl.getAttribute("data-post-event-export-url") || "";
   var cctvUrl = mapEl.getAttribute("data-cctv-url") || "";
+  var cctvExportUrl = mapEl.getAttribute("data-cctv-export-url") || "";
   var mapsInterventionsUrl = mapEl.getAttribute("data-maps-interventions-url") || "";
+  var mapsInterventionsExportUrl = mapEl.getAttribute("data-maps-interventions-export-url") || "";
   var mapsHazardReportsUrl = mapEl.getAttribute("data-maps-hazard-reports-url") || "";
   var mapsHazardReportsListUrl = mapEl.getAttribute("data-maps-hazard-reports-list-url") || "";
+  var mapsHazardReportsListExportUrl = mapEl.getAttribute("data-maps-hazard-reports-list-export-url") || "";
   var mapsHazardReportsHistoricalUrl = mapEl.getAttribute("data-maps-hazard-reports-historical-url") || "";
+  var mapsHazardReportsHistoricalExportUrl = mapEl.getAttribute("data-maps-hazard-reports-historical-export-url") || "";
   var mapsHazardEmployeesUrl = mapEl.getAttribute("data-maps-hazard-employees-url") || "";
   var mapsHazardSysUserUrl = mapEl.getAttribute("data-maps-hazard-sysuser-url") || "";
   var mapsHazardLokasiUrl = mapEl.getAttribute("data-maps-hazard-lokasi-url") || "";
@@ -4522,6 +4527,69 @@
         url.searchParams.delete("site");
       }
       window.location.href = url.toString();
+    });
+  }
+
+  var postEventExport = document.getElementById("gm-postevent-export");
+  if (postEventExport) {
+    postEventExport.addEventListener("click", function () {
+      if (!postEventExportUrl) {
+        return;
+      }
+      var url = new URL(postEventExportUrl, window.location.origin);
+      url.searchParams.set("date", postEventDate || todayIsoDate());
+      if (postEventQuery) {
+        url.searchParams.set("q", postEventQuery);
+      } else {
+        url.searchParams.delete("q");
+      }
+      window.location.href = url.toString();
+    });
+  }
+
+  var cctvExport = document.getElementById("gm-cctv-export");
+  if (cctvExport) {
+    cctvExport.addEventListener("click", function () {
+      if (!cctvExportUrl) {
+        return;
+      }
+      var url = new URL(cctvExportUrl, window.location.origin);
+      if (cctvSite) {
+        url.searchParams.set("site", cctvSite);
+      } else {
+        url.searchParams.delete("site");
+      }
+      window.location.href = url.toString();
+    });
+  }
+
+  var ivExport = document.getElementById("gm-iv-export");
+  if (ivExport) {
+    ivExport.addEventListener("click", function () {
+      if (!mapsInterventionsExportUrl) {
+        return;
+      }
+      window.location.href = mapsInterventionsExportUrl;
+    });
+  }
+
+  var hrExport = document.getElementById("gm-hr-export");
+  if (hrExport) {
+    hrExport.addEventListener("click", function () {
+      if (!mapsHazardReportsListExportUrl) {
+        return;
+      }
+      window.location.href = mapsHazardReportsListExportUrl;
+    });
+  }
+
+  var histExport = document.getElementById("gm-hist-export");
+  if (histExport) {
+    histExport.addEventListener("click", function () {
+      if (!mapsHazardReportsHistoricalExportUrl) {
+        return;
+      }
+      window.location.href = mapsHazardReportsHistoricalExportUrl;
     });
   }
 

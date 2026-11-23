@@ -14,11 +14,16 @@
     data-pob-export-url="{{ $pobExportUrl }}"
     data-post-event-url="{{ $postEventUrl }}"
     data-post-event-trail-url="{{ $postEventTrailUrl }}"
+    data-post-event-export-url="{{ $postEventExportUrl }}"
     data-cctv-url="{{ $cctvUrl }}"
+    data-cctv-export-url="{{ $cctvExportUrl }}"
     data-maps-interventions-url="{{ $mapsInterventionsUrl }}"
+    data-maps-interventions-export-url="{{ $mapsInterventionsExportUrl }}"
     data-maps-hazard-reports-url="{{ $mapsHazardReportsUrl }}"
     data-maps-hazard-reports-list-url="{{ $mapsHazardReportsListUrl }}"
+    data-maps-hazard-reports-list-export-url="{{ $mapsHazardReportsListExportUrl }}"
     data-maps-hazard-reports-historical-url="{{ $mapsHazardReportsHistoricalUrl }}"
+    data-maps-hazard-reports-historical-export-url="{{ $mapsHazardReportsHistoricalExportUrl }}"
     data-maps-hazard-employees-url="{{ $mapsHazardEmployeesUrl }}"
     data-maps-hazard-sysuser-url="{{ $mapsHazardSysUserUrl }}"
     data-maps-hazard-lokasi-url="{{ $mapsHazardLokasiUrl }}"
@@ -269,6 +274,7 @@
             <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
               <path d="M2 22 C12 22 16 10 26 14 C36 18 40 8 50 12 C60 16 68 24 86 12" />
             </svg>
+            <button type="button" class="gm-export-btn" id="gm-postevent-export">Unduh Excel</button>
           </div>
           <label class="gm-hud-hint" for="hud-postevent-date">Tanggal jejak
             <input type="date" id="hud-postevent-date" class="gm-hud-date">
@@ -297,6 +303,7 @@
             <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
               <path d="M2 20 C14 20 18 10 28 12 C38 14 42 22 52 16 C62 10 70 8 86 14" />
             </svg>
+            <button type="button" class="gm-export-btn" id="gm-cctv-export">Unduh Excel</button>
           </div>
           <div class="gm-hud-split">
             <button type="button" class="gm-hud-metric is-safe" data-cctv-status="on">
@@ -335,6 +342,7 @@
             <button type="button" class="gm-hud-sound-toggle" id="gm-iv-sound-toggle" aria-pressed="true" title="Bunyi alarm pelanggaran baru: aktif">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8 8 0 0 1 0 12"/></svg>
             </button>
+            <button type="button" class="gm-export-btn" id="gm-iv-export">Unduh Excel</button>
           </div>
           <div class="gm-hud-split">
             <button type="button" class="gm-hud-metric is-unsafe" data-iv-status="open">
@@ -376,6 +384,7 @@
               <p class="gm-hud-kicker">Laporan Hazard Ter-intervensi</p>
               <p class="gm-hud-value"><b id="hud-hr-total">–</b> <small>laporan submit</small></p>
             </div>
+            <button type="button" class="gm-export-btn" id="gm-hr-export">Unduh Excel</button>
           </div>
           <p class="gm-hud-foot">Laporan hazard yang sudah dikirim dan sudah punya intervensi, beserta status terkini.</p>
         </article>
@@ -395,6 +404,7 @@
             <svg class="gm-hud-spark" viewBox="0 0 88 32" fill="none" aria-hidden="true">
               <path d="M2 18 C12 22 18 8 28 12 C38 16 44 24 54 14 C64 6 74 16 86 10" />
             </svg>
+            <button type="button" class="gm-export-btn" id="gm-hist-export">Unduh Excel</button>
           </div>
           <div class="gm-hud-sites" id="hud-hist-status" role="group" aria-label="Filter status laporan">
             <button type="button" class="gm-hud-site is-on" data-hist-status="">Semua <b id="hud-hist-all">0</b></button>

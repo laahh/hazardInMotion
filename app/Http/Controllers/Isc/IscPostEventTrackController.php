@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Isc;
 
 use App\Http\Controllers\Controller;
+use App\Services\Isc\IscPostEventExcelService;
 use App\Services\Isc\IscPostEventTrackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class IscPostEventTrackController extends Controller
 {
     public function __construct(
         private readonly IscPostEventTrackService $tracks,
+        private readonly IscPostEventExcelService $excel,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -42,6 +45,15 @@ final class IscPostEventTrackController extends Controller
             'success' => true,
             ...$this->tracks->trail($entity, mb_substr($id, 0, 80), $date, $demo),
         ]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $date = $this->date($request);
+        $query = trim((string) $request->query('q', ''));
+        $demo = $request->query('source', 'live') === 'demo';
+
+        return $this->excel->download($date, mb_substr($query, 0, 80), $demo);
     }
 
     private function date(Request $request): string

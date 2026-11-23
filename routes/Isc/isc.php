@@ -34,8 +34,11 @@ Route::prefix('isc')
         Route::get('/maps/pob/{key}', [IscPobController::class, 'show'])->where('key', '.*')->name('maps.pob.show');
         Route::get('/maps/post-event', [IscPostEventTrackController::class, 'index'])->name('maps.post-event');
         Route::get('/maps/post-event/trail', [IscPostEventTrackController::class, 'trail'])->name('maps.post-event.trail');
+        Route::get('/maps/post-event/export', [IscPostEventTrackController::class, 'export'])->name('maps.post-event.export');
         Route::get('/maps/cctv', [IscCctvMapController::class, 'index'])->name('maps.cctv');
+        Route::get('/maps/cctv/export', [IscCctvMapController::class, 'export'])->name('maps.cctv.export');
         Route::get('/maps/interventions', [IscMapsInterventionController::class, 'index'])->name('maps.interventions');
+        Route::get('/maps/interventions/export', [IscMapsInterventionController::class, 'exportTasks'])->name('maps.interventions.export');
         // Lookup & submit hazard/intervensi dari peta: cukup login, tanpa batas peran ISC.
         Route::get('/maps/hazard-employees', [IscMapsInterventionController::class, 'lookupEmployees'])
             ->middleware('auth')
@@ -61,9 +64,15 @@ Route::prefix('isc')
         Route::get('/maps/hazard-reports/list', [IscMapsInterventionController::class, 'hazardReportsList'])
             ->middleware('auth')
             ->name('maps.hazard-reports.list');
+        Route::get('/maps/hazard-reports/list/export', [IscMapsInterventionController::class, 'exportHazardReportsList'])
+            ->middleware('auth')
+            ->name('maps.hazard-reports.list.export');
         Route::get('/maps/hazard-reports/historical', [IscMapsInterventionController::class, 'hazardReportsHistorical'])
             ->middleware('auth')
             ->name('maps.hazard-reports.historical');
+        Route::get('/maps/hazard-reports/historical/export', [IscMapsInterventionController::class, 'exportHazardReportsHistorical'])
+            ->middleware('auth')
+            ->name('maps.hazard-reports.historical.export');
         // Intervensi dari peta: siapa pun yang login (tanpa batas peran ISC).
         Route::post('/maps/interventions', [IscMapsInterventionController::class, 'store'])
             ->middleware('auth')
