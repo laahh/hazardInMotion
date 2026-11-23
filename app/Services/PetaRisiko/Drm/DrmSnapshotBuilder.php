@@ -173,6 +173,11 @@ class DrmSnapshotBuilder
         $rincian = $beranda['_rincian'];
         unset($beranda['_rincian']);
         $statTemuan = array_map(fn ($info) => $this->statTemuan(array_map('strval', $info['dl']), $perDl['temuan'], $sampai), $pjaBc);
+        $pjaRingkas = array_values(array_map(fn ($p) => [...$this->ringkasPja($p, $cakupan, $berkas[$p['id']]), 'tm' => $statTemuan[$p['id']]],
+            array_filter($pjaBc, fn ($p) => ! DrmMaster::pjaDikecualikan((string) $p['nama'], $cfg))));
+        $daftarPerusahaan = array_column($pjaRingkas, 'perusahaan');
+        $perusahaan = $daftarPerusahaan === [] ? [] : array_values(array_unique(array_merge(...$daftarPerusahaan)));
+        sort($perusahaan);
 
         return [
             'meta' => [
@@ -186,11 +191,12 @@ class DrmSnapshotBuilder
                 'konsekuensi' => self::KONSEKUENSI,
                 'level' => self::LEVEL,
                 'sites' => $sites,
+                // Daftar perusahaan (dari personil PJA, bukan nama PJA) untuk filter "Perusahaan".
+                'perusahaan' => $perusahaan,
                 'grup' => array_values(isset($d['master']) ? $d['master']->data['grup'] : array_unique(array_column($d['dl'], 'grp'))),
                 'grupDl' => $this->jumlahDlPerGrup($dl),
                 'proses' => $this->daftarProses($cfg),
-                'pja' => array_values(array_map(fn ($p) => [...$this->ringkasPja($p, $cakupan, $berkas[$p['id']]), 'tm' => $statTemuan[$p['id']]],
-                    array_filter($pjaBc, fn ($p) => ! DrmMaster::pjaDikecualikan((string) $p['nama'], $cfg)))),
+                'pja' => $pjaRingkas,
                 'kolomAkt' => self::KOLOM_AKT,
                 'kolomBahaya' => self::KOLOM_BAHAYA,
                 'beranda' => $beranda,
@@ -246,8 +252,12 @@ class DrmSnapshotBuilder
             // berkas PJA (bukan meta.json). Angka ringkasan tidak berubah; opsi ini hanya menambah volume.
             $ringkas = $b->ringkasMgmt($dlIds, $hidPerDl, $hira, $berkas[$id]['beranda'], $berkas[$id]['insiden'], false, true);
             $berkas[$id]['beranda']['rincian'] = $ringkas['rincian']['u'];
+            // Perusahaan personil PJA ini (BC + mitra anak) — dipakai untuk filter "Perusahaan" di tab Group
+            // Lokasi (per detail lokasi, union seluruh PJA pemilik) dan Beranda PJA (pemilih PJA).
+            $pjaPerusahaan = $this->perusahaanDariPersonil($berkas[$id]['personil'] ?? []);
             foreach ($dlIds as $idDl) {
-                $kamusDl[$idDl] ??= [(string) ($dl[$idDl]['site'] ?? ''), (string) ($dl[$idDl]['lokasi'] ?? ''), (string) ($dl[$idDl]['detlok'] ?? ''), (string) ($dl[$idDl]['grp'] ?? '')];
+                $kamusDl[$idDl] ??= [(string) ($dl[$idDl]['site'] ?? ''), (string) ($dl[$idDl]['lokasi'] ?? ''), (string) ($dl[$idDl]['detlok'] ?? ''), (string) ($dl[$idDl]['grp'] ?? ''), []];
+                $kamusDl[$idDl][4] = array_values(array_unique(array_merge($kamusDl[$idDl][4], $pjaPerusahaan)));
             }
             // PJA dikecualikan (config pja_dikecualikan, mis. Inspektor): berkasnya tetap lengkap untuk Rapor PJA publik,
             // tetapi tidak masuk daftar PJA dashboard (Beranda PJA, Semua PJA, PJA mapping detail lokasi).
@@ -255,6 +265,7 @@ class DrmSnapshotBuilder
                 continue;
             }
             $mgmt[] = ['id' => (string) $id, 'nama' => $info['nama'], 'site' => $info['site'], 'ndl' => count($dlIds), 'dls' => $dlIds,
+                'perusahaan' => $pjaPerusahaan,
                 ...array_diff_key($ringkas, self::BERAT_PER_PJA + ['rincian' => 1])];
         }
 
@@ -752,7 +763,29 @@ class DrmSnapshotBuilder
             'temuan' => $berkas['temuanTotal'],
             'insiden' => count(array_filter($berkas['insiden'], fn ($i) => $i['tanggal'] >= $setahun)),
             'personil' => count($berkas['personil']),
+            // Perusahaan personil (BC + mitra anak), untuk filter "Perusahaan" di tab Semua PJA / Beranda PJA
+            // (dihitung dari data personil, BUKAN nama PJA Mitra Kerja — nama itu tidak konsisten memuat
+            // nama perusahaan, mis. "mitra 1", "SUPERIOR MTL").
+            'perusahaan' => $this->perusahaanDariPersonil($berkas['personil']),
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $personil
+     * @return list<string>
+     */
+    private function perusahaanDariPersonil(array $personil): array
+    {
+        $out = [];
+        foreach ($personil as $p) {
+            $nama = trim((string) ($p['perusahaan'] ?? ''));
+            if ($nama !== '' && ! in_array($nama, $out, true)) {
+                $out[] = $nama;
+            }
+        }
+        sort($out);
+
+        return $out;
     }
 
     /**

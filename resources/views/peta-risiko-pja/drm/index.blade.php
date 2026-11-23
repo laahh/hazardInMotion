@@ -43,6 +43,7 @@
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label data-ctl="site">Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
+      <label data-ctl="grup-pja-bpja" hidden>Perusahaan <select id="dr-perusahaan"><option value="ALL">Semua perusahaan</option></select></label>
       <label><span class="material-symbols-outlined" style="font-size:18px;color:var(--primary)">calendar_month</span> Periode <select id="dr-w"></select></label>
       <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
       <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
@@ -221,7 +222,8 @@
   const q = new URLSearchParams(location.search);
   // Tab "periode" sedang disembunyikan: tautan lama ?tab=periode diarahkan ke Overview.
   const state = { tab: ['periode'].includes(q.get('tab')) ? 'site' : (q.get('tab') || 'site'), site: q.get('site') || 'ALL', grup: q.get('grup') || '', proses: q.get('proses') || '', cari: '',
-    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, dlbuka: {}, pjaB: q.get('pja') || '', kelMx: q.get('kel') || '' };
+    w: q.has('w') ? Math.max(0, parseInt(q.get('w'), 10) || 0) : -1, lv: q.get('lv') === 'ALL' ? 'ALL' : 'SH', pri: 'all', urut: 'skor', buka: {}, pbuka: {}, situs: {}, kbuka: {}, dlbuka: {}, pjaB: q.get('pja') || '', kelMx: q.get('kel') || '',
+    perusahaan: q.get('perusahaan') || 'ALL' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
 
@@ -230,6 +232,10 @@
 
   function init() {
     $('#dr-site').innerHTML += M.sites.map((s) => `<option value="${DR.esc(s)}">${DR.esc(s)}</option>`).join('');
+    $('#dr-perusahaan').innerHTML += (M.perusahaan || []).map((p) => `<option value="${DR.esc(p)}">${DR.esc(p)}</option>`).join('');
+    if (state.perusahaan !== 'ALL' && !(M.perusahaan || []).includes(state.perusahaan)) state.perusahaan = 'ALL';
+    $('#dr-perusahaan').value = state.perusahaan;
+    $('#dr-perusahaan').addEventListener('change', (e) => { state.perusahaan = e.target.value; render(); });
     // Grup lokasi tanpa baris baseline sama sekali (mis. grup master dengan 0 baris HIRA) tidak ditampilkan.
     M.grup = grupBerisi();
     $('#dr-grup').innerHTML = M.grup.map((g) => `<option value="${DR.esc(g)}">${DR.esc(g)}</option>`).join('');
@@ -271,6 +277,7 @@
     if (state.tab === 'grup') p.set('grup', state.grup);
     if (state.tab === 'proses') p.set('proses', state.proses);
     if (state.tab === 'bpja' && state.pjaB) p.set('pja', state.pjaB);
+    if (['grup', 'pja', 'bpja'].includes(state.tab) && state.perusahaan !== 'ALL') p.set('perusahaan', state.perusahaan);
     history.replaceState(null, '', '?' + p.toString());
   }
 
@@ -279,6 +286,7 @@
     document.querySelector('[data-ctl="grup"]').hidden = state.tab !== 'grup';
     document.querySelectorAll('[data-ctl="pja"]').forEach((e) => { e.hidden = state.tab !== 'pja'; });
     document.querySelector('[data-ctl="proses"]').hidden = state.tab !== 'proses';
+    document.querySelector('[data-ctl="grup-pja-bpja"]').hidden = !['grup', 'pja', 'bpja'].includes(state.tab);
     $('#dr-panel-cakupan').hidden = TAB_W.includes(state.tab);
     $('#dr-panel-pja').hidden = state.tab !== 'pja';
     $('#dr-panel-periode').hidden = state.tab !== 'periode';
@@ -300,13 +308,16 @@
   /** Isi pemilih PJA (dikelompokkan per site) sekali, lalu gambar PJA terpilih untuk minggu & level di bilah filter. */
   function bukaBeranda() {
     const sel = $('#dr-bpja-pja');
-    const L = ((M.beranda || {}).mgmt || []).slice().sort((a, b) => a.site.localeCompare(b.site) || a.nama.localeCompare(b.nama));
-    if (!L.length) { $('#dr-bpja-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
-    if (!sel.options.length) {
-      const perSite = {};
-      L.forEach((p) => { (perSite[p.site] ||= []).push(p); });
-      sel.innerHTML = Object.entries(perSite).map(([site, d]) => `<optgroup label="${DR.esc(site)}">${d.map((p) => `<option value="${DR.esc(p.id)}">${DR.esc(p.nama)}</option>`).join('')}</optgroup>`).join('');
+    const semuaL = ((M.beranda || {}).mgmt || []).slice().sort((a, b) => a.site.localeCompare(b.site) || a.nama.localeCompare(b.nama));
+    if (!semuaL.length) { $('#dr-bpja-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Snapshot belum memuat data PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code>.</div></div>'; return; }
+    const L = semuaL.filter((p) => state.perusahaan === 'ALL' || (p.perusahaan || []).includes(state.perusahaan));
+    if (!L.length) { $('#dr-bpja-isi').innerHTML = '<div class="pr-card"><div class="pr-empty">Tidak ada PJA dengan personil dari perusahaan ini.</div></div>'; return; }
+    const perSite = {};
+    L.forEach((p) => { (perSite[p.site] ||= []).push(p); });
+    sel.innerHTML = Object.entries(perSite).map(([site, d]) => `<optgroup label="${DR.esc(site)}">${d.map((p) => `<option value="${DR.esc(p.id)}">${DR.esc(p.nama)}</option>`).join('')}</optgroup>`).join('');
+    if (!sel.dataset.wired) {
       sel.addEventListener('change', () => { state.pjaB = sel.value; renderBpja(); simpanUrl(); });
+      sel.dataset.wired = '1';
     }
     if (!state.pjaB || !L.some((p) => String(p.id) === String(state.pjaB))) {
       state.pjaB = String((L.find((p) => state.site === 'ALL' || p.site === state.site) || L[0]).id);
@@ -832,7 +843,8 @@
     const NW = M.beranda.minggu.length, kamus = M.beranda.dl || {}, peta = new Map();
     M.beranda.mgmt.forEach((p) => (p.dls || []).forEach((d) => {
       const info = kamus[d];
-      if (!info || info[3] !== state.grup || (state.site !== 'ALL' && info[0] !== state.site)) return;
+      if (!info || info[3] !== state.grup || (state.site !== 'ALL' && info[0] !== state.site)
+        || (state.perusahaan !== 'ALL' && !(info[4] || []).includes(state.perusahaan))) return;
       if (!peta.has(d)) {
         // Status per detail lokasi dari ringkasan unik "semua site" (sama untuk setiap PJA pemiliknya).
         // Snapshot lama (sebelum 17 Nov 2026) menyimpan dlw per PJA, bukan di ringkasan ALL: pakai yang tersedia.
@@ -1617,6 +1629,7 @@
       const r = ring[String(p.id)] || {}, tm = r.tm || [0, 0, 0, 0], tot = c[ix.tot];
       return {
         id: String(p.id), nama: p.nama, site: p.site, ndl: p.ndl, personil: r.personil || 0, lama: p.lama, insiden: p.insiden,
+        perusahaan: p.perusahaan || r.perusahaan || [],
         tot, full: c[ix.full], part: c[ix.part], gapo: c[ix.gaponly], none: c[ix.none], g2: c[ix.closed], g3: c[ix.ulang], g4: c[ix.stop],
         gr: tot ? (tot - c[ix.full]) / tot : 0, nr: tot ? c[ix.none] / tot : 0,
         op: tm[0], lewat: tm[1], lama30: tm[2], esk: tm[3],
@@ -1666,7 +1679,8 @@
     const panel = $('#dr-panel-pja');
     if (!formatBaru()) { panel.innerHTML = pesanLama(); return; }
     const semua = dataPja();
-    const diSite = semua.filter((o) => state.site === 'ALL' || o.site === state.site);
+    const diSite = semua.filter((o) => (state.site === 'ALL' || o.site === state.site)
+      && (state.perusahaan === 'ALL' || (o.perusahaan || []).includes(state.perusahaan)));
     const tampil = diSite.filter((o) => (state.pri === 'all' || o.pri === state.pri) && (!state.cari || o.nama.toLowerCase().includes(state.cari)));
     const urut = {
       skor: (a, b) => b.skor - a.skor || (b.tot - b.full) - (a.tot - a.full), gap: (a, b) => b.gr - a.gr, gapn: (a, b) => (b.tot - b.full) - (a.tot - a.full),
