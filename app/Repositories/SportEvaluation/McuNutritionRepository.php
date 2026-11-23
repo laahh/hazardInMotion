@@ -4,228 +4,329 @@ declare(strict_types=1);
 
 namespace App\Repositories\SportEvaluation;
 
+use App\Services\SportEvaluation\BewellConnectionService;
+use App\Services\SportEvaluation\McuConnectionService;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Throwable;
+
 /**
- * Sumber data mentah untuk dashboard MCU x Nutrisi.
+ * Sumber data REAL untuk dashboard MCU x Nutrisi — MCU Postgres
+ * (`bcsid.mv_ftw_mcu`, kolom `kondisi_kritis`/`kondisi_non_kritis` JSONB)
+ * + BeWell MySQL (`food_analyses`).
  *
- * Saat ini mengembalikan data dummy (lihat catatan di dashboard()) sambil
- * menunggu HealthNutritionRiskService (join real MCU Postgres `mv_ftw_mcu` +
- * BeWell MySQL `food_analyses`) dipetakan ke kontrak yang sama. Bentuk data
- * SUDAH disamakan dengan skema real: setiap "record" punya flag has_mcu /
- * has_nutrition terpisah, dan field yang memang tidak ada di sumber aslinya
- * (mis. natrium — food_analyses tidak punya kolom sodium) selalu null, bukan
- * dikarang jadi 0. Ganti isi method di sini ke query asli tanpa perlu ubah
- * McuNutritionAnalyticsService atau Blade begitu koneksi MCU siap dites.
+ * PENTING: skema `mv_ftw_mcu` sudah dicek langsung (lihat pg_attribute) —
+ * HANYA ada flag normal/abnormal per nama kondisi di JSONB, TIDAK ADA kolom
+ * angka BMI/tensi/kolesterol/LDL/HDL/trigliserida/GDP/skor Framingham
+ * sama sekali. Karena itu kontrak record di sini pakai boolean per kondisi
+ * (conditions), BUKAN angka lab seperti versi dummy sebelumnya.
  *
- * @phpstan-type McuNutritionRecord array{
- *     id: int,
- *     nama: string,
- *     nik: string,
- *     perusahaan: string,
- *     site: string,
- *     departemen: string,
- *     jabatan: string,
- *     has_mcu: bool,
- *     has_nutrition: bool,
- *     bmi: float|null,
- *     tensi_sistol: int|null,
- *     tensi_diastol: int|null,
- *     gdp: int|null,
- *     kolesterol: int|null,
- *     ldl: int|null,
- *     hdl: int|null,
- *     trigliserida: int|null,
- *     framingham_score: int|null,
- *     metabolic_component_count: int|null,
- *     avg_calories: float|null,
- *     target_calories: float|null,
- *     avg_carbs_g: float|null,
- *     avg_fat_g: float|null,
- *     avg_protein_g: float|null,
- *     avg_fiber_g: float|null,
- *     avg_sodium_mg: null,
- *     logging_days_30d: int|null,
- * }
+ * 5 kondisi yang dilacak (bukan 6 — "Obesitas/BMI" DIHAPUS karena tidak ada
+ * satupun nama_kondisi terkait BMI/obesitas di seluruh tabel, dicek via
+ * SELECT DISTINCT nama_kondisi):
+ * dislipidemia, hipertensi, gula_darah, sindrom_metabolik, framingham.
  */
 final class McuNutritionRepository
 {
-    private const TOTAL_MCU = 19401;
+    private const CACHE_TTL = 1800;
 
-    private const TOTAL_NUTRITION = 17289;
+    private const DEFAULT_CALORIE_TARGET = 2300.0;
 
-    private const TOTAL_MATCHED = 16842;
+    private const NUTRITION_WINDOW_DAYS = 30;
+
+    /** @var array<string, string> kategori => nama_kondisi persis di MCU Postgres */
+    private const CONDITION_NAME_MAP = [
+        'hipertensi' => 'Tekanan Darah Tinggi',
+        'gula_darah' => 'Gula Darah Puasa (GDP) tinggi',
+        'sindrom_metabolik' => 'Memiliki Sindrome Metabolik',
+        'framingham' => 'Penilaian Framingham Score Risiko Tinggi',
+    ];
+
+    /** @var list<string> dislipidemia = gabungan 3 nama_kondisi ini (salah satu abnormal saja sudah cukup) */
+    private const DISLIPIDEMIA_NAMES = ['Kolestrol Total', 'LDL', 'Trigliserida'];
+
+    public function __construct(
+        private readonly McuConnectionService $mcu,
+        private readonly BewellConnectionService $bewell,
+    ) {}
 
     /**
-     * Cakupan data secara keseluruhan (bukan hanya sample di records()).
-     * Analisis MCU x Nutrisi lain di service HARUS memakai matched_total
-     * sebagai denominator, bukan total_mcu atau total_nutrition.
-     *
      * @return array{total_mcu: int, total_nutrition: int, matched_total: int}
      */
     public function coverage(): array
     {
+        $records = $this->records();
+
         return [
-            'total_mcu' => self::TOTAL_MCU,
-            'total_nutrition' => self::TOTAL_NUTRITION,
-            'matched_total' => self::TOTAL_MATCHED,
+            'total_mcu' => count(array_filter($records, static fn (array $r): bool => $r['has_mcu'])),
+            'total_nutrition' => count(array_filter($records, static fn (array $r): bool => $r['has_nutrition'])),
+            'matched_total' => count(array_filter($records, static fn (array $r): bool => $r['has_mcu'] && $r['has_nutrition'])),
         ];
     }
 
     /**
-     * Sample record employee-level (dipakai tabel + drill-down). Jumlah
-     * sample jauh lebih kecil dari coverage() di atas — representatif untuk
-     * demo, bukan dump seluruh populasi ke browser (lih. catatan performa
-     * pada McuNutritionAnalyticsService).
-     *
      * @return list<array<string, mixed>>
      */
     public function records(): array
     {
-        static $cached = null;
-        if ($cached !== null) {
-            return $cached;
-        }
-
-        $firstNames = ['Andi', 'Budi', 'Citra', 'Dedi', 'Eka', 'Fajar', 'Gita', 'Hendra', 'Indra', 'Joko', 'Kartika', 'Lina', 'Made', 'Nur', 'Oscar', 'Putri', 'Rian', 'Sari', 'Taufik', 'Umi', 'Vina', 'Wahyu', 'Yani', 'Zaki'];
-        $lastNames = ['Pratama', 'Santoso', 'Dewi', 'Kurniawan', 'Lestari', 'Wibowo', 'Anggraini', 'Saputra', 'Wijaya', 'Ramadhan', 'Utami', 'Setiawan', 'Puspita', 'Firmansyah', 'Handayani'];
-        $sites = ['LMO', 'SMO', 'BMO 1', 'GMO', 'BMO 3', 'BMO 2'];
-        $companies = ['PT ABC', 'PT XYZ', 'PT PAMA', 'PT BUMA', 'PT BAR', 'PT DNX Indonesia'];
-        $departements = ['Produksi', 'Engineering', 'HSE', 'HR', 'Logistik', 'Plant'];
-        $jabatans = ['Operator', 'Supervisor', 'Engineer', 'Admin', 'Teknisi', 'Foreman'];
-
-        $seed = [
-            ['nama' => 'Andi Pratama', 'nik' => '123456', 'company' => 'PT ABC', 'site' => 'LMO', 'bmi' => 32.1, 'tensi' => [145, 95], 'gdp' => 126, 'kolesterol' => 240, 'ldl' => 160, 'hdl' => 42, 'trigliserida' => 220],
-            ['nama' => 'Budi Santoso', 'nik' => '234567', 'company' => 'PT XYZ', 'site' => 'SMO', 'bmi' => 29.8, 'tensi' => [138, 92], 'gdp' => 112, 'kolesterol' => 210, 'ldl' => 140, 'hdl' => 45, 'trigliserida' => 180],
-            ['nama' => 'Citra Dewi', 'nik' => '345678', 'company' => 'PT PAMA', 'site' => 'BMO 1', 'bmi' => 31.5, 'tensi' => [128, 88], 'gdp' => 118, 'kolesterol' => 190, 'ldl' => 130, 'hdl' => 48, 'trigliserida' => 160],
-            ['nama' => 'Dedi Kurniawan', 'nik' => '456789', 'company' => 'PT BUMA', 'site' => 'GMO', 'bmi' => 29.8, 'tensi' => [150, 98], 'gdp' => 134, 'kolesterol' => 260, 'ldl' => 170, 'hdl' => 40, 'trigliserida' => 240],
-            ['nama' => 'Eka Lestari', 'nik' => '567890', 'company' => 'PT BAR', 'site' => 'BMO 3', 'bmi' => 30.5, 'tensi' => [140, 90], 'gdp' => 128, 'kolesterol' => 200, 'ldl' => 135, 'hdl' => 44, 'trigliserida' => 190],
-        ];
-
-        $records = [];
-        $id = 1;
-        foreach ($seed as $row) {
-            $records[] = $this->buildRecord($id++, $row['nama'], $row['nik'], $row['company'], $row['site'], $departements[array_rand($departements)], $jabatans[array_rand($jabatans)], $row, true, true);
-        }
-
-        mt_srand(20260918);
-        for ($i = 0; $i < 95; $i++) {
-            $nama = $firstNames[array_rand($firstNames)].' '.$lastNames[array_rand($lastNames)];
-            $hasMcu = mt_rand(1, 100) <= 92;
-            // Sekitar 89% dari yang punya MCU juga punya log nutrisi (≈ matched/total_mcu asli).
-            $hasNutrition = $hasMcu && mt_rand(1, 100) <= 89;
-
-            $row = [
-                'bmi' => round(mt_rand(180, 360) / 10, 1),
-                'tensi' => [mt_rand(105, 155), mt_rand(70, 100)],
-                'gdp' => mt_rand(80, 160),
-                'kolesterol' => mt_rand(150, 280),
-                'ldl' => mt_rand(90, 190),
-                'hdl' => mt_rand(35, 65),
-                'trigliserida' => mt_rand(100, 260),
-            ];
-
-            $records[] = $this->buildRecord(
-                $id++,
-                $nama,
-                (string) mt_rand(100000, 999999),
-                $companies[array_rand($companies)],
-                $sites[array_rand($sites)],
-                $departements[array_rand($departements)],
-                $jabatans[array_rand($jabatans)],
-                $row,
-                $hasMcu,
-                $hasNutrition,
+        try {
+            return Cache::remember(
+                'evaluasi_well:health_nutrition:mcu_records:v1',
+                self::CACHE_TTL,
+                fn (): array => $this->buildRecords()
             );
-        }
+        } catch (Throwable $e) {
+            report($e);
 
-        return $cached = $records;
+            return [];
+        }
     }
 
     /**
-     * @param  array{bmi: float, tensi: array{0: int, 1: int}, gdp: int, kolesterol: int, ldl: int, hdl: int, trigliserida: int}  $mcu
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      */
-    private function buildRecord(
-        int $id,
-        string $nama,
-        string $nik,
-        string $company,
-        string $site,
-        string $departemen,
-        string $jabatan,
-        array $mcu,
-        bool $hasMcu,
-        bool $hasNutrition,
-    ): array {
-        $metabolicComponents = 0;
-        if ($hasMcu) {
-            if ($mcu['bmi'] >= 30) {
-                $metabolicComponents++;
-            }
-            if ($mcu['tensi'][0] >= 130 || $mcu['tensi'][1] >= 85) {
-                $metabolicComponents++;
-            }
-            if ($mcu['gdp'] >= 100) {
-                $metabolicComponents++;
-            }
-            if ($mcu['trigliserida'] >= 150) {
-                $metabolicComponents++;
-            }
-            if ($mcu['hdl'] < 40) {
-                $metabolicComponents++;
-            }
+    private function buildRecords(): array
+    {
+        $profiles = $this->fetchActiveEmployees();
+        if ($profiles->isEmpty()) {
+            return [];
         }
 
-        $framinghamScore = $hasMcu
-            ? min(30, max(1, (int) round(($mcu['bmi'] - 18) + ($mcu['tensi'][0] - 110) / 4 + ($mcu['kolesterol'] - 150) / 10)))
-            : null;
+        $mcuBySid = $this->fetchMcuConditions();
 
-        $avgCalories = null;
-        $targetCalories = null;
-        $avgCarbs = null;
-        $avgFat = null;
-        $avgProtein = null;
-        $avgFiber = null;
-        $loggingDays = null;
-        if ($hasNutrition) {
-            $targetCalories = 2300.0;
-            $avgCalories = (float) mt_rand(1600, 3200);
-            $avgCarbs = (float) mt_rand(180, 480);
-            $avgFat = (float) mt_rand(40, 150);
-            $avgProtein = (float) mt_rand(40, 100);
-            $avgFiber = (float) mt_rand(6, 30);
-            $loggingDays = mt_rand(1, 30);
-        }
+        $userIds = $profiles->map(static fn (object $p): int => (int) $p->id)->values()->all();
+        $nutritionByUser = $this->fetchNutritionAverages($userIds);
 
-        return [
-            'id' => $id,
-            'nama' => $nama,
-            'nik' => $nik,
-            'perusahaan' => $company,
-            'site' => $site,
-            'departemen' => $departemen,
-            'jabatan' => $jabatan,
-            'has_mcu' => $hasMcu,
-            'has_nutrition' => $hasNutrition,
-            'bmi' => $hasMcu ? $mcu['bmi'] : null,
-            'tensi_sistol' => $hasMcu ? $mcu['tensi'][0] : null,
-            'tensi_diastol' => $hasMcu ? $mcu['tensi'][1] : null,
-            'gdp' => $hasMcu ? $mcu['gdp'] : null,
-            'kolesterol' => $hasMcu ? $mcu['kolesterol'] : null,
-            'ldl' => $hasMcu ? $mcu['ldl'] : null,
-            'hdl' => $hasMcu ? $mcu['hdl'] : null,
-            'trigliserida' => $hasMcu ? $mcu['trigliserida'] : null,
-            'framingham_score' => $framinghamScore,
-            'metabolic_component_count' => $hasMcu ? $metabolicComponents : null,
-            'avg_calories' => $avgCalories,
-            'target_calories' => $targetCalories,
-            'avg_carbs_g' => $avgCarbs,
-            'avg_fat_g' => $avgFat,
-            'avg_protein_g' => $avgProtein,
-            'avg_fiber_g' => $avgFiber,
-            // food_analyses (BeWell) tidak punya kolom natrium/sodium — jangan
-            // dikarang, biarkan null supaya UI menampilkan "Data belum tersedia".
-            'avg_sodium_mg' => null,
-            'logging_days_30d' => $loggingDays,
+        $emptyConditions = [
+            'dislipidemia' => false, 'hipertensi' => false, 'gula_darah' => false,
+            'sindrom_metabolik' => false, 'framingham' => false,
         ];
+
+        $records = [];
+        foreach ($profiles as $sid => $profile) {
+            $uid = (int) $profile->id;
+            $mcu = $mcuBySid[$sid] ?? null;
+            $nutrition = $nutritionByUser[$uid] ?? null;
+            $hasNutrition = $nutrition !== null && $nutrition['days_logged'] > 0;
+
+            $records[] = [
+                'id' => $uid,
+                'nama' => (string) ($profile->nama ?: 'User #'.$uid),
+                'nik' => (string) ($profile->nik ?: '-'),
+                'kode_sid' => $sid,
+                'perusahaan' => trim((string) ($profile->nama_perusahaan ?? '')) !== '' ? $profile->nama_perusahaan : '-',
+                'site' => trim((string) ($profile->site ?? '')) !== '' ? $profile->site : '-',
+                'departemen' => trim((string) ($profile->divisi ?? '')) !== '' ? $profile->divisi : '-',
+                'has_mcu' => $mcu !== null,
+                'has_nutrition' => $hasNutrition,
+                'exam_date' => $mcu['exam_date'] ?? null,
+                'conditions' => $mcu['conditions'] ?? $emptyConditions,
+                'avg_calories' => $hasNutrition ? $nutrition['avg_calories'] : null,
+                'target_calories' => $hasNutrition ? self::DEFAULT_CALORIE_TARGET : null,
+                'avg_carbs_g' => $hasNutrition ? $nutrition['avg_carbs_g'] : null,
+                'avg_protein_g' => $hasNutrition ? $nutrition['avg_protein_g'] : null,
+                'logging_days_30d' => $hasNutrition ? $nutrition['days_logged'] : null,
+            ];
+        }
+
+        return $records;
+    }
+
+    /**
+     * Satu baris per SID (data MCU terbaru), kondisi diambil dari JSONB
+     * kondisi_kritis + kondisi_non_kritis.
+     *
+     * @return array<string, array{exam_date: ?string, conditions: array<string, bool>}>
+     */
+    private function fetchMcuConditions(): array
+    {
+        if (! $this->mcu->isUp() || ! $this->mcu->isMappingReady()) {
+            return [];
+        }
+
+        $table = (string) config('bemcu.table');
+        $examDate = (string) config('bemcu.exam_date');
+        $sidCol = trim((string) config('bemcu.identity.sid', ''));
+        if ($table === '' || $examDate === '' || $sidCol === '') {
+            return [];
+        }
+
+        $sql = 'SELECT UPPER(TRIM('.$sidCol.')) AS sid, '.$examDate.' AS exam_date, kondisi_kritis, kondisi_non_kritis'
+            .' FROM ('
+            .' SELECT DISTINCT ON (UPPER(TRIM('.$sidCol.'))) '.$sidCol.', '.$examDate.', kondisi_kritis, kondisi_non_kritis'
+            .' FROM '.$table
+            .' WHERE '.$sidCol.' IS NOT NULL AND TRIM('.$sidCol.") <> ''"
+            .' ORDER BY UPPER(TRIM('.$sidCol.')), '.$examDate.' DESC NULLS LAST'
+            .' ) latest';
+
+        try {
+            $rows = DB::connection(McuConnectionService::CONNECTION)->select($sql);
+        } catch (Throwable $e) {
+            report($e);
+
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $sid = trim((string) ($row->sid ?? ''));
+            if ($sid === '') {
+                continue;
+            }
+
+            $items = array_merge(
+                $this->decodeJson($row->kondisi_kritis ?? null),
+                $this->decodeJson($row->kondisi_non_kritis ?? null),
+            );
+
+            $flags = [
+                'dislipidemia' => false, 'hipertensi' => false, 'gula_darah' => false,
+                'sindrom_metabolik' => false, 'framingham' => false,
+            ];
+
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $nama = trim((string) ($item['nama_kondisi'] ?? ''));
+                if ($nama === '' || ! $this->isAbnormal($item)) {
+                    continue;
+                }
+
+                if (in_array($nama, self::DISLIPIDEMIA_NAMES, true)) {
+                    $flags['dislipidemia'] = true;
+                }
+                foreach (self::CONDITION_NAME_MAP as $key => $targetName) {
+                    if ($nama === $targetName) {
+                        $flags[$key] = true;
+                    }
+                }
+            }
+
+            $out[$sid] = [
+                'exam_date' => $row->exam_date !== null ? (string) $row->exam_date : null,
+                'conditions' => $flags,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function decodeJson(mixed $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (! is_string($raw)) {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * kondisi_kritis pakai flag is_yes/is_no/is_na; kondisi_non_kritis cuma
+     * punya 'note' ('normal'/'abnormal') tanpa flag is_yes/is_no/is_na.
+     *
+     * @param  array<string, mixed>  $item
+     */
+    private function isAbnormal(array $item): bool
+    {
+        if (array_key_exists('is_yes', $item) || array_key_exists('is_no', $item) || array_key_exists('is_na', $item)) {
+            return ! empty($item['is_yes']);
+        }
+
+        return mb_strtolower(trim((string) ($item['note'] ?? ''))) === 'abnormal';
+    }
+
+    /**
+     * @return Collection<string, object> keyed by UPPER(kode_sid)
+     */
+    private function fetchActiveEmployees(): Collection
+    {
+        if (! $this->bewell->isUp()) {
+            return collect();
+        }
+
+        try {
+            $rows = DB::connection(BewellConnectionService::CONNECTION)
+                ->table('employee_profiles')
+                ->where('status_karyawan', 'AKTIF')
+                ->whereNotNull('kode_sid')
+                ->where('kode_sid', '!=', '')
+                ->get(['id', 'nama', 'nik', 'kode_sid', 'site', 'nama_perusahaan', 'divisi']);
+        } catch (Throwable $e) {
+            report($e);
+
+            return collect();
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $sid = mb_strtoupper(trim((string) ($row->kode_sid ?? '')));
+            if ($sid === '' || isset($out[$sid])) {
+                continue;
+            }
+            $out[$sid] = $row;
+        }
+
+        return collect($out);
+    }
+
+    /**
+     * Rata-rata kalori/karbohidrat/protein per user selama 30 hari terakhir.
+     * avg_fat_g/avg_fiber_g/avg_sodium_mg SENGAJA tidak disertakan — belum
+     * terverifikasi ada sebagai kolom di `food_analyses` (lihat juga catatan
+     * di NutritionEvaluationService yang cuma pakai total_calories/carbs_g/
+     * protein_g untuk hal yang sama).
+     *
+     * @param  list<int>  $userIds
+     * @return array<int, array{days_logged:int, avg_calories:float, avg_carbs_g:float, avg_protein_g:float}>
+     */
+    private function fetchNutritionAverages(array $userIds): array
+    {
+        if ($userIds === [] || ! $this->bewell->isUp()) {
+            return [];
+        }
+
+        $from = Carbon::now()->subDays(self::NUTRITION_WINDOW_DAYS)->startOfDay()->format('Y-m-d H:i:s');
+        $to = Carbon::now()->endOfDay()->format('Y-m-d H:i:s');
+
+        $dayRows = collect();
+        foreach (array_chunk($userIds, 1000) as $chunk) {
+            try {
+                $rows = DB::connection(BewellConnectionService::CONNECTION)
+                    ->table('food_analyses')
+                    ->selectRaw('user_id, DATE(created_at) AS d, COALESCE(SUM(total_calories), 0) AS cal, COALESCE(SUM(carbs_g), 0) AS carb, COALESCE(SUM(protein_g), 0) AS prot')
+                    ->whereIn('user_id', $chunk)
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupByRaw('user_id, DATE(created_at)')
+                    ->get();
+                $dayRows = $dayRows->concat($rows);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
+        $out = [];
+        foreach ($dayRows->groupBy('user_id') as $uid => $rows) {
+            $out[(int) $uid] = [
+                'days_logged' => $rows->count(),
+                'avg_calories' => round((float) $rows->avg('cal'), 1),
+                'avg_carbs_g' => round((float) $rows->avg('carb'), 1),
+                'avg_protein_g' => round((float) $rows->avg('prot'), 1),
+            ];
+        }
+
+        return $out;
     }
 }

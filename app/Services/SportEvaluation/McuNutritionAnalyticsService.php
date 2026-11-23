@@ -8,10 +8,29 @@ use App\Repositories\SportEvaluation\McuNutritionRepository;
 use Illuminate\Support\Carbon;
 
 /**
- * Agregasi & view-model untuk dashboard MCU x Nutrisi. Controller tidak boleh
- * melakukan kalkulasi sendiri — semua angka yang ditampilkan Blade datang
- * dari sini, dibentuk dari McuNutritionRepository (saat ini dummy, lihat
- * catatan di repository).
+ * Agregasi & view-model untuk dashboard MCU x Nutrisi — SEMUA angka di
+ * bawah ini dihitung dari data real (`McuNutritionRepository`): MCU
+ * Postgres (`bcsid.mv_ftw_mcu`) + BeWell MySQL (`food_analyses`). Tidak
+ * ada data dummy/fiktif lagi di class ini (lihat git history untuk versi
+ * lama yang masih pakai `mt_rand`).
+ *
+ * Catatan batasan sumber data (SEMUA dicek langsung ke skema asli,
+ * bukan asumsi):
+ * - MCU Postgres cuma punya flag normal/abnormal per nama kondisi (JSONB
+ *   kondisi_kritis/kondisi_non_kritis) — TIDAK ADA angka BMI/tensi/
+ *   kolesterol/LDL/HDL/trigliserida/GDP/skor Framingham mentah. Karena itu
+ *   tabel karyawan & detail di bawah pakai BADGE status per kondisi, bukan
+ *   angka lab.
+ * - Kondisi "Obesitas/BMI" DIHAPUS dari 6 kondisi versi lama — tidak ada
+ *   satupun nama_kondisi terkait BMI di seluruh tabel MCU.
+ * - food_analyses (BeWell) cuma dipakai untuk total_calories/carbs_g/
+ *   protein_g (kolom yang terbukti ada & dipakai NutritionEvaluationService)
+ *   — avg_fat_g/avg_fiber_g/avg_sodium_mg versi lama DIHAPUS karena belum
+ *   terverifikasi ada sebagai kolom.
+ * - Chart yang butuh data historis/snapshot dari waktu ke waktu (heatmap
+ *   pola harian, tren bulanan 9 bulan, sparkline KPI) DIHAPUS — sumber data
+ *   saat ini cuma punya kondisi TERKINI per karyawan, bukan snapshot
+ *   historis, jadi tidak ada cara membuat angka itu secara valid.
  *
  * Semua rasio kondisi x nutrisi memakai matched records (has_mcu &&
  * has_nutrition) sebagai denominator — bukan total_mcu atau total_nutrition
@@ -20,6 +39,30 @@ use Illuminate\Support\Carbon;
 final class McuNutritionAnalyticsService
 {
     private const TARGET_CALORIES = 2300.0;
+
+    /**
+     * Ambang "berisiko" untuk 3 faktor pola makan di bawah ini BELUM punya
+     * band resmi dari tim medis/gizi — ini pilihan pragmatis (konsisten
+     * dengan DEFAULT_CARB_TARGET/DEFAULT_PROTEIN_TARGET di
+     * NutritionEvaluationService), bukan standar klinis. Faktor "Lemak
+     * Tinggi"/"Serat Rendah" versi lama DIHAPUS — kolom fat_g/fiber_g belum
+     * terverifikasi ada di food_analyses.
+     */
+    private const CARB_OVER_THRESHOLD = 300.0;
+
+    private const PROTEIN_UNDER_THRESHOLD = 52.5;
+
+    /** @var list<string> */
+    private const CONDITION_KEYS = ['dislipidemia', 'hipertensi', 'gula_darah', 'sindrom_metabolik', 'framingham'];
+
+    /** @var array<string, string> */
+    private const CONDITION_LABELS = [
+        'dislipidemia' => 'Dislipidemia',
+        'hipertensi' => 'Hipertensi',
+        'gula_darah' => 'Gula Darah Tinggi',
+        'sindrom_metabolik' => 'Sindrom Metabolik',
+        'framingham' => 'Framingham High Risk',
+    ];
 
     public function __construct(
         private readonly McuNutritionRepository $repository,
@@ -32,26 +75,36 @@ final class McuNutritionAnalyticsService
     {
         $today = Carbon::now();
         $rangeStart = $today->copy()->subDays(24);
+        $records = $this->repository->records();
         $coverage = $this->repository->coverage();
+        $matched = array_values(array_filter(
+            $records,
+            static fn (array $r): bool => $r['has_mcu'] && $r['has_nutrition']
+        ));
 
         return [
-            'dummyMode' => true,
             'dateRangeLabel' => $rangeStart->translatedFormat('d M Y').' – '.$today->translatedFormat('d M Y'),
-            'filterOptions' => [
-                'sites' => ['BMO 1', 'BMO 2', 'BMO 3', 'GMO', 'LMO', 'SMO'],
-                'companies' => ['PT ABC', 'PT XYZ', 'PT PAMA', 'PT BUMA', 'PT BAR', 'PT DNX Indonesia'],
-            ],
+            'filterOptions' => $this->filterOptions($records),
             'coverage' => $this->coverageSummary($coverage),
-            'kpiTop' => $this->kpiTop($coverage),
-            'kpiConditions' => $this->kpiConditions(),
-            'heatmap' => $this->heatmap($rangeStart, $today),
-            'compliance' => $this->compliance(),
-            'associationMatrix' => $this->associationMatrix(),
-            'macroChart' => $this->macroChart(),
-            'comparisonChart' => $this->comparisonChart(),
-            'conditionAnalysis' => $this->conditionAnalysis(),
-            'trendChart' => $this->trendChart(),
-            'employeeTabs' => $this->employeeTabs(),
+            'kpiTop' => $this->kpiTop($coverage, $records, $matched),
+            'kpiConditions' => $this->kpiConditions($records),
+            'associationMatrix' => $this->associationMatrix($matched),
+            'macroChart' => $this->macroChart($matched),
+            'comparisonChart' => $this->comparisonChart($matched),
+            'conditionAnalysis' => $this->conditionAnalysis($matched),
+            'employeeTabs' => $this->employeeTabs($records),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $records
+     * @return array{sites: list<string>, companies: list<string>}
+     */
+    private function filterOptions(array $records): array
+    {
+        return [
+            'sites' => collect($records)->pluck('site')->filter(static fn ($v): bool => $v !== '-')->unique()->sort()->values()->all(),
+            'companies' => collect($records)->pluck('perusahaan')->filter(static fn ($v): bool => $v !== '-')->unique()->sort()->values()->all(),
         ];
     }
 
@@ -62,9 +115,6 @@ final class McuNutritionAnalyticsService
     private function coverageSummary(array $coverage): array
     {
         $matchedPct = round($coverage['matched_total'] / max(1, $coverage['total_mcu']) * 100, 1);
-
-        // Ambang kualitas data ditentukan di sini (bukan di Blade) supaya
-        // pesan yang tampil konsisten dengan angka coverage yang sama.
         $isGoodQuality = $matchedPct >= 80.0;
 
         return [
@@ -84,392 +134,312 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  array{total_mcu: int, total_nutrition: int, matched_total: int}  $coverage
+     * @param  list<array<string, mixed>>  $records
+     * @param  list<array<string, mixed>>  $matched
      * @return array<string, array<string, mixed>>
      */
-    private function kpiTop(array $coverage): array
+    private function kpiTop(array $coverage, array $records, array $matched): array
     {
+        $berisiko = count(array_filter(
+            $records,
+            static fn (array $r): bool => $r['has_mcu'] && $this->conditionsFor($r) !== []
+        ));
+        $memenuhiTarget = count(array_filter(
+            $matched,
+            static fn (array $r): bool => $r['target_calories'] !== null && $r['avg_calories'] <= $r['target_calories'] * 1.15
+        ));
+
         return [
             'total_karyawan' => [
                 'label' => 'Total Karyawan (MCU)',
                 'icon' => 'solar:users-group-rounded-bold',
                 'color' => 'success',
                 'value' => $coverage['total_mcu'],
-                'sub_label' => 'dari periode sebelumnya',
-                'delta_pct' => 5.2,
-                'sparkline' => [18400, 18600, 18750, 18900, 19050, 19180, $coverage['total_mcu']],
-                'caption' => 'Seluruh karyawan yang mengikuti MCU',
+                'caption' => 'Karyawan AKTIF yang punya data MCU',
             ],
             'karyawan_berisiko' => [
                 'label' => 'Karyawan Berisiko',
                 'icon' => 'solar:heart-pulse-bold',
                 'color' => 'danger',
-                'value' => 3482,
-                'sub_label' => 'dari total MCU',
-                'sub_pct' => round(3482 / $coverage['total_mcu'] * 100, 1),
-                'delta_pct' => 2.1,
-                'sparkline' => [3120, 3210, 3260, 3300, 3350, 3410, 3482],
-                'caption' => 'Memiliki ≥1 parameter risiko',
+                'value' => $berisiko,
+                'sub_pct' => $coverage['total_mcu'] > 0 ? round($berisiko / $coverage['total_mcu'] * 100, 1) : 0.0,
+                'caption' => 'Memiliki ≥1 kondisi abnormal terkonfirmasi',
             ],
             'target_kalori' => [
                 'label' => 'Memenuhi Target Kalori',
                 'icon' => 'solar:donut-bitten-bold',
                 'color' => 'success',
-                'value' => 14216,
-                'sub_label' => 'dari matched records',
-                'sub_pct' => round(14216 / $coverage['matched_total'] * 100, 1),
-                'delta_pct' => 4.5,
-                'sparkline' => [12800, 13100, 13400, 13650, 13900, 14050, 14216],
-                'caption' => 'Sesuai dengan target kalori harian',
+                'value' => $memenuhiTarget,
+                'sub_pct' => $coverage['matched_total'] > 0 ? round($memenuhiTarget / $coverage['matched_total'] * 100, 1) : 0.0,
+                'caption' => 'Dari matched records, ≤115% target kalori harian',
             ],
             'data_nutrisi' => [
                 'label' => 'Data Nutrisi Tercatat',
                 'icon' => 'solar:clipboard-list-bold',
                 'color' => 'info',
                 'value' => $coverage['total_nutrition'],
-                'sub_label' => 'coverage dari total MCU',
-                'sub_pct' => round($coverage['total_nutrition'] / $coverage['total_mcu'] * 100, 1),
-                'delta_pct' => 3.8,
-                'sparkline' => [15900, 16200, 16500, 16750, 16950, 17100, $coverage['total_nutrition']],
-                'caption' => 'Memiliki minimal 1 hari pencatatan nutrisi',
+                'sub_pct' => $coverage['total_mcu'] > 0 ? round($coverage['total_nutrition'] / $coverage['total_mcu'] * 100, 1) : 0.0,
+                'caption' => 'Punya minimal 1 hari log makan (30 hari terakhir)',
             ],
         ];
     }
 
     /**
+     * @param  list<array<string, mixed>>  $records
      * @return list<array<string, mixed>>
      */
-    private function kpiConditions(): array
+    private function kpiConditions(array $records): array
     {
-        return [
-            ['key' => 'obesitas', 'label' => 'Obesitas', 'sub_label' => 'BMI ≥30', 'icon' => 'solar:scale-bold', 'color' => '#F86624', 'bg' => '#FFF7ED', 'value' => 1482, 'pct' => 7.6, 'delta_pct' => 1.4, 'sparkline' => [1290, 1330, 1360, 1390, 1420, 1455, 1482]],
-            ['key' => 'dislipidemia', 'label' => 'Dislipidemia', 'sub_label' => 'Kol/LDL/TG tinggi', 'icon' => 'solar:test-tube-bold', 'color' => '#2563EB', 'bg' => '#EFF6FF', 'value' => 1126, 'pct' => 5.8, 'delta_pct' => 0.9, 'sparkline' => [1030, 1055, 1075, 1090, 1105, 1116, 1126]],
-            ['key' => 'hipertensi', 'label' => 'Hipertensi', 'sub_label' => 'Tekanan Darah', 'icon' => 'solar:heart-pulse-bold', 'color' => '#DC2626', 'bg' => '#FEF2F2', 'value' => 1904, 'pct' => 9.8, 'delta_pct' => 2.6, 'sparkline' => [1690, 1740, 1790, 1830, 1860, 1885, 1904]],
-            ['key' => 'gula_darah', 'label' => 'Gula Darah Tinggi', 'sub_label' => 'GDP', 'icon' => 'solar:test-tube-minimalistic-bold', 'color' => '#F4941E', 'bg' => '#FFFBEB', 'value' => 962, 'pct' => 5.0, 'delta_pct' => 1.1, 'sparkline' => [850, 875, 895, 915, 935, 950, 962]],
-            ['key' => 'sindrom_metabolik', 'label' => 'Sindrom Metabolik', 'sub_label' => '≥3 komponen', 'icon' => 'solar:pulse-bold', 'color' => '#8252E9', 'bg' => '#FAF5FF', 'value' => 684, 'pct' => 3.5, 'delta_pct' => 0.8, 'sparkline' => [615, 630, 645, 658, 668, 677, 684]],
-            ['key' => 'framingham', 'label' => 'Framingham High Risk', 'sub_label' => 'Skor risiko 10 tahun', 'icon' => 'solar:danger-triangle-bold', 'color' => '#DB2777', 'bg' => '#FDF2F8', 'value' => 421, 'pct' => 2.2, 'delta_pct' => 0.6, 'sparkline' => [368, 380, 392, 402, 410, 416, 421]],
+        $withMcu = array_filter($records, static fn (array $r): bool => $r['has_mcu']);
+        $totalMcu = max(1, count($withMcu));
+
+        $meta = [
+            'dislipidemia' => ['sub_label' => 'Kolesterol/LDL/Trigliserida', 'icon' => 'solar:test-tube-bold', 'color' => '#2563EB', 'bg' => '#EFF6FF'],
+            'hipertensi' => ['sub_label' => 'Tekanan Darah', 'icon' => 'solar:heart-pulse-bold', 'color' => '#DC2626', 'bg' => '#FEF2F2'],
+            'gula_darah' => ['sub_label' => 'GDP', 'icon' => 'solar:test-tube-minimalistic-bold', 'color' => '#F4941E', 'bg' => '#FFFBEB'],
+            'sindrom_metabolik' => ['sub_label' => 'Diagnosis MCU', 'icon' => 'solar:pulse-bold', 'color' => '#8252E9', 'bg' => '#FAF5FF'],
+            'framingham' => ['sub_label' => 'Skor risiko 10 tahun', 'icon' => 'solar:danger-triangle-bold', 'color' => '#DB2777', 'bg' => '#FDF2F8'],
         ];
-    }
 
-    /**
-     * @return array{categories: list<string>, days: list<string>, series: list<array<string, mixed>>, stats: array<string, mixed>}
-     */
-    private function heatmap(Carbon $start, Carbon $end): array
-    {
-        $days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-        $byDow = array_fill(0, 7, []);
-        $labels = [];
-        $dailyTotals = [];
-        $weekdaySum = 0;
-        $weekdayDays = 0;
-        $weekendSum = 0;
-        $weekendDays = 0;
-        $peakLabel = '-';
-        $peakValue = -1;
-
-        $cursor = $start->copy();
-        $i = 0;
-        while ($cursor->lte($end)) {
-            $label = $cursor->format('d M');
-            $labels[] = $label;
-            $dow = $cursor->dayOfWeekIso - 1;
-            $isWeekday = $cursor->dayOfWeekIso <= 5;
-            $weekProgress = $i / 24;
-            $weekdayBoost = $isWeekday ? 1.25 : 0.7;
-            $base = 60 + ($weekProgress * 260);
-            $wave = sin($i / 3) * 60;
-            $value = max(0, (int) round(($base + $wave) * $weekdayBoost));
-
-            foreach ($byDow as $d => $row) {
-                $byDow[$d][] = $d === $dow ? $value : null;
-            }
-
-            $dailyTotals[] = $value;
-            if ($isWeekday) {
-                $weekdaySum += $value;
-                $weekdayDays++;
-            } else {
-                $weekendSum += $value;
-                $weekendDays++;
-            }
-            if ($value > $peakValue) {
-                $peakValue = $value;
-                $peakLabel = $cursor->translatedFormat('d M Y');
-            }
-
-            $i++;
-            $cursor->addDay();
+        $cards = [];
+        foreach (self::CONDITION_KEYS as $key) {
+            $count = count(array_filter($withMcu, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+            $cards[] = [
+                'key' => $key,
+                'label' => self::CONDITION_LABELS[$key],
+                'sub_label' => $meta[$key]['sub_label'],
+                'icon' => $meta[$key]['icon'],
+                'color' => $meta[$key]['color'],
+                'bg' => $meta[$key]['bg'],
+                'value' => $count,
+                'pct' => round($count / $totalMcu * 100, 1),
+            ];
         }
 
-        $series = [];
-        foreach ($days as $index => $dayLabel) {
-            $data = [];
-            foreach ($labels as $colIndex => $label) {
-                $data[] = ['x' => $label, 'y' => $byDow[$index][$colIndex]];
-            }
-            $series[] = ['name' => $dayLabel, 'data' => $data];
-        }
-
-        $avgDaily = $dailyTotals === [] ? 0 : (int) round(array_sum($dailyTotals) / count($dailyTotals));
-        $weekdayAvg = $weekdayDays > 0 ? $weekdaySum / $weekdayDays : 0.0;
-        $weekendAvg = $weekendDays > 0 ? $weekendSum / $weekendDays : 0.0;
-        $ratio = $weekendAvg > 0 ? round($weekdayAvg / $weekendAvg, 1) : 0.0;
-
-        return [
-            'categories' => $labels,
-            'days' => $days,
-            'series' => $series,
-            'stats' => [
-                'peak_day_label' => $peakLabel,
-                'peak_day_count' => max(0, $peakValue),
-                'avg_daily' => $avgDaily,
-                'weekday_ratio' => $ratio,
-                'peak_hour_label' => '08:00 – 10:00',
-            ],
-        ];
+        return $cards;
     }
 
     /**
-     * @return array{center_value: int, center_label: string, legend: list<array<string, mixed>>}
-     */
-    private function compliance(): array
-    {
-        return [
-            'center_value' => 17289,
-            'center_label' => 'Karyawan',
-            'legend' => [
-                ['label' => 'Rutin (≥5 hari/minggu)', 'pct' => 62.4, 'count' => 12107, 'color' => '#16A34A'],
-                ['label' => 'Cukup (3-4 hari/minggu)', 'pct' => 18.7, 'count' => 3624, 'color' => '#F4941E'],
-                ['label' => 'Jarang (1-2 hari/minggu)', 'pct' => 8.5, 'count' => 1651, 'color' => '#2563EB'],
-                ['label' => 'Tidak pernah', 'pct' => 10.4, 'count' => 2019, 'color' => '#DC2626'],
-            ],
-        ];
-    }
-
-    /**
-     * Keterkaitan deskriptif (proporsi overlap), BUKAN hasil uji statistik —
-     * lihat label & tooltip di Blade yang menegaskan ini "Association /
-     * Keterkaitan Deskriptif".
+     * Keterkaitan deskriptif (proporsi overlap antara kondisi MCU dan pola
+     * makan berisiko), BUKAN hasil uji statistik.
      *
+     * @param  list<array<string, mixed>>  $matched
      * @return array{rows: list<string>, cols: list<string>, cells: list<list<array<string, mixed>>>}
      */
-    private function associationMatrix(): array
+    private function associationMatrix(array $matched): array
     {
-        $rows = ['Obesitas (BMI≥30)', 'Dislipidemia', 'Hipertensi', 'Gula Darah Tinggi', 'Sindrom Metabolik', 'Framingham High Risk'];
-        $cols = ['Kalori Berlebih', 'Karbohidrat Tinggi', 'Lemak Tinggi', 'Protein Rendah', 'Serat Rendah'];
-        $rowDenominators = [1482, 1126, 1904, 962, 684, 421];
-
-        // Level 0-4: 0=Tidak Signifikan, 1=Rendah, 2=Sedang, 3=Tinggi, 4=Sangat Tinggi.
-        $levels = [
-            [4, 3, 4, 2, 3],
-            [3, 3, 4, 2, 3],
-            [3, 2, 3, 1, 3],
-            [3, 4, 2, 1, 2],
-            [4, 4, 3, 2, 4],
-            [4, 3, 4, 2, 3],
-        ];
-        // Perkiraan % overlap per level, dipakai untuk hitung jumlah karyawan pada tooltip.
-        $levelPct = [0 => 8.0, 1 => 20.0, 2 => 35.0, 3 => 50.0, 4 => 65.0];
+        $cols = ['calorie_over' => 'Kalori Berlebih', 'carb_over' => 'Karbohidrat Tinggi', 'protein_under' => 'Protein Rendah'];
 
         $cells = [];
-        foreach ($rows as $ri => $rowLabel) {
+        $rows = [];
+        foreach (self::CONDITION_KEYS as $key) {
+            $group = array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+            $denominator = count($group);
+            $rows[] = self::CONDITION_LABELS[$key];
+
             $rowCells = [];
-            foreach ($cols as $ci => $colLabel) {
-                $level = $levels[$ri][$ci];
-                $denominator = $rowDenominators[$ri];
-                $pct = $levelPct[$level];
+            foreach ($cols as $factorKey => $colLabel) {
+                $count = count(array_filter($group, fn (array $r): bool => $this->hasFactor($r, $factorKey)));
+                $pct = $denominator > 0 ? round($count / $denominator * 100, 1) : 0.0;
                 $rowCells[] = [
-                    'level' => $level,
-                    'condition' => $rowLabel,
+                    'level' => $this->associationLevel($pct),
+                    'condition' => self::CONDITION_LABELS[$key],
                     'factor' => $colLabel,
                     'pct' => $pct,
-                    'count' => (int) round($denominator * $pct / 100),
+                    'count' => $count,
                     'denominator' => $denominator,
                 ];
             }
             $cells[] = $rowCells;
         }
 
-        return ['rows' => $rows, 'cols' => $cols, 'cells' => $cells];
+        return ['rows' => $rows, 'cols' => array_values($cols), 'cells' => $cells];
+    }
+
+    private function associationLevel(float $pct): int
+    {
+        return match (true) {
+            $pct >= 65.0 => 4,
+            $pct >= 50.0 => 3,
+            $pct >= 35.0 => 2,
+            $pct >= 20.0 => 1,
+            default => 0,
+        };
     }
 
     /**
+     * @param  array<string, mixed>  $record
+     */
+    private function hasFactor(array $record, string $factorKey): bool
+    {
+        $avgCalories = (float) ($record['avg_calories'] ?? 0);
+        $targetCalories = (float) ($record['target_calories'] ?? self::TARGET_CALORIES);
+        $avgCarbs = (float) ($record['avg_carbs_g'] ?? 0);
+        $avgProtein = (float) ($record['avg_protein_g'] ?? 0);
+
+        return match ($factorKey) {
+            'calorie_over' => $targetCalories > 0 && $avgCalories >= $targetCalories * 1.15,
+            'carb_over' => $avgCarbs >= self::CARB_OVER_THRESHOLD,
+            'protein_under' => $avgProtein > 0 && $avgProtein <= self::PROTEIN_UNDER_THRESHOLD,
+            default => false,
+        };
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $matched
      * @return array{tabs: array<string, string>, data: array<string, array<string, mixed>>}
      */
-    private function macroChart(): array
+    private function macroChart(array $matched): array
     {
-        $tabs = [
-            'semua' => 'Semua',
-            'obesitas' => 'Obesitas',
-            'dislipidemia' => 'Dislipidemia',
-            'hipertensi' => 'Hipertensi',
-            'gula_darah' => 'Gula Darah',
-            'sindrom_metabolik' => 'Sindrom Metabolik',
-        ];
-        $categories = ['Karbohidrat', 'Lemak', 'Protein', 'Serat'];
-        $base = [
-            'semua' => ['berisiko' => [28.4, 32.5, 12.1, 8.7], 'tidak_berisiko' => [12.1, 14.6, 8.4, 22.3]],
-            'obesitas' => ['berisiko' => [31.2, 38.6, 14.0, 9.4], 'tidak_berisiko' => [13.5, 15.9, 9.1, 24.0]],
-            'dislipidemia' => ['berisiko' => [26.8, 41.2, 11.5, 7.9], 'tidak_berisiko' => [12.8, 16.4, 8.0, 20.7]],
-            'hipertensi' => ['berisiko' => [24.5, 27.1, 13.2, 10.1], 'tidak_berisiko' => [11.6, 13.2, 8.9, 23.4]],
-            'gula_darah' => ['berisiko' => [36.9, 22.4, 10.8, 8.2], 'tidak_berisiko' => [14.2, 12.5, 7.6, 21.5]],
-            'sindrom_metabolik' => ['berisiko' => [34.1, 36.4, 12.9, 6.5], 'tidak_berisiko' => [13.0, 15.1, 8.2, 19.8]],
-        ];
+        $tabs = ['semua' => 'Semua'] + self::CONDITION_LABELS;
+        $categories = ['Karbohidrat', 'Protein'];
 
         $data = [];
-        foreach ($base as $key => $series) {
-            $data[$key] = array_merge(['categories' => $categories], $series);
+        foreach ($tabs as $key => $label) {
+            $group = $key === 'semua'
+                ? $matched
+                : array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+
+            $berisiko = array_values(array_filter($group, fn (array $r): bool => $this->hasFactor($r, 'carb_over') || $this->hasFactor($r, 'calorie_over')));
+            $tidakBerisiko = array_values(array_filter($group, fn (array $r): bool => ! ($this->hasFactor($r, 'carb_over') || $this->hasFactor($r, 'calorie_over'))));
+
+            $data[$key] = [
+                'categories' => $categories,
+                'berisiko' => [
+                    round($this->avgOf($berisiko, 'avg_carbs_g'), 1),
+                    round($this->avgOf($berisiko, 'avg_protein_g'), 1),
+                ],
+                'tidak_berisiko' => [
+                    round($this->avgOf($tidakBerisiko, 'avg_carbs_g'), 1),
+                    round($this->avgOf($tidakBerisiko, 'avg_protein_g'), 1),
+                ],
+            ];
         }
 
         return ['tabs' => $tabs, 'data' => $data];
     }
 
     /**
-     * Dipisah jadi dua sumbu/unit (kkal vs gram) — jangan gabung ke satu
-     * axis, skalanya jauh berbeda dan bisa menyesatkan.
-     *
+     * @param  list<array<string, mixed>>  $matched
      * @return array{calories: array<string, mixed>, macros: array<string, mixed>}
      */
-    private function comparisonChart(): array
+    private function comparisonChart(array $matched): array
     {
+        $berisiko = array_values(array_filter($matched, fn (array $r): bool => $this->conditionsFor($r) !== []));
+        $tidakBerisiko = array_values(array_filter($matched, fn (array $r): bool => $this->conditionsFor($r) === []));
+
         return [
             'calories' => [
                 'categories' => ['Kalori (kkal)'],
-                'berisiko' => [2850],
-                'tidak_berisiko' => [2120],
+                'berisiko' => [round($this->avgOf($berisiko, 'avg_calories'), 0)],
+                'tidak_berisiko' => [round($this->avgOf($tidakBerisiko, 'avg_calories'), 0)],
             ],
             'macros' => [
-                'categories' => ['Karbohidrat (g)', 'Lemak (g)', 'Protein (g)', 'Serat (g)'],
-                'berisiko' => [420, 130, 65, 14],
-                'tidak_berisiko' => [310, 95, 72, 22],
+                'categories' => ['Karbohidrat (g)', 'Protein (g)'],
+                'berisiko' => [
+                    round($this->avgOf($berisiko, 'avg_carbs_g'), 0),
+                    round($this->avgOf($berisiko, 'avg_protein_g'), 0),
+                ],
+                'tidak_berisiko' => [
+                    round($this->avgOf($tidakBerisiko, 'avg_carbs_g'), 0),
+                    round($this->avgOf($tidakBerisiko, 'avg_protein_g'), 0),
+                ],
             ],
         ];
     }
 
     /**
+     * @param  list<array<string, mixed>>  $group
+     */
+    private function avgOf(array $group, string $field): float
+    {
+        if ($group === []) {
+            return 0.0;
+        }
+
+        $sum = array_sum(array_map(static fn (array $r): float => (float) ($r[$field] ?? 0), $group));
+
+        return $sum / count($group);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $matched
      * @return list<array<string, mixed>>
      */
-    private function conditionAnalysis(): array
+    private function conditionAnalysis(array $matched): array
     {
-        return [
-            [
-                'key' => 'obesitas',
-                'title' => 'Analisis Obesitas (BMI≥30)',
-                'total' => 1482,
-                'pct' => 7.6,
-                'legend' => [
-                    ['label' => 'Melebihi target kalori', 'pct' => 38.2, 'count' => 566, 'color' => '#DC2626', 'icon' => 'mdi:arrow-up-bold', 'available' => true],
-                    ['label' => '<50% target kalori', 'pct' => 22.1, 'count' => 327, 'color' => '#F86624', 'icon' => 'mdi:arrow-down-bold', 'available' => true],
-                    ['label' => 'Tidak ada data kalori', 'pct' => 39.7, 'count' => 589, 'color' => '#94A3B8', 'icon' => 'mdi:help-circle', 'available' => true],
-                ],
-                'insight' => '62,3% kelompok obesitas ditemukan memiliki pola asupan kalori di atas target harian.',
-            ],
-            [
-                'key' => 'dislipidemia',
-                'title' => 'Analisis Dislipidemia',
-                'total' => 1126,
-                'pct' => 5.8,
-                'legend' => [
-                    ['label' => 'Kalori berlebih', 'pct' => 34.7, 'color' => '#DC2626', 'icon' => 'mdi:fire', 'available' => true],
-                    ['label' => 'Lemak tinggi', 'pct' => 41.2, 'color' => '#F86624', 'icon' => 'mdi:oil', 'available' => true],
-                    ['label' => 'Karbohidrat tinggi', 'pct' => 28.1, 'color' => '#F4941E', 'icon' => 'mdi:rice', 'available' => true],
-                    ['label' => 'Serat rendah', 'pct' => 36.5, 'color' => '#94A3B8', 'icon' => 'mdi:leaf-off', 'available' => true],
-                ],
-                'insight' => 'Dislipidemia paling banyak ditemukan bersama pola konsumsi lemak tinggi.',
-            ],
-            [
-                'key' => 'hipertensi',
-                'title' => 'Analisis Hipertensi',
-                'total' => 1904,
-                'pct' => 9.8,
-                'legend' => [
-                    ['label' => 'Kalori berlebih', 'pct' => 28.9, 'color' => '#DC2626', 'icon' => 'mdi:fire', 'available' => true],
-                    // food_analyses (BeWell) tidak mencatat natrium — tampilkan status
-                    // "belum tersedia" apa adanya, jangan dikarang jadi sebuah persentase.
-                    ['label' => 'Natrium tinggi', 'pct' => null, 'color' => '#94A3B8', 'icon' => 'mdi:shaker-outline', 'available' => false],
-                    ['label' => 'Lemak tinggi', 'pct' => 27.1, 'color' => '#F86624', 'icon' => 'mdi:oil', 'available' => true],
-                    ['label' => 'Serat rendah', 'pct' => 33.8, 'color' => '#94A3B8', 'icon' => 'mdi:leaf-off', 'available' => true],
-                ],
-                'insight' => 'Data natrium belum tersedia dari log nutrisi — asosiasi hipertensi saat ini hanya dihitung dari kalori, lemak, dan serat.',
-            ],
-            [
-                'key' => 'gula_darah',
-                'title' => 'Analisis Gula Darah Tinggi',
-                'total' => 962,
-                'pct' => 5.0,
-                'legend' => [
-                    ['label' => 'Kalori berlebih', 'pct' => 26.1, 'color' => '#DC2626', 'icon' => 'mdi:fire', 'available' => true],
-                    ['label' => 'Karbohidrat tinggi', 'pct' => 48.6, 'color' => '#F4941E', 'icon' => 'mdi:rice', 'available' => true],
-                    ['label' => 'Lemak tinggi', 'pct' => 22.4, 'color' => '#F86624', 'icon' => 'mdi:oil', 'available' => true],
-                    ['label' => 'Serat rendah', 'pct' => 41.2, 'color' => '#94A3B8', 'icon' => 'mdi:leaf-off', 'available' => true],
-                ],
-                'insight' => 'Karbohidrat tinggi adalah faktor yang paling sering ditemukan bersama gula darah tinggi.',
-            ],
-            [
-                'key' => 'sindrom_metabolik',
-                'title' => 'Analisis Sindrom Metabolik',
-                'total' => 684,
-                'pct' => 3.5,
-                'legend' => [
-                    ['label' => 'Kalori berlebih', 'pct' => 45.3, 'color' => '#DC2626', 'icon' => 'mdi:fire', 'available' => true],
-                    ['label' => 'Karbohidrat tinggi', 'pct' => 48.1, 'color' => '#F4941E', 'icon' => 'mdi:rice', 'available' => true],
-                    ['label' => 'Lemak tinggi', 'pct' => 36.4, 'color' => '#F86624', 'icon' => 'mdi:oil', 'available' => true],
-                    ['label' => 'Serat rendah', 'pct' => 51.7, 'color' => '#94A3B8', 'icon' => 'mdi:leaf-off', 'available' => true],
-                ],
-                'insight' => 'Lebih dari separuh kelompok sindrom metabolik memiliki asupan serat rendah.',
-            ],
-            [
-                'key' => 'framingham',
-                'title' => 'Analisis Framingham Risk Score',
-                'total' => 421,
-                'pct' => 2.2,
-                'legend' => [
-                    ['label' => 'Kalori berlebih', 'pct' => 42.5, 'color' => '#DC2626', 'icon' => 'mdi:fire', 'available' => true],
-                    ['label' => 'Lemak tinggi', 'pct' => 39.4, 'color' => '#F86624', 'icon' => 'mdi:oil', 'available' => true],
-                    ['label' => 'Kolesterol tinggi', 'pct' => 37.8, 'color' => '#F4941E', 'icon' => 'mdi:water', 'available' => true],
-                    ['label' => 'Aktivitas rendah', 'pct' => 46.1, 'color' => '#94A3B8', 'icon' => 'mdi:run-fast', 'available' => true],
-                ],
-                'insight' => 'Skor Framingham High Risk berasosiasi secara deskriptif dengan pola makan tinggi lemak dan kolesterol — bukan hubungan sebab-akibat yang teruji secara statistik.',
-            ],
+        $totalMatched = count($matched);
+        $factors = [
+            'calorie_over' => ['label' => 'Kalori berlebih', 'color' => '#DC2626', 'icon' => 'mdi:fire'],
+            'carb_over' => ['label' => 'Karbohidrat tinggi', 'color' => '#F4941E', 'icon' => 'mdi:rice'],
+            'protein_under' => ['label' => 'Protein rendah', 'color' => '#94A3B8', 'icon' => 'mdi:food-drumstick-off'],
         ];
+
+        $cards = [];
+        foreach (self::CONDITION_KEYS as $key) {
+            $group = array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+            $denominator = count($group);
+
+            $legend = [];
+            $topLabel = null;
+            $topPct = -1.0;
+            foreach ($factors as $factorKey => $factorMeta) {
+                $count = count(array_filter($group, fn (array $r): bool => $this->hasFactor($r, $factorKey)));
+                $pct = $denominator > 0 ? round($count / $denominator * 100, 1) : 0.0;
+                $legend[] = [
+                    'label' => $factorMeta['label'],
+                    'pct' => $pct,
+                    'count' => $count,
+                    'color' => $factorMeta['color'],
+                    'icon' => $factorMeta['icon'],
+                    'available' => true,
+                ];
+                if ($pct > $topPct) {
+                    $topPct = $pct;
+                    $topLabel = $factorMeta['label'];
+                }
+            }
+
+            $insight = $denominator > 0 && $topLabel !== null
+                ? number_format($topPct, 1).'% dari karyawan dengan kondisi ini memiliki pola makan "'.mb_strtolower($topLabel).'" (data 30 hari terakhir).'
+                : 'Belum cukup data pola makan (matched) untuk kondisi ini.';
+
+            $cards[] = [
+                'key' => $key,
+                'title' => 'Analisis '.self::CONDITION_LABELS[$key],
+                'total' => $denominator,
+                'pct' => $totalMatched > 0 ? round($denominator / $totalMatched * 100, 1) : 0.0,
+                'legend' => $legend,
+                'insight' => $insight,
+            ];
+        }
+
+        return $cards;
     }
 
     /**
-     * @return array{categories: list<string>, series: list<array<string, mixed>>}
-     */
-    private function trendChart(): array
-    {
-        return [
-            'categories' => ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep'],
-            'series' => [
-                ['name' => 'Obesitas', 'data' => [1180, 1220, 1260, 1290, 1330, 1370, 1410, 1450, 1482]],
-                ['name' => 'Dislipidemia', 'data' => [950, 980, 1010, 1035, 1060, 1080, 1100, 1115, 1126]],
-                ['name' => 'Hipertensi', 'data' => [1550, 1600, 1650, 1690, 1730, 1780, 1820, 1860, 1904]],
-                ['name' => 'Gula Darah Tinggi', 'data' => [780, 800, 820, 845, 865, 890, 915, 940, 962]],
-                ['name' => 'Sindrom Metabolik', 'data' => [560, 580, 600, 615, 630, 648, 660, 672, 684]],
-                ['name' => 'Framingham High Risk', 'data' => [340, 355, 365, 378, 388, 398, 405, 413, 421]],
-            ],
-        ];
-    }
-
-    /**
+     * @param  list<array<string, mixed>>  $records
      * @return array<string, array{label: string, total: int}>
      */
-    private function employeeTabs(): array
+    private function employeeTabs(array $records): array
     {
-        return [
-            'semua' => ['label' => 'Semua', 'total' => 3482],
-            'obesitas' => ['label' => 'Obesitas', 'total' => 1482],
-            'dislipidemia' => ['label' => 'Dislipidemia', 'total' => 1126],
-            'hipertensi' => ['label' => 'Hipertensi', 'total' => 1904],
-            'gula_darah' => ['label' => 'Gula Darah Tinggi', 'total' => 962],
-            'sindrom_metabolik' => ['label' => 'Sindrom Metabolik', 'total' => 684],
-            'framingham' => ['label' => 'Framingham High Risk', 'total' => 421],
-        ];
+        $withMcuAndCondition = array_filter($records, static fn (array $r): bool => $r['has_mcu']);
+        $tabs = ['semua' => ['label' => 'Semua', 'total' => count(array_filter($withMcuAndCondition, fn (array $r): bool => $this->conditionsFor($r) !== []))]];
+
+        foreach (self::CONDITION_KEYS as $key) {
+            $tabs[$key] = [
+                'label' => self::CONDITION_LABELS[$key],
+                'total' => count(array_filter($withMcuAndCondition, static fn (array $r): bool => $r['conditions'][$key] ?? false)),
+            ];
+        }
+
+        return $tabs;
     }
 
     /**
-     * Baris tabel karyawan berisiko, di-flag per kondisi dari sample record.
-     * Server-side: caller (controller) yang menerapkan search/order/paginasi.
+     * Baris tabel karyawan berisiko (punya ≥1 kondisi MCU abnormal
+     * terkonfirmasi). Server-side: caller (controller) yang menerapkan
+     * search/order/paginasi.
      *
      * @return list<array<string, mixed>>
      */
@@ -499,8 +469,11 @@ final class McuNutritionAnalyticsService
     }
 
     /**
-     * Detail 1 karyawan untuk modal "Detail" — profil MCU x Nutrisi
-     * berpasangan (paired comparison), plus flag data yang belum lengkap.
+     * Detail 1 karyawan untuk modal "Detail" — profil MCU x Nutrisi, plus
+     * flag data yang belum lengkap. Tidak ada lagi "profile_pairs" (versi
+     * lama memasangkan BMI/LDL/GDP numerik vs nutrisi) — sisi MCU sekarang
+     * cuma status normal/abnormal per kondisi, tidak ada angka yang bisa
+     * dipasangkan.
      *
      * @return array<string, mixed>|null
      */
@@ -523,28 +496,25 @@ final class McuNutritionAnalyticsService
                     'perusahaan' => $record['perusahaan'],
                     'site' => $record['site'],
                     'departemen' => $record['departemen'],
-                    'jabatan' => $record['jabatan'],
                 ],
                 'mcu' => $record['has_mcu'] ? [
-                    'bmi' => $record['bmi'],
-                    'tensi' => $record['tensi_sistol'].'/'.$record['tensi_diastol'],
-                    'gdp' => $record['gdp'],
-                    'kolesterol' => $record['kolesterol'],
-                    'ldl' => $record['ldl'],
-                    'hdl' => $record['hdl'],
-                    'trigliserida' => $record['trigliserida'],
-                    'framingham_score' => $record['framingham_score'],
-                    'metabolic_component_count' => $record['metabolic_component_count'],
+                    'exam_date' => $record['exam_date'],
+                    'conditions' => array_map(
+                        static fn (string $key): array => [
+                            'key' => $key,
+                            'label' => self::CONDITION_LABELS[$key],
+                            'status' => ($record['conditions'][$key] ?? false) ? 'Abnormal' : 'Normal',
+                            'abnormal' => (bool) ($record['conditions'][$key] ?? false),
+                        ],
+                        self::CONDITION_KEYS
+                    ),
                 ] : null,
                 'nutrition' => $record['has_nutrition'] ? [
                     'avg_calories' => $record['avg_calories'],
                     'target_calories' => $record['target_calories'],
                     'calories_vs_target_pct' => $caloriesVsTargetPct,
                     'avg_carbs_g' => $record['avg_carbs_g'],
-                    'avg_fat_g' => $record['avg_fat_g'],
                     'avg_protein_g' => $record['avg_protein_g'],
-                    'avg_fiber_g' => $record['avg_fiber_g'],
-                    'avg_sodium_mg' => $record['avg_sodium_mg'],
                     'logging_days_30d' => $record['logging_days_30d'],
                 ] : null,
                 'conditions' => $conditions,
@@ -553,7 +523,6 @@ final class McuNutritionAnalyticsService
                     'has_nutrition' => $record['has_nutrition'],
                     'matched' => $record['has_mcu'] && $record['has_nutrition'],
                 ],
-                'profile_pairs' => $this->profilePairs($record),
             ];
         }
 
@@ -561,102 +530,32 @@ final class McuNutritionAnalyticsService
     }
 
     /**
-     * "MCU x Nutrition Profile": baris perbandingan berpasangan MCU vs
-     * nutrisi, hanya diisi kalau kedua sisi punya data.
-     *
-     * @return list<array{mcu_label: string, mcu_value: string, mcu_flag: string, nutrition_label: string, nutrition_value: string, nutrition_flag: string}>
-     */
-    private function profilePairs(array $record): array
-    {
-        if (! $record['has_mcu'] || ! $record['has_nutrition']) {
-            return [];
-        }
-
-        $pairs = [];
-
-        if ($record['bmi'] !== null && $record['avg_calories'] !== null && $record['target_calories'] !== null) {
-            $pct = round((($record['avg_calories'] - $record['target_calories']) / $record['target_calories']) * 100);
-            $pairs[] = [
-                'mcu_label' => 'BMI',
-                'mcu_value' => number_format($record['bmi'], 1, ',', '.'),
-                'mcu_flag' => $record['bmi'] >= 30 ? 'HIGH' : 'NORMAL',
-                'nutrition_label' => 'Kalori vs Target',
-                'nutrition_value' => ($pct >= 0 ? '+' : '').$pct.'%',
-                'nutrition_flag' => $pct > 0 ? 'ABOVE TARGET' : 'ON TARGET',
-            ];
-        }
-
-        if ($record['ldl'] !== null && $record['avg_fat_g'] !== null) {
-            $pairs[] = [
-                'mcu_label' => 'LDL',
-                'mcu_value' => (string) $record['ldl'],
-                'mcu_flag' => $record['ldl'] >= 130 ? 'HIGH' : 'NORMAL',
-                'nutrition_label' => 'Asupan Lemak',
-                'nutrition_value' => number_format($record['avg_fat_g'], 0, ',', '.').' g',
-                'nutrition_flag' => $record['avg_fat_g'] >= 90 ? 'ABOVE TARGET' : 'ON TARGET',
-            ];
-        }
-
-        if ($record['gdp'] !== null && $record['avg_carbs_g'] !== null) {
-            $pairs[] = [
-                'mcu_label' => 'GDP',
-                'mcu_value' => (string) $record['gdp'],
-                'mcu_flag' => $record['gdp'] >= 100 ? 'HIGH' : 'NORMAL',
-                'nutrition_label' => 'Asupan Karbohidrat',
-                'nutrition_value' => number_format($record['avg_carbs_g'], 0, ',', '.').' g',
-                'nutrition_flag' => $record['avg_carbs_g'] >= 350 ? 'ABOVE TARGET' : 'ON TARGET',
-            ];
-        }
-
-        return $pairs;
-    }
-
-    /**
+     * @param  array<string, mixed>  $record
      * @return list<string>
      */
     private function conditionsFor(array $record): array
     {
-        $conditions = [];
-        if ($record['bmi'] !== null && $record['bmi'] >= 30) {
-            $conditions[] = 'obesitas';
-        }
-        if (($record['kolesterol'] !== null && $record['kolesterol'] >= 200)
-            || ($record['ldl'] !== null && $record['ldl'] >= 130)
-            || ($record['trigliserida'] !== null && $record['trigliserida'] >= 150)) {
-            $conditions[] = 'dislipidemia';
-        }
-        if (($record['tensi_sistol'] !== null && $record['tensi_sistol'] >= 130)
-            || ($record['tensi_diastol'] !== null && $record['tensi_diastol'] >= 85)) {
-            $conditions[] = 'hipertensi';
-        }
-        if ($record['gdp'] !== null && $record['gdp'] >= 100) {
-            $conditions[] = 'gula_darah';
-        }
-        if ($record['metabolic_component_count'] !== null && $record['metabolic_component_count'] >= 3) {
-            $conditions[] = 'sindrom_metabolik';
-        }
-        if ($record['framingham_score'] !== null && $record['framingham_score'] >= 20) {
-            $conditions[] = 'framingham';
+        if (! $record['has_mcu']) {
+            return [];
         }
 
-        return $conditions;
+        $out = [];
+        foreach (self::CONDITION_KEYS as $key) {
+            if ($record['conditions'][$key] ?? false) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
     }
 
     /**
+     * @param  array<string, mixed>  $record
      * @param  list<string>  $conditions
      * @return array<string, mixed>
      */
     private function toEmployeeRow(array $record, array $conditions): array
     {
-        $conditionLabels = [
-            'obesitas' => 'Obesitas',
-            'dislipidemia' => 'Dislipidemia',
-            'hipertensi' => 'Hipertensi',
-            'gula_darah' => 'Gula Darah Tinggi',
-            'sindrom_metabolik' => 'Sindrom Metabolik',
-            'framingham' => 'Framingham High Risk',
-        ];
-
         $statusNutrisi = 'Data belum tersedia';
         if ($record['has_nutrition'] && $record['avg_calories'] !== null && $record['target_calories'] !== null) {
             $ratio = $record['avg_calories'] / $record['target_calories'];
@@ -670,14 +569,8 @@ final class McuNutritionAnalyticsService
             'perusahaan' => $record['perusahaan'],
             'site' => $record['site'],
             'departemen' => $record['departemen'],
-            'bmi' => $record['bmi'],
-            'kolesterol' => $record['kolesterol'],
-            'ldl' => $record['ldl'],
-            'trigliserida' => $record['trigliserida'],
-            'tensi' => $record['tensi_sistol'] !== null ? $record['tensi_sistol'].'/'.$record['tensi_diastol'] : null,
-            'gdp' => $record['gdp'],
             'conditions' => $conditions,
-            'risiko_label' => implode(', ', array_map(static fn (string $c): string => $conditionLabels[$c] ?? $c, $conditions)),
+            'risiko_label' => implode(', ', array_map(static fn (string $c): string => self::CONDITION_LABELS[$c] ?? $c, $conditions)),
             'status_nutrisi' => $statusNutrisi,
             'has_nutrition' => $record['has_nutrition'],
         ];

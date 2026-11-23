@@ -88,9 +88,10 @@ final class HealthNutritionRiskController extends Controller
         $orderColumnIndex = (int) data_get($request->input('order'), '0.column', 0);
         $orderDir = strtolower((string) data_get($request->input('order'), '0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
         // Kolom tabel (lihat #healthNutritionTable di Blade): 0 no, 1 nama, 2 perusahaan,
-        // 3 site, 4 departemen, 5 bmi, 6 kolesterol, 7 ldl, 8 trigliserida, 9 tensi,
-        // 10 gdp, 11 conditions, 12 status_nutrisi, 13 aksi.
-        $orderable = [1 => 'nama', 5 => 'bmi', 6 => 'kolesterol', 7 => 'ldl', 8 => 'trigliserida', 10 => 'gdp'];
+        // 3 site, 4 departemen, 5 risiko (conditions), 6 status_nutrisi, 7 aksi.
+        // Tidak ada lagi kolom angka lab (bmi/kolesterol/ldl/dst) — sumber MCU asli
+        // cuma punya flag normal/abnormal, bukan angka (lihat McuNutritionAnalyticsService).
+        $orderable = [1 => 'nama'];
         if (isset($orderable[$orderColumnIndex])) {
             $key = $orderable[$orderColumnIndex];
             usort($rows, static function (array $a, array $b) use ($key, $orderDir): int {
@@ -207,12 +208,6 @@ final class HealthNutritionRiskController extends Controller
                 'Perusahaan',
                 'Site',
                 'Departemen',
-                'BMI',
-                'Kolesterol',
-                'LDL',
-                'Trigliserida',
-                'Tensi',
-                'GDP',
                 'Risiko',
                 'Status Nutrisi',
             ]);
@@ -227,12 +222,6 @@ final class HealthNutritionRiskController extends Controller
                     $row['perusahaan'],
                     $row['site'],
                     $row['departemen'],
-                    $row['bmi'],
-                    $row['kolesterol'],
-                    $row['ldl'],
-                    $row['trigliserida'],
-                    $row['tensi'],
-                    $row['gdp'],
                     $row['risiko_label'],
                     $row['status_nutrisi'],
                 ], null, 'A'.$rowNum);
