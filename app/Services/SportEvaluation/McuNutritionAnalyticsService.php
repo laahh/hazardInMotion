@@ -9,28 +9,19 @@ use Illuminate\Support\Carbon;
 
 /**
  * Agregasi & view-model untuk dashboard MCU x Nutrisi — SEMUA angka di
- * bawah ini dihitung dari data real (`McuNutritionRepository`): MCU
- * Postgres (`bcsid.mv_ftw_mcu`) + BeWell MySQL (`food_analyses`). Tidak
- * ada data dummy/fiktif lagi di class ini (lihat git history untuk versi
- * lama yang masih pakai `mt_rand`).
+ * bawah ini dihitung dari data real (`McuNutritionRepository`): riwayat
+ * penyakit kritis TERKONFIRMASI ClickHouse (`behealth.
+ * clean_data_konfirmasi_penyakit_kritis`) + BeWell MySQL (`food_analyses`).
+ * Tidak ada data dummy/fiktif lagi di class ini (lihat git history untuk
+ * versi lama yang pakai `mt_rand`, dan versi sebelum itu lagi yang coba
+ * pakai MCU Postgres — dibatalkan karena kredensial `pgsql_ssh` di server
+ * produksi tidak valid, atas arahan user diganti ke sumber ClickHouse yang
+ * sudah terbukti jalan di tab "Riwayat Penyakit Kritis").
  *
- * Catatan batasan sumber data (SEMUA dicek langsung ke skema asli,
- * bukan asumsi):
- * - MCU Postgres cuma punya flag normal/abnormal per nama kondisi (JSONB
- *   kondisi_kritis/kondisi_non_kritis) — TIDAK ADA angka BMI/tensi/
- *   kolesterol/LDL/HDL/trigliserida/GDP/skor Framingham mentah. Karena itu
- *   tabel karyawan & detail di bawah pakai BADGE status per kondisi, bukan
- *   angka lab.
- * - Kondisi "Obesitas/BMI" DIHAPUS dari 6 kondisi versi lama — tidak ada
- *   satupun nama_kondisi terkait BMI di seluruh tabel MCU.
- * - food_analyses (BeWell) cuma dipakai untuk total_calories/carbs_g/
- *   protein_g (kolom yang terbukti ada & dipakai NutritionEvaluationService)
- *   — avg_fat_g/avg_fiber_g/avg_sodium_mg versi lama DIHAPUS karena belum
- *   terverifikasi ada sebagai kolom.
- * - Chart yang butuh data historis/snapshot dari waktu ke waktu (heatmap
- *   pola harian, tren bulanan 9 bulan, sparkline KPI) DIHAPUS — sumber data
- *   saat ini cuma punya kondisi TERKINI per karyawan, bukan snapshot
- *   historis, jadi tidak ada cara membuat angka itu secara valid.
+ * Kategori "kondisi kesehatan" TIDAK di-hardcode — diambil dinamis dari
+ * `McuNutritionRepository::conditionLabels()` (6 label penyakit
+ * terkonfirmasi paling sering, apa adanya dari ClickHouse, tanpa
+ * taksonomi buatan sendiri).
  *
  * Semua rasio kondisi x nutrisi memakai matched records (has_mcu &&
  * has_nutrition) sebagai denominator — bukan total_mcu atau total_nutrition
@@ -44,24 +35,20 @@ final class McuNutritionAnalyticsService
      * Ambang "berisiko" untuk 3 faktor pola makan di bawah ini BELUM punya
      * band resmi dari tim medis/gizi — ini pilihan pragmatis (konsisten
      * dengan DEFAULT_CARB_TARGET/DEFAULT_PROTEIN_TARGET di
-     * NutritionEvaluationService), bukan standar klinis. Faktor "Lemak
-     * Tinggi"/"Serat Rendah" versi lama DIHAPUS — kolom fat_g/fiber_g belum
-     * terverifikasi ada di food_analyses.
+     * NutritionEvaluationService), bukan standar klinis.
      */
     private const CARB_OVER_THRESHOLD = 300.0;
 
     private const PROTEIN_UNDER_THRESHOLD = 52.5;
 
-    /** @var list<string> */
-    private const CONDITION_KEYS = ['dislipidemia', 'hipertensi', 'gula_darah', 'sindrom_metabolik', 'framingham'];
-
-    /** @var array<string, string> */
-    private const CONDITION_LABELS = [
-        'dislipidemia' => 'Dislipidemia',
-        'hipertensi' => 'Hipertensi',
-        'gula_darah' => 'Gula Darah Tinggi',
-        'sindrom_metabolik' => 'Sindrom Metabolik',
-        'framingham' => 'Framingham High Risk',
+    /** @var list<string> palet warna digilir per kondisi (dinamis, bukan per-nama) */
+    private const PALETTE = [
+        ['color' => '#2563EB', 'bg' => '#EFF6FF', 'icon' => 'solar:test-tube-bold'],
+        ['color' => '#DC2626', 'bg' => '#FEF2F2', 'icon' => 'solar:heart-pulse-bold'],
+        ['color' => '#F4941E', 'bg' => '#FFFBEB', 'icon' => 'solar:test-tube-minimalistic-bold'],
+        ['color' => '#8252E9', 'bg' => '#FAF5FF', 'icon' => 'solar:pulse-bold'],
+        ['color' => '#DB2777', 'bg' => '#FDF2F8', 'icon' => 'solar:danger-triangle-bold'],
+        ['color' => '#16A34A', 'bg' => '#ECFDF5', 'icon' => 'solar:shield-cross-bold'],
     ];
 
     public function __construct(
@@ -77,6 +64,7 @@ final class McuNutritionAnalyticsService
         $rangeStart = $today->copy()->subDays(24);
         $records = $this->repository->records();
         $coverage = $this->repository->coverage();
+        $conditionLabels = $this->repository->conditionLabels();
         $matched = array_values(array_filter(
             $records,
             static fn (array $r): bool => $r['has_mcu'] && $r['has_nutrition']
@@ -86,13 +74,13 @@ final class McuNutritionAnalyticsService
             'dateRangeLabel' => $rangeStart->translatedFormat('d M Y').' – '.$today->translatedFormat('d M Y'),
             'filterOptions' => $this->filterOptions($records),
             'coverage' => $this->coverageSummary($coverage),
-            'kpiTop' => $this->kpiTop($coverage, $records, $matched),
-            'kpiConditions' => $this->kpiConditions($records),
-            'associationMatrix' => $this->associationMatrix($matched),
-            'macroChart' => $this->macroChart($matched),
-            'comparisonChart' => $this->comparisonChart($matched),
-            'conditionAnalysis' => $this->conditionAnalysis($matched),
-            'employeeTabs' => $this->employeeTabs($records),
+            'kpiTop' => $this->kpiTop($coverage, $records, $conditionLabels, $matched),
+            'kpiConditions' => $this->kpiConditions($records, $conditionLabels),
+            'associationMatrix' => $this->associationMatrix($matched, $conditionLabels),
+            'macroChart' => $this->macroChart($matched, $conditionLabels),
+            'comparisonChart' => $this->comparisonChart($matched, $conditionLabels),
+            'conditionAnalysis' => $this->conditionAnalysis($matched, $conditionLabels),
+            'employeeTabs' => $this->employeeTabs($records, $conditionLabels),
         ];
     }
 
@@ -135,14 +123,15 @@ final class McuNutritionAnalyticsService
     /**
      * @param  array{total_mcu: int, total_nutrition: int, matched_total: int}  $coverage
      * @param  list<array<string, mixed>>  $records
+     * @param  list<string>  $conditionLabels
      * @param  list<array<string, mixed>>  $matched
      * @return array<string, array<string, mixed>>
      */
-    private function kpiTop(array $coverage, array $records, array $matched): array
+    private function kpiTop(array $coverage, array $records, array $conditionLabels, array $matched): array
     {
         $berisiko = count(array_filter(
             $records,
-            static fn (array $r): bool => $r['has_mcu'] && $this->conditionsFor($r) !== []
+            fn (array $r): bool => $r['has_mcu'] && $this->conditionsFor($r, $conditionLabels) !== []
         ));
         $memenuhiTarget = count(array_filter(
             $matched,
@@ -151,11 +140,11 @@ final class McuNutritionAnalyticsService
 
         return [
             'total_karyawan' => [
-                'label' => 'Total Karyawan (MCU)',
+                'label' => 'Total Karyawan (AKTIF)',
                 'icon' => 'solar:users-group-rounded-bold',
                 'color' => 'success',
                 'value' => $coverage['total_mcu'],
-                'caption' => 'Karyawan AKTIF yang punya data MCU',
+                'caption' => 'Punya riwayat penyakit kritis terkonfirmasi',
             ],
             'karyawan_berisiko' => [
                 'label' => 'Karyawan Berisiko',
@@ -163,7 +152,7 @@ final class McuNutritionAnalyticsService
                 'color' => 'danger',
                 'value' => $berisiko,
                 'sub_pct' => $coverage['total_mcu'] > 0 ? round($berisiko / $coverage['total_mcu'] * 100, 1) : 0.0,
-                'caption' => 'Memiliki ≥1 kondisi abnormal terkonfirmasi',
+                'caption' => 'Memiliki ≥1 penyakit kritis terkonfirmasi',
             ],
             'target_kalori' => [
                 'label' => 'Memenuhi Target Kalori',
@@ -186,31 +175,25 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  list<array<string, mixed>>  $records
+     * @param  list<string>  $conditionLabels
      * @return list<array<string, mixed>>
      */
-    private function kpiConditions(array $records): array
+    private function kpiConditions(array $records, array $conditionLabels): array
     {
         $withMcu = array_filter($records, static fn (array $r): bool => $r['has_mcu']);
         $totalMcu = max(1, count($withMcu));
 
-        $meta = [
-            'dislipidemia' => ['sub_label' => 'Kolesterol/LDL/Trigliserida', 'icon' => 'solar:test-tube-bold', 'color' => '#2563EB', 'bg' => '#EFF6FF'],
-            'hipertensi' => ['sub_label' => 'Tekanan Darah', 'icon' => 'solar:heart-pulse-bold', 'color' => '#DC2626', 'bg' => '#FEF2F2'],
-            'gula_darah' => ['sub_label' => 'GDP', 'icon' => 'solar:test-tube-minimalistic-bold', 'color' => '#F4941E', 'bg' => '#FFFBEB'],
-            'sindrom_metabolik' => ['sub_label' => 'Diagnosis MCU', 'icon' => 'solar:pulse-bold', 'color' => '#8252E9', 'bg' => '#FAF5FF'],
-            'framingham' => ['sub_label' => 'Skor risiko 10 tahun', 'icon' => 'solar:danger-triangle-bold', 'color' => '#DB2777', 'bg' => '#FDF2F8'],
-        ];
-
         $cards = [];
-        foreach (self::CONDITION_KEYS as $key) {
-            $count = count(array_filter($withMcu, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+        foreach ($conditionLabels as $i => $label) {
+            $palette = self::PALETTE[$i % count(self::PALETTE)];
+            $count = count(array_filter($withMcu, static fn (array $r): bool => $r['conditions'][$label] ?? false));
             $cards[] = [
-                'key' => $key,
-                'label' => self::CONDITION_LABELS[$key],
-                'sub_label' => $meta[$key]['sub_label'],
-                'icon' => $meta[$key]['icon'],
-                'color' => $meta[$key]['color'],
-                'bg' => $meta[$key]['bg'],
+                'key' => $label,
+                'label' => $label,
+                'sub_label' => 'Penyakit kritis terkonfirmasi',
+                'icon' => $palette['icon'],
+                'color' => $palette['color'],
+                'bg' => $palette['bg'],
                 'value' => $count,
                 'pct' => round($count / $totalMcu * 100, 1),
             ];
@@ -220,22 +203,23 @@ final class McuNutritionAnalyticsService
     }
 
     /**
-     * Keterkaitan deskriptif (proporsi overlap antara kondisi MCU dan pola
-     * makan berisiko), BUKAN hasil uji statistik.
+     * Keterkaitan deskriptif (proporsi overlap antara kondisi terkonfirmasi
+     * dan pola makan berisiko), BUKAN hasil uji statistik.
      *
      * @param  list<array<string, mixed>>  $matched
+     * @param  list<string>  $conditionLabels
      * @return array{rows: list<string>, cols: list<string>, cells: list<list<array<string, mixed>>>}
      */
-    private function associationMatrix(array $matched): array
+    private function associationMatrix(array $matched, array $conditionLabels): array
     {
         $cols = ['calorie_over' => 'Kalori Berlebih', 'carb_over' => 'Karbohidrat Tinggi', 'protein_under' => 'Protein Rendah'];
 
         $cells = [];
         $rows = [];
-        foreach (self::CONDITION_KEYS as $key) {
-            $group = array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+        foreach ($conditionLabels as $label) {
+            $group = array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$label] ?? false));
             $denominator = count($group);
-            $rows[] = self::CONDITION_LABELS[$key];
+            $rows[] = $label;
 
             $rowCells = [];
             foreach ($cols as $factorKey => $colLabel) {
@@ -243,7 +227,7 @@ final class McuNutritionAnalyticsService
                 $pct = $denominator > 0 ? round($count / $denominator * 100, 1) : 0.0;
                 $rowCells[] = [
                     'level' => $this->associationLevel($pct),
-                    'condition' => self::CONDITION_LABELS[$key],
+                    'condition' => $label,
                     'factor' => $colLabel,
                     'pct' => $pct,
                     'count' => $count,
@@ -287,11 +271,15 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  list<array<string, mixed>>  $matched
+     * @param  list<string>  $conditionLabels
      * @return array{tabs: array<string, string>, data: array<string, array<string, mixed>>}
      */
-    private function macroChart(array $matched): array
+    private function macroChart(array $matched, array $conditionLabels): array
     {
-        $tabs = ['semua' => 'Semua'] + self::CONDITION_LABELS;
+        $tabs = ['semua' => 'Semua'];
+        foreach ($conditionLabels as $label) {
+            $tabs[$label] = $label;
+        }
         $categories = ['Karbohidrat', 'Protein'];
 
         $data = [];
@@ -321,12 +309,13 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  list<array<string, mixed>>  $matched
+     * @param  list<string>  $conditionLabels
      * @return array{calories: array<string, mixed>, macros: array<string, mixed>}
      */
-    private function comparisonChart(array $matched): array
+    private function comparisonChart(array $matched, array $conditionLabels): array
     {
-        $berisiko = array_values(array_filter($matched, fn (array $r): bool => $this->conditionsFor($r) !== []));
-        $tidakBerisiko = array_values(array_filter($matched, fn (array $r): bool => $this->conditionsFor($r) === []));
+        $berisiko = array_values(array_filter($matched, fn (array $r): bool => $this->conditionsFor($r, $conditionLabels) !== []));
+        $tidakBerisiko = array_values(array_filter($matched, fn (array $r): bool => $this->conditionsFor($r, $conditionLabels) === []));
 
         return [
             'calories' => [
@@ -364,9 +353,10 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  list<array<string, mixed>>  $matched
+     * @param  list<string>  $conditionLabels
      * @return list<array<string, mixed>>
      */
-    private function conditionAnalysis(array $matched): array
+    private function conditionAnalysis(array $matched, array $conditionLabels): array
     {
         $totalMatched = count($matched);
         $factors = [
@@ -376,8 +366,8 @@ final class McuNutritionAnalyticsService
         ];
 
         $cards = [];
-        foreach (self::CONDITION_KEYS as $key) {
-            $group = array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$key] ?? false));
+        foreach ($conditionLabels as $label) {
+            $group = array_values(array_filter($matched, static fn (array $r): bool => $r['conditions'][$label] ?? false));
             $denominator = count($group);
 
             $legend = [];
@@ -405,8 +395,8 @@ final class McuNutritionAnalyticsService
                 : 'Belum cukup data pola makan (matched) untuk kondisi ini.';
 
             $cards[] = [
-                'key' => $key,
-                'title' => 'Analisis '.self::CONDITION_LABELS[$key],
+                'key' => $label,
+                'title' => 'Analisis '.$label,
                 'total' => $denominator,
                 'pct' => $totalMatched > 0 ? round($denominator / $totalMatched * 100, 1) : 0.0,
                 'legend' => $legend,
@@ -419,17 +409,18 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  list<array<string, mixed>>  $records
+     * @param  list<string>  $conditionLabels
      * @return array<string, array{label: string, total: int}>
      */
-    private function employeeTabs(array $records): array
+    private function employeeTabs(array $records, array $conditionLabels): array
     {
-        $withMcuAndCondition = array_filter($records, static fn (array $r): bool => $r['has_mcu']);
-        $tabs = ['semua' => ['label' => 'Semua', 'total' => count(array_filter($withMcuAndCondition, fn (array $r): bool => $this->conditionsFor($r) !== []))]];
+        $withMcu = array_filter($records, static fn (array $r): bool => $r['has_mcu']);
+        $tabs = ['semua' => ['label' => 'Semua', 'total' => count(array_filter($withMcu, fn (array $r): bool => $this->conditionsFor($r, $conditionLabels) !== []))]];
 
-        foreach (self::CONDITION_KEYS as $key) {
-            $tabs[$key] = [
-                'label' => self::CONDITION_LABELS[$key],
-                'total' => count(array_filter($withMcuAndCondition, static fn (array $r): bool => $r['conditions'][$key] ?? false)),
+        foreach ($conditionLabels as $label) {
+            $tabs[$label] = [
+                'label' => $label,
+                'total' => count(array_filter($withMcu, static fn (array $r): bool => $r['conditions'][$label] ?? false)),
             ];
         }
 
@@ -437,21 +428,22 @@ final class McuNutritionAnalyticsService
     }
 
     /**
-     * Baris tabel karyawan berisiko (punya ≥1 kondisi MCU abnormal
-     * terkonfirmasi). Server-side: caller (controller) yang menerapkan
-     * search/order/paginasi.
+     * Baris tabel karyawan berisiko (punya ≥1 penyakit kritis terkonfirmasi
+     * termasuk dalam 6 kondisi teratas). Server-side: caller (controller)
+     * yang menerapkan search/order/paginasi.
      *
      * @return list<array<string, mixed>>
      */
     public function employeeRows(): array
     {
+        $conditionLabels = $this->repository->conditionLabels();
         $rows = [];
         foreach ($this->repository->records() as $record) {
             if (! $record['has_mcu']) {
                 continue;
             }
 
-            $conditions = $this->conditionsFor($record);
+            $conditions = $this->conditionsFor($record, $conditionLabels);
             if ($conditions === []) {
                 continue;
             }
@@ -469,22 +461,21 @@ final class McuNutritionAnalyticsService
     }
 
     /**
-     * Detail 1 karyawan untuk modal "Detail" — profil MCU x Nutrisi, plus
-     * flag data yang belum lengkap. Tidak ada lagi "profile_pairs" (versi
-     * lama memasangkan BMI/LDL/GDP numerik vs nutrisi) — sisi MCU sekarang
-     * cuma status normal/abnormal per kondisi, tidak ada angka yang bisa
-     * dipasangkan.
+     * Detail 1 karyawan untuk modal "Detail" — profil kondisi x nutrisi,
+     * plus flag data yang belum lengkap.
      *
      * @return array<string, mixed>|null
      */
     public function employeeDetail(int $id): ?array
     {
+        $conditionLabels = $this->repository->conditionLabels();
+
         foreach ($this->repository->records() as $record) {
             if ($record['id'] !== $id) {
                 continue;
             }
 
-            $conditions = $this->conditionsFor($record);
+            $conditions = $this->conditionsFor($record, $conditionLabels);
             $caloriesVsTargetPct = ($record['avg_calories'] !== null && $record['target_calories'] !== null && $record['target_calories'] > 0)
                 ? round((($record['avg_calories'] - $record['target_calories']) / $record['target_calories']) * 100, 0)
                 : null;
@@ -500,13 +491,12 @@ final class McuNutritionAnalyticsService
                 'mcu' => $record['has_mcu'] ? [
                     'exam_date' => $record['exam_date'],
                     'conditions' => array_map(
-                        static fn (string $key): array => [
-                            'key' => $key,
-                            'label' => self::CONDITION_LABELS[$key],
-                            'status' => ($record['conditions'][$key] ?? false) ? 'Abnormal' : 'Normal',
-                            'abnormal' => (bool) ($record['conditions'][$key] ?? false),
+                        static fn (string $label): array => [
+                            'label' => $label,
+                            'status' => ($record['conditions'][$label] ?? false) ? 'Terkonfirmasi' : 'Tidak Ada',
+                            'abnormal' => (bool) ($record['conditions'][$label] ?? false),
                         ],
-                        self::CONDITION_KEYS
+                        $conditionLabels
                     ),
                 ] : null,
                 'nutrition' => $record['has_nutrition'] ? [
@@ -531,18 +521,19 @@ final class McuNutritionAnalyticsService
 
     /**
      * @param  array<string, mixed>  $record
+     * @param  list<string>  $conditionLabels
      * @return list<string>
      */
-    private function conditionsFor(array $record): array
+    private function conditionsFor(array $record, array $conditionLabels): array
     {
         if (! $record['has_mcu']) {
             return [];
         }
 
         $out = [];
-        foreach (self::CONDITION_KEYS as $key) {
-            if ($record['conditions'][$key] ?? false) {
-                $out[] = $key;
+        foreach ($conditionLabels as $label) {
+            if ($record['conditions'][$label] ?? false) {
+                $out[] = $label;
             }
         }
 
@@ -570,7 +561,7 @@ final class McuNutritionAnalyticsService
             'site' => $record['site'],
             'departemen' => $record['departemen'],
             'conditions' => $conditions,
-            'risiko_label' => implode(', ', array_map(static fn (string $c): string => self::CONDITION_LABELS[$c] ?? $c, $conditions)),
+            'risiko_label' => implode(', ', $conditions),
             'status_nutrisi' => $statusNutrisi,
             'has_nutrition' => $record['has_nutrition'],
         ];

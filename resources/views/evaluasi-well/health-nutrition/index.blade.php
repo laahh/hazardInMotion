@@ -518,21 +518,23 @@
             .replace(/'/g, '&#039;');
     }
 
+    // Kondisi sekarang berupa label penyakit terkonfirmasi (string, dinamis
+    // dari ClickHouse) — bukan key tetap lagi, jadi warna badge digilir
+    // berdasarkan hash sederhana dari nama kondisi, bukan peta per-nama.
+    var riskBadgeClasses = [
+        'bg-info-focus text-info-main',
+        'bg-danger-focus text-danger-main',
+        'bg-warning-focus text-warning-main',
+        'bg-purple-focus text-purple-main',
+        'bg-neutral-200 text-neutral-600'
+    ];
     function riskBadgeClass(condition) {
-        var map = {
-            dislipidemia: 'bg-info-focus text-info-main',
-            hipertensi: 'bg-danger-focus text-danger-main',
-            gula_darah: 'bg-purple-focus text-purple-main',
-            sindrom_metabolik: 'bg-neutral-200 text-neutral-600',
-            framingham: 'bg-danger-focus text-danger-main'
-        };
-        return map[condition] || 'bg-neutral-200 text-secondary-light';
+        var hash = 0;
+        for (var i = 0; i < condition.length; i++) {
+            hash = (hash * 31 + condition.charCodeAt(i)) >>> 0;
+        }
+        return riskBadgeClasses[hash % riskBadgeClasses.length];
     }
-
-    var conditionLabels = {
-        dislipidemia: 'Dislipidemia', hipertensi: 'Hipertensi',
-        gula_darah: 'Gula Darah Tinggi', sindrom_metabolik: 'Sindrom Metabolik', framingham: 'Framingham High Risk'
-    };
 
     function statusBadgeClass(status) {
         if (status === 'Baik') return 'bg-success-focus text-success-main';
@@ -588,7 +590,7 @@
                     if (type !== 'display') return row.risiko_label;
                     return data.map(function (c) {
                         return '<span class="' + riskBadgeClass(c) + ' px-10 py-2 rounded-pill text-xs fw-medium d-inline-block mb-2 me-2">'
-                            + escapeHtml(conditionLabels[c] || c) + '</span>';
+                            + escapeHtml(c) + '</span>';
                     }).join('');
                 }
             },
@@ -667,7 +669,7 @@
             });
             html += '</ul>';
         } else {
-            html += '<p class="text-sm text-secondary-light mb-0">Data MCU belum tersedia.</p>';
+            html += '<p class="text-sm text-secondary-light mb-0">Belum ada riwayat penyakit kritis terkonfirmasi.</p>';
         }
         html += '</div>';
 
@@ -1003,7 +1005,7 @@
     <span class="hn-coverage-icon hn-coverage-icon--green"><iconify-icon icon="solar:users-group-rounded-bold"></iconify-icon></span>
     <div>
       <div class="hn-coverage-value">{{ $fmt($coverage['total_mcu']) }}</div>
-      <div class="hn-coverage-label">MCU records</div>
+      <div class="hn-coverage-label">Karyawan dengan penyakit kritis terkonfirmasi</div>
     </div>
   </div>
   <span class="hn-coverage-divider"></span>
@@ -1128,7 +1130,7 @@
     <div class="d-flex align-items-center gap-8">
       <span class="hn-section-bar"></span>
       <iconify-icon icon="solar:heart-pulse-bold" class="text-success-main text-lg"></iconify-icon>
-      <h6 class="fw-bold text-lg mb-0">Kondisi Kesehatan Karyawan (Hasil MCU)</h6>
+      <h6 class="fw-bold text-lg mb-0">Kondisi Kesehatan Karyawan (Penyakit Kritis Terkonfirmasi)</h6>
     </div>
     <button type="button" class="hn-detail-analysis-btn" title="Analisis per kondisi — segera hadir">
       <iconify-icon icon="solar:chart-2-bold"></iconify-icon>
@@ -1165,7 +1167,7 @@
     <div class="col-xxl-6">
       <div class="card radius-8 border-0 shadow-sm h-100">
         <div class="card-body p-24">
-          <h6 class="fw-bold text-lg mb-2">Keterkaitan Deskriptif: Hasil MCU dengan Pola Nutrisi</h6>
+          <h6 class="fw-bold text-lg mb-2">Keterkaitan Deskriptif: Penyakit Kritis Terkonfirmasi dengan Pola Nutrisi</h6>
           <span class="text-sm text-secondary-light d-block mb-16">
             Proporsi overlap antar kelompok (bukan hasil uji statistik) — semakin gelap semakin tinggi proporsinya.
           </span>
@@ -1373,9 +1375,9 @@
     <div class="card-body p-24">
       <h6 class="fw-semibold mb-12">Ringkasan</h6>
       <p class="text-sm text-secondary-light">
-        Dari {{ $fmt($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan yang mengikuti MCU dan
+        Dari {{ $fmt($kpiTop['total_karyawan']['value'] ?? 0) }} karyawan dengan riwayat penyakit kritis terkonfirmasi dan
         {{ $fmt($coverage['matched_total']) }} yang datanya berhasil di-matched dengan log nutrisi ({{ $fmt($coverage['matched_pct_of_mcu'], 1) }}%),
-        {{ $fmt($kpiTop['karyawan_berisiko']['value'] ?? 0) }} ({{ $fmt($kpiTop['karyawan_berisiko']['sub_pct'] ?? 0, 1) }}%) ditemukan berisiko metabolik.
+        {{ $fmt($kpiTop['karyawan_berisiko']['value'] ?? 0) }} ({{ $fmt($kpiTop['karyawan_berisiko']['sub_pct'] ?? 0, 1) }}%) ditemukan berisiko.
         {{ $fmt($kpiTop['target_kalori']['sub_pct'] ?? 0, 1) }}% dari matched records telah memenuhi target kalori harian.
       </p>
       <div class="row g-3 mt-8">

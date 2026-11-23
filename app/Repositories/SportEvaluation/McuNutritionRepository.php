@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Repositories\SportEvaluation;
 
 use App\Services\SportEvaluation\BewellConnectionService;
-use App\Services\SportEvaluation\McuConnectionService;
+use App\Services\SportEvaluation\RfidClickHouseClient;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -13,42 +13,49 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Sumber data REAL untuk dashboard MCU x Nutrisi — MCU Postgres
- * (`bcsid.mv_ftw_mcu`, kolom `kondisi_kritis`/`kondisi_non_kritis` JSONB)
- * + BeWell MySQL (`food_analyses`).
+ * Sumber data REAL untuk dashboard "MCU x Nutrisi" — nama halaman tetap
+ * "MCU" (tidak diganti, di luar scope), tapi sisi "kondisi kesehatan" di
+ * sini SEKARANG diambil dari riwayat penyakit kritis TERKONFIRMASI
+ * ClickHouse (`behealth.clean_data_konfirmasi_penyakit_kritis`, via
+ * `RfidClickHouseClient`), BUKAN MCU Postgres (`bcsid.mv_ftw_mcu`).
  *
- * PENTING: skema `mv_ftw_mcu` sudah dicek langsung (lihat pg_attribute) —
- * HANYA ada flag normal/abnormal per nama kondisi di JSONB, TIDAK ADA kolom
- * angka BMI/tensi/kolesterol/LDL/HDL/trigliserida/GDP/skor Framingham
- * sama sekali. Karena itu kontrak record di sini pakai boolean per kondisi
- * (conditions), BUKAN angka lab seperti versi dummy sebelumnya.
+ * Kenapa pindah dari MCU Postgres: kredensial koneksi `pgsql_ssh` di
+ * server produksi tidak valid (password authentication failed,
+ * dikonfirmasi langsung ke RDS) dan belum ada yang bisa memberi kredensial
+ * yang benar — atas arahan user, sisi kondisi kesehatan diganti ke sumber
+ * yang SUDAH terbukti jalan (sama persis dengan yang dipakai tab "Riwayat
+ * Penyakit Kritis", lihat CriticalIllnessLifestyleService).
  *
- * 5 kondisi yang dilacak (bukan 6 — "Obesitas/BMI" DIHAPUS karena tidak ada
- * satupun nama_kondisi terkait BMI/obesitas di seluruh tabel, dicek via
- * SELECT DISTINCT nama_kondisi):
- * dislipidemia, hipertensi, gula_darah, sindrom_metabolik, framingham.
+ * Kategori kondisi TIDAK di-hardcode lagi (dulu 5 kategori tetap dari MCU)
+ * — sekarang dihitung dinamis: 6 label penyakit TERKONFIRMASI paling
+ * sering muncul di antara karyawan AKTIF, apa adanya dari ClickHouse,
+ * tanpa taksonomi buatan sendiri.
  */
 final class McuNutritionRepository
 {
+    private const CACHE_KEY = 'evaluasi_well:health_nutrition:mcu_records:v2';
+
     private const CACHE_TTL = 1800;
 
     private const DEFAULT_CALORIE_TARGET = 2300.0;
 
     private const NUTRITION_WINDOW_DAYS = 30;
 
-    /** @var array<string, string> kategori => nama_kondisi persis di MCU Postgres */
-    private const CONDITION_NAME_MAP = [
-        'hipertensi' => 'Tekanan Darah Tinggi',
-        'gula_darah' => 'Gula Darah Puasa (GDP) tinggi',
-        'sindrom_metabolik' => 'Memiliki Sindrome Metabolik',
-        'framingham' => 'Penilaian Framingham Score Risiko Tinggi',
+    private const TOP_CONDITION_COUNT = 6;
+
+    /**
+     * Variasi huruf besar/kecil yang sudah terkonfirmasi kondisi sama —
+     * SAMA PERSIS dengan CASE_ALIASES di CriticalIllnessLifestyleService,
+     * sengaja duplikat kecil (bukan di-share) supaya 2 fitur ini independen.
+     *
+     * @var array<string, string>
+     */
+    private const CASE_ALIASES = [
+        'hipertensi' => 'Hipertensi',
     ];
 
-    /** @var list<string> dislipidemia = gabungan 3 nama_kondisi ini (salah satu abnormal saja sudah cukup) */
-    private const DISLIPIDEMIA_NAMES = ['Kolestrol Total', 'LDL', 'Trigliserida'];
-
     public function __construct(
-        private readonly McuConnectionService $mcu,
+        private readonly RfidClickHouseClient $clickhouse,
         private readonly BewellConnectionService $bewell,
     ) {}
 
@@ -71,45 +78,63 @@ final class McuNutritionRepository
      */
     public function records(): array
     {
+        return $this->dataset()['records'];
+    }
+
+    /**
+     * 6 label penyakit terkonfirmasi paling sering muncul (di antara
+     * karyawan AKTIF), urut dari yang paling banyak.
+     *
+     * @return list<string>
+     */
+    public function conditionLabels(): array
+    {
+        return $this->dataset()['condition_labels'];
+    }
+
+    /**
+     * @return array{records: list<array<string, mixed>>, condition_labels: list<string>}
+     */
+    private function dataset(): array
+    {
+        $empty = ['records' => [], 'condition_labels' => []];
+
         try {
-            return Cache::remember(
-                'evaluasi_well:health_nutrition:mcu_records:v1',
-                self::CACHE_TTL,
-                fn (): array => $this->buildRecords()
-            );
+            return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, fn (): array => $this->buildDataset());
         } catch (Throwable $e) {
             report($e);
 
-            return [];
+            return $empty;
         }
     }
 
     /**
-     * @return list<array<string, mixed>>
+     * @return array{records: list<array<string, mixed>>, condition_labels: list<string>}
      */
-    private function buildRecords(): array
+    private function buildDataset(): array
     {
         $profiles = $this->fetchActiveEmployees();
         if ($profiles->isEmpty()) {
-            return [];
+            return ['records' => [], 'condition_labels' => []];
         }
 
-        $mcuBySid = $this->fetchMcuConditions();
+        $illnessBySid = $this->fetchCriticalIllnessConditions();
+        $conditionLabels = $this->topConditionLabels($illnessBySid, $profiles);
 
         $userIds = $profiles->map(static fn (object $p): int => (int) $p->id)->values()->all();
         $nutritionByUser = $this->fetchNutritionAverages($userIds);
 
-        $emptyConditions = [
-            'dislipidemia' => false, 'hipertensi' => false, 'gula_darah' => false,
-            'sindrom_metabolik' => false, 'framingham' => false,
-        ];
-
         $records = [];
         foreach ($profiles as $sid => $profile) {
             $uid = (int) $profile->id;
-            $mcu = $mcuBySid[$sid] ?? null;
+            $illness = $illnessBySid[$sid] ?? null;
             $nutrition = $nutritionByUser[$uid] ?? null;
             $hasNutrition = $nutrition !== null && $nutrition['days_logged'] > 0;
+
+            $conditions = [];
+            foreach ($conditionLabels as $label) {
+                $conditions[$label] = $illness !== null && in_array($label, $illness['labels'], true);
+            }
 
             $records[] = [
                 'id' => $uid,
@@ -119,10 +144,10 @@ final class McuNutritionRepository
                 'perusahaan' => trim((string) ($profile->nama_perusahaan ?? '')) !== '' ? $profile->nama_perusahaan : '-',
                 'site' => trim((string) ($profile->site ?? '')) !== '' ? $profile->site : '-',
                 'departemen' => trim((string) ($profile->divisi ?? '')) !== '' ? $profile->divisi : '-',
-                'has_mcu' => $mcu !== null,
+                'has_mcu' => $illness !== null,
                 'has_nutrition' => $hasNutrition,
-                'exam_date' => $mcu['exam_date'] ?? null,
-                'conditions' => $mcu['conditions'] ?? $emptyConditions,
+                'exam_date' => $illness['confirmed_date'] ?? null,
+                'conditions' => $conditions,
                 'avg_calories' => $hasNutrition ? $nutrition['avg_calories'] : null,
                 'target_calories' => $hasNutrition ? self::DEFAULT_CALORIE_TARGET : null,
                 'avg_carbs_g' => $hasNutrition ? $nutrition['avg_carbs_g'] : null,
@@ -131,38 +156,34 @@ final class McuNutritionRepository
             ];
         }
 
-        return $records;
+        return ['records' => $records, 'condition_labels' => $conditionLabels];
     }
 
     /**
-     * Satu baris per SID (data MCU terbaru), kondisi diambil dari JSONB
-     * kondisi_kritis + kondisi_non_kritis.
+     * Satu baris per SID — SELURUH riwayat (groupUniqArray), bukan cuma
+     * record terbaru, supaya "riwayat" benar-benar riwayat (sama seperti
+     * CriticalIllnessLifestyleService::fetchIllnessRows()).
      *
-     * @return array<string, array{exam_date: ?string, conditions: array<string, bool>}>
+     * @return array<string, array{confirmed_date: ?string, labels: list<string>}>
      */
-    private function fetchMcuConditions(): array
+    private function fetchCriticalIllnessConditions(): array
     {
-        if (! $this->mcu->isUp() || ! $this->mcu->isMappingReady()) {
+        if (! $this->clickhouse->up()) {
             return [];
         }
 
-        $table = (string) config('bemcu.table');
-        $examDate = (string) config('bemcu.exam_date');
-        $sidCol = trim((string) config('bemcu.identity.sid', ''));
-        if ($table === '' || $examDate === '' || $sidCol === '') {
-            return [];
-        }
-
-        $sql = 'SELECT UPPER(TRIM('.$sidCol.')) AS sid, '.$examDate.' AS exam_date, kondisi_kritis, kondisi_non_kritis'
-            .' FROM ('
-            .' SELECT DISTINCT ON (UPPER(TRIM('.$sidCol.'))) '.$sidCol.', '.$examDate.', kondisi_kritis, kondisi_non_kritis'
-            .' FROM '.$table
-            .' WHERE '.$sidCol.' IS NOT NULL AND TRIM('.$sidCol.") <> ''"
-            .' ORDER BY UPPER(TRIM('.$sidCol.')), '.$examDate.' DESC NULLS LAST'
-            .' ) latest';
+        $sql = "SELECT
+                upper(trim(sid)) AS sid,
+                groupUniqArray(penyakit_terkonfirmasi) AS penyakit_list,
+                max(tanggal_terkonfirmasi_penyakit_kritis) AS tanggal_terkonfirmasi
+            FROM behealth.clean_data_konfirmasi_penyakit_kritis FINAL
+            WHERE sid IS NOT NULL AND trim(sid) != ''
+              AND penyakit_terkonfirmasi IS NOT NULL
+              AND lower(trim(penyakit_terkonfirmasi)) NOT IN ('tidak ada', '')
+            GROUP BY sid";
 
         try {
-            $rows = DB::connection(McuConnectionService::CONNECTION)->select($sql);
+            $rawRows = $this->clickhouse->select($sql, 30);
         } catch (Throwable $e) {
             report($e);
 
@@ -170,82 +191,63 @@ final class McuNutritionRepository
         }
 
         $out = [];
-        foreach ($rows as $row) {
-            $sid = trim((string) ($row->sid ?? ''));
+        foreach ($rawRows as $row) {
+            $sid = trim((string) ($row['sid'] ?? ''));
             if ($sid === '') {
                 continue;
             }
 
-            $items = array_merge(
-                $this->decodeJson($row->kondisi_kritis ?? null),
-                $this->decodeJson($row->kondisi_non_kritis ?? null),
-            );
-
-            $flags = [
-                'dislipidemia' => false, 'hipertensi' => false, 'gula_darah' => false,
-                'sindrom_metabolik' => false, 'framingham' => false,
-            ];
-
-            foreach ($items as $item) {
-                if (! is_array($item)) {
-                    continue;
-                }
-                $nama = trim((string) ($item['nama_kondisi'] ?? ''));
-                if ($nama === '' || ! $this->isAbnormal($item)) {
-                    continue;
-                }
-
-                if (in_array($nama, self::DISLIPIDEMIA_NAMES, true)) {
-                    $flags['dislipidemia'] = true;
-                }
-                foreach (self::CONDITION_NAME_MAP as $key => $targetName) {
-                    if ($nama === $targetName) {
-                        $flags[$key] = true;
-                    }
+            $labels = [];
+            foreach ((array) ($row['penyakit_list'] ?? []) as $label) {
+                $canon = $this->canonicalizeCondition((string) $label);
+                if ($canon !== '' && ! in_array($canon, $labels, true)) {
+                    $labels[] = $canon;
                 }
             }
+            if ($labels === []) {
+                continue;
+            }
 
+            $tanggal = trim((string) ($row['tanggal_terkonfirmasi'] ?? ''));
             $out[$sid] = [
-                'exam_date' => $row->exam_date !== null ? (string) $row->exam_date : null,
-                'conditions' => $flags,
+                'confirmed_date' => $tanggal !== '' ? $tanggal : null,
+                'labels' => $labels,
             ];
         }
 
         return $out;
     }
 
-    /**
-     * @return array<int, mixed>
-     */
-    private function decodeJson(mixed $raw): array
+    private function canonicalizeCondition(string $raw): string
     {
-        if ($raw === null || $raw === '') {
-            return [];
+        $trimmed = trim($raw);
+        if ($trimmed === '' || mb_strtolower($trimmed) === 'tidak ada') {
+            return '';
         }
-        if (is_array($raw)) {
-            return $raw;
-        }
-        if (! is_string($raw)) {
-            return [];
-        }
-        $decoded = json_decode($raw, true);
 
-        return is_array($decoded) ? $decoded : [];
+        return self::CASE_ALIASES[mb_strtolower($trimmed)] ?? $trimmed;
     }
 
     /**
-     * kondisi_kritis pakai flag is_yes/is_no/is_na; kondisi_non_kritis cuma
-     * punya 'note' ('normal'/'abnormal') tanpa flag is_yes/is_no/is_na.
-     *
-     * @param  array<string, mixed>  $item
+     * @param  array<string, array{confirmed_date: ?string, labels: list<string>}>  $illnessBySid
+     * @return list<string>
      */
-    private function isAbnormal(array $item): bool
+    private function topConditionLabels(array $illnessBySid, Collection $profiles): array
     {
-        if (array_key_exists('is_yes', $item) || array_key_exists('is_no', $item) || array_key_exists('is_na', $item)) {
-            return ! empty($item['is_yes']);
+        $counts = [];
+        foreach ($profiles as $sid => $profile) {
+            $illness = $illnessBySid[$sid] ?? null;
+            if ($illness === null) {
+                continue;
+            }
+            foreach ($illness['labels'] as $label) {
+                $counts[$label] = ($counts[$label] ?? 0) + 1;
+            }
         }
 
-        return mb_strtolower(trim((string) ($item['note'] ?? ''))) === 'abnormal';
+        arsort($counts);
+
+        return array_slice(array_keys($counts), 0, self::TOP_CONDITION_COUNT);
     }
 
     /**
@@ -285,9 +287,7 @@ final class McuNutritionRepository
     /**
      * Rata-rata kalori/karbohidrat/protein per user selama 30 hari terakhir.
      * avg_fat_g/avg_fiber_g/avg_sodium_mg SENGAJA tidak disertakan — belum
-     * terverifikasi ada sebagai kolom di `food_analyses` (lihat juga catatan
-     * di NutritionEvaluationService yang cuma pakai total_calories/carbs_g/
-     * protein_g untuk hal yang sama).
+     * terverifikasi ada sebagai kolom di `food_analyses`.
      *
      * @param  list<int>  $userIds
      * @return array<int, array{days_logged:int, avg_calories:float, avg_carbs_g:float, avg_protein_g:float}>
