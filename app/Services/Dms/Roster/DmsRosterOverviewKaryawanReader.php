@@ -137,8 +137,8 @@ final class DmsRosterOverviewKaryawanReader
                 'malam' => (int) $r['malam'],
                 'off' => (int) $r['off'],
                 'cuti' => (int) $r['cutiCur'],
-                // Total menit kerja dari jadwal Master Roster (APPROVED) sepanjang
-                // periode yang sama dengan kolom On-site/Pagi/Malam di atas.
+                // Rata-rata menit kerja per hari kerja — murni dari jadwal Master
+                // Roster (lihat totalJamKerjaRoster()), bukan dibagi hari on-site RFID.
                 'jamKerjaMenit' => $jamHalaman[strtoupper(trim((string) $r['sid']))] ?? 0,
                 'shiftMaks' => [
                     $r['onNoOff'].' hari beruntun',
@@ -377,15 +377,20 @@ final class DmsRosterOverviewKaryawanReader
     }
 
     /**
-     * Total menit kerja per SID dari jadwal Master Roster (dms_roster_master_jadwal),
-     * bukan RFID — tap keluar sering tidak tercatat sehingga totalnya banyak
-     * nol kalau dihitung dari tap. Jadwal yang dihitung = baris dari upload
-     * APPROVED yang paling akhir disetujui per (SID, tanggal), sama dengan
-     * definisi "jadwal berlaku" di DmsRosterMasterService /
-     * DmsRosterJamKerjaLebihCache.
+     * Rata-rata menit kerja PER HARI KERJA per SID, murni dari jadwal Master
+     * Roster (dms_roster_master_jadwal) — baik pembilang (total menit) maupun
+     * pembagi (jumlah hari kerja) dari sumber yang sama, supaya tidak
+     * tercampur dengan hari on-site versi RFID yang bisa beda jumlahnya
+     * (mis. hari on-site RFID tanpa jadwal Master Roster untuk SID itu).
+     * Hari OFF/Cuti/Izin/Sakit (menit = 0) TIDAK ikut dihitung sebagai
+     * pembagi — hanya hari yang benar-benar ada jadwal kerjanya.
+     *
+     * Jadwal yang dihitung = baris dari upload APPROVED yang paling akhir
+     * disetujui per (SID, tanggal), sama dengan definisi "jadwal berlaku" di
+     * DmsRosterMasterService / DmsRosterJamKerjaLebihCache.
      *
      * @param  list<string>  $sids
-     * @return array<string, int> SID (huruf besar) => total menit
+     * @return array<string, int> SID (huruf besar) => rata-rata menit per hari kerja
      */
     private function totalJamKerjaRoster(array $sids, string $dari, string $sampai): array
     {
@@ -395,7 +400,7 @@ final class DmsRosterOverviewKaryawanReader
 
         $placeholder = implode(',', array_fill(0, count($sids), '?'));
         $rows = DB::select("
-            SELECT sid, SUM(menit) AS total_menit
+            SELECT sid, SUM(menit) AS total_menit, SUM(menit > 0) AS hari_kerja
             FROM (
                 SELECT
                     UPPER(TRIM(j.kode_sid)) AS sid,
@@ -418,8 +423,9 @@ final class DmsRosterOverviewKaryawanReader
         $out = [];
         foreach ($rows as $r) {
             $sid = (string) $r->sid;
-            if ($sid !== '') {
-                $out[$sid] = (int) $r->total_menit;
+            $hariKerja = (int) $r->hari_kerja;
+            if ($sid !== '' && $hariKerja > 0) {
+                $out[$sid] = (int) round(((int) $r->total_menit) / $hariKerja);
             }
         }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Dms\Roster;
 
 use App\Services\PembatasanLV\PembatasanLVOlapQuery;
+use App\Services\SportEvaluation\RfidClickHouseClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -14,10 +15,16 @@ use Throwable;
  * Sinkronisasi RFID → skema ternormalisasi Kepatuhan Roster.
  *
  * Empat tahap:
- *   1. sinkronKaryawan()  master karyawan + SIMPER + flag wajib_cek  (±8 rb)
+ *   1. sinkronKaryawan()  master karyawan + SIMPER + flag wajib_cek  (±8 rb) — dari Postgres OLAP ($olap)
  *   2. (gate disinkronkan otomatis di dalam tahap 3)                 (puluhan)
- *   3. sinkronScan()      fakta harian per rentang tanggal           (±1,2 jt/tahun)
+ *   3. sinkronScan()      fakta harian per rentang tanggal           (±1,2 jt/tahun) — dari ClickHouse ($rfidClickHouse)
  *   4. kompilasiPola()    rakit string pola per karyawan per tahun   (±8 rb)
+ *
+ * Tahap 3 pindah dari Postgres bcsid.mv_checkinout_rfid ke ClickHouse
+ * obds.aaj_vw_checkinout_rfid: materialized view Postgres-nya berhenti
+ * ter-refresh (tertinggal berhari-hari), sedangkan salinan ClickHouse-nya
+ * selalu sampai hari berjalan. Tahap 1 (master karyawan/SIMPER) TETAP dari
+ * Postgres OLAP — tabelnya beda, bukan bagian dari masalah ini.
  *
  * Kenapa penarikan scan dilakukan per RENTANG TANGGAL dan bukan per daftar
  * SID: indeks tanggal_checkinout bekerja baik untuk rentang sempit, sedangkan
@@ -30,6 +37,7 @@ final class DmsRosterSyncService
 {
     public function __construct(
         private readonly PembatasanLVOlapQuery $olap,
+        private readonly RfidClickHouseClient $rfidClickHouse,
         private readonly DmsRosterJabatanKategori $kategori,
     ) {}
 
@@ -498,41 +506,44 @@ final class DmsRosterSyncService
     }
 
     /**
+     * Tarik fakta harian dari ClickHouse OBDS (obds.aaj_vw_checkinout_rfid),
+     * BUKAN lagi Postgres bcsid.mv_checkinout_rfid — materialized view
+     * Postgres itu tertinggal (berhenti ter-refresh), sedangkan salinan
+     * ClickHouse-nya selalu sampai hari berjalan. Lihat juga
+     * RfidClickHouseClient (dipakai modul Peta Risiko PJA & Evaluasi Well
+     * untuk sumber yang sama).
+     *
      * @return list<object>
      */
     private function ambilScanOlap(CarbonImmutable $dari, CarbonImmutable $sampai, ?int $timeoutMs): array
     {
-        $statusLolos = (string) config('dms_roster.populasi.status_lolos_scan', 'PASSED');
+        $statusLolos = strtoupper((string) config('dms_roster.populasi.status_lolos_scan', 'PASSED'));
 
         try {
-            return $this->olap->select(
-                "SELECT s.kode_sid,
-                        s.tanggal_checkinout::date AS tanggal,
-                        MIN(s.tanggal_checkinout) FILTER (WHERE s.jenis_checkinout = 'CHECK IN')  AS waktu_in,
-                        MAX(s.tanggal_checkinout) FILTER (WHERE s.jenis_checkinout = 'CHECK OUT') AS waktu_out,
-                        (ARRAY_AGG(s.gate ORDER BY s.tanggal_checkinout ASC)
-                            FILTER (WHERE s.jenis_checkinout = 'CHECK IN'))[1] AS gate_in,
-                        (ARRAY_AGG(s.gate ORDER BY s.tanggal_checkinout DESC)
-                            FILTER (WHERE s.jenis_checkinout = 'CHECK OUT'))[1] AS gate_out
-                 FROM bcsid.mv_checkinout_rfid s
-                 WHERE upper(trim(coalesce(s.status_lolos, ''))) = ?
-                   AND s.tanggal_checkinout >= ?
-                   AND s.tanggal_checkinout < ?
-                   AND s.kode_sid IS NOT NULL
-                   AND trim(s.kode_sid) <> ''
-                 GROUP BY 1, 2",
-                [
-                    strtoupper($statusLolos),
-                    $dari->startOfDay()->toDateTimeString(),
-                    $sampai->addDay()->startOfDay()->toDateTimeString(),
-                ],
-                $timeoutMs ?? (int) config('dms_roster.sync.timeout_incremental_ms', 20000),
+            $rows = $this->rfidClickHouse->select(
+                "SELECT
+                        kode_sid,
+                        toDate(date) AS tanggal,
+                        minIf(date, status_checkin_out = 'CHECK IN') AS waktu_in,
+                        maxIf(date, status_checkin_out = 'CHECK OUT') AS waktu_out,
+                        argMinIf(pintu_gate, date, status_checkin_out = 'CHECK IN') AS gate_in,
+                        argMaxIf(pintu_gate, date, status_checkin_out = 'CHECK OUT') AS gate_out
+                 FROM obds.aaj_vw_checkinout_rfid
+                 WHERE upper(trim(coalesce(status_passed, ''))) = ".RfidClickHouseClient::quote($statusLolos)."
+                   AND date >= ".RfidClickHouseClient::quote($dari->startOfDay()->toDateTimeString())."
+                   AND date < ".RfidClickHouseClient::quote($sampai->addDay()->startOfDay()->toDateTimeString())."
+                   AND kode_sid IS NOT NULL
+                   AND trim(kode_sid) <> ''
+                 GROUP BY kode_sid, tanggal",
+                $timeoutMs !== null ? intdiv($timeoutMs, 1000) : null,
             );
         } catch (Throwable $e) {
             Log::warning('DmsRoster tarik scan gagal: '.$e->getMessage());
 
             return [];
         }
+
+        return array_map(static fn (array $r): object => (object) $r, $rows);
     }
 
     // =================================================================

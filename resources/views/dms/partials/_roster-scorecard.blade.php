@@ -489,7 +489,7 @@
                 <td class="num">{{ $r['malam'] }}</td>
                 <td class="num">{{ $r['off'] }}</td>
                 <td class="num">{{ $r['cuti'] }}</td>
-                <td class="num" title="Jumlah jam kerja dari jadwal Master Roster yang disetujui, sepanjang periode ini (dms_roster_master_jadwal)">
+                <td class="num" title="Rata-rata jam kerja per hari on-site, dari jadwal Master Roster yang disetujui (dms_roster_master_jadwal)">
                   @php $menitKerja = (int) ($r['jamKerjaMenit'] ?? 0); @endphp
                   {{ intdiv($menitKerja, 60) }}j {{ str_pad((string) ($menitKerja % 60), 2, '0', STR_PAD_LEFT) }}m
                 </td>
