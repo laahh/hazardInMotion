@@ -46,6 +46,7 @@ final class DrmMasterBarisExcel
         'label' => ['Label', 60, true],
         'kb' => ['Risiko awal (info)', 13, false],
         'site' => ['Site (info)', 14, false],
+        'pja' => ['Perusahaan / PJA (info)', 28, false],
         'dept_hira' => ['Departemen HIRA (info)', 26, false],
         'idh' => ['ID HIRA (info)', 13, false],
         'kelompok' => ['Kelompok aktivitas (info)', 22, false],

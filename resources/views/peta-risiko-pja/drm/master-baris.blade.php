@@ -118,6 +118,12 @@
           <option value="{{ $st }}">{{ $st }}</option>
         @endforeach
       </select>
+      <select id="mb-f-pja" aria-label="Perusahaan" style="max-width:220px">
+        <option value="">Semua perusahaan</option>
+        @foreach ($perusahaan as $p)
+          <option value="{{ $p }}">{{ $p }}</option>
+        @endforeach
+      </select>
       <select id="mb-f-dep" aria-label="Departemen asal HIRA" style="max-width:280px">
         <option value="">Semua departemen</option>
         @foreach ($departemen as $d)
@@ -260,9 +266,11 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ')
+      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ') + ' ' + r.pja.join(' ')
           : kolomDep(d) + '<span class="mb-site" title="Site tempat baris ini dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA)">Site: '
-            + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>' },
+            + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>'
+            + '<span class="mb-site" title="Nama PJA di lokasi tempat grup baris ini punya detail lokasi (M07/M08) — bukan data personil">Perusahaan: '
+            + (r.pja.length ? '<b>' + r.pja.map(esc).join(', ') + '</b>' : '<i>tidak ada PJA</i>') + '</span>' },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
@@ -271,23 +279,26 @@
   const fKosong = document.getElementById('mb-f-kosong');
   const fDep = document.getElementById('mb-f-dep');
   const fSite = document.getElementById('mb-f-site');
+  const fPja = document.getElementById('mb-f-pja');
   DataTable.ext.search.push((settings, _data, idx) => {
     if (settings.nTable.id !== 'mb-tabel') return true;
     const r = ROWS[idx];
     if (fKb.value && r.kb !== fKb.value) return false;
     if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
     if (fSite.value && !r.st.includes(fSite.value)) return false;
+    if (fPja.value && !r.pja.includes(fPja.value)) return false;
     const k = fKosong.value;
     if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
     if (k) return !r[k].length;
     return true;
   });
-  [fKb, fKosong, fDep, fSite].forEach((el) => el.addEventListener('change', () => tabel.draw()));
+  [fKb, fKosong, fDep, fSite, fPja].forEach((el) => el.addEventListener('change', () => tabel.draw()));
   document.getElementById('mb-reset').addEventListener('click', () => {
     fKb.value = '';
     fKosong.value = '';
     fDep.value = '';
     fSite.value = '';
+    fPja.value = '';
     tabel.search('').order([0, 'asc']).page(0).draw();
   });
   // Unduh Excel mengikuti filter + kata cari yang sedang aktif (disaring ulang di server dengan aturan yang sama).
@@ -297,6 +308,7 @@
     if (fKosong.value) q.set('kosong', fKosong.value);
     if (fDep.value) q.set('dep', fDep.value);
     if (fSite.value) q.set('site', fSite.value);
+    if (fPja.value) q.set('pja', fPja.value);
     if (tabel.search()) q.set('q', tabel.search());
     e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });

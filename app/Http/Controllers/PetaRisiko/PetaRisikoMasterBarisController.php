@@ -59,7 +59,10 @@ final class PetaRisikoMasterBarisController extends Controller
         [$hira, $hiraGagal] = $this->hiraAsal($baris);
         $terakhir = $this->terakhirDiubah();
         // Site tempat baris dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA).
-        $sitePer = app(DrmMasterBarisUnggah::class)->sitePerBaris($hira);
+        $unggah = app(DrmMasterBarisUnggah::class);
+        $sitePer = $unggah->sitePerBaris($hira);
+        // Perusahaan = nama PJA di lokasi tempat grup baris itu punya detail lokasi (M07/M08) — bukan data personil.
+        $pjaPer = $unggah->perusahaanPerBaris();
         $rows = array_map(fn ($b) => [
             'ri' => (int) $b->ri,
             'a' => (string) $b->aktivitas,
@@ -71,6 +74,7 @@ final class PetaRisikoMasterBarisController extends Controller
             // Perubahan terakhir [nama, waktu] dari riwayat.
             'u' => $terakhir[(int) $b->ri] ?? null,
             'st' => $sitePer[(int) $b->ri] ?? [],
+            'pja' => $pjaPer[(int) $b->ri] ?? [],
             'OBS' => $label[(int) $b->ri]['OBS'] ?? [],
             'OAK' => $label[(int) $b->ri]['OAK'] ?? [],
             'KET' => $label[(int) $b->ri]['KET'] ?? [],
@@ -79,6 +83,8 @@ final class PetaRisikoMasterBarisController extends Controller
         sort($departemen);
         $site = array_values(array_unique(array_merge(...array_column($rows, 'st') ?: [[]])));
         sort($site, SORT_NATURAL);
+        $perusahaan = array_values(array_unique(array_merge(...array_column($rows, 'pja') ?: [[]])));
+        sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
 
         // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.
         return view('peta-risiko-pja.drm.master-baris', array_merge($data, [
@@ -86,6 +92,7 @@ final class PetaRisikoMasterBarisController extends Controller
             'rows' => $rows,
             'departemen' => $departemen,
             'site' => $site,
+            'perusahaan' => $perusahaan,
             'hiraGagal' => $hiraGagal,
         ], $this->saran($kolom)));
     }
@@ -97,6 +104,7 @@ final class PetaRisikoMasterBarisController extends Controller
         $filter = $request->validate([
             'kb' => ['nullable', 'in:Significant,High,Medium,Low'], 'kosong' => ['nullable', 'in:OBS,OAK,KET,SEMUA'],
             'dep' => ['nullable', 'string', 'max:150'], 'q' => ['nullable', 'string', 'max:200'], 'site' => ['nullable', 'string', 'max:60'],
+            'pja' => ['nullable', 'string', 'max:200'],
         ]);
         try {
             $baris = DB::table('drm_master_baris')->where('aktif', true)->get(['ri', 'idh', 'bahaya'])->all();

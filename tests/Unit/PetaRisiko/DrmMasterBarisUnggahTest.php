@@ -199,6 +199,27 @@ class DrmMasterBarisUnggahTest extends TestCase
         $this->assertSame("BMO 1\nLMO", $u->ekspor(['site' => 'LMO'], $hira)[0]['site']);
     }
 
+    public function test_perusahaan_dari_pja_per_baris(): void
+    {
+        DB::table('drm_master_dl')->insert([
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'detail' => 'Front', 'gid' => 2, 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit B', 'detail' => 'Front', 'gid' => 1, 'aktif' => true],
+        ]);
+        DB::table('drm_master_lokasi_pja')->insert([
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'nama_pja' => 'PJA Pit A BC', 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'nama_pja' => 'PJA Mitra Pit A', 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit B', 'nama_pja' => 'PJA Pit B', 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit C', 'nama_pja' => 'PJA Tidak Terpakai', 'aktif' => false],
+        ]);
+        DB::table('drm_master_grup_baris')->insert(['gid' => 1, 'ri' => 1]); // ri 1 sudah di gid 2 (fixture dasar); jadi ikut 2 grup
+        $u = app(DrmMasterBarisUnggah::class);
+
+        // ri 1: grup 1 (Pit B) + grup 2 (Pit A) → union PJA kedua lokasi. ri 2: tidak di grup mana pun → kosong.
+        $this->assertSame([1 => ['PJA Mitra Pit A', 'PJA Pit A BC', 'PJA Pit B']], $u->perusahaanPerBaris());
+        $this->assertSame([1], array_column($u->ekspor(['pja' => 'PJA Pit B'], []), 'ri'));
+        $this->assertSame([], array_column($u->ekspor(['pja' => 'PJA Tidak Terpakai'], []), 'ri'));
+    }
+
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */
     private function unduh(): array
     {
