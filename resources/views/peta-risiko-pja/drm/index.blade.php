@@ -569,7 +569,10 @@
     const baris = barisTersaring(d, R);
     if (!baris.length) return;
     const adaVol = baris.some((b) => b.gap !== undefined);
-    const NK = 5;
+    // t.length > 11 = snapshot baru (k1/c1/k2/c2/kt ditambahkan setelah index 0-10 lama). Snapshot lama: tampilkan strip.
+    const adaDetail = baris.some((b) => b.t.length > 11);
+    const stripDetail = '<span class="dr-mute" title="Jalankan ulang php artisan peta-risiko:sync untuk mengisi ini">–</span>';
+    const NK = 7;
     const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
     let kel = '', html = '';
     baris.forEach((b, i) => {
@@ -587,17 +590,24 @@
       const rinci = [nObs ? `${DR.fmt(nObs)} Obs` : '', nOak ? `${DR.fmt(nOak)} OAK` : '', nKet ? `${DR.fmt(nKet)} Ketidaksesuaian` : ''].filter(Boolean).join(' · ');
       const sap = kode === 'T' ? '<span class="dr-sap-tidak">Tidak ada SAP</span>'
         : adaVol ? `<span class="dr-sap-ada">Ada · ${DR.fmt(total)} laporan</span><small>${rinci}</small>` : '<span class="dr-sap-ada">Ada</span>';
+      const residual = !adaDetail ? stripDetail
+        : b.t[4] ? `<span class="dr-lv lv-${DR.esc(b.t[4])}">${DR.esc(b.t[4])}</span><small>${DR.esc(b.t[13] || '-')} × ${DR.esc(b.t[14] || '-')}</small>`
+          : '<span class="dr-mute">–</span>';
+      const kontrol = !adaDetail ? stripDetail
+        : (String(b.t[15] || '').split(' | ').filter(Boolean).slice(0, 4).map((x) => '• ' + DR.esc(x)).join('<br>') || '<span class="dr-mute">tidak tercatat di HIRA</span>');
       html += `<tr class="dr-modal-baris" data-i="${i}">
         <td>${DR.esc(b.t[0] || '-')}${b.t[1] && b.t[1] !== b.t[0] ? `<small>${DR.esc(b.t[1])}</small>` : ''}</td>
         <td><b>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}</b>${b.t[3] ? `<small>${DR.esc(b.t[3])}</small>` : ''}${tanda ? `<div>${tanda}</div>` : ''}</td>
-        <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
+        <td><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span>${adaDetail ? `<small>${DR.esc(b.t[11] || '-')} × ${DR.esc(b.t[12] || '-')}</small>` : ''}</td>
+        <td>${residual}</td>
         <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span>${alasan ? `<div>${alasan}</div>` : ''}</td>
+        <td>${kontrol}</td>
         <td>${sap}${kode === 'T' ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td></tr>
         <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="${NK}"></td></tr>`;
     });
     const isi = d.querySelector('#dr-modal-isi');
-    isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-st-tbl"><thead><tr><th>Aktivitas HIRA</th><th>Bahaya - Risiko</th><th>Risiko Baseline</th>
-      <th>Status SAP ${wKode(state.w)}</th><th>SAP ${wKode(state.w)}</th></tr></thead><tbody>${html}</tbody></table>`;
+    isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-st-tbl"><thead><tr><th>Aktivitas HIRA</th><th>Bahaya - Risiko</th><th>Risiko Awal</th><th>Risiko Residual</th>
+      <th>Status SAP ${wKode(state.w)}</th><th>Pengendalian yang ada</th><th>SAP ${wKode(state.w)}</th></tr></thead><tbody>${html}</tbody></table>`;
     isi.querySelectorAll('.dr-sap-btn').forEach((btn) => btn.addEventListener('click', () => bukaSapBahaya(baris[+btn.dataset.i], btn)));
   }
 
