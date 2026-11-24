@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Dms\Roster;
 
+use App\Models\DmsRosterMasterUpload;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -90,7 +91,24 @@ final class DmsRosterOverviewKaryawanReader
         $ambang = $this->engine->ambang();
         $pg = $payload['paginasi'];
         $panjang = (int) $payload['meta']['panjang'];
-        $jamHalaman = $this->totalJamKerja($mentahHalaman, $panjang);
+
+        // Total jam kerja dari jadwal Master Roster (BUKAN RFID — tap keluar
+        // sering tidak tercatat, jadi hasilnya banyak nol kalau dari RFID).
+        // Periode sama persis dengan kolom On-site/Pagi/Malam: 1 Jan s.d. hari
+        // ke-$panjang (lihat $tlRentang di _roster-scorecard.blade.php).
+        $dariJadwal = CarbonImmutable::create((int) $payload['tahun'], 1, 1);
+        $sampaiJadwal = $dariJadwal->addDays(max(0, $panjang - 1));
+        try {
+            $jamHalaman = $this->totalJamKerjaRoster(
+                array_column($payload['baris'], 'sid'),
+                $dariJadwal->toDateString(),
+                $sampaiJadwal->toDateString(),
+            );
+        } catch (Throwable $e) {
+            Log::warning('DmsRoster total jam kerja roster scorecard gagal: '.$e->getMessage());
+            $jamHalaman = [];
+        }
+
         $baris = [];
 
         foreach ($payload['baris'] as $i => $r) {
@@ -119,9 +137,9 @@ final class DmsRosterOverviewKaryawanReader
                 'malam' => (int) $r['malam'],
                 'off' => (int) $r['off'],
                 'cuti' => (int) $r['cutiCur'],
-                // Total menit kerja aktual (tap RFID masuk→keluar) sepanjang
+                // Total menit kerja dari jadwal Master Roster (APPROVED) sepanjang
                 // periode yang sama dengan kolom On-site/Pagi/Malam di atas.
-                'jamKerjaMenit' => $jamHalaman[(string) $r['sid']] ?? 0,
+                'jamKerjaMenit' => $jamHalaman[strtoupper(trim((string) $r['sid']))] ?? 0,
                 'shiftMaks' => [
                     $r['onNoOff'].' hari beruntun',
                     $r['rentang_onNoOff'] !== '' ? $r['rentang_onNoOff'] : '—',
@@ -359,32 +377,50 @@ final class DmsRosterOverviewKaryawanReader
     }
 
     /**
-     * Total menit kerja aktual (tap RFID masuk→keluar) per SID, dari hari ke-0
-     * sampai ke-($panjang-1) sejak 1 Jan — rentang yang sama dengan kolom
-     * On-site/Pagi/Malam (lihat $panjang di ambil()). Pasangan masuk→keluar
-     * memakai aturan lintas tengah malam yang sama dengan teksScan().
+     * Total menit kerja per SID dari jadwal Master Roster (dms_roster_master_jadwal),
+     * bukan RFID — tap keluar sering tidak tercatat sehingga totalnya banyak
+     * nol kalau dihitung dari tap. Jadwal yang dihitung = baris dari upload
+     * APPROVED yang paling akhir disetujui per (SID, tanggal), sama dengan
+     * definisi "jadwal berlaku" di DmsRosterMasterService /
+     * DmsRosterJamKerjaLebihCache.
      *
-     * @param  array<string, array<int, array{masuk:?int,keluar:?int,gate_masuk:string,gate_keluar:string}>>  $mentah
-     * @return array<string, int>
+     * @param  list<string>  $sids
+     * @return array<string, int> SID (huruf besar) => total menit
      */
-    private function totalJamKerja(array $mentah, int $panjang): array
+    private function totalJamKerjaRoster(array $sids, string $dari, string $sampai): array
     {
+        if ($sids === []) {
+            return [];
+        }
+
+        $placeholder = implode(',', array_fill(0, count($sids), '?'));
+        $rows = DB::select("
+            SELECT sid, SUM(menit) AS total_menit
+            FROM (
+                SELECT
+                    UPPER(TRIM(j.kode_sid)) AS sid,
+                    j.tanggal,
+                    COALESCE(j.menit_total_kerja, j.menit_kerja, 0) AS menit,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY j.kode_sid, j.tanggal
+                        ORDER BY COALESCE(u.direview_pada, u.created_at) DESC, u.id DESC
+                    ) AS rn
+                FROM dms_roster_master_jadwal j
+                INNER JOIN dms_roster_master_upload u ON u.id = j.upload_id
+                WHERE u.status = ?
+                  AND j.tanggal BETWEEN ? AND ?
+                  AND UPPER(TRIM(j.kode_sid)) IN ({$placeholder})
+            ) t
+            WHERE t.rn = 1
+            GROUP BY sid
+        ", [DmsRosterMasterUpload::STATUS_APPROVED, $dari, $sampai, ...$sids]);
+
         $out = [];
-        foreach ($mentah as $sid => $hari) {
-            $total = 0;
-            foreach ($hari as $i => $h) {
-                if ($i >= $panjang) {
-                    continue;
-                }
-                $besok = $hari[$i + 1] ?? null;
-                if ($h['masuk'] !== null && $h['keluar'] !== null && $h['keluar'] > $h['masuk']) {
-                    $total += $h['keluar'] - $h['masuk'];
-                } elseif ($h['masuk'] !== null && $h['masuk'] >= self::MENIT_SHIFT_MALAM && $besok !== null && $besok['keluar'] !== null
-                    && ($besok['masuk'] === null || $besok['keluar'] < $besok['masuk'])) {
-                    $total += (1440 - $h['masuk']) + $besok['keluar'];
-                }
+        foreach ($rows as $r) {
+            $sid = (string) $r->sid;
+            if ($sid !== '') {
+                $out[$sid] = (int) $r->total_menit;
             }
-            $out[$sid] = $total;
         }
 
         return $out;

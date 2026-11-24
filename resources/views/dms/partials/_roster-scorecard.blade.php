@@ -488,7 +488,7 @@
                 <td class="num">{{ $r['malam'] }}</td>
                 <td class="num">{{ $r['off'] }}</td>
                 <td class="num">{{ $r['cuti'] }}</td>
-                <td class="num" title="Jumlah tap RFID masuk→keluar sepanjang periode ini (dms_roster_scan_harian)">
+                <td class="num" title="Jumlah jam kerja dari jadwal Master Roster yang disetujui, sepanjang periode ini (dms_roster_master_jadwal)">
                   @php $menitKerja = (int) ($r['jamKerjaMenit'] ?? 0); @endphp
                   {{ intdiv($menitKerja, 60) }}j {{ str_pad((string) ($menitKerja % 60), 2, '0', STR_PAD_LEFT) }}m
                 </td>
