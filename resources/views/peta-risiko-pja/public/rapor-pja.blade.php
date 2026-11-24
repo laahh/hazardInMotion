@@ -263,10 +263,6 @@
          </div>
 
          <div class="panel-st" id="panel-open" hidden>
-            <div class="alert alert-info" style="margin:1rem 0 .85rem">
-               <span class="material-symbols-outlined" style="font-size:18px;vertical-align:-4px">info</span>
-               Bahaya-risiko Significant/High di baseline HIRA area PJA ini yang <strong>tidak tertangkap laporan SAP</strong> sama sekali pada minggu ini. Prioritaskan pengawasan dan pelaporan di sini.
-            </div>
             <div id="belum"></div>
             <p class="more" id="belum-more"></p>
          </div>
