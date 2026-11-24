@@ -50,7 +50,6 @@
       <div class="tp-aksi">
         @yield('hero-aksi')
         <nav class="tp-aksi-nav" aria-label="Ke halaman lain">
-          <a class="pr-back" href="{{ route('peta-risiko-pja.index') }}" @if (request()->routeIs('peta-risiko-pja.index')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">dashboard</span> Dashboard</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.index') }}" @if (request()->routeIs('peta-risiko-pja.master.index')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">table_view</span> Tabel Master</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}" @if (request()->routeIs('peta-risiko-pja.master.baris.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">view_list</span> Master per Baris</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}" @if (request()->routeIs('peta-risiko-pja.master.grup.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup Lokasi &amp; Aktivitas</a>
