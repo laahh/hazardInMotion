@@ -1689,10 +1689,14 @@
     tampil.sort(urut);
     const B = jumlah(diSite), G = B.t - B.full, W = DR.BW, wk = wKode(state.w);
     const kpi = (ac, kc, judul, angka, isi, k) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(k)}<small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
+    // Kosong = kombinasi site + perusahaan terpilih tidak punya PJA sama sekali. Jangan tampilkan kartu KPI
+    // sama sekali di sini — ringkasan unik (kartuAtas) dihitung per site tanpa atribusi perusahaan, jadi akan
+    // menampilkan angka site itu seolah-olah milik perusahaan yang dipilih padahal PJA-nya 0.
+    const kosong = diSite.length === 0;
 
     // Kartu KPI memakai ringkasan baseline unik yang sama dengan tab Overview (bukan jumlah baris tingkat PJA,
     // yang menghitung satu bahaya berulang di tiap PJA). Snapshot lama tanpa ringkasan unik: jumlah per PJA.
-    const kartuAtas = adaUnik()
+    const kartuAtas = (!kosong && adaUnik())
       ? (() => {
         const P = cakupanP(), NW = M.beranda.minggu.length;
         const V = jumlahF(P, (p) => vekPja(p, state.w)), V0 = state.w + 1 < NW ? jumlahF(P, (p) => vekPja(p, state.w + 1)) : null;
@@ -1700,7 +1704,7 @@
       })()
       : null;
 
-    panel.innerHTML = (kartuAtas || `<div class="br-kpis">
+    panel.innerHTML = (kosong ? '' : kartuAtas || `<div class="br-kpis">
         ${kpi('var(--navy)', 'var(--navy)', `Baris baseline · ${state.site === 'ALL' ? 'seluruh BC' : DR.esc(state.site)} · ${wk}`, DR.fmt(B.t), `${diSite.length} PJA · ${state.lv === 'ALL' ? 'semua level' : 'Significant + High'}`, 't')}
         ${kpi(W.ok, 'var(--green-d)', 'Terkontrol penuh', pctI(B.full, B.t), `${DR.fmt(B.full)} baris`, 'full')}
         ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pctI(B.part, B.t), `${DR.fmt(B.part)} baris · gap total ${pctI(G, B.t)}`, 'part')}
