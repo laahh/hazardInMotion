@@ -6,14 +6,18 @@ namespace App\Services\PeerPressure;
 
 use App\Models\PeerPressureKejadianEdukasi;
 use App\Models\ValidasiTbc;
-use App\Support\PeerPressure\PeerPressureDashboardRestrictedContractors;
 use App\Support\PeerPressure\PelaksanaanComplianceEvaluator;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Menghitung pelaksanaan peer pressure (sudah / belum) terhadap baseline tiga jalur,
- * dibatasi ke kontraktor {@see PeerPressureDashboardRestrictedContractors} dan dipecah per site.
+ * Menghitung pelaksanaan peer pressure (sudah / belum) terhadap baseline tiga jalur
+ * (BeRecord golden rules + validasi TBC + fatigue), dipecah per site.
+ * Populasi baseline disamakan persis dengan kartu "Total Deviasi Pelanggaran"
+ * {@see \App\Actions\PeerPressure\GetPeerPressureDeviationModalBreakdownAction}: seluruh kontraktor,
+ * tidak dibatasi ke kontraktor tertentu. Baris validasi TBC tanpa kejadian "Blindspot To Be Concerned
+ * Hazards" yang tasklist-nya cocok tetap dihitung di baseline (sesuai total deviasi), tapi selalu
+ * berstatus "belum" karena tidak ada status pelaksanaan yang bisa dicek untuknya.
  */
 final class PeerPressurePelaksanaanBaselineService
 {
@@ -54,60 +58,31 @@ final class PeerPressurePelaksanaanBaselineService
 
         $bounds = $this->kejadianTanggalTemuanBounds($year, $month);
 
-        $beCoMapFull = $this->berecordNitip->mapNormalizedBeRecordToCompany($year, $month);
-        $beCoMap = [];
-        foreach ($beCoMapFull as $k => $coRaw) {
-            $kn = $this->normalizeKey((string) $k);
-            if ($kn === '' || ! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($this->companyLabel($coRaw))) {
-                continue;
-            }
-            $beCoMap[$kn] = $coRaw;
-        }
-        $beBaseline = count($beCoMap);
-        $completedBe = $this->completedNormalizedIdBerecordSetRestricted($bounds);
+        $beRows = $this->berecordNitip->goldenRulesBaselineRows($year, $month);
+        $completedBe = $this->completedNormalizedIdBerecordSet($bounds);
+        $beBaseline = count($beRows);
         $selesaiBe = 0;
-        foreach (array_keys($beCoMap) as $bk) {
-            if (isset($completedBe[$bk])) {
+        foreach ($beRows as $r) {
+            if (isset($completedBe[$r['be_record_norm']])) {
                 $selesaiBe++;
             }
         }
 
-        $fatigueQ = $this->scopedKejadian($bounds)
-            ->whereRaw('LOWER(TRIM(COALESCE(kategori_deviasi, \'\'))) = ?', ['tidak speak up fatigue']);
         $fatigueBaseline = 0;
         $selesaiFatigue = 0;
-        foreach ($fatigueQ->cursor(['perusahaan', 'status_pelaksanaan_edukasi']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ($this->fatigueKejadianQuery($bounds)->cursor(['status_pelaksanaan_edukasi']) as $row) {
             $fatigueBaseline++;
             if (PelaksanaanComplianceEvaluator::isPelaksanaanClosed($row->status_pelaksanaan_edukasi ?? null)) {
                 $selesaiFatigue++;
             }
         }
 
-        $tbcQuery = ValidasiTbc::query()
-            ->whereRaw('LENGTH(TRIM(COALESCE(tasklist, \'\'))) > 0');
-        if ($year !== null && $month !== null) {
-            $y = max(self::MIN_YEAR, min(self::MAX_YEAR, $year));
-            $m = max(1, min(12, $month));
-            $start = Carbon::create($y, $m, 1)->startOfDay();
-            $end = $start->copy()->endOfMonth();
-            $tbcQuery->where('created_at', '>=', $start)->where('created_at', '<=', $end);
-        }
-
         $blindspotFull = $this->blindspotKejadianGroupsByTasklist($bounds);
         $tbcBaseline = 0;
         $selesaiTbc = 0;
-        foreach ((clone $tbcQuery)->cursor(['tasklist']) as $row) {
+        foreach ($this->tbcQuery($year, $month)->cursor(['tasklist']) as $row) {
             $tl = $this->normalizeKey((string) ($row->tasklist ?? ''));
-            if ($tl === '') {
-                continue;
-            }
-            $resolved = $this->resolveTbcRestricted($tl, $blindspotFull);
-            if ($resolved === null) {
-                continue;
-            }
+            $resolved = $this->resolveTbc($tl, $blindspotFull);
             $tbcBaseline++;
             if ($resolved['done']) {
                 $selesaiTbc++;
@@ -138,7 +113,7 @@ final class PeerPressurePelaksanaanBaselineService
     }
 
     /**
-     * Ringkasan per site dengan rincian perusahaan (hanya kontraktor terbatas); baris site bisa di-expand ke perusahaan.
+     * Ringkasan per site dengan rincian perusahaan; baris site bisa di-expand ke perusahaan.
      *
      * @return array{
      *   period_scope: string,
@@ -163,55 +138,31 @@ final class PeerPressurePelaksanaanBaselineService
         /** @var array<string, array{companies: array<string, array{total: int, selesai: int}>}> $tree */
         $tree = [];
 
-        $beCoMapFull = $this->berecordNitip->mapNormalizedBeRecordToCompany($year, $month);
-        $completedBe = $this->completedNormalizedIdBerecordSetRestricted($bounds);
-        $beSiteMap = $this->beRecordKeyToSiteFromKejadianRestricted($bounds);
+        $beRows = $this->berecordNitip->goldenRulesBaselineRows($year, $month);
+        $completedBe = $this->completedNormalizedIdBerecordSet($bounds);
+        $beSiteMap = $this->beRecordKeyToSiteFromKejadian($bounds);
         $companyPreferredSite = $this->companyPreferredSiteFromKejadian($bounds);
         $beKeyToSiteWp = $this->beRecordKeyToSiteFromWpKaryawan($year, $month);
 
-        foreach ($beCoMapFull as $beKey => $coRaw) {
-            $beNorm = $this->normalizeKey((string) $beKey);
-            if ($beNorm === '' || ! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($this->companyLabel($coRaw))) {
-                continue;
-            }
-            $co = $this->companyLabel($coRaw);
+        foreach ($beRows as $r) {
+            $beNorm = $r['be_record_norm'];
+            $co = $this->companyLabel($r['perusahaan']);
             $site = $this->resolveBeRecordSiteForAggregation($beSiteMap, $beNorm, $co, $companyPreferredSite, $beKeyToSiteWp);
             $done = isset($completedBe[$beNorm]);
             $this->accSiteCompany($tree, $site, $co, $done);
         }
 
-        $fatigueQ = $this->scopedKejadian($bounds)
-            ->whereRaw('LOWER(TRIM(COALESCE(kategori_deviasi, \'\'))) = ?', ['tidak speak up fatigue']);
-        foreach ($fatigueQ->cursor(['perusahaan', 'status_pelaksanaan_edukasi', 'site']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ($this->fatigueKejadianQuery($bounds)->cursor(['perusahaan', 'status_pelaksanaan_edukasi', 'site']) as $row) {
             $site = $this->siteLabel($row->site ?? null);
             $co = $this->companyLabel($row->perusahaan ?? null);
             $done = PelaksanaanComplianceEvaluator::isPelaksanaanClosed($row->status_pelaksanaan_edukasi ?? null);
             $this->accSiteCompany($tree, $site, $co, $done);
         }
 
-        $tbcQuery = ValidasiTbc::query()
-            ->whereRaw('LENGTH(TRIM(COALESCE(tasklist, \'\'))) > 0');
-        if ($year !== null && $month !== null) {
-            $y = max(self::MIN_YEAR, min(self::MAX_YEAR, $year));
-            $m = max(1, min(12, $month));
-            $start = Carbon::create($y, $m, 1)->startOfDay();
-            $end = $start->copy()->endOfMonth();
-            $tbcQuery->where('created_at', '>=', $start)->where('created_at', '<=', $end);
-        }
-
         $blindspotFull = $this->blindspotKejadianGroupsByTasklist($bounds);
-        foreach ((clone $tbcQuery)->cursor(['tasklist']) as $row) {
+        foreach ($this->tbcQuery($year, $month)->cursor(['tasklist']) as $row) {
             $tl = $this->normalizeKey((string) ($row->tasklist ?? ''));
-            if ($tl === '') {
-                continue;
-            }
-            $resolved = $this->resolveTbcRestricted($tl, $blindspotFull);
-            if ($resolved === null) {
-                continue;
-            }
+            $resolved = $this->resolveTbc($tl, $blindspotFull);
             $this->accSiteCompany($tree, $resolved['site'], $resolved['company'], $resolved['done']);
         }
 
@@ -224,13 +175,13 @@ final class PeerPressurePelaksanaanBaselineService
             return $this->finalizeSiteTreePayload($tree, 'month', $periodLabel);
         }
 
-        return $this->finalizeSiteTreePayload($tree, 'all', 'Semua data (baseline · kontraktor terpilih)');
+        return $this->finalizeSiteTreePayload($tree, 'all', 'Semua data (baseline · seluruh kontraktor)');
     }
 
     private const BASELINE_DETAIL_ROW_CAP = 300;
 
     /**
-     * Daftar item baseline (BeRecord / TBC / fatigue) untuk sel tertentu pada ringkasan site × kontraktor.
+     * Daftar item baseline (BeRecord / TBC / fatigue) untuk sel tertentu pada ringkasan site × perusahaan.
      *
      * @return array{rows: list<array<string, mixed>>, truncated: bool, cap: int}
      */
@@ -263,7 +214,7 @@ final class PeerPressurePelaksanaanBaselineService
     }
 
     /**
-     * Seluruh item baseline (BeRecord / TBC / fatigue, tujuh kontraktor) pada periode tertentu, tanpa filter site/company/status.
+     * Seluruh item baseline (BeRecord / TBC / fatigue, seluruh kontraktor) pada periode tertentu, tanpa filter site/company/status.
      * Jumlahnya sama persis dengan {@see self::compute()} (dipakai agar tabel rincian "Pelaksanaan Comply" selaras dengan kartu KPI).
      *
      * @return list<array{
@@ -293,26 +244,23 @@ final class PeerPressurePelaksanaanBaselineService
     {
         $rows = [];
 
-        $beCoMapFull = $this->berecordNitip->mapNormalizedBeRecordToCompany($year, $month);
-        $completedBe = $this->completedNormalizedIdBerecordSetRestricted($bounds);
-        $beSiteMap = $this->beRecordKeyToSiteFromKejadianRestricted($bounds);
+        $beRows = $this->berecordNitip->goldenRulesBaselineRows($year, $month);
+        $completedBe = $this->completedNormalizedIdBerecordSet($bounds);
+        $beSiteMap = $this->beRecordKeyToSiteFromKejadian($bounds);
         $companyPreferredSite = $this->companyPreferredSiteFromKejadian($bounds);
         $beKeyToSiteWp = $this->beRecordKeyToSiteFromWpKaryawan($year, $month);
         $beSnap = $this->berecordDisplayByNormalizedKey($bounds);
 
-        foreach ($beCoMapFull as $beKey => $coRaw) {
-            $beNorm = $this->normalizeKey((string) $beKey);
-            if ($beNorm === '' || ! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($this->companyLabel($coRaw))) {
-                continue;
-            }
-            $co = $this->companyLabel($coRaw);
+        foreach ($beRows as $r) {
+            $beNorm = $r['be_record_norm'];
+            $co = $this->companyLabel($r['perusahaan']);
             $site = $this->resolveBeRecordSiteForAggregation($beSiteMap, $beNorm, $co, $companyPreferredSite, $beKeyToSiteWp);
             $done = isset($completedBe[$beNorm]);
             $snap = $beSnap[$beNorm] ?? null;
             $rows[] = [
                 'jenis' => 'berecord',
                 'jenis_label' => 'BeRecord',
-                'referensi' => $snap['id_berecord'] ?? $beNorm,
+                'referensi' => $snap['id_berecord'] ?? ($beNorm !== '' ? $beNorm : 'OLAP #'.$r['id']),
                 'perusahaan' => $co,
                 'site' => $site,
                 'tanggal_temuan' => $this->formatDateOptional($snap['tanggal_temuan'] ?? null),
@@ -322,12 +270,7 @@ final class PeerPressurePelaksanaanBaselineService
             ];
         }
 
-        $fatigueQ = $this->scopedKejadian($bounds)
-            ->whereRaw('LOWER(TRIM(COALESCE(kategori_deviasi, \'\'))) = ?', ['tidak speak up fatigue']);
-        foreach ($fatigueQ->cursor(['id', 'perusahaan', 'status_pelaksanaan_edukasi', 'site', 'tanggal_temuan']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ($this->fatigueKejadianQuery($bounds)->cursor(['id', 'perusahaan', 'status_pelaksanaan_edukasi', 'site', 'tanggal_temuan']) as $row) {
             $site = $this->siteLabel($row->site ?? null);
             $co = $this->companyLabel($row->perusahaan ?? null);
             $done = PelaksanaanComplianceEvaluator::isPelaksanaanClosed($row->status_pelaksanaan_edukasi ?? null);
@@ -344,32 +287,16 @@ final class PeerPressurePelaksanaanBaselineService
             ];
         }
 
-        $tbcQuery = ValidasiTbc::query()
-            ->whereRaw('LENGTH(TRIM(COALESCE(tasklist, \'\'))) > 0');
-        if ($year !== null && $month !== null) {
-            $y = max(self::MIN_YEAR, min(self::MAX_YEAR, $year));
-            $m = max(1, min(12, $month));
-            $start = Carbon::create($y, $m, 1)->startOfDay();
-            $end = $start->copy()->endOfMonth();
-            $tbcQuery->where('created_at', '>=', $start)->where('created_at', '<=', $end);
-        }
-
         $blindspotFull = $this->blindspotKejadianGroupsByTasklist($bounds);
-        foreach ((clone $tbcQuery)->cursor(['id', 'tasklist', 'created_at']) as $row) {
+        foreach ($this->tbcQuery($year, $month)->cursor(['id', 'tasklist', 'created_at']) as $row) {
             $tl = $this->normalizeKey((string) ($row->tasklist ?? ''));
-            if ($tl === '') {
-                continue;
-            }
-            $resolved = $this->resolveTbcRestricted($tl, $blindspotFull);
-            if ($resolved === null) {
-                continue;
-            }
+            $resolved = $this->resolveTbc($tl, $blindspotFull);
             $done = $resolved['done'];
             $taskRaw = trim((string) ($row->tasklist ?? ''));
             $rows[] = [
                 'jenis' => 'tbc',
                 'jenis_label' => 'Validasi TBC (tasklist)',
-                'referensi' => $taskRaw !== '' ? $taskRaw : $tl,
+                'referensi' => $taskRaw !== '' ? $taskRaw : ('Validasi TBC #'.(string) ($row->id ?? '')),
                 'perusahaan' => $resolved['company'],
                 'site' => $resolved['site'],
                 'tanggal_temuan' => $this->formatDateOptional($row->created_at ?? null),
@@ -415,10 +342,7 @@ final class PeerPressurePelaksanaanBaselineService
             ->whereRaw('LENGTH(TRIM(COALESCE(id_berecord, \'\'))) > 0');
 
         $out = [];
-        foreach ($q->cursor(['id', 'id_berecord', 'tanggal_temuan', 'status_pelaksanaan_edukasi', 'perusahaan']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ($q->cursor(['id', 'id_berecord', 'tanggal_temuan', 'status_pelaksanaan_edukasi']) as $row) {
             $nk = $this->normalizeKey((string) ($row->id_berecord ?? ''));
             if ($nk === '') {
                 continue;
@@ -492,7 +416,7 @@ final class PeerPressurePelaksanaanBaselineService
             'period_scope' => $periodScope,
             'period_label' => $periodLabel,
             'baseline_scope' => true,
-            'contractor_scope' => PeerPressureDashboardRestrictedContractors::COMPANIES,
+            'contractor_scope' => [],
             'sites' => $sites,
         ];
     }
@@ -529,8 +453,9 @@ final class PeerPressurePelaksanaanBaselineService
     }
 
     /**
-     * Site yang paling sering muncul per perusahaan (kontraktor terbatas) pada kejadian dalam periode,
-     * hanya dari baris dengan kolom site terisi — dipakai fallback setelah site dari kejadian dan site dari bep_vw_wp_karyawan (kode_sid).
+     * Site yang paling sering muncul per perusahaan pada kejadian dalam periode, hanya dari baris
+     * dengan kolom site terisi — dipakai fallback setelah site dari kejadian dan site dari
+     * bep_vw_wp_karyawan (kode_sid).
      *
      * @param  array{0: ?string, 1: ?string}  $tanggalBounds
      * @return array<string, string> label perusahaan => label site
@@ -540,9 +465,6 @@ final class PeerPressurePelaksanaanBaselineService
         /** @var array<string, array<string, int>> $counts */
         $counts = [];
         foreach ($this->scopedKejadian($tanggalBounds)->cursor(['perusahaan', 'site']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
             $site = $this->siteLabel($row->site ?? null);
             if ($site === '(Site tidak diisi)') {
                 continue;
@@ -634,26 +556,24 @@ final class PeerPressurePelaksanaanBaselineService
     }
 
     /**
+     * Resolusi satu baris validasi TBC terhadap kejadian "Blindspot To Be Concerned Hazards" yang tasklist-nya
+     * cocok. Tanpa kejadian pasangan, baris tetap dihitung baseline (selaras "Total Deviasi Pelanggaran")
+     * tapi selalu "belum" karena tidak ada status pelaksanaan yang bisa diperiksa.
+     *
      * @param  array<string, list<array{co: string, closed: bool, site: string}>>  $fullGroups
-     * @return array{done: bool, company: string, site: string}|null
+     * @return array{done: bool, company: string, site: string}
      */
-    private function resolveTbcRestricted(string $tl, array $fullGroups): ?array
+    private function resolveTbc(string $tl, array $fullGroups): array
     {
         $entries = $fullGroups[$tl] ?? [];
-        $allowed = [];
-        foreach ($entries as $e) {
-            if (PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($e['co'])) {
-                $allowed[] = $e;
-            }
-        }
-        if ($allowed === []) {
-            return null;
+        if ($entries === []) {
+            return ['done' => false, 'company' => '(Tidak diisi)', 'site' => '(Site tidak diketahui)'];
         }
 
         $done = false;
-        $company = $allowed[0]['co'];
-        $site = $allowed[0]['site'];
-        foreach ($allowed as $e) {
+        $company = $entries[0]['co'];
+        $site = $entries[0]['site'];
+        foreach ($entries as $e) {
             if ($e['closed']) {
                 $done = true;
                 $company = $e['co'];
@@ -670,7 +590,7 @@ final class PeerPressurePelaksanaanBaselineService
      * @param  array{0: ?string, 1: ?string}  $tanggalBounds
      * @return array<string, true>
      */
-    private function completedNormalizedIdBerecordSetRestricted(array $tanggalBounds): array
+    private function completedNormalizedIdBerecordSet(array $tanggalBounds): array
     {
         $q = $this->scopedKejadian($tanggalBounds)
             ->where(function ($q): void {
@@ -679,10 +599,7 @@ final class PeerPressurePelaksanaanBaselineService
             ->whereRaw('LENGTH(TRIM(COALESCE(id_berecord, \'\'))) > 0');
 
         $keys = [];
-        foreach ($q->cursor(['id_berecord', 'perusahaan']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ($q->cursor(['id_berecord']) as $row) {
             $k = $this->normalizeKey((string) ($row->id_berecord ?? ''));
             if ($k !== '') {
                 $keys[$k] = true;
@@ -696,16 +613,13 @@ final class PeerPressurePelaksanaanBaselineService
      * @param  array{0: ?string, 1: ?string}  $tanggalBounds
      * @return array<string, string> normalized id_berecord => site label
      */
-    private function beRecordKeyToSiteFromKejadianRestricted(array $tanggalBounds): array
+    private function beRecordKeyToSiteFromKejadian(array $tanggalBounds): array
     {
         $q = $this->scopedKejadian($tanggalBounds)
             ->whereRaw('LENGTH(TRIM(COALESCE(id_berecord, \'\'))) > 0');
 
         $out = [];
-        foreach ($q->cursor(['id_berecord', 'site', 'perusahaan']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ($q->cursor(['id_berecord', 'site']) as $row) {
             $k = $this->normalizeKey((string) ($row->id_berecord ?? ''));
             if ($k === '') {
                 continue;
@@ -772,6 +686,28 @@ final class PeerPressurePelaksanaanBaselineService
         if ($startS !== null && $endS !== null) {
             $q->where('tanggal_temuan', '>=', $startS)
                 ->where('tanggal_temuan', '<=', $endS);
+        }
+
+        return $q;
+    }
+
+    private function fatigueKejadianQuery(array $bounds): Builder
+    {
+        return $this->scopedKejadian($bounds)
+            ->whereRaw('LOWER(TRIM(COALESCE(kategori_deviasi, \'\'))) = ?', ['tidak speak up fatigue']);
+    }
+
+    private function tbcQuery(?int $year, ?int $month): Builder
+    {
+        $q = ValidasiTbc::query()
+            ->whereRaw('LENGTH(TRIM(COALESCE(tasklist, \'\'))) > 0');
+
+        if ($year !== null && $month !== null) {
+            $y = max(self::MIN_YEAR, min(self::MAX_YEAR, $year));
+            $m = max(1, min(12, $month));
+            $start = Carbon::create($y, $m, 1)->startOfDay();
+            $end = $start->copy()->endOfMonth();
+            $q->where('created_at', '>=', $start)->where('created_at', '<=', $end);
         }
 
         return $q;

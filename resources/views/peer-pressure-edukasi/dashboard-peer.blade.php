@@ -273,7 +273,7 @@
                <div class="mt-4">
                   <p id="peer-kpi-pelaksanaan-compliance" class="font-headline font-extrabold text-4xl">{{ number_format((float) ($kpi['peer_pressure_compliance_pct'] ?? 0), 1) }}<span class="text-2xl font-bold">%</span></p>
                   <p class="text-on-surface-variant text-[11px] font-medium mt-1 leading-snug">
-                     <span id="peer-kpi-pelaksanaan-compliance-count">{{ (int) ($kpi['peer_pressure_compliance_comply'] ?? 0) }}/{{ (int) ($kpi['peer_pressure_compliance_total'] ?? 0) }}</span> item baseline (7 kontraktor · sama kartu pelaksanaan). Klik untuk penjelasan detail.
+                     <span id="peer-kpi-pelaksanaan-compliance-count">{{ (int) ($kpi['peer_pressure_compliance_comply'] ?? 0) }}/{{ (int) ($kpi['peer_pressure_compliance_total'] ?? 0) }}</span> item baseline (sama "Total Deviasi Pelanggaran"). Klik untuk penjelasan detail.
                   </p>
                </div>
             </button>
@@ -294,7 +294,7 @@
                      <span id="peer-kpi-completion-delta" class="text-[11px] font-bold text-on-surface-variant shrink-0">—</span>
                      @endif
                   </div>
-                  <p id="peer-kpi-completion-hint" class="text-on-surface-variant text-[10px] font-medium mt-1">{{ ($chartPeriodMonth ?? false) ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline) pada bulan yang dipilih' : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline)' }}</p>
+                  <p id="peer-kpi-completion-hint" class="text-on-surface-variant text-[10px] font-medium mt-1">{{ ($chartPeriodMonth ?? false) ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian pada bulan yang dipilih' : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (seluruh data)' }}</p>
                   <div class="w-full bg-[#f1f5f9] h-2 rounded-full mt-3 overflow-hidden border border-outline-variant/10">
                      <div id="peer-kpi-completion-bar" class="bg-[#16a34a] h-full rounded-full transition-all" style="width: {{ $kpiBarW }}%"></div>
                   </div>
@@ -1020,7 +1020,7 @@
                   <div class="mt-2 flex flex-wrap items-end gap-3">
                      <p id="peer-compliance-modal-summary-pct" class="font-headline text-4xl font-extrabold text-on-surface tabular-nums">{{ number_format((float) ($kpi['peer_pressure_compliance_pct'] ?? 0), 1) }}<span class="text-2xl font-bold">%</span></p>
                      <p id="peer-compliance-modal-summary-line" class="text-sm font-medium text-on-surface">
-                        <span id="peer-compliance-modal-summary-count">{{ (int) ($kpi['peer_pressure_compliance_comply'] ?? 0) }}</span> dari <span id="peer-compliance-modal-summary-total">{{ (int) ($kpi['peer_pressure_compliance_total'] ?? 0) }}</span> item baseline (7 kontraktor) memenuhi syarat <span class="font-semibold text-secondary">comply</span> — selaras pelaksanaan selesai.
+                        <span id="peer-compliance-modal-summary-count">{{ (int) ($kpi['peer_pressure_compliance_comply'] ?? 0) }}</span> dari <span id="peer-compliance-modal-summary-total">{{ (int) ($kpi['peer_pressure_compliance_total'] ?? 0) }}</span> item baseline memenuhi syarat <span class="font-semibold text-secondary">comply</span> — selaras pelaksanaan selesai.
                      </p>
                   </div>
                   <div class="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/80">
@@ -1035,7 +1035,7 @@
 
                <section class="mt-6 rounded-xl border border-outline-variant/20 bg-[#f8fafc] p-4 sm:p-5">
                   <h3 class="font-headline text-sm font-bold text-on-surface">Ringkasan data</h3>
-                  <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">Angka ringkas dan tabel di bawah sama-sama mengikuti baseline pelaksanaan (BeRecord + TBC + fatigue, tujuh kontraktor) untuk periode yang sama dengan kartu KPI.</p>
+                  <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">Angka ringkas dan tabel di bawah sama-sama mengikuti baseline pelaksanaan (BeRecord + TBC + fatigue, seluruh kontraktor — sama populasi dengan kartu "Total Deviasi Pelanggaran") untuk periode yang sama dengan kartu KPI.</p>
                   <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                      <div class="rounded-lg border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-center shadow-sm">
                         <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Comply</p>
@@ -1055,7 +1055,7 @@
                   </div>
                   <p id="peer-compliance-brief-narrative" class="mt-4 text-[12px] leading-relaxed text-on-surface">
                      @if($kpiTracked === 0)
-                        Belum ada item baseline pada periode ini untuk tujuh kontraktor terpilih.
+                        Belum ada item baseline pada periode ini.
                      @else
                         Dari {{ number_format($kpiTracked) }} item baseline: <strong class="text-emerald-800">{{ number_format($kpiComply) }} comply</strong> dan <strong class="text-red-800">{{ number_format($kpiNonComply) }} belum comply</strong>. Persentase di atas = comply ÷ total × 100 ({{ number_format((float) ($kpi['peer_pressure_compliance_pct'] ?? 0), 1) }}%).
                      @endif
@@ -1066,7 +1066,7 @@
                <section class="mt-6">
                   <h3 class="font-headline text-sm font-bold text-on-surface">Data per item baseline</h3>
                   <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">
-                     Rincian per item baseline (BeRecord + TBC + fatigue, tujuh kontraktor), ditampilkan per halaman. Klik ID untuk membuka detail kejadian bila tersedia.
+                     Rincian per item baseline (BeRecord + TBC + fatigue, seluruh kontraktor — sama populasi dengan "Total Deviasi Pelanggaran"), ditampilkan per halaman. Klik ID untuk membuka detail kejadian bila tersedia.
                   </p>
                   <div id="peer-compliance-table-loading" class="mt-3 hidden rounded-lg border border-outline-variant/20 bg-[#f8fafc] px-4 py-8 text-center text-[12px] font-medium text-on-surface-variant" aria-live="polite">
                      <span class="material-symbols-outlined mb-2 inline-block animate-spin text-2xl text-secondary" style="animation-duration:1s">progress_activity</span>
@@ -1091,7 +1091,7 @@
                      </table>
                   </div>
                   <p id="peer-compliance-table-empty" class="mt-3 hidden rounded-lg border border-dashed border-outline-variant/30 bg-white px-4 py-8 text-center text-[12px] text-on-surface-variant">
-                     Belum ada item baseline pada periode ini untuk tujuh kontraktor terpilih.
+                     Belum ada item baseline pada periode ini.
                   </p>
                   <div id="peer-compliance-pagination" class="mt-3 hidden flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant/15 pt-3"></div>
                </section>
@@ -1161,7 +1161,7 @@
                </button>
             </div>
             <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
-               <p class="text-[11px] leading-snug text-on-surface-variant">Proporsi mengikuti kartu <span class="font-semibold text-on-surface">Pelaksanaan Rate</span> dan <span class="font-semibold text-on-surface">hanya menghitung baseline untuk tujuh kontraktor terpilih</span> (Bukit Makmur, Kaltim Diamond Coal, Mutiara Tanjung Lestari, Pamapersada, Bumi Artlantis, Fajar Anugerah Dinamika, Madhani Talatah). Kejadian dianggap <span class="font-semibold text-on-surface">sudah dilaksanakan</span> bila status pelaksanaan edukasi mengandung <span class="font-mono text-[10px]">CLOSED</span> atau <span class="font-mono text-[10px]">SELESAI</span>. Pilih tab di bawah untuk melihat tabel kejadian <span class="font-semibold text-on-surface">sudah selesai</span> atau <span class="font-semibold text-on-surface">belum selesai</span>.</p>
+               <p class="text-[11px] leading-snug text-on-surface-variant">Proporsi mengikuti kartu <span class="font-semibold text-on-surface">Pelaksanaan Rate</span> dan <span class="font-semibold text-on-surface">menghitung baseline seluruh kontraktor</span> (sama populasi dengan kartu "Total Deviasi Pelanggaran": BeRecord golden rules + validasi TBC + fatigue). Kejadian dianggap <span class="font-semibold text-on-surface">sudah dilaksanakan</span> bila status pelaksanaan edukasi mengandung <span class="font-mono text-[10px]">CLOSED</span> atau <span class="font-mono text-[10px]">SELESAI</span>. Pilih tab di bawah untuk melihat tabel kejadian <span class="font-semibold text-on-surface">sudah selesai</span> atau <span class="font-semibold text-on-surface">belum selesai</span>.</p>
                <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2" role="tablist" aria-label="Pelaksanaan peer pressure">
                   <button type="button" role="tab" id="peer-pelaksanaan-tab-selesai" class="peer-pelaksanaan-tab rounded-xl border px-4 py-4 text-center shadow-sm transition-all outline-none w-full ring-2 ring-emerald-400/50 border-emerald-300 bg-emerald-50/90 focus-visible:ring-2 focus-visible:ring-emerald-500/40" data-pelaksanaan-tab="selesai" aria-selected="true" aria-controls="peer-pelaksanaan-panel-selesai" tabindex="0">
                      <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Sudah peer pressure</p>
@@ -1172,7 +1172,7 @@
                      <p id="peer-pelaksanaan-modal-pct-belum" class="mt-2 font-headline text-4xl font-extrabold tabular-nums text-amber-950">{{ number_format($kpiPctBelum, 1) }}<span class="text-2xl font-bold">%</span></p>
                   </button>
                </div>
-               <p id="peer-pelaksanaan-modal-total-caption" class="mt-3 text-center text-[10px] text-on-surface-variant">Dasar perhitungan tab di atas: {{ number_format($kpiPelaksanaanBaseline) }} item baseline (BeRecord CH + validasi TBC + fatigue) untuk tujuh kontraktor terpilih @if($chartPeriodMonth ?? false)pada periode filter chart.@else pada seluruh periode data.@endif</p>
+               <p id="peer-pelaksanaan-modal-total-caption" class="mt-3 text-center text-[10px] text-on-surface-variant">Dasar perhitungan tab di atas: {{ number_format($kpiPelaksanaanBaseline) }} item baseline (BeRecord CH + validasi TBC + fatigue), seluruh kontraktor @if($chartPeriodMonth ?? false)pada periode filter chart.@else pada seluruh periode data.@endif</p>
 
                <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div class="rounded-xl border border-emerald-200/80 bg-emerald-50/50 px-4 py-3 shadow-sm">
@@ -1193,9 +1193,9 @@
                </div>
 
                <div class="mt-5 rounded-xl border border-teal-200/80 bg-teal-50/50 px-4 py-3">
-                  <p class="text-[10px] font-bold uppercase tracking-wide text-teal-900">Pelaksanaan per site (tujuh kontraktor)</p>
+                  <p class="text-[10px] font-bold uppercase tracking-wide text-teal-900">Pelaksanaan per site (seluruh kontraktor)</p>
                   <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">
-                     Ringkasan <span class="font-medium text-on-surface">per site</span> dari item baseline yang sama; baris site dapat dibuka untuk melihat <span class="font-medium text-on-surface">per perusahaan</span> di bawahnya. Arahkan mouse ke kolom <span class="font-medium text-on-surface">Terlaksana</span> atau <span class="font-medium text-on-surface">Tidak terlaksana</span> untuk melihat tabel rincian item baseline. Hanya kontraktor terpilih; mengikuti filter periode chart. Untuk BeRecord, jika site belum terbaca dari kejadian, digunakan <span class="font-medium text-on-surface">site dari Nitip · bep_vw_wp_karyawan</span> (cocokkan <span class="font-medium text-on-surface">kode_sid</span> dengan BeRecord) bila kolom site terisi.
+                     Ringkasan <span class="font-medium text-on-surface">per site</span> dari item baseline yang sama; baris site dapat dibuka untuk melihat <span class="font-medium text-on-surface">per perusahaan</span> di bawahnya. Arahkan mouse ke kolom <span class="font-medium text-on-surface">Terlaksana</span> atau <span class="font-medium text-on-surface">Tidak terlaksana</span> untuk melihat tabel rincian item baseline. Seluruh kontraktor; mengikuti filter periode chart. Untuk BeRecord, jika site belum terbaca dari kejadian, digunakan <span class="font-medium text-on-surface">site dari Nitip · bep_vw_wp_karyawan</span> (cocokkan <span class="font-medium text-on-surface">kode_sid</span> dengan BeRecord) bila kolom site terisi.
                   </p>
                   <p id="peer-pp-summary-loading" class="mt-3 hidden text-[12px] leading-snug text-teal-900/90" role="status">Memuat ringkasan site…</p>
                   <p id="peer-pp-summary-empty" class="mt-3 hidden text-[12px] leading-snug text-on-surface-variant" role="status"></p>
@@ -2193,8 +2193,8 @@
           if (hintEl && periodScope) {
             hintEl.textContent =
               periodScope === 'month'
-                ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline) pada bulan yang dipilih'
-                : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline)';
+                ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian pada bulan yang dipilih'
+                : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (seluruh data)';
           }
           var totalEl = document.getElementById('peer-kpi-total');
           var trendEl = document.getElementById('peer-kpi-total-trend');
@@ -2351,7 +2351,7 @@
             cap.textContent =
               'Dasar perhitungan tab di atas: ' +
               baseLine.toLocaleString('id-ID') +
-              ' item baseline (BeRecord CH + validasi TBC + fatigue) untuk tujuh kontraktor terpilih ' +
+              ' item baseline (BeRecord CH + validasi TBC + fatigue), seluruh kontraktor ' +
               (periodScope === 'month' ? 'pada periode filter chart.' : 'pada seluruh periode data.');
           }
           if (elCntS) elCntS.textContent = selesai.toLocaleString('id-ID');
@@ -2410,7 +2410,7 @@
           if (bNar) {
             if (ct === 0) {
               bNar.textContent =
-                'Belum ada item baseline pada periode ini untuk tujuh kontraktor terpilih.';
+                'Belum ada item baseline pada periode ini.';
             } else {
               var pctFmt = pct.toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
               bNar.innerHTML =
@@ -3377,7 +3377,7 @@
           var sites = data && Array.isArray(data.sites) ? data.sites : [];
           if (!sites.length) {
             emptyEl.textContent =
-              'Belum ada data site untuk ringkasan baseline (kontraktor terpilih) pada periode ini.';
+              'Belum ada data site untuk ringkasan baseline pada periode ini.';
             emptyEl.classList.remove('hidden');
             wrapEl.classList.add('hidden');
             return;

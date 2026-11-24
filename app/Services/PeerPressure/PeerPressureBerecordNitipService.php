@@ -137,6 +137,48 @@ final class PeerPressureBerecordNitipService
     }
 
     /**
+     * Baris baseline BeRecord (filter periode + golden_rules sama {@see countDistinctIdsGoldenRulesBaseline}):
+     * satu baris per `id` OLAP (bukan dedup per nilai BeRecord), dipakai agar total baseline pelaksanaan
+     * sama persis dengan kartu "Total Deviasi Pelanggaran".
+     *
+     * @return list<array{id: string, be_record_norm: string, perusahaan: string}>
+     */
+    public function goldenRulesBaselineRows(?int $year = null, ?int $month = null): array
+    {
+        if (! $this->isConnected()) {
+            return [];
+        }
+
+        [$where, $params] = $this->deviationModalBeRecordWhere($year, $month);
+
+        try {
+            $sql = 'SELECT id::text AS id, lower(trim("BeRecord"::text)) AS b, trim(COALESCE(perusahaan, \'\')) AS co'
+                .' FROM '.self::TABLE.' '.$where.' ORDER BY id';
+            $rows = $this->select($sql, $params);
+            $out = [];
+            foreach ($rows as $row) {
+                $id = $this->cell($row, 'id');
+                if ($id === null || trim($id) === '') {
+                    continue;
+                }
+                $out[] = [
+                    'id' => trim($id),
+                    'be_record_norm' => (string) ($this->cell($row, 'b') ?? ''),
+                    'perusahaan' => (string) ($this->cell($row, 'co') ?? ''),
+                ];
+            }
+
+            return $out;
+        } catch (Throwable $e) {
+            Log::warning('PeerPressureBerecordNitipService: goldenRulesBaselineRows gagal', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
      * Jumlah nilai unik kolom `id` pada view `bcsid.bep_vw_berecord`.
      * Jika tahun & bulan diisi, dibatasi ke baris yang `start_date_be_record` jatuh di bulan tersebut.
      */

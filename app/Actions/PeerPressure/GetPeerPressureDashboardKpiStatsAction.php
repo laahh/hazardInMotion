@@ -9,7 +9,6 @@ use App\Models\PeerPressurePesertaEdukasi;
 use App\Services\PeerPressure\PeerPressurePelaksanaanBaselineService;
 use App\Support\PeerPressure\KategoriDeviasiBucket;
 use App\Support\PeerPressure\PelaksanaanComplianceEvaluator;
-use App\Support\PeerPressure\PeerPressureDashboardRestrictedContractors;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -221,8 +220,7 @@ final class GetPeerPressureDashboardKpiStatsAction
     }
 
     /**
-     * Total & selesai (CLOSED/SELESAI) hanya untuk kejadian dari tujuh kontraktor terpilih
-     * (sama scope dengan {@see PeerPressurePelaksanaanBaselineService}), dipakai kartu "Evaluasi Kelompok Kerja".
+     * Total & selesai (CLOSED/SELESAI), dipakai kartu "Evaluasi Kelompok Kerja".
      *
      * @return array{0: int, 1: int} [total, selesai]
      */
@@ -230,10 +228,7 @@ final class GetPeerPressureDashboardKpiStatsAction
     {
         $total = 0;
         $closed = 0;
-        foreach ((clone $base)->cursor(['perusahaan', 'status_pelaksanaan_edukasi']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ((clone $base)->cursor(['status_pelaksanaan_edukasi']) as $row) {
             $total++;
             if (PelaksanaanComplianceEvaluator::isPelaksanaanClosed($row->status_pelaksanaan_edukasi ?? null)) {
                 $closed++;
@@ -619,17 +614,10 @@ SQL;
         ];
     }
 
-    /**
-     * Dibatasi ke tujuh kontraktor terpilih (sama scope dengan baseline pelaksanaan), karena dipakai di bagian
-     * modal "Pelaksanaan Peer Pressure" / "Evaluasi Kelompok Kerja" yang sudah menyatakan scope tersebut.
-     */
     private function countPelaksanaanStatusKosong(Builder $base): int
     {
         $n = 0;
-        foreach ((clone $base)->cursor(['perusahaan', 'status_pelaksanaan_edukasi']) as $row) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ((clone $base)->cursor(['status_pelaksanaan_edukasi']) as $row) {
             if (trim((string) ($row->status_pelaksanaan_edukasi ?? '')) === '') {
                 $n++;
             }
@@ -663,7 +651,6 @@ SQL;
     /**
      * Agregasi per jenis kelompok kerja: selesai (CLOSED/SELESAI) vs belum, untuk modal pelaksanaan.
      * Variasi label (mis. GRUP SBS COACHING + Grup SBS, Grup Kerja (Under 1 GL) + Fleet) dilebur per {@see canonicalKelompokKerjaLabel}.
-     * Dibatasi ke tujuh kontraktor terpilih (sama scope dengan baseline pelaksanaan).
      *
      * @return list<array{kelompok: string, selesai: int, belum: int, total: int, pct_selesai: float}>
      */
@@ -671,10 +658,7 @@ SQL;
     {
         /** @var array<string, array{selesai: int, total: int}> $merged */
         $merged = [];
-        foreach ((clone $base)->cursor(['perusahaan', 'jenis_kelompok_kerja', 'status_pelaksanaan_edukasi']) as $r) {
-            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($r->perusahaan ?? null)) {
-                continue;
-            }
+        foreach ((clone $base)->cursor(['jenis_kelompok_kerja', 'status_pelaksanaan_edukasi']) as $r) {
             $rawLabel = trim((string) ($r->jenis_kelompok_kerja ?? ''));
             $rawLabel = $rawLabel === '' ? '(Tidak diisi)' : $rawLabel;
             $key = $this->canonicalKelompokKerjaLabel($rawLabel);
@@ -708,8 +692,8 @@ SQL;
     }
 
     /**
-     * Metrik "Pelaksanaan Comply" pada KPI diselaraskan dengan baseline pelaksanaan:
-     * tujuh kontraktor terpilih, BeRecord (CH + golden_rules) + validasi TBC + fatigue.
+     * Metrik "Pelaksanaan Comply" pada KPI diselaraskan dengan baseline pelaksanaan (seluruh kontraktor,
+     * sama populasi dengan kartu "Total Deviasi Pelanggaran"): BeRecord (golden_rules) + validasi TBC + fatigue.
      * Total = item baseline; comply = yang sudah memenuhi pelaksanaan selesai (sama {@see PeerPressurePelaksanaanBaselineService::compute}).
      *
      * @return array{
