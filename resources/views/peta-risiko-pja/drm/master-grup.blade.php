@@ -298,12 +298,12 @@
           ? esc(d) + '<br><span class="mg-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
       kolomHira, kolomKelompok, kolomGrup,
     ],
-  });
-
-  // Isi chip "Asal HIRA" halaman yang sedang tampil setiap kali tabel digambar ulang (deferRender: baru ada di DOM).
-  tabel.on('draw', () => {
-    const tds = document.querySelectorAll('#mg-tabel td[data-hira]');
-    if (tds.length) isiHira(document.getElementById('mg-tabel'), [...tds].map((td) => td.dataset.hira));
+    // Isi chip "Asal HIRA" halaman yang sedang tampil setiap draw (termasuk draw pertama saat tabel dibuat;
+    // .on('draw', …) SETELAH new DataTable() sudah kelewat draw pertama karena draw itu terjadi sinkron di konstruktor).
+    drawCallback: function () {
+      const tds = document.querySelectorAll('#mg-tabel td[data-hira]');
+      if (tds.length) isiHira(document.getElementById('mg-tabel'), [...tds].map((td) => td.dataset.hira));
+    },
   });
 
   // Tabel disaring di bawah search bawaan DataTables; filter kustom (risiko, kelompok, grup/tanpa grup).
