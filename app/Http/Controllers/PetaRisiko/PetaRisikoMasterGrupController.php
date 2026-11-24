@@ -22,78 +22,70 @@ final class PetaRisikoMasterGrupController extends Controller
     {
     }
 
+    /**
+     * Tabel datar satu baris = satu baris HIRA (sama konsep dengan /master/baris): kolom "Grup lokasi" berisi
+     * chip grup yang bisa ditambah/dikeluarkan per baris, disaring/dicari di browser (DataTables).
+     */
     public function index(Request $request): View
     {
         $data = ['siap' => DrmMasterDb::terisi(), 'bolehUbah' => $this->bolehUbah($request)];
         if (! $data['siap']) {
             return view('peta-risiko-pja.drm.master-grup', $data);
         }
-        $daftar = $this->grup->daftarGrup();
-        $gid = (int) $request->query('gid', 0);
-        if (! collect($daftar)->contains('gid', $gid)) {
-            // Bawaan: grup dengan baris terbanyak.
-            $gid = (int) (collect($daftar)->sortByDesc('baris')->first()['gid'] ?? 0);
-        }
 
         return view('peta-risiko-pja.drm.master-grup', $data + [
-            'daftarGrup' => $daftar,
-            'gid' => $gid,
-            'grupAktif' => collect($daftar)->firstWhere('gid', $gid),
-            'aktivitas' => $this->grup->aktivitasGrup($gid),
-            'luar' => $data['bolehUbah'] ? $this->grup->aktivitasLuar($gid) : [],
-            'dl' => $this->grup->detailLokasi($gid),
+            'daftarGrup' => $this->grup->daftarGrup(),
+            'rows' => $this->grup->semuaBaris(),
+            'dlPerGrup' => $this->grup->semuaDetailLokasi(),
             'kelompok' => $this->grup->kelompok(),
         ]);
     }
 
-    /** Tambah aktivitas (semua barisnya) ke grup. */
+    /** Tambahkan baris terpilih (bisa lintas aktivitas) ke grup — chip "+ Tambah ke grup" per baris atau aksi borongan. */
     public function tambah(Request $request, int $gid): RedirectResponse
     {
         $this->izin($request);
-        $v = $request->validate(['aid' => ['required', 'integer', 'min:0']]);
+        $v = $request->validate([
+            'ri' => ['required', 'array', 'min:1', 'max:2000'],
+            'ri.*' => ['integer', 'min:0'],
+        ], ['ri.required' => 'Pilih minimal satu baris.']);
+        $ri = array_map('intval', $v['ri']);
 
-        return $this->jalankan($gid, fn () => $this->grup->tambah($gid, (int) $v['aid']), fn ($n) => $n ? "{$n} baris aktivitas ditambahkan ke grup." : 'Semua baris aktivitas ini sudah ada di grup.');
+        return $this->jalankan(fn () => $this->grup->tambahBaris($gid, $ri), fn ($n) => $n ? "{$n} baris ditambahkan ke grup." : 'Baris terpilih sudah ada di grup ini.');
     }
 
-    /** Pindah atau hapus baris terpilih dari grup. */
+    /** Keluarkan baris terpilih dari grup $gid (chip hapus per baris, atau aksi borongan). */
     public function ubahBaris(Request $request, int $gid): RedirectResponse
     {
         $this->izin($request);
         $v = $request->validate([
-            'aksi' => ['required', 'in:pindah,hapus'],
             'ri' => ['required', 'array', 'min:1', 'max:2000'],
             'ri.*' => ['integer', 'min:0'],
-            'tujuan' => ['required_if:aksi,pindah', 'nullable', 'integer'],
-        ], ['ri.required' => 'Pilih minimal satu baris.', 'tujuan.required_if' => 'Pilih grup tujuan.']);
+        ], ['ri.required' => 'Pilih minimal satu baris.']);
         $ri = array_map('intval', $v['ri']);
 
-        if ($v['aksi'] === 'hapus') {
-            return $this->jalankan($gid, fn () => $this->grup->hapus($gid, $ri), fn ($n) => "{$n} baris dikeluarkan dari grup.");
-        }
-
-        return $this->jalankan($gid, fn () => $this->grup->pindah($gid, (int) $v['tujuan'], $ri), fn ($n) => "{$n} baris dipindah ke grup tujuan.");
+        return $this->jalankan(fn () => $this->grup->hapus($gid, $ri), fn ($n) => "{$n} baris dikeluarkan dari grup.");
     }
 
     /** Ubah kelompok aktivitas (M02). */
     public function kelompok(Request $request, int $aid): RedirectResponse
     {
         $this->izin($request);
-        $v = $request->validate(['kelompok' => ['required', 'string', 'max:10'], 'gid' => ['nullable', 'integer']]);
-        $gid = (int) ($v['gid'] ?? 0);
+        $v = $request->validate(['kelompok' => ['required', 'string', 'max:10']]);
 
-        return $this->jalankan($gid, fn () => $this->grup->ubahKelompok($aid, $v['kelompok']), fn ($ubah) => $ubah ? 'Kelompok aktivitas diperbarui.' : 'Kelompok aktivitas tidak berubah.');
+        return $this->jalankan(fn () => $this->grup->ubahKelompok($aid, $v['kelompok']), fn ($ubah) => $ubah ? 'Kelompok aktivitas diperbarui.' : 'Kelompok aktivitas tidak berubah.');
     }
 
-    private function jalankan(int $gid, callable $aksi, callable $pesan): RedirectResponse
+    private function jalankan(callable $aksi, callable $pesan): RedirectResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
         try {
             $hasil = $aksi();
         } catch (InvalidArgumentException $e) {
-            return redirect()->route('peta-risiko-pja.master.grup.index', ['gid' => $gid])->withErrors(['grup' => $e->getMessage()]);
+            return redirect()->route('peta-risiko-pja.master.grup.index')->withErrors(['grup' => $e->getMessage()]);
         }
 
-        return redirect()->route('peta-risiko-pja.master.grup.index', ['gid' => $gid])
+        return redirect()->route('peta-risiko-pja.master.grup.index')
             ->with('pesan', $pesan($hasil).' Berlaku setelah peta-risiko:sync berikutnya.');
     }
 

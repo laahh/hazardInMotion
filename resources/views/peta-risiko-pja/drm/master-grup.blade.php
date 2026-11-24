@@ -13,7 +13,7 @@
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Peta Risiko PJA</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Grup lokasi & aktivitas</span></p>
   <h1 class="pr-title">Grup lokasi & aktivitas HIRA</h1>
-  <p class="pr-sub">Aktivitas HIRA yang berlaku di setiap grup lokasi (M05) beserta kelompok aktivitasnya (M02). Semua detail lokasi di grup mewarisi baris di sini sebagai baseline. Perubahan berlaku pada <code>peta-risiko:sync</code> berikutnya.</p>
+  <p class="pr-sub">Setiap baris HIRA (aktivitas · sub aktivitas · bahaya-risiko) dengan grup lokasi (M05) tempatnya berlaku sebagai baseline, dan kelompok aktivitasnya (M02). Satu baris bisa dipakai di lebih dari satu grup. Perubahan berlaku pada <code>peta-risiko:sync</code> berikutnya.</p>
 @endsection
 
 @section('content')
@@ -22,47 +22,41 @@
   .mg-banner.ok { background: #e9f7ee; color: #146c34; border: 1px solid rgba(22, 163, 74, .25); }
   .mg-banner.err { background: #fdecef; color: #9b1c31; border: 1px solid rgba(200, 16, 46, .25); }
   .mg-banner.warn { background: #fff7e6; color: #8a5300; border: 1px solid rgba(217, 119, 6, .25); }
-  .mg-top { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
-  .mg-grup { display: grid; gap: 4px; max-height: 70vh; overflow: auto; padding: 8px; }
-  .mg-grup a { display: flex; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 10px; color: #2c2f31; text-decoration: none; font-size: 13.5px; }
-  .mg-grup a:hover { background: #f1f4fb; }
-  .mg-grup a.on { background: #3952bc; color: #fff; }
-  .mg-grup a small { font-size: 11.5px; opacity: .75; white-space: nowrap; }
-  .mg-grup a.kosong:not(.on) { color: #9aa0a6; }
-  .mg-ring { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .mg-ring div { background: #fff; border: 1px solid rgba(0, 0, 0, .08); border-radius: 14px; padding: 12px 14px; }
-  .mg-ring small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #595c5e; }
-  .mg-ring b { font-size: 22px; font-weight: 800; color: #2c2f31; }
-  .mg-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgba(171, 173, 175, .2); }
-  .mg-bar input, .mg-bar select { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #f8fafc; font-size: 13px; }
-  .mg-bar input[type=search] { flex: 1 1 240px; }
+  .mg-banner code { background: rgba(0, 0, 0, .06); padding: 1px 6px; border-radius: 6px; }
+  .mg-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 20px; border-bottom: 1px solid rgba(171, 173, 175, .2); }
+  .mg-bar select { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; }
   .mg-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 0; background: #3952bc; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
   .mg-btn.sek { background: #fff; color: #2c2f31; border: 1px solid rgba(171, 173, 175, .45); }
   .mg-btn.bahaya { background: #fff; color: #b42318; border: 1px solid rgba(180, 35, 24, .35); }
-  .mg-kel { padding: 10px 18px; background: #f8fafc; border-top: 1px solid rgba(171, 173, 175, .2); font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #595c5e; }
-  .mg-akt > summary { display: flex; gap: 12px; align-items: center; padding: 11px 18px; cursor: pointer; list-style: none; border-top: 1px solid rgba(171, 173, 175, .15); }
-  .mg-akt > summary::-webkit-details-marker { display: none; }
-  .mg-akt > summary::before { content: "▸"; color: #3952bc; transition: transform .2s; }
-  .mg-akt[open] > summary::before { transform: rotate(90deg); }
-  .mg-akt > summary:hover { background: #f6f8fd; }
-  .mg-akt .nama { flex: 1; min-width: 0; font-size: 13.5px; }
-  .mg-akt .nama small { display: block; color: #8a8d90; font-size: 11.5px; }
-  .mg-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eef1f5; color: #475569; white-space: nowrap; }
-  .mg-chip.lain { background: #fff7e6; color: #8a5300; }
-  .mg-isi { padding: 6px 18px 16px 40px; background: #fbfcfe; }
-  .mg-isi form.kel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 10px; font-size: 13px; }
-  .mg-isi select { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(171, 173, 175, .55); font-size: 13px; }
   .mg-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .mg-tbl th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #595c5e; padding: 8px 10px; border-bottom: 1px solid rgba(171, 173, 175, .3); }
-  .mg-tbl td { padding: 8px 10px; border-bottom: 1px solid rgba(171, 173, 175, .15); vertical-align: top; }
-  .mg-lv { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; background: #f3f4f6; color: #4b5563; }
+  .mg-tbl th { position: sticky; top: 0; background: #f8fafc; text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #595c5e; padding: 10px 12px; border-bottom: 1px solid rgba(171, 173, 175, .3); }
+  .mg-tbl td { vertical-align: top; padding: 10px 12px; border-bottom: 1px solid rgba(171, 173, 175, .18); }
+  .mg-tbl td.hira { min-width: 150px; max-width: 220px; }
+  .mg-tbl td.hira small { display: block; color: #8a8d90; font-size: 11.5px; margin-top: 2px; }
+  .mg-tbl td.kel { min-width: 190px; }
+  .mg-tbl td.grp { min-width: 230px; }
+  .mg-lv { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; background: #f3f4f6; color: #4b5563; }
   .mg-lv.Significant { background: #fdecee; color: #b91c1c; } .mg-lv.High { background: #fff0e3; color: #b45309; }
   .mg-lv.Medium { background: #fef8e1; color: #92650a; } .mg-lv.Low { background: #eef8f0; color: #15803d; }
-  .mg-aksi { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; font-size: 13px; }
+  .mg-nonaktif { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #f3f4f6; color: #8a8d90; }
+  .mg-chip { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 6px; padding: 5px 6px 5px 10px; border-radius: 10px; background: #f1f5f9; border: 1px solid #e2e8f0; font-size: 12px; line-height: 1.35; }
+  .mg-chip span { flex: 1; }
+  .mg-chip form { margin: 0; }
+  .mg-chip button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+  .mg-chip button:hover { color: #b91c1c; }
+  .mg-kosong { color: #b0b3b6; font-size: 12px; font-style: italic; }
+  .mg-tambah summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #3952bc; list-style: none; }
+  .mg-tambah summary::-webkit-details-marker { display: none; }
+  .mg-tambah form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .mg-tambah select { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(171, 173, 175, .55); font-size: 12.5px; }
+  .mg-tambah button { align-self: flex-start; padding: 5px 12px; border-radius: 999px; border: 0; background: #3952bc; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .mg-kel-form select { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(171, 173, 175, .55); font-size: 12.5px; min-width: 170px; }
+  .mg-scroll { overflow-x: auto; }
+  .mg-bulk { display: none; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 20px; background: #eef1fd; border-bottom: 1px solid rgba(57, 82, 188, .18); font-size: 13px; }
+  .mg-bulk.on { display: flex; }
+  .mg-bulk select { padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(171, 173, 175, .45); font-size: 13px; }
   .mg-dl { columns: 3 260px; font-size: 12.5px; color: #475569; padding: 4px 18px 16px; }
   .mg-dl div { break-inside: avoid; padding: 2px 0; }
-  .mg-kosong { padding: 24px 18px; color: #8a8d90; font-size: 13px; }
-  @media (max-width: 900px) { .mg-top { grid-template-columns: 1fr; } .mg-grup { max-height: 260px; } }
 </style>
 
 @if (session('pesan'))
@@ -75,161 +69,239 @@
 @if (! $siap)
   <div class="mg-banner warn"><span class="material-symbols-outlined">database</span><div>Master database belum siap. Isi dulu tabel master (<code>php artisan peta-risiko:master-db --isi</code>) sebelum memakai halaman ini.</div></div>
 @else
-  <div class="mg-top">
-    <div class="pr-card" style="padding:0">
-      <div class="pr-card-head"><div><b>Grup lokasi</b><small>Baris HIRA · detail lokasi</small></div></div>
-      <nav class="mg-grup" aria-label="Pilih grup lokasi">
-        @foreach ($daftarGrup as $g)
-          <a href="{{ route('peta-risiko-pja.master.grup.index', ['gid' => $g['gid']]) }}" class="{{ $g['gid'] === $gid ? 'on' : '' }} {{ $g['baris'] ? '' : 'kosong' }}" @if ($g['gid'] === $gid) aria-current="page" @endif>
-            <span>{{ $g['nama'] }}</span><small>{{ number_format($g['baris'], 0, ',', '.') }} · {{ number_format($g['dl'], 0, ',', '.') }} DL</small>
-          </a>
+  <div class="pr-card" style="padding:0">
+    <div class="mg-bar">
+      <input type="search" id="mg-cari" placeholder="Cari aktivitas, sub aktivitas, atau bahaya…" aria-label="Cari" style="flex:1 1 240px;max-width:420px;padding:9px 14px;border-radius:999px;border:1px solid rgba(171,173,175,.45);background:#f8fafc;font-size:13.5px">
+      <select id="mg-f-kb" aria-label="Risiko awal">
+        <option value="">Semua risiko</option>
+        @foreach (['Significant', 'High', 'Medium', 'Low'] as $lv)
+          <option value="{{ $lv }}">{{ $lv }}</option>
         @endforeach
-      </nav>
+      </select>
+      <select id="mg-f-kel" aria-label="Kelompok aktivitas">
+        <option value="">Semua kelompok</option>
+        @foreach ($kelompok as $kode => $nama)
+          <option value="{{ $kode }}">{{ $nama }}</option>
+        @endforeach
+      </select>
+      <select id="mg-f-grup" aria-label="Grup lokasi">
+        <option value="">Semua grup</option>
+        <option value="__TANPA__">Tanpa grup</option>
+        @foreach ($daftarGrup as $g)
+          <option value="{{ $g['gid'] }}">{{ $g['nama'] }} ({{ number_format($g['baris'], 0, ',', '.') }})</option>
+        @endforeach
+      </select>
+      <button class="mg-btn sek" type="button" id="mg-reset">Reset filter</button>
     </div>
 
-    <div>
-      <div class="mg-ring">
-        <div><small>Baris HIRA di grup</small><b>{{ number_format($grupAktif['baris'] ?? 0, 0, ',', '.') }}</b></div>
-        <div><small>Aktivitas HIRA</small><b>{{ number_format($grupAktif['aktivitas'] ?? 0, 0, ',', '.') }}</b></div>
-        <div><small>Detail lokasi</small><b>{{ number_format($grupAktif['dl'] ?? 0, 0, ',', '.') }}</b></div>
-      </div>
-
-      <div class="pr-card" style="padding:0">
-        <div class="mg-bar">
-          <input type="search" id="mg-cari" placeholder="Cari aktivitas, sub aktivitas, atau bahaya…" aria-label="Cari aktivitas">
-          <select id="mg-f-kel" aria-label="Saring kelompok">
-            <option value="">Semua kelompok</option>
-            @foreach ($kelompok as $kode => $nama)
-              @if (collect($aktivitas)->contains('kelompok', $kode))<option value="{{ $kode }}">{{ $nama }}</option>@endif
-            @endforeach
+    <div class="mg-bulk" id="mg-bulk">
+      <span id="mg-bulk-n"></span>
+      @if ($bolehUbah)
+        <form method="post" id="mg-bulk-tambah" onsubmit="return mgBulk(this, 'ditambahkan ke')">@csrf
+          <select name="gidTarget" aria-label="Grup tujuan (tambah)" required>
+            <option value="">Tambahkan ke grup…</option>
+            @foreach ($daftarGrup as $g)<option value="{{ $g['gid'] }}">{{ $g['nama'] }}</option>@endforeach
           </select>
-          @if ($bolehUbah)
-            <form method="post" action="{{ route('peta-risiko-pja.master.grup.tambah', ['gid' => $gid]) }}" style="display:flex;gap:8px;flex:1 1 320px" onsubmit="return mgTambah(this)">@csrf
-              <input list="mg-luar" id="mg-tambah-teks" placeholder="Tambah aktivitas ke grup ini…" aria-label="Tambah aktivitas" style="flex:1">
-              <input type="hidden" name="aid" id="mg-tambah-aid">
-              <button class="mg-btn" type="submit"><span class="material-symbols-outlined" style="font-size:18px">add</span> Tambah</button>
-            </form>
-            <datalist id="mg-luar">@foreach ($luar as $a)<option value="{{ $a['aktivitas'] }} · #{{ $a['aid'] }}" data-aid="{{ $a['aid'] }}">{{ $kelompok[$a['kelompok']] ?? $a['kelompok'] }} · {{ $a['sisa'] }} baris</option>@endforeach</datalist>
-          @endif
-        </div>
+          <button class="mg-btn sek" type="submit"><span class="material-symbols-outlined" style="font-size:17px">add</span> Tambahkan</button>
+        </form>
+        <form method="post" id="mg-bulk-hapus" onsubmit="return mgBulk(this, 'dikeluarkan dari')">@csrf
+          <select name="gidTarget" aria-label="Grup sumber (keluarkan)" required>
+            <option value="">Keluarkan dari grup…</option>
+            @foreach ($daftarGrup as $g)<option value="{{ $g['gid'] }}">{{ $g['nama'] }}</option>@endforeach
+          </select>
+          <button class="mg-btn bahaya" type="submit"><span class="material-symbols-outlined" style="font-size:17px">remove_circle</span> Keluarkan</button>
+        </form>
+      @endif
+    </div>
 
-        <div id="mg-daftar">
-          @php $kelSebelum = null; @endphp
-          @forelse ($aktivitas as $a)
-            @if ($a['kelompok'] !== $kelSebelum)
-              @php $kelSebelum = $a['kelompok']; $nKel = collect($aktivitas)->where('kelompok', $a['kelompok']); @endphp
-              <div class="mg-kel" data-kel="{{ $a['kelompok'] }}">{{ $kelompok[$a['kelompok']] ?? $a['kelompok'] }} · {{ $nKel->count() }} aktivitas · {{ $nKel->sum(fn ($x) => count($x['baris'])) }} baris</div>
-            @endif
-            <details class="mg-akt" data-kel="{{ $a['kelompok'] }}" data-cari="{{ mb_strtolower($a['aktivitas'].' '.collect($a['baris'])->map(fn ($b) => $b['sub'].' '.$b['bahaya'])->implode(' ')) }}">
-              <summary>
-                <div class="nama"><b>{{ $a['aktivitas'] }}</b><small>ID aktivitas {{ $a['aid'] }}</small></div>
-                <span class="mg-chip">{{ count($a['baris']) }}{{ count($a['baris']) < $a['total'] ? ' dari '.$a['total'] : '' }} baris</span>
-                @foreach ($a['lain'] as $l)<span class="mg-chip lain" title="Baris aktivitas ini juga ada di grup lain">{{ $l['nama'] }} · {{ $l['n'] }}</span>@endforeach
-              </summary>
-              <div class="mg-isi">
-                @if ($bolehUbah)
-                  <form class="kel" method="post" action="{{ route('peta-risiko-pja.master.grup.kelompok', ['aid' => $a['aid']]) }}">@csrf
-                    <input type="hidden" name="gid" value="{{ $gid }}">
-                    <label for="kel-{{ $a['aid'] }}">Kelompok aktivitas</label>
-                    <select name="kelompok" id="kel-{{ $a['aid'] }}">
-                      @foreach ($kelompok as $kode => $nama)<option value="{{ $kode }}" @selected($kode === $a['kelompok'])>{{ $nama }}</option>@endforeach
-                    </select>
-                    <button class="mg-btn sek" type="submit">Simpan kelompok</button>
-                    <span class="pr-meta">berlaku untuk semua baris aktivitas ini di semua grup</span>
-                  </form>
-                @else
-                  <p class="pr-meta" style="margin:6px 0 10px">Kelompok: {{ $kelompok[$a['kelompok']] ?? $a['kelompok'] }}</p>
-                @endif
-                <form method="post" action="{{ route('peta-risiko-pja.master.grup.baris', ['gid' => $gid]) }}" onsubmit="return mgKonfirmasi(event, this)">@csrf
-                  <div class="pr-scroll" style="overflow-x:auto">
-                    <table class="mg-tbl">
-                      <thead><tr>@if ($bolehUbah)<th style="width:34px"><input type="checkbox" class="mg-semua" aria-label="Pilih semua baris aktivitas ini"></th>@endif<th>ID</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Risiko awal</th></tr></thead>
-                      <tbody>
-                        @foreach ($a['baris'] as $b)
-                          <tr>@if ($bolehUbah)<td><input type="checkbox" name="ri[]" value="{{ $b['ri'] }}" aria-label="Pilih baris {{ $b['ri'] }}"></td>@endif
-                            <td>{{ $b['ri'] }}</td><td>{{ $b['sub'] ?: '—' }}</td><td>{{ $b['bahaya'] }}@unless ($b['aktif'])<span class="mg-chip" style="margin-left:6px">nonaktif</span>@endunless</td>
-                            <td><span class="mg-lv {{ $b['kb'] }}">{{ $b['kb'] ?: '-' }}</span></td></tr>
-                        @endforeach
-                      </tbody>
-                    </table>
-                  </div>
-                  @if ($bolehUbah)
-                    <div class="mg-aksi">
-                      <span class="pr-meta">Baris terpilih:</span>
-                      <select name="tujuan" aria-label="Grup tujuan">
-                        <option value="">Pindah ke grup…</option>
-                        @foreach ($daftarGrup as $g)@if ($g['gid'] !== $gid)<option value="{{ $g['gid'] }}">{{ $g['nama'] }}</option>@endif @endforeach
-                      </select>
-                      <button class="mg-btn sek" type="submit" name="aksi" value="pindah"><span class="material-symbols-outlined" style="font-size:17px">move_down</span> Pindahkan</button>
-                      <button class="mg-btn bahaya" type="submit" name="aksi" value="hapus"><span class="material-symbols-outlined" style="font-size:17px">remove_circle</span> Keluarkan dari grup</button>
-                    </div>
-                  @endif
-                </form>
-              </div>
-            </details>
-          @empty
-            <div class="mg-kosong">Grup ini belum punya baris HIRA. Semua detail lokasinya tidak punya baseline. Tambahkan aktivitas yang dikerjakan di grup ini.</div>
-          @endforelse
-          <div class="mg-kosong" id="mg-tak-cocok" hidden>Tidak ada aktivitas yang cocok.</div>
-        </div>
-      </div>
-
-      <details class="pr-card" style="padding:0;margin-top:16px">
-        <summary class="pr-card-head" style="cursor:pointer"><div><b>Detail lokasi di grup ini ({{ count($dl) }})</b><small>Semua mewarisi baris HIRA di atas</small></div></summary>
-        <div class="mg-dl">@forelse ($dl as $d)<div>{{ $d['site'] }} · {{ $d['lokasi'] }} · <b>{{ $d['detail'] }}</b></div>@empty<div>Tidak ada detail lokasi aktif.</div>@endforelse</div>
-      </details>
-      @unless ($bolehUbah)<p class="pr-meta" style="margin-top:10px">Anda hanya bisa melihat; hubungi admin untuk menjadi editor master.</p>@endunless
+    <div class="mg-scroll">
+      <table class="mg-tbl" id="mg-tabel" style="width:100%">
+        <thead><tr>
+          @if ($bolehUbah)<th style="width:30px"><input type="checkbox" id="mg-semua" aria-label="Pilih semua baris yang tampil"></th>@endif
+          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Kelompok aktivitas</th><th>Grup lokasi</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
+
+  <div class="pr-card" style="margin-top:16px;display:none" id="mg-dl-card">
+    <div class="pr-card-head"><div><b id="mg-dl-judul">Detail lokasi</b><small>Semua mewarisi baris HIRA grup ini</small></div></div>
+    <div class="mg-dl" id="mg-dl-isi"></div>
+  </div>
+  @unless ($bolehUbah)<p class="pr-meta" style="margin-top:10px">Anda hanya bisa melihat; hubungi admin untuk menjadi editor master.</p>@endunless
 @endif
 @endsection
 
 @section('scripts')
 @if ($siap)
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@2.1.8/css/dataTables.dataTables.min.css">
+<style>
+  #mg-tabel_wrapper .dt-layout-row { padding: 10px 20px; margin: 0; }
+  #mg-tabel_wrapper .dt-length select { border-radius: 8px; padding: 4px 8px; }
+  table.mg-tbl.dataTable > thead > tr > th { padding: 10px 12px; }
+</style>
+{{-- DataTables 2 tetap butuh jQuery; layout _layout-drm tidak memuatnya. --}}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net@2.1.8/js/dataTables.min.js"></script>
 <script>
-  (function () {
-    const cari = document.getElementById('mg-cari'), fKel = document.getElementById('mg-f-kel');
-    function saring() {
-      const q = cari.value.trim().toLowerCase(), k = fKel.value;
-      let ada = 0;
-      document.querySelectorAll('.mg-akt').forEach((d) => {
-        const tampil = (!k || d.dataset.kel === k) && (!q || d.dataset.cari.includes(q));
-        d.hidden = !tampil;
-        if (tampil) ada++;
-        if (tampil && q) d.open = true;
-      });
-      document.querySelectorAll('.mg-kel').forEach((h) => {
-        h.hidden = ![...document.querySelectorAll(`.mg-akt[data-kel="${h.dataset.kel}"]`)].some((d) => !d.hidden);
-      });
-      document.getElementById('mg-tak-cocok').hidden = ada > 0;
-    }
-    cari.addEventListener('input', saring);
-    fKel.addEventListener('change', saring);
-    document.querySelectorAll('.mg-semua').forEach((c) => c.addEventListener('change', () => {
-      c.closest('table').querySelectorAll('input[name="ri[]"]').forEach((x) => { x.checked = c.checked; });
-    }));
-  })();
+(function () {
+  const ROWS = @json($rows);
+  const DAFTAR_GRUP = @json($daftarGrup);
+  const DL_PER_GRUP = @json($dlPerGrup);
+  const KELOMPOK = @json($kelompok);
+  const BOLEH = @json($bolehUbah);
+  const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+  const URL_TAMBAH = @json(route('peta-risiko-pja.master.grup.tambah', ['gid' => 0]));
+  const URL_HAPUS = @json(route('peta-risiko-pja.master.grup.baris', ['gid' => 0]));
+  const URL_KELOMPOK = @json(route('peta-risiko-pja.master.grup.kelompok', ['aid' => 0]));
+  const PETA_ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => PETA_ESC[c]);
+  const urlTambah = (gid) => URL_TAMBAH.replace(/\/0\/tambah$/, '/' + gid + '/tambah');
+  const urlHapus = (gid) => URL_HAPUS.replace(/\/0\/baris$/, '/' + gid + '/baris');
+  const urlKelompok = (aid) => URL_KELOMPOK.replace(/\/0\/kelompok$/, '/' + aid + '/kelompok');
+  const token = () => '<input type="hidden" name="_token" value="' + esc(CSRF) + '">';
+  const riHidden = (ri) => '<input type="hidden" name="ri[]" value="' + ri + '">';
 
-  /** Isi aid dari pilihan datalist; tolak teks yang tidak ada di daftar. */
-  function mgTambah(form) {
-    const teks = document.getElementById('mg-tambah-teks').value;
-    const opsi = [...document.querySelectorAll('#mg-luar option')].find((o) => o.value === teks);
-    if (!opsi) { alert('Pilih aktivitas dari daftar saran.'); return false; }
-    document.getElementById('mg-tambah-aid').value = opsi.dataset.aid;
-    return confirm('Tambahkan semua baris aktivitas ini ke grup?');
+  function chipGrup(g, ri) {
+    const hapus = BOLEH
+      ? '<form method="post" action="' + esc(urlHapus(g.gid)) + '" data-konfirmasi="Keluarkan baris ' + ri + ' dari grup ' + esc(g.nama) + '?">'
+        + token() + riHidden(ri) + '<button type="submit" title="Keluarkan dari grup" aria-label="Keluarkan dari grup">×</button></form>'
+      : '';
+    return '<div class="mg-chip"><span>' + esc(g.nama) + '</span>' + hapus + '</div>';
   }
 
-  function mgKonfirmasi(e, form) {
-    const aksi = e.submitter ? e.submitter.value : '';
-    const n = form.querySelectorAll('input[name="ri[]"]:checked').length;
-    if (!n) { alert('Pilih minimal satu baris.'); return false; }
-    if (aksi === 'pindah') {
-      const t = form.querySelector('select[name="tujuan"]');
-      if (!t.value) { alert('Pilih grup tujuan.'); return false; }
-      return confirm(`Pindahkan ${n} baris ke grup "${t.options[t.selectedIndex].text}"?`);
-    }
-    return confirm(`Keluarkan ${n} baris dari grup ini? Baris yang tidak ada di grup mana pun tidak masuk baseline.`);
+  function formTambahGrup(ri, dikecualikan) {
+    const opsi = DAFTAR_GRUP.filter((g) => !dikecualikan.includes(g.gid))
+      .map((g) => '<option value="' + g.gid + '">' + esc(g.nama) + '</option>').join('');
+    if (!opsi) return '';
+    return '<details class="mg-tambah"><summary>+ Tambah ke grup</summary>'
+      + '<form method="post" action="' + esc(URL_TAMBAH) + '" data-ri="' + ri + '" onsubmit="return mgTambahSatu(this)">' + token()
+      + riHidden(ri) + '<select name="gid"><option value="">Pilih grup…</option>' + opsi + '</select>'
+      + '<button type="submit">Tambahkan</button></form></details>';
   }
+
+  const kolomGrup = { data: 'grup', orderable: false, className: 'grp', render: (d, type, r) => {
+    if (type !== 'display') return d.map((g) => g.nama).join(' | ');
+    const isi = d.length ? d.map((g) => chipGrup(g, r.ri)).join('') : '<div class="mg-kosong">Belum ada grup</div>';
+    return isi + (BOLEH ? formTambahGrup(r.ri, d.map((g) => g.gid)) : '');
+  } };
+
+  const kolomKelompok = { data: 'kelompok', className: 'kel', render: (d, type, r) => {
+    if (type !== 'display') return (KELOMPOK[d] || d);
+    if (!BOLEH) return esc(KELOMPOK[d] || d);
+    const opsi = Object.entries(KELOMPOK).map(([kode, nama]) => '<option value="' + kode + '"' + (kode === d ? ' selected' : '') + '>' + esc(nama) + '</option>').join('');
+    return '<form method="post" class="mg-kel-form" action="' + esc(urlKelompok(r.aid)) + '" data-konfirmasi="Ubah kelompok aktivitas ini? Berlaku untuk semua baris aktivitas ini di semua grup.">'
+      + token() + '<select name="kelompok" onchange="this.form.requestSubmit()">' + opsi + '</select></form>';
+  } };
+
+  const tabel = new DataTable('#mg-tabel', {
+    data: ROWS,
+    deferRender: true,
+    stateSave: true,
+    pageLength: 25,
+    lengthMenu: [10, 25, 50, 100, 250],
+    order: [[BOLEH ? 1 : 0, 'asc']],
+    autoWidth: false,
+    language: {
+      search: 'Cari:', searchPlaceholder: 'aktivitas, bahaya…',
+      lengthMenu: 'Tampilkan _MENU_ baris', info: '_START_–_END_ dari _TOTAL_ baris',
+      infoEmpty: 'Tidak ada baris', infoFiltered: '(disaring dari _MAX_)', zeroRecords: 'Tidak ada baris yang cocok.',
+      paginate: { first: '«', previous: '‹', next: '›', last: '»' },
+    },
+    columns: [
+      ...(BOLEH ? [{ data: 'ri', orderable: false, className: 'mg-cek', render: (d, type) => type === 'display' ? '<input type="checkbox" class="mg-baris" value="' + d + '" aria-label="Pilih baris ' + d + '">' : d }] : []),
+      { data: 'a', className: 'hira', render: (d, type, r) => type !== 'display' ? d + ' ' + r.ri
+          : esc(d) + '<small>ID ' + r.ri + '</small>' + (r.aktif ? '' : '<span class="mg-nonaktif">nonaktif</span>') },
+      { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
+      { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
+          ? esc(d) + '<br><span class="mg-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
+      kolomKelompok, kolomGrup,
+    ],
+  });
+
+  // Tabel disaring di bawah search bawaan DataTables; filter kustom (risiko, kelompok, grup/tanpa grup).
+  const fKb = document.getElementById('mg-f-kb');
+  const fKel = document.getElementById('mg-f-kel');
+  const fGrup = document.getElementById('mg-f-grup');
+  DataTable.ext.search.push((settings, _data, idx) => {
+    if (settings.nTable.id !== 'mg-tabel') return true;
+    const r = ROWS[idx];
+    if (fKb.value && r.kb !== fKb.value) return false;
+    if (fKel.value && r.kelompok !== fKel.value) return false;
+    if (fGrup.value === '__TANPA__') return !r.grup.length;
+    if (fGrup.value && !r.grup.some((g) => String(g.gid) === fGrup.value)) return false;
+    return true;
+  });
+
+  function tampilkanDl() {
+    const gid = fGrup.value;
+    const card = document.getElementById('mg-dl-card');
+    if (!gid || gid === '__TANPA__') { card.style.display = 'none'; return; }
+    const g = DAFTAR_GRUP.find((x) => String(x.gid) === gid);
+    const dl = DL_PER_GRUP[gid] || [];
+    document.getElementById('mg-dl-judul').textContent = 'Detail lokasi · ' + (g ? g.nama : gid) + ' (' + dl.length + ')';
+    document.getElementById('mg-dl-isi').innerHTML = dl.length
+      ? dl.map((d) => '<div>' + esc(d.site) + ' · ' + esc(d.lokasi) + ' · <b>' + esc(d.detail) + '</b></div>').join('')
+      : '<div>Tidak ada detail lokasi aktif.</div>';
+    card.style.display = '';
+  }
+
+  [fKb, fKel, fGrup].forEach((el) => el.addEventListener('change', () => { tabel.draw(); if (el === fGrup) tampilkanDl(); }));
+  document.getElementById('mg-reset').addEventListener('click', () => {
+    fKb.value = ''; fKel.value = ''; fGrup.value = '';
+    tampilkanDl();
+    tabel.search('').order([BOLEH ? 1 : 0, 'asc']).page(0).draw();
+  });
+
+  // Deep-link dari Alur baseline (korelasi): ?gid=X membuka grup itu langsung.
+  const qGid = new URLSearchParams(location.search).get('gid');
+  if (qGid && [...fGrup.options].some((o) => o.value === qGid)) { fGrup.value = qGid; tabel.draw(); tampilkanDl(); }
+
+  document.getElementById('mg-tabel').addEventListener('submit', (e) => {
+    const pesan = e.target.dataset.konfirmasi;
+    if (pesan && !confirm(pesan)) e.preventDefault();
+  });
+
+  if (!BOLEH) return;
+
+  /** Tolak submit bila grup tujuan belum dipilih di chip "+ Tambah ke grup". */
+  window.mgTambahSatu = function (form) {
+    if (!form.gid.value) { alert('Pilih grup tujuan.'); return false; }
+    form.action = urlTambah(form.gid.value);
+    return true;
+  };
+
+  const cekSemua = document.getElementById('mg-semua');
+  const bulkBar = document.getElementById('mg-bulk');
+  function baitSemua() {
+    return [...document.querySelectorAll('#mg-tabel tbody .mg-baris:checked')];
+  }
+  function perbaruiBulk() {
+    const n = baitSemua().length;
+    bulkBar.classList.toggle('on', n > 0);
+    document.getElementById('mg-bulk-n').textContent = n + ' baris terpilih';
+  }
+  document.getElementById('mg-tabel').addEventListener('change', (e) => {
+    if (e.target.classList.contains('mg-baris') || e.target === cekSemua) {
+      if (e.target === cekSemua) document.querySelectorAll('#mg-tabel tbody .mg-baris').forEach((c) => { c.checked = cekSemua.checked; });
+      perbaruiBulk();
+    }
+  });
+  tabel.on('draw', () => { if (cekSemua) cekSemua.checked = false; perbaruiBulk(); });
+
+  window.mgBulk = function (form, kataKerja) {
+    const ri = baitSemua().map((c) => c.value);
+    if (!ri.length) { alert('Pilih minimal satu baris.'); return false; }
+    const gid = form.gidTarget.value;
+    if (!gid) { alert('Pilih grup.'); return false; }
+    const nama = (DAFTAR_GRUP.find((g) => String(g.gid) === gid) || {}).nama || gid;
+    if (!confirm(ri.length + ' baris akan ' + kataKerja + ' grup "' + nama + '". Lanjutkan?')) return false;
+    form.action = form === document.getElementById('mg-bulk-tambah') ? urlTambah(gid) : urlHapus(gid);
+    ri.forEach((r) => form.insertAdjacentHTML('beforeend', riHidden(r)));
+    return true;
+  };
+})();
 </script>
 @endif
 @endsection

@@ -94,6 +94,67 @@ final class DrmMasterGrup
             ->get(['site', 'lokasi', 'detail'])->map(fn ($r) => ['site' => (string) $r->site, 'lokasi' => (string) $r->lokasi, 'detail' => (string) $r->detail])->all();
     }
 
+    /** Detail lokasi aktif semua grup sekaligus (satu query, bukan N+1). @return array<int, list<array{site: string, lokasi: string, detail: string}>> */
+    public function semuaDetailLokasi(): array
+    {
+        $hasil = [];
+        foreach (DB::table('drm_master_dl')->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get(['gid', 'site', 'lokasi', 'detail']) as $d) {
+            $hasil[(int) $d->gid][] = ['site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail];
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Semua baris HIRA dengan grup lokasi tempatnya berlaku (M05) — tampilan flat satu baris = satu <tr>, sama
+     * konsep dengan master per baris (drm_master_baris + chip label OBS/OAK/KET): grup lokasi di sini jadi chip
+     * yang bisa ditambah/dikeluarkan per baris, bukan navigasi "pilih 1 grup dulu".
+     *
+     * @return list<array{ri: int, aid: int, a: string, kelompok: string, s: string, b: string, kb: string, aktif: bool, grup: list<array{gid: int, nama: string}>}>
+     */
+    public function semuaBaris(): array
+    {
+        $baris = DB::table('drm_master_baris as b')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
+            ->orderBy('b.aktivitas')->orderBy('b.sub')->orderBy('b.bahaya')
+            ->get(['b.ri', 'b.aid', 'b.aktivitas', 'b.sub', 'b.bahaya', 'b.kb', 'b.aktif', 'a.kelompok']);
+        $namaGrup = DB::table('drm_master_grup')->pluck('nama', 'gid');
+        $grupPerRi = [];
+        foreach (DB::table('drm_master_grup_baris')->orderBy('gid')->get(['ri', 'gid']) as $g) {
+            $grupPerRi[(int) $g->ri][] = ['gid' => (int) $g->gid, 'nama' => (string) ($namaGrup[$g->gid] ?? ('#'.$g->gid))];
+        }
+
+        return $baris->map(fn ($b) => [
+            'ri' => (int) $b->ri, 'aid' => (int) $b->aid, 'a' => (string) $b->aktivitas, 'kelompok' => (string) ($b->kelompok ?: 'K0'),
+            's' => (string) $b->sub, 'b' => (string) $b->bahaya, 'kb' => (string) $b->kb, 'aktif' => (bool) $b->aktif,
+            'grup' => $grupPerRi[(int) $b->ri] ?? [],
+        ])->values()->all();
+    }
+
+    /**
+     * Tambahkan baris (ri) langsung ke grup, lintas aktivitas (dipakai chip "+ Tambah ke grup" & aksi borongan di
+     * master/grup — beda dengan tambah(), yang membatasi ke satu aktivitas untuk alur "Tambah aktivitas" / Alur baseline).
+     * Mengembalikan jumlah baru.
+     *
+     * @param  list<int>  $ri
+     */
+    public function tambahBaris(int $gid, array $ri): int
+    {
+        $this->pastikanGrup($gid);
+        $valid = DB::table('drm_master_baris')->whereIn('ri', $ri)->pluck('ri')->map(fn ($v) => (int) $v)->all();
+
+        return DB::transaction(function () use ($gid, $valid) {
+            $ada = DB::table('drm_master_grup_baris')->where('gid', $gid)->whereIn('ri', $valid)->pluck('ri')->map(fn ($v) => (int) $v)->all();
+            $baru = array_values(array_diff($valid, $ada));
+            $sekarang = now();
+            foreach ($baru as $r) {
+                $id = DB::table('drm_master_grup_baris')->insertGetId(['gid' => $gid, 'ri' => $r, 'diubah_oleh' => $this->user(), 'created_at' => $sekarang, 'updated_at' => $sekarang]);
+                $this->db->catat('drm_master_grup_baris', (string) $id, 'tambah', null, ['gid' => $gid, 'ri' => $r]);
+            }
+
+            return count($baru);
+        });
+    }
+
     /**
      * Tambahkan baris aktivitas ke grup (semua barisnya, atau hanya $ri yang milik aktivitas itu). Mengembalikan jumlah baru.
      *

@@ -210,16 +210,21 @@ class DrmSnapshotBuilderTest extends TestCase
     {
         $r = $this->susun()['meta']['beranda']['ringkas'];
 
-        // DL 101 & 102 dimiliki PJA Pit BC (personil BC + mitra MK): ringkasan per perusahaan tersedia di site
-        // LMO maupun ALL, dan "ndl" tidak melebihi ndl ALL (DL 201 tanpa PJA tidak ikut perusahaan manapun).
+        // DL 101 & 102 dimiliki PJA Pit BC (personil BC + mitra MK): ringkasan per perusahaan hanya dipecah di
+        // cakupan ALL (bukan disilangkan dengan tiap site, lihat catatan memori di DrmSnapshotBuilder::ringkasUnik
+        // — menghindari kehabisan memori di produksi), "ndl" tidak melebihi ndl ALL (DL 201 tanpa PJA tidak ikut
+        // perusahaan manapun).
         $this->assertEqualsCanonicalizing(['ALL', 'BC', 'MK'], array_keys($r['ALL']));
-        $this->assertEqualsCanonicalizing(['ALL', 'BC', 'MK'], array_keys($r['LMO']));
+        $this->assertSame(['ALL'], array_keys($r['LMO']));
         $this->assertSame(2, $r['ALL']['BC']['ndl']);
         $this->assertSame(2, $r['ALL']['MK']['ndl']);
         $this->assertLessThan($r['ALL']['ALL']['ndl'], $r['ALL']['BC']['ndl']);
-        // Kombinasi site×perusahaan kosong tidak disimpan; "dlw" (berat) hanya ada di ALL|ALL.
+        // Kombinasi site×perusahaan kosong tidak disimpan; struktur berat ("dlw", "akt", "gka") hanya ada di ALL|ALL.
         $this->assertArrayNotHasKey('dlw', $r['ALL']['BC']);
+        $this->assertArrayNotHasKey('akt', $r['ALL']['BC']);
+        $this->assertArrayNotHasKey('gka', $r['ALL']['BC']);
         $this->assertArrayHasKey('dlw', $r['ALL']['ALL']);
+        $this->assertArrayHasKey('akt', $r['ALL']['ALL']);
     }
 
     public function test_proses_bisnis_masuk_meta_cakupan_dan_baris_aktivitas(): void

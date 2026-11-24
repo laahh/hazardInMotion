@@ -313,13 +313,23 @@ class DrmSnapshotBuilder
      *
      * Perusahaan = union personil PJA pemilik detail lokasi (kamusDl[id][4], lihat beranda()): satu detail lokasi
      * dengan ≥2 perusahaan pemilik tetap terhitung UTUH pada ringkasan tiap perusahaan itu (union, bukan irisan),
-     * sama dengan cara filter baris di tab Group Lokasi / Semua PJA sebelum ini. Kombinasi (site, perusahaan)
-     * yang detail lokasinya kosong tidak disimpan (hemat ukuran snapshot). Struktur paling berat (`dlw`, per
-     * detail lokasi) hanya disimpan sekali di ALL|ALL — satu-satunya yang dipakai tabel Group Lokasi, yang
-     * menyaring site/grup/perusahaan sendiri di JS dari M.beranda.dl; menyimpannya per kombinasi site×perusahaan
-     * akan membengkak persis seperti dulu per PJA (lihat catatan di beranda()). Rincian baris per status (dipakai
-     * modal kartu KPI, ditulis ke rincian.json) juga TIDAK dipecah per perusahaan — tetap per site saja, karena
-     * barisnya sudah unik lintas detail lokasi (tidak ada atribusi perusahaan per baris untuk disaring).
+     * sama dengan cara filter baris di tab Group Lokasi / Semua PJA sebelum ini.
+     *
+     * PENTING (pelajaran 24 Nov 2026): percobaan pertama menyilangkan TIAP site × TIAP perusahaan membuat sync
+     * produksi kehabisan memori (PHP fatal error, limit 2 GB, di DrmBeranda::tambah — dipanggil ribuan kali lewat
+     * ringkasMgmt/berkas per kombinasi). Karena itu pecahan per perusahaan HANYA dihitung untuk cakupan 'ALL'
+     * (gabungan semua site), BUKAN disilangkan dengan tiap site satu per satu — site tunggal tetap hanya
+     * punya varian 'ALL' (semua perusahaan). Frontend yang butuh site tertentu + perusahaan tertentu sekaligus
+     * jatuh balik ke ringkasan 'ALL' site untuk perusahaan itu (lihat ringkasAktif() di index.blade.php).
+     * Struktur paling berat (`dlw`, per detail lokasi) hanya disimpan sekali di ALL|ALL — satu-satunya yang
+     * dipakai tabel Group Lokasi, yang menyaring site/grup/perusahaan sendiri di JS dari M.beranda.dl. Struktur
+     * granular lain (`akt`, `gka` — breakdown per aktivitas HIRA, bisa ratusan kunci) juga dibuang untuk tiap
+     * kombinasi perusahaan (bukan hanya dlw), supaya kombinasi yang jumlahnya = jumlah perusahaan tetap murah;
+     * drill-down "lihat aktivitas HIRA kelompok ini" sengaja kosong saat filter perusahaan aktif.
+     * Kombinasi (site, perusahaan) yang detail lokasinya kosong tidak disimpan (hemat ukuran snapshot). Rincian
+     * baris per status (dipakai modal kartu KPI, ditulis ke rincian.json) juga TIDAK dipecah per perusahaan —
+     * tetap per site saja, karena barisnya sudah unik lintas detail lokasi (tidak ada atribusi perusahaan per
+     * baris untuk disaring).
      *
      * @param  array<string, array<string, mixed>>  $dl
      * @param  array<string, list<string>>  $hidPerDl
@@ -340,24 +350,30 @@ class DrmSnapshotBuilder
             $cakupan[$site] ??= [];
         }
         $buang = array_flip(['kgTot', 'u4', 'kelTot', 'kelGap', 'lama', 'insiden']);
+        // Struktur granular (akt/gka) dibuang untuk tiap kombinasi perusahaan — lihat catatan "PENTING" di atas.
+        $buangPerusahaan = $buang + ['dlw' => 1, 'akt' => 1, 'gka' => 1];
         $hasil = $lingkup = $hidDipakai = [];
         foreach ($cakupan as $kunci => $ids) {
             // Site per departemen: pasangan (DL, bahaya) per cakupan site disesuaikan (lihat pasanganSite).
             [$idsSite, $pasanganSite] = $kunci === 'ALL' || $rute === [] ? [$ids, $hidPerDl] : self::pasanganSite((string) $kunci, $dl, $hidPerDl, $rute);
             $hasil[$kunci] = [];
-            foreach (['ALL' => null] + array_fill_keys($perusahaan, null) as $p => $_) {
+            // Pecahan per perusahaan hanya di cakupan 'ALL' (lihat catatan "PENTING" di atas fungsi ini) — site
+            // tunggal lain hanya punya varian 'ALL' perusahaan, sama seperti sebelum fitur ini ada.
+            $daftarP = $kunci === 'ALL' ? ['ALL' => null] + array_fill_keys($perusahaan, null) : ['ALL' => null];
+            foreach ($daftarP as $p => $_) {
                 if ($p === 'ALL') {
                     [$idsP, $pasanganP] = [$idsSite, $pasanganSite];
                 } else {
                     $idsP = array_values(array_filter($idsSite, fn ($id) => in_array($p, $kamusDl[(string) $id][4] ?? [], true)));
                     if ($idsP === []) {
-                        continue; // kombinasi site × perusahaan tanpa detail lokasi tidak disimpan
+                        continue; // kombinasi tanpa detail lokasi tidak disimpan
                     }
                     $pasanganP = array_intersect_key($pasanganSite, array_flip($idsP));
                 }
                 $ambilRincian = $p === 'ALL'; // lihat catatan di atas: rincian/lingkup tidak dipecah per perusahaan
                 $berkas = $b->berkas($idsP, $pasanganP, $hira, $dl, $idx, []);
                 $r = $b->ringkasMgmt($idsP, $pasanganP, $hira, $berkas, [], true, $ambilRincian);
+                unset($berkas);
                 if ($ambilRincian) {
                     $lingkup[$kunci] = $r['rincian'];
                     foreach ($r['rincian']['u'] as $baris) {
@@ -371,12 +387,14 @@ class DrmSnapshotBuilder
                         $ada[$hid] = true;
                     }
                 }
+                $buangIni = $kunci === 'ALL' && $p === 'ALL' ? $buang : ($p === 'ALL' ? $buang + ['dlw' => 1] : $buangPerusahaan);
                 $hasil[$kunci][$p] = [
-                    ...array_diff_key($r, $kunci === 'ALL' && $p === 'ALL' ? $buang : $buang + ['dlw' => 1]),
+                    ...array_diff_key($r, $buangIni),
                     'ndl' => count($idsP),
                     // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
                     'nBarisDl' => count($ada),
                 ];
+                unset($r);
             }
         }
         $hasil['ALL']['ALL']['nBarisMaster'] = count($hira);

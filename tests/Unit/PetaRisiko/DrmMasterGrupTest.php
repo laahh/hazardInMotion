@@ -71,6 +71,42 @@ class DrmMasterGrupTest extends TestCase
         $svc->pindah(20, 20, [1]);
     }
 
+    public function test_semua_baris_flat_dengan_chip_grup(): void
+    {
+        $svc = app(DrmMasterGrup::class);
+
+        $baris = collect($svc->semuaBaris())->keyBy('ri');
+        // ri 1 & 2 hanya di Workshop; ri 754 di Workshop; ri 755 hanya di Jetty.
+        $this->assertSame([20], array_column($baris[1]['grup'], 'gid'));
+        $this->assertSame(['Jetty'], array_column($baris[755]['grup'], 'nama'));
+        $this->assertSame('K10', $baris[754]['kelompok']);
+        // Baris yang belum masuk grup mana pun tetap tampil (chip kosong), bukan disembunyikan.
+        $this->assertCount(4, $baris);
+    }
+
+    public function test_semua_detail_lokasi_dikelompokkan_per_gid(): void
+    {
+        $svc = app(DrmMasterGrup::class);
+
+        $dl = $svc->semuaDetailLokasi();
+        $this->assertCount(2, $dl[20]);
+        $this->assertArrayNotHasKey(8, $dl);
+    }
+
+    public function test_tambah_baris_lintas_aktivitas_tidak_menggandakan(): void
+    {
+        $svc = app(DrmMasterGrup::class);
+
+        // ri 1 (aid 1) & ri 755 (aid 7, sudah di Jetty) sekaligus, lintas aktivitas — tambah() biasa tidak bisa begini.
+        $this->assertSame(1, $svc->tambahBaris(8, [1, 755]));
+        // ri 1 kini di kedua grup (Workshop semula + Jetty baru), diurutkan per gid.
+        $this->assertSame(['Jetty', 'Workshop/Pit Stop'], array_column(collect($svc->semuaBaris())->keyBy('ri')[1]['grup'], 'nama'));
+        $this->assertSame(0, $svc->tambahBaris(8, [1, 755]));
+
+        $this->expectException(InvalidArgumentException::class);
+        $svc->tambahBaris(999, [1]);
+    }
+
     public function test_tambah_hapus_dan_ubah_kelompok(): void
     {
         $svc = app(DrmMasterGrup::class);

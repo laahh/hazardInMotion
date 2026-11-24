@@ -381,10 +381,19 @@
   /** Snapshot punya ringkasan baseline unik (kelompok aktivitas × bahaya, tidak dipetakan ke PJA)? */
   const adaUnik = () => !!(M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL);
   /**
-   * Entri ringkasan baseline unik untuk site × perusahaan terpilih (undefined bila kombinasinya tidak punya
-   * detail lokasi sama sekali — lihat DrmSnapshotBuilder::ringkasUnik, kombinasi kosong tidak disimpan di snapshot).
+   * Entri ringkasan baseline unik untuk site × perusahaan terpilih. Pecahan per perusahaan HANYA dihitung di
+   * cakupan 'ALL' (semua site) — menyilangkan tiap site × tiap perusahaan sempat membuat sync produksi kehabisan
+   * memori (lihat DrmSnapshotBuilder::ringkasUnik) — jadi site tertentu + perusahaan tertentu sekaligus jatuh
+   * balik ke ringkasan 'ALL' site untuk perusahaan itu (lihat jatuhBalikSite()).
    */
-  const ringkasAktif = () => (M.beranda.ringkas[state.site] || {})[state.perusahaan];
+  const ringkasAktif = () => {
+    const langsung = (M.beranda.ringkas[state.site] || {})[state.perusahaan];
+    if (langsung !== undefined || state.perusahaan === 'ALL') return langsung;
+    return (M.beranda.ringkas.ALL || {})[state.perusahaan];
+  };
+  /** true bila kartu/tabel di atas sebenarnya gabungan SEMUA site (site spesifik + perusahaan tidak disilangkan di snapshot). */
+  const jatuhBalikSite = () => state.perusahaan !== 'ALL' && state.site !== 'ALL'
+    && (M.beranda.ringkas[state.site] || {})[state.perusahaan] === undefined && (M.beranda.ringkas.ALL || {})[state.perusahaan] !== undefined;
   /**
    * Sumber angka tab Overview / Group Lokasi / Kelompok Aktivitas: ringkasan baseline unik cakupan itu
    * (satu "PJA semu" berisi semua detail lokasi site × perusahaan). Snapshot lama: jumlah baris tingkat PJA.
@@ -797,14 +806,18 @@
       $('#dr-tbl-grup').innerHTML = ''; $('#dr-tbl-proses').innerHTML = '';
       return;
     }
-    const lokasi = state.site === 'ALL' ? 'BC' : DR.esc(state.site);
+    const fallbackSite = jatuhBalikSite();
+    const lokasi = state.site === 'ALL' || fallbackSite ? 'BC' : DR.esc(state.site);
     const namaKel = (M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses;
     const judul = state.tab === 'grup' ? `${DR.esc(state.grup)} · ${lokasi}` : state.tab === 'proses' ? `${DR.esc(namaKel)} · ${lokasi}` : lokasi;
     const V = jumlahF(P, (p) => vekTab(p, w)), V0 = w + 1 < NW ? jumlahF(P, (p) => vekTab(p, w + 1)) : null;
     const R = adaUnik() ? ringkasAktif() : null;
-    const catatan = R
+    const catatanFallback = fallbackSite
+      ? `<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Kartu &amp; tabel di atas gabungan <b>seluruh site</b> untuk perusahaan ${DR.esc(state.perusahaan)} — pecahan per site + perusahaan tidak disimpan saat sync (hemat memori). Tabel detail lokasi di bawah tetap tersaring ke ${DR.esc(state.site)} saja.</p>`
+      : '';
+    const catatan = catatanFallback || (R
       ? (pitaAktif() ? '' : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot belum memakai pita cakupan, sehingga hampir semua bahaya terbaca "sebagian". Jalankan ulang <code>php artisan peta-risiko:sync</code>.</p>')
-      : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot lama: angka masih jumlah baris tingkat PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code> untuk baseline unik.</p>';
+      : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot lama: angka masih jumlah baris tingkat PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code> untuk baseline unik.</p>');
     $('#dr-kpi4').innerHTML = kartu4(V, V0, `${judul} · ${wk}`) + catatan;
 
     $('#dr-card-mx').hidden = state.tab !== 'site';
@@ -1468,7 +1481,9 @@
       return `<tr class="br-sub br-akt${buka ? ' open' : ''}" data-akt="${DR.esc(kunci)}" style="cursor:pointer"><td style="padding-left:40px"><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} bahaya-risiko ${DR.esc(nama || '(tanpa nama aktivitas)')}">▸</button>${DR.esc(nama || '(tanpa nama aktivitas)')}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`
         + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:6px 16px 14px 64px" data-akt-isi="${DR.esc(kunci)}" data-akt-nama="${DR.esc(nama)}"><span class="dr-mute">Memuat bahaya-risiko…</span></td></tr>` : '');
     }).join('')
-      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${adaUnik() && M.beranda.ringkas.ALL.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
+      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${
+        state.perusahaan !== 'ALL' ? ' (rincian per aktivitas tidak dipecah per perusahaan — pilih "Semua perusahaan" untuk melihatnya)'
+          : adaUnik() && M.beranda.ringkas.ALL.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
     const tautan = diGrup || state.tab !== 'proses' || state.proses !== kel
       ? `<tr class="br-sub"><td colspan="8" style="padding-left:40px"><a href="#" data-kekel="${DR.esc(kel)}">Lihat kelompok ini di semua grup ›</a></td></tr>` : '';
     return isi + tautan;
@@ -1720,13 +1735,18 @@
 
     // Kartu KPI memakai ringkasan baseline unik yang sama dengan tab Overview (bukan jumlah baris tingkat PJA,
     // yang menghitung satu bahaya berulang di tiap PJA) — sejak ringkasan unik dipecah per perusahaan juga
-    // (ringkasAktif/cakupanP), kartu ini otomatis ikut tersaring sama dengan daftar PJA di bawahnya.
+    // (ringkasAktif/cakupanP), kartu ini otomatis ikut tersaring sama dengan daftar PJA di bawahnya. Site tertentu
+    // + perusahaan tertentu sekaligus jatuh balik ke angka gabungan seluruh site (lihat jatuhBalikSite()); daftar
+    // PJA di bawah tetap tersaring tepat ke site itu karena pakai atribusi per-PJA, bukan ringkasan unik.
     // Snapshot lama tanpa ringkasan unik: jumlah per PJA.
+    const fallbackSitePja = jatuhBalikSite();
     const kartuAtas = (!kosong && adaUnik())
       ? (() => {
         const P = cakupanP(), NW = M.beranda.minggu.length;
         const V = jumlahF(P, (p) => vekPja(p, state.w)), V0 = state.w + 1 < NW ? jumlahF(P, (p) => vekPja(p, state.w + 1)) : null;
-        return kartu4(V, V0, `${state.site === 'ALL' ? 'BC' : DR.esc(state.site)} · ${diSite.length} PJA · ${wk}`);
+        const judulAtas = `${state.site === 'ALL' || fallbackSitePja ? 'BC' : DR.esc(state.site)} · ${diSite.length} PJA · ${wk}`;
+        return kartu4(V, V0, judulAtas) + (fallbackSitePja
+          ? `<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Kartu di atas gabungan <b>seluruh site</b> untuk perusahaan ${DR.esc(state.perusahaan)} (pecahan per site + perusahaan tidak disimpan saat sync). Daftar PJA di bawah tetap tersaring ke ${DR.esc(state.site)} saja.</p>` : '');
       })()
       : null;
 
