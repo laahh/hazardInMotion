@@ -483,6 +483,22 @@ return [
         'simper_status_aktif' => 1,
         'simper_tipe_ids' => [370, 415, 1795, 1809, 75933],
 
+        /*
+        | Kartu "Total Karyawan" sekarang menghitung SID dengan minimal satu
+        | hari jadwal Master Roster (APPROVED) yang jam kerjanya > ambang ini
+        | — bukan lagi total seluruh karyawan wajib dicek. Dihitung dari
+        | dms_roster_master_jadwal oleh DmsRosterJamKerjaLebihCache (latar,
+        | command dms:master-roster-jam-kerja-ringkas).
+        |
+        | banned_hari: SID dengan jumlah hari (tidak harus berturutan) di atas
+        | ambang ini jadi kandidat banned — sama pola dengan
+        | reg_live.aturan.onsite_maks (> 70 hari), tapi dasarnya roster,
+        | bukan tap RFID. Belum ada tile/daftar banned-nya di halaman ini
+        | (lihat docs/overshift.md untuk pola Long Shift yang sudah ada).
+        */
+        'jam_kerja_lebih_jam' => 11,
+        'banned_hari' => 70,
+
         'cache_ttl' => 600,
         'timeout_ms' => 20000,
 

@@ -121,6 +121,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(15)
             ->runInBackground();
 
+        // Kartu "Total Karyawan" (Ringkasan Roster): jam kerja roster > ambang per SID.
+        $schedule->command('dms:master-roster-jam-kerja-ringkas')
+            ->everyMinute()
+            ->withoutOverlapping(15)
+            ->runInBackground();
+
         $schedule->command('dms:sync-roster-rfid')
             ->timezone('Asia/Makassar')
             ->hourly()

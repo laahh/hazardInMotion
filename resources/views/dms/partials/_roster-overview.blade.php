@@ -242,8 +242,9 @@
                   <iconify-icon icon="solar:users-group-rounded-bold" class="icon"></iconify-icon>
                 </span>
                 <div>
-                  <span class="text-secondary-light fw-medium text-sm d-block mb-2">
-                    Total Karyawan
+                  <span class="text-secondary-light fw-medium text-sm d-block mb-2"
+                        title="Karyawan dengan minimal satu hari jadwal Master Roster (disetujui) yang jam kerjanya > {{ config('dms_roster.total_karyawan.jam_kerja_lebih_jam', 11) }} jam">
+                    Jam Kerja &gt; {{ config('dms_roster.total_karyawan.jam_kerja_lebih_jam', 11) }} Jam
                     @if ($live)
                       <span class="text-success-600 fw-semibold" title="Diambil langsung dari database">&middot; live</span>
                       {{-- <span class="d-block" style="font-size:10.5px">punya SIMPER aktif</span> --}}
