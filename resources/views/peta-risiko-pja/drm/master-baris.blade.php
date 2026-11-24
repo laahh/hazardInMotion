@@ -245,6 +245,16 @@
         + (!x.ada ? '<span class="mb-tag hilang">tidak ada</span>' : '') + '</span>').join('')).join('');
   }
 
+  /**
+   * Perusahaan per detail lokasi (keputusan user: JANGAN digabung rata se-grup — satu grup lokasi bisa mencakup
+   * banyak detail lokasi dengan PJA/perusahaan berbeda-beda; tanpa rincian lokasi, asal satu nama perusahaan
+   * jadi tidak bisa ditelusuri / tampak nyasar dari lokasi lain di grup yang sama yang sebenarnya tidak terkait).
+   */
+  function kolomPja(pja) {
+    if (!pja.length) return '<i>tidak ada data</i>';
+    return pja.map((p) => '<div><b>' + esc(p.site) + ' · ' + esc(p.lokasi) + ':</b> ' + esc(p.perusahaan.join(', ')) + '</div>').join('');
+  }
+
   const tabel = new DataTable('#mb-tabel', {
     data: ROWS,
     deferRender: true,
@@ -266,11 +276,12 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ') + ' ' + r.pja.join(' ')
+      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display'
+          ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ') + ' ' + r.pja.map((p) => p.site + ' ' + p.lokasi + ' ' + p.perusahaan.join(' ')).join(' ')
           : kolomDep(d) + '<span class="mb-site" title="Site tempat baris ini dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA)">Site: '
             + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>'
-            + '<span class="mb-site" title="Nama perusahaan personil PJA di lokasi tempat grup baris ini punya detail lokasi (M07/M08 + personil)">Perusahaan: '
-            + (r.pja.length ? '<b>' + r.pja.map(esc).join(', ') + '</b>' : '<i>tidak ada data</i>') + '</span>' },
+            + '<span class="mb-site" title="Perusahaan personil PJA, dirinci per detail lokasi (satu grup bisa mencakup beberapa lokasi dengan perusahaan berbeda)">Perusahaan:<br>'
+            + kolomPja(r.pja) + '</span>' },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
@@ -286,7 +297,7 @@
     if (fKb.value && r.kb !== fKb.value) return false;
     if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
     if (fSite.value && !r.st.includes(fSite.value)) return false;
-    if (fPja.value && !r.pja.includes(fPja.value)) return false;
+    if (fPja.value && !r.pja.some((p) => p.perusahaan.includes(fPja.value))) return false;
     const k = fKosong.value;
     if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
     if (k) return !r[k].length;

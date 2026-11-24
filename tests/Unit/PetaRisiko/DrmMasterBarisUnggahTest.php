@@ -216,10 +216,15 @@ class DrmMasterBarisUnggahTest extends TestCase
         DB::table('drm_master_grup_baris')->insert(['gid' => 1, 'ri' => 1]); // ri 1 sudah di gid 2 (fixture dasar); jadi ikut 2 grup
         $u = app(DrmMasterBarisUnggah::class);
 
-        // ri 1: grup 1 (Pit B: BC, PT Kontraktor B) + grup 2 (Pit A: BC, PT Mitra Jaya) → union nama perusahaan, bukan nama PJA.
-        $this->assertSame([1 => ['BC', 'PT Kontraktor B', 'PT Mitra Jaya']], $u->perusahaanPerBaris());
+        // ri 1: grup 1 (Pit B) + grup 2 (Pit A) → DIRINCI per lokasi (bukan digabung rata), masing-masing dengan
+        // daftar perusahaannya sendiri; Pit A punya 2 PJA (BC + PT Mitra Jaya) tetap ditampilkan satu entri lokasi.
+        $this->assertSame([1 => [
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'perusahaan' => ['BC', 'PT Mitra Jaya']],
+            ['site' => 'LMO', 'lokasi' => 'Pit B', 'perusahaan' => ['BC', 'PT Kontraktor B']],
+        ]], $u->perusahaanPerBaris());
         $this->assertSame([1], array_column($u->ekspor(['pja' => 'PT Kontraktor B'], []), 'ri'));
         $this->assertSame([], array_column($u->ekspor(['pja' => 'PT Tidak Terpakai'], []), 'ri'));
+        $this->assertSame("LMO · Pit A: BC, PT Mitra Jaya\nLMO · Pit B: BC, PT Kontraktor B", $u->ekspor(['pja' => 'BC'], [])[0]['pja']);
     }
 
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */

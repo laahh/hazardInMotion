@@ -90,38 +90,51 @@ final class DrmMasterBarisUnggah
     }
 
     /**
-     * "Perusahaan" tempat tiap baris berlaku: nama perusahaan PERSONIL PJA di lokasi (site, lokasi) tempat grup
-     * baris itu punya detail lokasi (M07/M08, drm_master_lokasi_pja.perusahaan) — keputusan user: perusahaan dari
-     * PJA-nya ("dia punya perusahaan"), BUKAN nama PJA itu sendiri. Kolom perusahaan diisi dari ClickHouse personil
-     * (DrmSql::perusahaanPerPja) saat `peta-risiko:master-db --isi`; kosong sampai perintah itu dijalankan ulang
-     * setelah migrasi menambah kolomnya.
+     * "Perusahaan" tempat tiap baris berlaku, DIRINCI PER DETAIL LOKASI (keputusan user 24 Nov 2026 — jangan
+     * digabung rata se-grup: grup lokasi (M05) bisa mencakup banyak detail lokasi dengan PJA/perusahaan yang
+     * beda-beda, menggabungkannya jadi satu daftar membuat asal satu nama perusahaan tidak bisa ditelusuri /
+     * tampak nyasar dari lokasi lain di grup yang sama yang sebenarnya tidak terkait). Nama perusahaan dari
+     * PERSONIL PJA (drm_master_lokasi_pja.perusahaan, diisi dari ClickHouse personil lewat
+     * `peta-risiko:master-db --isi` — lihat DrmSql::perusahaanPerPja), BUKAN nama PJA itu sendiri.
      *
-     * @return array<int, list<string>>  ri => nama perusahaan terurut
+     * @return array<int, list<array{site: string, lokasi: string, perusahaan: list<string>}>>  ri => rincian per (site, lokasi)
      */
     public function perusahaanPerBaris(): array
     {
+        // (site, lokasi) → perusahaan unik di sana (lewat PJA-nya, bisa >1 PJA per lokasi).
         $pjaPerLokasi = [];
         foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->select('site', 'lokasi', 'perusahaan')->distinct()->get() as $p) {
-            $kunci = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
+            $site = trim((string) $p->site);
+            $lokasi = trim((string) $p->lokasi);
+            $kunci = mb_strtolower($site).'|'.mb_strtolower($lokasi);
+            $pjaPerLokasi[$kunci] ??= ['site' => $site, 'lokasi' => $lokasi, 'perusahaan' => []];
             foreach (DrmMasterDb::pisahLabel($p->perusahaan ?? '') as $nama) {
-                $pjaPerLokasi[$kunci][$nama] = true;
+                $pjaPerLokasi[$kunci]['perusahaan'][$nama] = true;
             }
         }
-        $pjaPerGrup = [];
+        // Grup → kunci (site, lokasi) yang detail lokasinya aktif DAN punya data perusahaan.
+        $lokasiPerGrup = [];
         foreach (DB::table('drm_master_dl')->where('aktif', true)->select('gid', 'site', 'lokasi')->distinct()->get() as $d) {
             $kunci = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi));
-            $pjaPerGrup[(int) $d->gid] = ($pjaPerGrup[(int) $d->gid] ?? []) + ($pjaPerLokasi[$kunci] ?? []);
+            if (isset($pjaPerLokasi[$kunci])) {
+                $lokasiPerGrup[(int) $d->gid][$kunci] = true;
+            }
         }
         $hasil = [];
         foreach (DB::table('drm_master_grup_baris')->get(['gid', 'ri']) as $g) {
-            $hasil[(int) $g->ri] = ($hasil[(int) $g->ri] ?? []) + ($pjaPerGrup[(int) $g->gid] ?? []);
+            $hasil[(int) $g->ri] = ($hasil[(int) $g->ri] ?? []) + ($lokasiPerGrup[(int) $g->gid] ?? []);
         }
 
-        return array_map(function (array $p) {
-            $p = array_keys($p);
-            sort($p, SORT_NATURAL | SORT_FLAG_CASE);
+        return array_map(function (array $kunciSet) use ($pjaPerLokasi) {
+            $out = [];
+            foreach (array_keys($kunciSet) as $kunci) {
+                $nama = array_keys($pjaPerLokasi[$kunci]['perusahaan']);
+                sort($nama, SORT_NATURAL | SORT_FLAG_CASE);
+                $out[] = ['site' => $pjaPerLokasi[$kunci]['site'], 'lokasi' => $pjaPerLokasi[$kunci]['lokasi'], 'perusahaan' => $nama];
+            }
+            usort($out, fn ($a, $b) => [$a['site'], $a['lokasi']] <=> [$b['site'], $b['lokasi']]);
 
-            return $p;
+            return $out;
         }, $hasil);
     }
 
@@ -198,7 +211,7 @@ final class DrmMasterBarisUnggah
             if (($filter['site'] ?? '') !== '' && ! in_array($filter['site'], $site, true)) {
                 continue;
             }
-            if (($filter['pja'] ?? '') !== '' && ! in_array($filter['pja'], $pja, true)) {
+            if (($filter['pja'] ?? '') !== '' && ! array_filter($pja, fn ($p) => in_array($filter['pja'], $p['perusahaan'], true))) {
                 continue;
             }
             $k = (string) ($filter['kosong'] ?? '');
@@ -215,7 +228,8 @@ final class DrmMasterBarisUnggah
                     continue 2;
                 }
             }
-            $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'site' => implode("\n", $site), 'pja' => implode("\n", $pja),
+            $teksPja = implode("\n", array_map(fn ($p) => $p['site'].' · '.$p['lokasi'].': '.implode(', ', $p['perusahaan']), $pja));
+            $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'site' => implode("\n", $site), 'pja' => $teksPja,
                 'kelompok' => (string) ($kelompok[$b['aid']] ?? ''), 'versi' => DrmMasterBarisExcel::versi($b)];
         }
 

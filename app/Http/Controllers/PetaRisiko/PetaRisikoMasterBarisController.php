@@ -83,7 +83,7 @@ final class PetaRisikoMasterBarisController extends Controller
         sort($departemen);
         $site = array_values(array_unique(array_merge(...array_column($rows, 'st') ?: [[]])));
         sort($site, SORT_NATURAL);
-        $perusahaan = array_values(array_unique(array_merge(...array_column($rows, 'pja') ?: [[]])));
+        $perusahaan = array_values(array_unique(array_merge([], ...array_map(fn ($r) => array_merge([], ...array_column($r['pja'], 'perusahaan')), $rows))));
         sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
 
         // array_merge (bukan +): nilai di sini harus menimpa 'terisi' => false di $data.
