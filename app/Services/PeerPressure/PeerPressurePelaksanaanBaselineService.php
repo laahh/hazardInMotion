@@ -242,6 +242,55 @@ final class PeerPressurePelaksanaanBaselineService
         ?int $month = null,
     ): array {
         $bounds = $this->kejadianTanggalTemuanBounds($year, $month);
+        $all = $this->buildBaselineRows($bounds, $year, $month);
+
+        $rows = array_values(array_filter(
+            $all,
+            fn (array $r): bool => (bool) $r['sudah_peer_pressure'] === $terlaksana
+                && $this->baselineDetailMatchesScope((string) $r['site'], (string) $r['perusahaan'], $scopeSite, $scopeCompany)
+        ));
+
+        $truncated = count($rows) > self::BASELINE_DETAIL_ROW_CAP;
+        if ($truncated) {
+            $rows = array_slice($rows, 0, self::BASELINE_DETAIL_ROW_CAP);
+        }
+
+        return [
+            'rows' => $rows,
+            'truncated' => $truncated,
+            'cap' => self::BASELINE_DETAIL_ROW_CAP,
+        ];
+    }
+
+    /**
+     * Seluruh item baseline (BeRecord / TBC / fatigue, tujuh kontraktor) pada periode tertentu, tanpa filter site/company/status.
+     * Jumlahnya sama persis dengan {@see self::compute()} (dipakai agar tabel rincian "Pelaksanaan Comply" selaras dengan kartu KPI).
+     *
+     * @return list<array{
+     *   jenis: string,
+     *   jenis_label: string,
+     *   referensi: string,
+     *   perusahaan: string,
+     *   site: string,
+     *   tanggal_temuan: string|null,
+     *   status_pelaksanaan_edukasi: string|null,
+     *   sudah_peer_pressure: bool,
+     *   kejadian_edukasi_id: int|null
+     * }>
+     */
+    public function baselineRowsForPeriod(?int $year = null, ?int $month = null): array
+    {
+        $bounds = $this->kejadianTanggalTemuanBounds($year, $month);
+
+        return $this->buildBaselineRows($bounds, $year, $month);
+    }
+
+    /**
+     * @param  array{0: ?string, 1: ?string}  $bounds
+     * @return list<array<string, mixed>>
+     */
+    private function buildBaselineRows(array $bounds, ?int $year, ?int $month): array
+    {
         $rows = [];
 
         $beCoMapFull = $this->berecordNitip->mapNormalizedBeRecordToCompany($year, $month);
@@ -259,9 +308,6 @@ final class PeerPressurePelaksanaanBaselineService
             $co = $this->companyLabel($coRaw);
             $site = $this->resolveBeRecordSiteForAggregation($beSiteMap, $beNorm, $co, $companyPreferredSite, $beKeyToSiteWp);
             $done = isset($completedBe[$beNorm]);
-            if ($done !== $terlaksana || ! $this->baselineDetailMatchesScope($site, $co, $scopeSite, $scopeCompany)) {
-                continue;
-            }
             $snap = $beSnap[$beNorm] ?? null;
             $rows[] = [
                 'jenis' => 'berecord',
@@ -285,9 +331,6 @@ final class PeerPressurePelaksanaanBaselineService
             $site = $this->siteLabel($row->site ?? null);
             $co = $this->companyLabel($row->perusahaan ?? null);
             $done = PelaksanaanComplianceEvaluator::isPelaksanaanClosed($row->status_pelaksanaan_edukasi ?? null);
-            if ($done !== $terlaksana || ! $this->baselineDetailMatchesScope($site, $co, $scopeSite, $scopeCompany)) {
-                continue;
-            }
             $rows[] = [
                 'jenis' => 'fatigue',
                 'jenis_label' => 'Fatigue (tidak speak up)',
@@ -322,9 +365,6 @@ final class PeerPressurePelaksanaanBaselineService
                 continue;
             }
             $done = $resolved['done'];
-            if ($done !== $terlaksana || ! $this->baselineDetailMatchesScope($resolved['site'], $resolved['company'], $scopeSite, $scopeCompany)) {
-                continue;
-            }
             $taskRaw = trim((string) ($row->tasklist ?? ''));
             $rows[] = [
                 'jenis' => 'tbc',
@@ -350,16 +390,7 @@ final class PeerPressurePelaksanaanBaselineService
             return strcmp((string) ($a['referensi'] ?? ''), (string) ($b['referensi'] ?? ''));
         });
 
-        $truncated = count($rows) > self::BASELINE_DETAIL_ROW_CAP;
-        if ($truncated) {
-            $rows = array_slice($rows, 0, self::BASELINE_DETAIL_ROW_CAP);
-        }
-
-        return [
-            'rows' => $rows,
-            'truncated' => $truncated,
-            'cap' => self::BASELINE_DETAIL_ROW_CAP,
-        ];
+        return $rows;
     }
 
     private function baselineDetailMatchesScope(string $site, string $company, string $scopeSite, ?string $scopeCompany): bool

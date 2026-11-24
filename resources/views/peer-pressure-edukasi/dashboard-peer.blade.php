@@ -1035,7 +1035,7 @@
 
                <section class="mt-6 rounded-xl border border-outline-variant/20 bg-[#f8fafc] p-4 sm:p-5">
                   <h3 class="font-headline text-sm font-bold text-on-surface">Ringkasan data</h3>
-                  <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">Angka ringkas mengikuti baseline pelaksanaan (BeRecord CH + TBC + fatigue, tujuh kontraktor) untuk periode yang sama dengan kartu KPI. Tabel di bawah tetap per kejadian (lima kategori terlacak).</p>
+                  <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">Angka ringkas dan tabel di bawah sama-sama mengikuti baseline pelaksanaan (BeRecord + TBC + fatigue, tujuh kontraktor) untuk periode yang sama dengan kartu KPI.</p>
                   <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                      <div class="rounded-lg border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-center shadow-sm">
                         <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Comply</p>
@@ -1064,9 +1064,9 @@
 
 
                <section class="mt-6">
-                  <h3 class="font-headline text-sm font-bold text-on-surface">Data per kejadian</h3>
+                  <h3 class="font-headline text-sm font-bold text-on-surface">Data per item baseline</h3>
                   <p class="mt-1 text-[11px] leading-snug text-on-surface-variant">
-                     Rincian per ID (lima kategori deviasi terlacak), ditampilkan per halaman. Klik ID untuk membuka detail kejadian.
+                     Rincian per item baseline (BeRecord + TBC + fatigue, tujuh kontraktor), ditampilkan per halaman. Klik ID untuk membuka detail kejadian bila tersedia.
                   </p>
                   <div id="peer-compliance-table-loading" class="mt-3 hidden rounded-lg border border-outline-variant/20 bg-[#f8fafc] px-4 py-8 text-center text-[12px] font-medium text-on-surface-variant" aria-live="polite">
                      <span class="material-symbols-outlined mb-2 inline-block animate-spin text-2xl text-secondary" style="animation-duration:1s">progress_activity</span>
@@ -1079,8 +1079,8 @@
                            <tr class="border-b border-outline-variant/20 bg-[#f1f5f9] text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
                               <th class="whitespace-nowrap px-2 py-2.5">ID</th>
                               <th class="whitespace-nowrap px-2 py-2.5">Tgl temuan</th>
-                              <th class="min-w-[140px] px-2 py-2.5">Kategori deviasi (data)</th>
-                              <th class="min-w-[120px] px-2 py-2.5">Kelompok</th>
+                              <th class="min-w-[140px] px-2 py-2.5">Referensi item</th>
+                              <th class="min-w-[120px] px-2 py-2.5">Jenis baseline</th>
                               <th class="min-w-[100px] px-2 py-2.5">Status pelaksanaan</th>
                               <th class="whitespace-nowrap px-2 py-2.5">id BeRecord</th>
                               <th class="whitespace-nowrap px-2 py-2.5">Hasil</th>
@@ -1091,7 +1091,7 @@
                      </table>
                   </div>
                   <p id="peer-compliance-table-empty" class="mt-3 hidden rounded-lg border border-dashed border-outline-variant/30 bg-white px-4 py-8 text-center text-[12px] text-on-surface-variant">
-                     Tidak ada kejadian pada periode ini yang masuk lima kategori pelacakan.
+                     Belum ada item baseline pada periode ini untuk tujuh kontraktor terpilih.
                   </p>
                   <div id="peer-compliance-pagination" class="mt-3 hidden flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant/15 pt-3"></div>
                </section>
@@ -4874,6 +4874,9 @@
           return d + ' ' + months[mo] + ' ' + y;
         }
         function complianceRecIdBtn(id) {
+          if (!id) {
+            return '<span class="font-semibold text-on-surface-variant">item ini</span>';
+          }
           return (
             '<button type="button" class="js-peer-compliance-detail-btn font-semibold text-primary hover:underline" data-id="' +
             escAttr(id) +
@@ -4889,28 +4892,19 @@
           var blocks = rows.map(function (row) {
             var id = row.id != null ? String(row.id) : '';
             var tgl = formatTanggalDeskriptifId(row.tanggal_temuan);
-            var kat = row.kategori_deviasi != null ? String(row.kategori_deviasi) : 'kategori tidak tercatat';
+            var kat = row.kategori_deviasi != null ? String(row.kategori_deviasi) : 'referensi tidak tercatat';
             var kel = row.bucket_label != null ? String(row.bucket_label) : '';
-            var kelTxt = kel ? ' Kelompok deviasi: ' + escHtml(kel) + '.' : '';
+            var kelTxt = kel ? ' Jenis baseline: ' + escHtml(kel) + '.' : '';
             var base =
-              'Pada kejadian ' +
+              'Pada item ' +
               complianceRecIdBtn(id) +
               ', tanggal temuan ' +
               tgl +
-              ', dengan kategori deviasi «' +
+              ', dengan referensi «' +
               escHtml(kat) +
               '».' +
               kelTxt;
 
-            if (code === 'be_tanpa_id_berecord') {
-              return (
-                '<p class="text-[11px] leading-relaxed text-on-surface">' +
-                base +
-                ' <strong class="font-semibold text-on-surface">Pelaksanaan edukasi sudah dinyatakan selesai</strong>, namun <strong class="font-semibold text-on-surface">kolom id BeRecord masih kosong</strong>. ' +
-                'Rekomendasi: isi id BeRecord yang sesuai dengan rekaman kasus di BeRecord agar pelacakan integrasi lengkap.' +
-                '</p>'
-              );
-            }
             if (code === 'be_belum_selesai') {
               return (
                 '<p class="text-[11px] leading-relaxed text-on-surface">' +
@@ -4920,20 +4914,11 @@
                 '</p>'
               );
             }
-            if (code === 'be_belum_selesai_dan_tanpa_id') {
-              return (
-                '<p class="text-[11px] leading-relaxed text-on-surface">' +
-                base +
-                ' <strong class="font-semibold text-on-surface">Pelaksanaan belum selesai dan id BeRecord juga kosong.</strong> ' +
-                'Rekomendasi: selesaikan siklus edukasi terlebih dahulu, kemudian lengkapi id BeRecord.' +
-                '</p>'
-              );
-            }
             if (code === 'fb_belum_selesai') {
               return (
                 '<p class="text-[11px] leading-relaxed text-on-surface">' +
                 base +
-                ' Untuk kategori Fatigue/Blindspot, BeRecord tidak dipakai; yang perlu adalah <strong class="font-semibold text-on-surface">status pelaksanaan selesai</strong> (CLOSED/SELESAI). ' +
+                ' Untuk jenis Fatigue/TBC, BeRecord tidak dipakai; yang perlu adalah <strong class="font-semibold text-on-surface">status pelaksanaan selesai</strong> (CLOSED/SELESAI). ' +
                 'Rekomendasi: perbarui status setelah edukasi selesai dilaksanakan.' +
                 '</p>'
               );
@@ -4941,7 +4926,7 @@
             return (
               '<p class="text-[11px] leading-relaxed text-on-surface">' +
               base +
-              ' Tinjau detail kejadian dan sesuaikan dengan standar penutupan serta pengisian data.' +
+              ' Tinjau detail item dan sesuaikan dengan standar penutupan serta pengisian data.' +
               '</p>'
             );
           });
@@ -5134,13 +5119,18 @@
                     var st = row.status_pelaksanaan_edukasi != null ? String(row.status_pelaksanaan_edukasi) : '—';
                     var be = row.id_berecord != null ? String(row.id_berecord) : '—';
                     var als = row.alasan != null ? String(row.alasan) : '—';
+                    var idCell = id
+                      ? '<button type="button" class="js-peer-compliance-detail-btn font-semibold text-primary hover:underline" data-id="' +
+                        escAttr(id) +
+                        '">#' +
+                        escHtml(id) +
+                        '</button>'
+                      : '<span class="text-on-surface-variant">—</span>';
                     return (
                       '<tr class="align-top hover:bg-[#f8fafc]">' +
-                      '<td class="px-2 py-2 tabular-nums"><button type="button" class="js-peer-compliance-detail-btn font-semibold text-primary hover:underline" data-id="' +
-                      escAttr(id) +
-                      '">#' +
-                      escHtml(id) +
-                      '</button></td>' +
+                      '<td class="px-2 py-2 tabular-nums">' +
+                      idCell +
+                      '</td>' +
                       '<td class="px-2 py-2 whitespace-nowrap tabular-nums">' +
                       escHtml(tgl) +
                       '</td>' +

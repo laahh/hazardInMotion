@@ -4,17 +4,14 @@ declare(strict_types=1);
 
 namespace App\Actions\PeerPressure;
 
-use App\Models\PeerPressureKejadianEdukasi;
 use App\Services\PeerPressure\PeerPressurePelaksanaanBaselineService;
-use App\Support\PeerPressure\KategoriDeviasiBucket;
-use App\Support\PeerPressure\PelaksanaanComplianceEvaluator;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Daftar kejadian peer pressure yang masuk metrik Pelaksanaan Comply, dengan status comply per baris (paginasi).
+ * Daftar item baseline peer pressure (BeRecord + TBC + fatigue, tujuh kontraktor) dengan status comply per baris (paginasi).
  * Menyertakan agregat penyebab tidak comply untuk rekomendasi perbaikan.
- * Ringkasan peer_pressure_compliance_* diselaraskan dengan baseline pelaksanaan (sama {@see GetPeerPressureDashboardKpiStatsAction}).
+ * Sumber data (item + ringkasan) sama persis dengan {@see GetPeerPressureDashboardKpiStatsAction} /
+ * {@see PeerPressurePelaksanaanBaselineService::compute()}, sehingga total & comply pada tabel selalu selaras dengan kartu KPI.
  */
 final class GetPeerPressureDashboardComplianceBreakdownAction
 {
@@ -39,7 +36,7 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
      *   peer_pressure_compliance_pct: float,
      *   peer_pressure_compliance_total: int,
      *   peer_pressure_compliance_comply: int,
-     *   recommendations: list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array{id: int, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>}>,
+     *   recommendations: list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array{id: int|null, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>}>,
      *   pagination: array{current_page: int, per_page: int, total: int, last_page: int, from: int|null, to: int|null},
      *   rows: list<array<string, mixed>>
      * }
@@ -53,24 +50,18 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
             $y = max(self::MIN_YEAR, min(self::MAX_YEAR, $year));
             $m = max(1, min(12, $month));
             $start = Carbon::create($y, $m, 1)->startOfDay();
-            $end = $start->copy()->endOfMonth();
-            $startS = $start->toDateString();
-            $endS = $end->toDateString();
-            $base = PeerPressureKejadianEdukasi::query()
-                ->where('tanggal_temuan', '>=', $startS)
-                ->where('tanggal_temuan', '<=', $endS);
 
             return [
                 'period_scope' => 'month',
                 'period_caption' => (self::MONTHS_ID[$m] ?? (string) $m).' '.$y,
-                ...$this->buildPaginated($base, $page, $perPage, $y, $m),
+                ...$this->buildPaginated($page, $perPage, $y, $m),
             ];
         }
 
         return [
             'period_scope' => 'all',
             'period_caption' => 'Seluruh data',
-            ...$this->buildPaginated(PeerPressureKejadianEdukasi::query(), $page, $perPage, null, null),
+            ...$this->buildPaginated($page, $perPage, null, null),
         ];
     }
 
@@ -79,76 +70,47 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
      *   peer_pressure_compliance_pct: float,
      *   peer_pressure_compliance_total: int,
      *   peer_pressure_compliance_comply: int,
-     *   recommendations: list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array{id: int, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>}>,
+     *   recommendations: list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array{id: int|null, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>}>,
      *   pagination: array{current_page: int, per_page: int, total: int, last_page: int, from: int|null, to: int|null},
      *   rows: list<array<string, mixed>>
      * }
      */
-    private function buildPaginated(Builder $query, int $page, int $perPage, ?int $year = null, ?int $month = null): array
+    private function buildPaginated(int $page, int $perPage, ?int $year = null, ?int $month = null): array
     {
-        $tracked = array_flip(KategoriDeviasiBucket::trackedComplianceBuckets());
-
-        $dbRows = (clone $query)
-            ->orderByDesc('tanggal_temuan')
-            ->orderByDesc('id')
-            ->get([
-                'id',
-                'tanggal_temuan',
-                'kategori_deviasi',
-                'status_pelaksanaan_edukasi',
-                'id_berecord',
-            ]);
+        $items = $this->pelaksanaanBaseline->baselineRowsForPeriod($year, $month);
 
         $out = [];
         $comply = 0;
-        $total = 0;
+        $total = count($items);
         /** @var array<string, int> $nonComplyByCode */
         $nonComplyByCode = [];
-        /** @var array<string, list<array{id: int, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>> $nonComplyRowsByCode */
+        /** @var array<string, list<array{id: int|null, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>> $nonComplyRowsByCode */
         $nonComplyRowsByCode = [];
 
-        foreach ($dbRows as $r) {
-            $bucket = KategoriDeviasiBucket::bucket($r->kategori_deviasi);
-            if (! isset($tracked[$bucket])) {
-                continue;
-            }
-
-            $total++;
-            $ev = PelaksanaanComplianceEvaluator::evaluate(
-                $bucket,
-                $r->status_pelaksanaan_edukasi,
-                $r->id_berecord
-            );
-            if ($ev['comply']) {
+        foreach ($items as $item) {
+            $done = (bool) ($item['sudah_peer_pressure'] ?? false);
+            if ($done) {
                 $comply++;
-            } else {
-                $code = $ev['reason_code'] ?? 'unknown';
-                $nonComplyByCode[$code] = ($nonComplyByCode[$code] ?? 0) + 1;
             }
 
-            $tanggal = $r->tanggal_temuan instanceof \DateTimeInterface
-                ? Carbon::parse($r->tanggal_temuan)->toDateString()
-                : (string) $r->tanggal_temuan;
+            $ev = self::evaluateBaselineItem($item);
 
             $row = [
-                'id' => (int) $r->id,
-                'tanggal_temuan' => $tanggal !== '' ? $tanggal : null,
-                'kategori_deviasi' => $r->kategori_deviasi !== null ? (string) $r->kategori_deviasi : null,
-                'bucket' => $bucket,
-                'bucket_label' => self::bucketLabel($bucket),
-                'status_pelaksanaan_edukasi' => $r->status_pelaksanaan_edukasi !== null
-                    ? (string) $r->status_pelaksanaan_edukasi
-                    : null,
-                'id_berecord' => $r->id_berecord !== null && trim((string) $r->id_berecord) !== ''
-                    ? (string) $r->id_berecord
-                    : null,
-                'comply' => $ev['comply'],
+                'id' => $item['kejadian_edukasi_id'] ?? null,
+                'tanggal_temuan' => $item['tanggal_temuan'] ?? null,
+                'kategori_deviasi' => $item['referensi'] ?? null,
+                'bucket' => $item['jenis'] ?? null,
+                'bucket_label' => $item['jenis_label'] ?? null,
+                'status_pelaksanaan_edukasi' => $item['status_pelaksanaan_edukasi'] ?? null,
+                'id_berecord' => ($item['jenis'] ?? null) === 'berecord' ? ($item['referensi'] ?? null) : null,
+                'comply' => $done,
                 'alasan' => $ev['alasan'],
-                'reason_code' => $ev['reason_code'] ?? 'unknown',
+                'reason_code' => $ev['reason_code'],
             ];
 
-            if (! $ev['comply']) {
-                $rc = $ev['reason_code'] ?? 'unknown';
+            if (! $done) {
+                $rc = $ev['reason_code'];
+                $nonComplyByCode[$rc] = ($nonComplyByCode[$rc] ?? 0) + 1;
                 if (! isset($nonComplyRowsByCode[$rc])) {
                     $nonComplyRowsByCode[$rc] = [];
                 }
@@ -192,9 +154,38 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
     }
 
     /**
+     * Evaluasi comply satu item baseline. Sejalan dengan {@see PeerPressurePelaksanaanBaselineService::compute()}:
+     * item sudah dianggap baseline (BE punya id BeRecord, TBC punya tasklist valid, fatigue tercatat), jadi satu-satunya
+     * syarat comply yang tersisa adalah status pelaksanaan edukasi selesai.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array{alasan: string, reason_code: string}
+     */
+    private static function evaluateBaselineItem(array $item): array
+    {
+        if ((bool) ($item['sudah_peer_pressure'] ?? false)) {
+            return [
+                'alasan' => 'Pelaksanaan selesai.',
+                'reason_code' => 'ok',
+            ];
+        }
+
+        return match ($item['jenis'] ?? '') {
+            'berecord' => [
+                'alasan' => 'Pelaksanaan belum selesai (status harus mengandung CLOSED atau SELESAI).',
+                'reason_code' => 'be_belum_selesai',
+            ],
+            default => [
+                'alasan' => 'Pelaksanaan belum selesai (status harus mengandung CLOSED atau SELESAI).',
+                'reason_code' => 'fb_belum_selesai',
+            ],
+        };
+    }
+
+    /**
      * @param  array<string, int>  $nonComplyByCode
-     * @param  array<string, list<array{id: int, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>>  $nonComplyRowsByCode
-     * @return list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array{id: int, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>}>
+     * @param  array<string, list<array{id: int|null, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>>  $nonComplyRowsByCode
+     * @return list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array{id: int|null, tanggal_temuan: string|null, kategori_deviasi: string|null, bucket_label: string}>}>
      */
     private static function buildRecommendations(array $nonComplyByCode, int $nonComplyTotal, array $nonComplyRowsByCode): array
     {
@@ -202,9 +193,9 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
             return [
                 [
                     'code' => 'all_ok',
-                    'judul' => 'Semua kejadian terlacak memenuhi comply',
+                    'judul' => 'Semua item baseline terlacak memenuhi comply',
                     'jumlah' => 0,
-                    'rekomendasi' => 'Pertahankan disiplin penutupan pelaksanaan edukasi dan pengisian id BeRecord sesuai aturan kategori.',
+                    'rekomendasi' => 'Pertahankan disiplin penutupan pelaksanaan edukasi sesuai aturan baseline (BeRecord + TBC + fatigue).',
                     'daftar_kejadian' => [],
                 ],
             ];
@@ -212,13 +203,7 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
 
         /** @var list<array{code: string, judul: string, jumlah: int, rekomendasi: string, daftar_kejadian: list<array<string, mixed>>}> $items */
         $items = [];
-        $order = [
-            'be_tanpa_id_berecord',
-            'be_belum_selesai',
-            'be_belum_selesai_dan_tanpa_id',
-            'fb_belum_selesai',
-            'unknown',
-        ];
+        $order = ['be_belum_selesai', 'fb_belum_selesai', 'unknown'];
 
         $copy = $nonComplyByCode;
         foreach ($order as $code) {
@@ -260,38 +245,18 @@ final class GetPeerPressureDashboardComplianceBreakdownAction
     private static function recommendationMeta(string $code): array
     {
         return match ($code) {
-            'be_tanpa_id_berecord' => [
-                'judul' => 'Perlu isi id BeRecord (pelaksanaan sudah selesai)',
-                'rekomendasi' => 'Uraian per kejadian di bawah menyebutkan tanggal temuan dan kategori; lengkapi kolom id BeRecord agar selaras dengan rekaman BeRecord.',
-            ],
             'be_belum_selesai' => [
                 'judul' => 'Perlu penutupan pelaksanaan (jalur BeRecord)',
-                'rekomendasi' => 'Uraian per kejadian: tutup pelaksanaan dengan status yang mengandung CLOSED atau SELESAI.',
-            ],
-            'be_belum_selesai_dan_tanpa_id' => [
-                'judul' => 'Belum selesai dan id BeRecord kosong',
-                'rekomendasi' => 'Uraian per kejadian: selesaikan dulu pelaksanaan, lalu isi id BeRecord.',
+                'rekomendasi' => 'Uraian per item di bawah menyebutkan tanggal temuan dan referensi; tutup pelaksanaan dengan status yang mengandung CLOSED atau SELESAI.',
             ],
             'fb_belum_selesai' => [
-                'judul' => 'Perlu penutupan pelaksanaan (Fatigue & Blindspot)',
-                'rekomendasi' => 'Kategori ini tidak memakai BeRecord. Uraian per kejadian: update status ke CLOSED/SELESAI setelah edukasi rampung.',
+                'judul' => 'Perlu penutupan pelaksanaan (Fatigue / TBC)',
+                'rekomendasi' => 'Kategori ini tidak memakai BeRecord. Uraian per item: update status ke CLOSED/SELESAI setelah edukasi rampung.',
             ],
             default => [
                 'judul' => 'Penyebab lain ('.$code.')',
-                'rekomendasi' => 'Uraian per kejadian terkait:',
+                'rekomendasi' => 'Uraian per item terkait:',
             ],
-        };
-    }
-
-    private static function bucketLabel(string $bucket): string
-    {
-        return match ($bucket) {
-            'tidak_speak_up_fatigue' => 'Tidak Speak Up Fatigue',
-            'blindspot_to_be_concerned' => 'Blindspot To Be Concerned Hazards',
-            'pelanggaran_pspp' => 'Pelanggaran PSPP',
-            'pelanggaran_golden_rules' => 'Pelanggaran Golden Rules',
-            'insiden' => 'Insiden',
-            default => $bucket,
         };
     }
 }
