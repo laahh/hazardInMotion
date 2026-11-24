@@ -43,7 +43,7 @@
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label data-ctl="site">Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
-      <label data-ctl="grup-pja-bpja" hidden>Perusahaan <select id="dr-perusahaan"><option value="ALL">Semua perusahaan</option></select></label>
+      <label>Perusahaan <select id="dr-perusahaan"><option value="ALL">Semua perusahaan</option></select></label>
       <label><span class="material-symbols-outlined" style="font-size:18px;color:var(--primary)">calendar_month</span> Periode <select id="dr-w"></select></label>
       <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
       <label data-ctl="pja" hidden>Prioritas <select id="dr-pri"><option value="all">Semua</option><option value="T">Tinggi</option><option value="S">Sedang</option><option value="R">Rendah</option><option value="K">Volume kecil</option></select></label>
@@ -261,7 +261,7 @@
 
   /** Grup lokasi yang punya minimal satu baris baseline di minggu dan level mana pun (semua site). */
   function grupBerisi() {
-    const sumber = M.beranda && M.beranda.ringkas && M.beranda.ringkas.ALL ? [M.beranda.ringkas.ALL] : ((M.beranda || {}).mgmt || []);
+    const sumber = M.beranda && M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL ? [M.beranda.ringkas.ALL.ALL] : ((M.beranda || {}).mgmt || []);
     const ada = new Set();
     sumber.forEach((p) => (p.grp || []).forEach((perLv) => Object.values(perLv || {}).forEach((m) => Object.entries(m || {}).forEach(([g, v]) => {
       if ((v || [])[0] > 0) ada.add(g);
@@ -277,7 +277,7 @@
     if (state.tab === 'grup') p.set('grup', state.grup);
     if (state.tab === 'proses') p.set('proses', state.proses);
     if (state.tab === 'bpja' && state.pjaB) p.set('pja', state.pjaB);
-    if (['grup', 'pja', 'bpja'].includes(state.tab) && state.perusahaan !== 'ALL') p.set('perusahaan', state.perusahaan);
+    if (state.perusahaan !== 'ALL') p.set('perusahaan', state.perusahaan);
     history.replaceState(null, '', '?' + p.toString());
   }
 
@@ -286,7 +286,6 @@
     document.querySelector('[data-ctl="grup"]').hidden = state.tab !== 'grup';
     document.querySelectorAll('[data-ctl="pja"]').forEach((e) => { e.hidden = state.tab !== 'pja'; });
     document.querySelector('[data-ctl="proses"]').hidden = state.tab !== 'proses';
-    document.querySelector('[data-ctl="grup-pja-bpja"]').hidden = !['grup', 'pja', 'bpja'].includes(state.tab);
     $('#dr-panel-cakupan').hidden = TAB_W.includes(state.tab);
     $('#dr-panel-pja').hidden = state.tab !== 'pja';
     $('#dr-panel-periode').hidden = state.tab !== 'periode';
@@ -380,12 +379,17 @@
   const jumlahF = (P, f) => P.reduce((a, p) => tambahVek(a, f(p)), KOSONG);
   const pjaDiSite = () => M.beranda.mgmt.filter((p) => state.site === 'ALL' || p.site === state.site);
   /** Snapshot punya ringkasan baseline unik (kelompok aktivitas × bahaya, tidak dipetakan ke PJA)? */
-  const adaUnik = () => !!(M.beranda.ringkas && M.beranda.ringkas.ALL);
+  const adaUnik = () => !!(M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL);
+  /**
+   * Entri ringkasan baseline unik untuk site × perusahaan terpilih (undefined bila kombinasinya tidak punya
+   * detail lokasi sama sekali — lihat DrmSnapshotBuilder::ringkasUnik, kombinasi kosong tidak disimpan di snapshot).
+   */
+  const ringkasAktif = () => (M.beranda.ringkas[state.site] || {})[state.perusahaan];
   /**
    * Sumber angka tab Overview / Group Lokasi / Kelompok Aktivitas: ringkasan baseline unik cakupan itu
-   * (satu "PJA semu" berisi semua detail lokasi site). Snapshot lama: jumlah baris tingkat PJA.
+   * (satu "PJA semu" berisi semua detail lokasi site × perusahaan). Snapshot lama: jumlah baris tingkat PJA.
    */
-  const cakupanP = () => (adaUnik() ? [M.beranda.ringkas[state.site]].filter(Boolean) : pjaDiSite());
+  const cakupanP = () => (adaUnik() ? [ringkasAktif()].filter(Boolean) : pjaDiSite());
 
   /** Ikon kartu KPI (gaya template dashboard-peer): kunci kategori → [ikon Material, latar, warna]. */
   const IKON_KPI = { t: ['inventory_2', 'rgba(57,82,188,.1)', '#3952bc'], full: ['verified', '#dcfce7', '#16a34a'], part: ['rule', '#fef3c7', '#b45309'],
@@ -397,12 +401,12 @@
    * Label kategori. Ringkasan baseline unik (tab Overview / Group Lokasi / Kelompok Aktivitas) memakai pita cakupan
    * detail lokasi (keputusan user 17 Nov 2026); tab Semua PJA tetap memakai kategori spec per PJA.
    */
-  const pitaAktif = () => adaUnik() && !!(M.beranda.ringkas.ALL || {}).pita;
+  const pitaAktif = () => adaUnik() && !!M.beranda.ringkas.ALL.ALL.pita;
   const LBL_SPEC = { full: 'Terkontrol penuh', part: 'Terkontrol sebagian', gapo: 'Hanya laporan bermasalah', none: 'Tanpa laporan',
     kFull: 'Terkontrol penuh', kPart: 'Sebagian', kGapo: 'Hanya bermasalah', kNone: 'Tanpa laporan' };
   function LBL() {
     if (!pitaAktif()) return LBL_SPEC;
-    const [atas, bawah] = M.beranda.ringkas.ALL.pita.map((x) => Math.round(100 * x));
+    const [atas, bawah] = M.beranda.ringkas.ALL.ALL.pita.map((x) => Math.round(100 * x));
     return { full: `Terkontrol di ≥${atas}% DL`, part: `Terkontrol di ${bawah}–${atas}% DL`, gapo: `Terkontrol di <${bawah}% DL`, none: 'Tidak terkontrol di DL mana pun',
       kFull: `≥${atas}% DL`, kPart: `${bawah}–${atas}% DL`, kGapo: `<${bawah}% DL`, kNone: '0% DL' };
   }
@@ -414,7 +418,7 @@
   function kartu4(V, V0, judul) {
     // Snapshot dihitung sebelum kolom status ada: kartu tetap berbentuk angka, isinya "–" sampai sync ulang.
     const ada = M.beranda.kolomMgmt.includes('idk');
-    const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
+    const R = adaUnik() ? ringkasAktif() : null;
     // Selisih jumlah vs minggu lalu; naikBaik = kenaikan berarti membaik (hijau).
     const beda = (k, naikBaik) => {
       if (!ada || !V0) return '';
@@ -782,11 +786,22 @@
   function renderCakupan() {
     if (!formatBaru() || !(adaUnik() || M.beranda.mgmt.every((p) => p.kel && p.grp))) { $('#dr-kpi4').innerHTML = pesanLama(); return; }
     const P = cakupanP(), w = state.w, NW = M.beranda.minggu.length, wk = wKode(w);
+    // Kombinasi site × perusahaan tanpa detail lokasi sama sekali (lihat DrmSnapshotBuilder::ringkasUnik) — jangan
+    // tampilkan kartu/tabel kosong seolah snapshot lama; pesan khusus, sama pola dengan tab Semua PJA / Beranda PJA.
+    if (adaUnik() && state.perusahaan !== 'ALL' && !P.length) {
+      $('#dr-kpi4').innerHTML = `<div class="pr-card"><div class="pr-empty">Tidak ada detail lokasi dengan personil dari perusahaan ${DR.esc(state.perusahaan)}${state.site === 'ALL' ? '' : ' di ' + DR.esc(state.site)}.</div></div>`;
+      $('#dr-card-mx').hidden = true; $('#dr-card-tm').hidden = true; $('#dr-card-grup').hidden = true;
+      $('#dr-tren-judul').textContent = ''; $('#dr-tren-sum').innerHTML = ''; $('#dr-tren').innerHTML = ''; $('#dr-legenda').innerHTML = '';
+      $('#dr-grup-judul').textContent = 'Per Group Lokasi'; $('#dr-grup-sub').textContent = '';
+      $('#dr-kel-judul').textContent = 'Per Kelompok Aktivitas'; $('#dr-kel-sub').textContent = '';
+      $('#dr-tbl-grup').innerHTML = ''; $('#dr-tbl-proses').innerHTML = '';
+      return;
+    }
     const lokasi = state.site === 'ALL' ? 'BC' : DR.esc(state.site);
     const namaKel = (M.proses.find((p) => p.kode === state.proses) || {}).nama || state.proses;
     const judul = state.tab === 'grup' ? `${DR.esc(state.grup)} · ${lokasi}` : state.tab === 'proses' ? `${DR.esc(namaKel)} · ${lokasi}` : lokasi;
     const V = jumlahF(P, (p) => vekTab(p, w)), V0 = w + 1 < NW ? jumlahF(P, (p) => vekTab(p, w + 1)) : null;
-    const R = adaUnik() ? M.beranda.ringkas[state.site] || {} : null;
+    const R = adaUnik() ? ringkasAktif() : null;
     const catatan = R
       ? (pitaAktif() ? '' : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot belum memakai pita cakupan, sehingga hampir semua bahaya terbaca "sebagian". Jalankan ulang <code>php artisan peta-risiko:sync</code>.</p>')
       : '<p class="dr-mute" style="margin:8px 0 0;font-size:12px">Snapshot lama: angka masih jumlah baris tingkat PJA. Jalankan ulang <code>php artisan peta-risiko:sync</code> untuk baseline unik.</p>';
@@ -856,9 +871,10 @@
       if (!info || info[3] !== state.grup || (state.site !== 'ALL' && info[0] !== state.site)
         || (state.perusahaan !== 'ALL' && !(info[4] || []).includes(state.perusahaan))) return;
       if (!peta.has(d)) {
-        // Status per detail lokasi dari ringkasan unik "semua site" (sama untuk setiap PJA pemiliknya).
-        // Snapshot lama (sebelum 17 Nov 2026) menyimpan dlw per PJA, bukan di ringkasan ALL: pakai yang tersedia.
-        const ra = M.beranda.ringkas && M.beranda.ringkas.ALL;
+        // Status per detail lokasi dari ringkasan unik "semua site × semua perusahaan" (sama untuk setiap PJA
+        // pemiliknya; dlw hanya disimpan di ALL|ALL, lihat DrmSnapshotBuilder::ringkasUnik). Snapshot lama
+        // (sebelum 17 Nov 2026) menyimpan dlw per PJA, bukan di ringkasan ALL: pakai yang tersedia.
+        const ra = M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL;
         const sumber = ra && ra.dlw ? ra : p;
         peta.set(d, { d, info, pja: [], v: vekDari(ambilKunci((sumber.dlw || [])[w], d)), v0: w + 1 < NW ? vekDari(ambilKunci((sumber.dlw || [])[w + 1], d)) : null });
       }
@@ -1452,7 +1468,7 @@
       return `<tr class="br-sub br-akt${buka ? ' open' : ''}" data-akt="${DR.esc(kunci)}" style="cursor:pointer"><td style="padding-left:40px"><button class="br-cr" type="button" aria-expanded="${buka}" aria-label="${buka ? 'Tutup' : 'Buka'} bahaya-risiko ${DR.esc(nama || '(tanpa nama aktivitas)')}">▸</button>${DR.esc(nama || '(tanpa nama aktivitas)')}</td>${barisVek(v, v0)}<td class="dr-mute">${gapTxt(v)}</td></tr>`
         + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:6px 16px 14px 64px" data-akt-isi="${DR.esc(kunci)}" data-akt-nama="${DR.esc(nama)}"><span class="dr-mute">Memuat bahaya-risiko…</span></td></tr>` : '');
     }).join('')
-      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${adaUnik() && M.beranda.ringkas.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
+      || `<tr class="br-sub"><td colspan="8" class="dr-mute" style="padding-left:40px">Tidak ada aktivitas pada level risiko terpilih${adaUnik() && M.beranda.ringkas.ALL.ALL.akt ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`;
     const tautan = diGrup || state.tab !== 'proses' || state.proses !== kel
       ? `<tr class="br-sub"><td colspan="8" style="padding-left:40px"><a href="#" data-kekel="${DR.esc(kel)}">Lihat kelompok ini di semua grup ›</a></td></tr>` : '';
     return isi + tautan;
@@ -1699,13 +1715,13 @@
     tampil.sort(urut);
     const B = jumlah(diSite), G = B.t - B.full, W = DR.BW, wk = wKode(state.w);
     const kpi = (ac, kc, judul, angka, isi, k) => `<div class="br-kpi" style="--ac:${ac};--kc:${kc}">${ikonKpi(k)}<small>${judul}</small><b>${angka}</b><em>${isi}</em></div>`;
-    // Kosong = kombinasi site + perusahaan terpilih tidak punya PJA sama sekali. Jangan tampilkan kartu KPI
-    // sama sekali di sini — ringkasan unik (kartuAtas) dihitung per site tanpa atribusi perusahaan, jadi akan
-    // menampilkan angka site itu seolah-olah milik perusahaan yang dipilih padahal PJA-nya 0.
+    // Kosong = kombinasi site + perusahaan terpilih tidak punya PJA sama sekali.
     const kosong = diSite.length === 0;
 
     // Kartu KPI memakai ringkasan baseline unik yang sama dengan tab Overview (bukan jumlah baris tingkat PJA,
-    // yang menghitung satu bahaya berulang di tiap PJA). Snapshot lama tanpa ringkasan unik: jumlah per PJA.
+    // yang menghitung satu bahaya berulang di tiap PJA) — sejak ringkasan unik dipecah per perusahaan juga
+    // (ringkasAktif/cakupanP), kartu ini otomatis ikut tersaring sama dengan daftar PJA di bawahnya.
+    // Snapshot lama tanpa ringkasan unik: jumlah per PJA.
     const kartuAtas = (!kosong && adaUnik())
       ? (() => {
         const P = cakupanP(), NW = M.beranda.minggu.length;

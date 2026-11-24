@@ -198,12 +198,28 @@ class DrmSnapshotBuilderTest extends TestCase
 
         // Semua detail lokasi (termasuk DL 201 tanpa PJA): bahaya 1, 2, 3, 5 masing-masing dihitung sekali.
         $this->assertSame(['ALL', 'LMO'], array_keys($r));
-        $this->assertSame(4, $r['ALL']['w'][0]['High'][0]);
-        $this->assertSame(3, $r['ALL']['ndl']);
-        $this->assertSame(5, $r['ALL']['nBarisMaster']);
-        $this->assertSame(4, $r['ALL']['nBarisDl']);
+        $this->assertSame(4, $r['ALL']['ALL']['w'][0]['High'][0]);
+        $this->assertSame(3, $r['ALL']['ALL']['ndl']);
+        $this->assertSame(5, $r['ALL']['ALL']['nBarisMaster']);
+        $this->assertSame(4, $r['ALL']['ALL']['nBarisDl']);
         // Jumlah per kelompok = baseline.
-        $this->assertSame(4, array_sum(array_map(fn ($v) => $v[0], $r['ALL']['kel'][0]['High'])));
+        $this->assertSame(4, array_sum(array_map(fn ($v) => $v[0], $r['ALL']['ALL']['kel'][0]['High'])));
+    }
+
+    public function test_ringkasan_baseline_unik_bisa_disaring_per_perusahaan(): void
+    {
+        $r = $this->susun()['meta']['beranda']['ringkas'];
+
+        // DL 101 & 102 dimiliki PJA Pit BC (personil BC + mitra MK): ringkasan per perusahaan tersedia di site
+        // LMO maupun ALL, dan "ndl" tidak melebihi ndl ALL (DL 201 tanpa PJA tidak ikut perusahaan manapun).
+        $this->assertEqualsCanonicalizing(['ALL', 'BC', 'MK'], array_keys($r['ALL']));
+        $this->assertEqualsCanonicalizing(['ALL', 'BC', 'MK'], array_keys($r['LMO']));
+        $this->assertSame(2, $r['ALL']['BC']['ndl']);
+        $this->assertSame(2, $r['ALL']['MK']['ndl']);
+        $this->assertLessThan($r['ALL']['ALL']['ndl'], $r['ALL']['BC']['ndl']);
+        // Kombinasi site×perusahaan kosong tidak disimpan; "dlw" (berat) hanya ada di ALL|ALL.
+        $this->assertArrayNotHasKey('dlw', $r['ALL']['BC']);
+        $this->assertArrayHasKey('dlw', $r['ALL']['ALL']);
     }
 
     public function test_proses_bisnis_masuk_meta_cakupan_dan_baris_aktivitas(): void

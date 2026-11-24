@@ -270,7 +270,12 @@ class DrmSnapshotBuilder
         }
 
         $rute = self::ruteSite($hira, $cfg);
-        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null, $rute);
+        // Daftar perusahaan dari union company tiap detail lokasi (kamusDl[id][4], diisi di atas) — dipakai untuk
+        // memecah ringkasUnik() per perusahaan juga (filter "Perusahaan" di tab Overview / Group Lokasi / Kelompok
+        // Aktivitas, bukan cuma baris daftar seperti sebelumnya).
+        $perusahaanSemua = $kamusDl === [] ? [] : array_values(array_unique(array_merge(...array_column($kamusDl, 4))));
+        sort($perusahaanSemua);
+        [$ringkas, $rincian] = $this->ringkasUnik($b, $dl, $hidPerDl, $hira, $idx, $d['master'] ?? null, $rute, $kamusDl, $perusahaanSemua);
 
         return [
             'minggu' => $b->minggu(),
@@ -300,18 +305,31 @@ class DrmSnapshotBuilder
     }
 
     /**
-     * Ringkasan baseline UNIK per cakupan (ALL + tiap site): satu baris = kelompok aktivitas × bahaya-risiko,
-     * dihitung sekali walau ada di banyak detail lokasi / dimiliki beberapa PJA (tidak dipetakan ke PJA).
-     * Status baris digabung dari semua detail lokasi cakupan (terkontrol penuh bila semuanya terkontrol).
-     * Bentuk datanya sama dengan ringkasan satu PJA (DrmBeranda::ringkasMgmt), sehingga tampilan bisa dipakai ulang.
+     * Ringkasan baseline UNIK per cakupan (site × perusahaan, ALL mewakili "semua"): satu baris = kelompok
+     * aktivitas × bahaya-risiko, dihitung sekali walau ada di banyak detail lokasi / dimiliki beberapa PJA
+     * (tidak dipetakan ke PJA). Status baris digabung dari semua detail lokasi cakupan (terkontrol penuh bila
+     * semuanya terkontrol). Bentuk datanya sama dengan ringkasan satu PJA (DrmBeranda::ringkasMgmt), sehingga
+     * tampilan bisa dipakai ulang.
+     *
+     * Perusahaan = union personil PJA pemilik detail lokasi (kamusDl[id][4], lihat beranda()): satu detail lokasi
+     * dengan ≥2 perusahaan pemilik tetap terhitung UTUH pada ringkasan tiap perusahaan itu (union, bukan irisan),
+     * sama dengan cara filter baris di tab Group Lokasi / Semua PJA sebelum ini. Kombinasi (site, perusahaan)
+     * yang detail lokasinya kosong tidak disimpan (hemat ukuran snapshot). Struktur paling berat (`dlw`, per
+     * detail lokasi) hanya disimpan sekali di ALL|ALL — satu-satunya yang dipakai tabel Group Lokasi, yang
+     * menyaring site/grup/perusahaan sendiri di JS dari M.beranda.dl; menyimpannya per kombinasi site×perusahaan
+     * akan membengkak persis seperti dulu per PJA (lihat catatan di beranda()). Rincian baris per status (dipakai
+     * modal kartu KPI, ditulis ke rincian.json) juga TIDAK dipecah per perusahaan — tetap per site saja, karena
+     * barisnya sudah unik lintas detail lokasi (tidak ada atribusi perusahaan per baris untuk disaring).
      *
      * @param  array<string, array<string, mixed>>  $dl
      * @param  array<string, list<string>>  $hidPerDl
      * @param  array<string, array<string, mixed>>  $hira
      * @param  array<string, mixed>  $idx
-     * @return array{0: array<string, array<string, mixed>>, 1: array<string, mixed>}  [ringkasan, rincian baris per status]
+     * @param  array<string, array{0: string, 1: string, 2: string, 3: string, 4: list<string>}>  $kamusDl  id DL => [site, lokasi, detlok, grp, perusahaan[]]
+     * @param  list<string>  $perusahaan
+     * @return array{0: array<string, array<string, array<string, mixed>>>, 1: array<string, mixed>}  [ringkasan[site][perusahaan], rincian baris per status]
      */
-    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null, array $rute = []): array
+    private function ringkasUnik(DrmBeranda $b, array $dl, array $hidPerDl, array $hira, array $idx, ?DrmMaster $master = null, array $rute = [], array $kamusDl = [], array $perusahaan = []): array
     {
         $cakupan = ['ALL' => []];
         foreach ($dl as $id => $d) {
@@ -325,31 +343,45 @@ class DrmSnapshotBuilder
         $hasil = $lingkup = $hidDipakai = [];
         foreach ($cakupan as $kunci => $ids) {
             // Site per departemen: pasangan (DL, bahaya) per cakupan site disesuaikan (lihat pasanganSite).
-            [$ids, $pasangan] = $kunci === 'ALL' || $rute === [] ? [$ids, $hidPerDl] : self::pasanganSite((string) $kunci, $dl, $hidPerDl, $rute);
-            $berkas = $b->berkas($ids, $pasangan, $hira, $dl, $idx, []);
-            $r = $b->ringkasMgmt($ids, $pasangan, $hira, $berkas, [], true, true);
-            $lingkup[$kunci] = $r['rincian'];
-            foreach ($r['rincian']['u'] as $baris) {
-                $hidDipakai[$baris[1]] = true;
-            }
-            unset($r['rincian']);
-            $ada = [];
-            foreach ($ids as $d) {
-                foreach ($pasangan[$d] ?? [] as $hid) {
-                    $ada[$hid] = true;
+            [$idsSite, $pasanganSite] = $kunci === 'ALL' || $rute === [] ? [$ids, $hidPerDl] : self::pasanganSite((string) $kunci, $dl, $hidPerDl, $rute);
+            $hasil[$kunci] = [];
+            foreach (['ALL' => null] + array_fill_keys($perusahaan, null) as $p => $_) {
+                if ($p === 'ALL') {
+                    [$idsP, $pasanganP] = [$idsSite, $pasanganSite];
+                } else {
+                    $idsP = array_values(array_filter($idsSite, fn ($id) => in_array($p, $kamusDl[(string) $id][4] ?? [], true)));
+                    if ($idsP === []) {
+                        continue; // kombinasi site × perusahaan tanpa detail lokasi tidak disimpan
+                    }
+                    $pasanganP = array_intersect_key($pasanganSite, array_flip($idsP));
                 }
+                $ambilRincian = $p === 'ALL'; // lihat catatan di atas: rincian/lingkup tidak dipecah per perusahaan
+                $berkas = $b->berkas($idsP, $pasanganP, $hira, $dl, $idx, []);
+                $r = $b->ringkasMgmt($idsP, $pasanganP, $hira, $berkas, [], true, $ambilRincian);
+                if ($ambilRincian) {
+                    $lingkup[$kunci] = $r['rincian'];
+                    foreach ($r['rincian']['u'] as $baris) {
+                        $hidDipakai[$baris[1]] = true;
+                    }
+                }
+                unset($r['rincian']);
+                $ada = [];
+                foreach ($idsP as $idDl) {
+                    foreach ($pasanganP[$idDl] ?? [] as $hid) {
+                        $ada[$hid] = true;
+                    }
+                }
+                $hasil[$kunci][$p] = [
+                    ...array_diff_key($r, $kunci === 'ALL' && $p === 'ALL' ? $buang : $buang + ['dlw' => 1]),
+                    'ndl' => count($idsP),
+                    // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
+                    'nBarisDl' => count($ada),
+                ];
             }
-            // Per detail lokasi cukup sekali (di ALL): status satu DL sama di cakupan mana pun.
-            $hasil[$kunci] = [
-                ...array_diff_key($r, $kunci === 'ALL' ? $buang : $buang + ['dlw' => 1]),
-                'ndl' => count($ids),
-                // Baris master HIRA yang punya detail lokasi di cakupan ini (sebelum bahaya umum dikeluarkan).
-                'nBarisDl' => count($ada),
-            ];
         }
-        $hasil['ALL']['nBarisMaster'] = count($hira);
+        $hasil['ALL']['ALL']['nBarisMaster'] = count($hira);
         // Kategori ringkasan unik memakai pita cakupan detail lokasi (lihat DrmBeranda::nilai).
-        $hasil['ALL']['pita'] = [DrmBeranda::PITA_ATAS, DrmBeranda::PITA_BAWAH];
+        $hasil['ALL']['ALL']['pita'] = [DrmBeranda::PITA_ATAS, DrmBeranda::PITA_BAWAH];
 
         // Teks baris HIRA yang muncul di rincian: hid => [aktivitas, sub aktivitas, bahaya, potensi, risiko residual,
         //   jumlah label OBS (M11), OAK (M12), Hazard (M09) di master yang menandai baris ini]. Jumlah label = MAPPING,
