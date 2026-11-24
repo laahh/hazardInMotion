@@ -511,13 +511,34 @@
       }).join('');
    }
 
+   /** Open Risk: tabel rinci per bahaya-risiko (sama kolomnya dengan HIRA di Beranda PJA admin). */
+   function tabelBelumAkt(data, kosong) {
+      if (!data.total) return '<div class="kosong">' + kosong + '</div>';
+      return data.aktivitas.map(function (a, i) {
+         return '<details class="akt"' + (i === 0 ? ' open' : '') + '><summary><span>' + esc(a.nama || 'Aktivitas tanpa nama') + '</span><em>' + a.baris.length + ' bahaya</em></summary>'
+            + '<div class="tbl-wrap" style="padding:.5rem .9rem .85rem"><table class="tbl-kartu"><thead><tr>'
+            + '<th style="min-width:200px">Bahaya-risiko</th><th>Sub aktivitas</th><th>Risiko awal</th><th>Risiko residual</th><th>Risiko menurut identifikasi SAP</th><th style="min-width:220px">Pengendalian yang ada</th>'
+            + '</tr></thead><tbody>' + a.baris.map(function (b) {
+               return '<tr>'
+                  + '<td data-label="Bahaya-risiko"><b>' + esc(b.bahaya) + '</b>' + (b.potensi ? '<small>' + esc(b.potensi) + '</small>' : '')
+                  + (b.insiden ? '<br><span class="chip chip-bm" style="margin-top:.25rem">pernah insiden</span>' : '') + '</td>'
+                  + '<td data-label="Sub aktivitas" style="color:var(--muted)">' + esc(b.sub || '–') + '</td>'
+                  + '<td data-label="Risiko awal">' + lv(b.n1 || b.level) + '<small>' + esc(b.k1) + ' × ' + esc(b.c1) + '</small></td>'
+                  + '<td data-label="Risiko residual">' + (b.n2 ? lv(b.n2) + '<small>' + esc(b.k2) + ' × ' + esc(b.c2) + '</small>' : '<span style="color:var(--muted)">–</span>') + '</td>'
+                  + '<td data-label="Risiko menurut identifikasi SAP">' + lv(b.n1 || b.level) + ' <span class="chip chip-bm">Tidak teridentifikasi</span></td>'
+                  + '<td data-label="Pengendalian yang ada">' + (b.kontrol.length ? b.kontrol.map(function (x) { return '• ' + esc(x); }).join('<br>') : '<span style="color:var(--muted)">tidak tercatat di HIRA</span>') + '</td>'
+                  + '</tr>';
+            }).join('') + '</tbody></table></div></details>';
+      }).join('');
+   }
+
    /** Kartu gabungan Ada Gap (+ temuan SAP open) & Open Risk; rincian tampil saat kartunya diklik. */
    function belum(r) {
       var u = r.ringkas.utama, tutupIkon = '<i><span class="material-symbols-outlined" style="font-size:16px">expand_more</span> Lihat rincian</i>';
       $('st-gap').innerHTML = '<span>Teridentifikasi - Ada Gap</span><b>' + fmt(r.gap.total) + '</b><em>' + pct(r.gap.total, u.tot) + ' · belum closed / berulang / OAK Stop · ' + fmt(r.temuan.total) + ' temuan open</em>' + tutupIkon;
       $('st-open').innerHTML = '<span>Tidak Teridentifikasi (Open Risk)</span><b>' + fmt(r.belum.total) + '</b><em>' + pct(r.belum.total, u.tot) + ' · tanpa laporan SAP</em>' + tutupIkon;
       var tampilBelum = r.belum.aktivitas.reduce(function (s, a) { return s + a.baris.length; }, 0);
-      $('belum').innerHTML = daftarAkt(r.belum, 'Semua bahaya-risiko Significant/High sudah teridentifikasi laporan SAP minggu ini.', false);
+      $('belum').innerHTML = tabelBelumAkt(r.belum, 'Semua bahaya-risiko Significant/High sudah teridentifikasi laporan SAP minggu ini.');
       $('belum-more').textContent = r.belum.total > tampilBelum ? 'Menampilkan ' + tampilBelum + ' dari ' + fmt(r.belum.total) + ' baris (prioritas: Significant dan yang pernah insiden).' : '';
       $('gap').innerHTML = daftarAkt(r.gap, 'Tidak ada bahaya-risiko Significant/High yang ada gap minggu ini.', true);
       pilihStatus(null);

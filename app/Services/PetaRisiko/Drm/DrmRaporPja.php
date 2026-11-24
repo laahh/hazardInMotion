@@ -31,7 +31,7 @@ final class DrmRaporPja
     private const TREN_MINGGU = 8;
 
     /** Indeks kolom berkas['bahaya']: [hid, a, an, sn, bn, p, n1, k1, c1, n2, k2, c2, kt, faktor, proses]. */
-    private const B_HID = 0, B_AN = 2, B_SN = 3, B_BN = 4, B_N1 = 6, B_K1 = 7, B_C1 = 8, B_N2 = 9, B_K2 = 10, B_C2 = 11, B_PROSES = 14;
+    private const B_HID = 0, B_AN = 2, B_SN = 3, B_BN = 4, B_P = 5, B_N1 = 6, B_K1 = 7, B_C1 = 8, B_N2 = 9, B_K2 = 10, B_C2 = 11, B_KT = 12, B_PROSES = 14;
 
     public function __construct(private readonly DrmRepository $repo)
     {
@@ -142,10 +142,10 @@ final class DrmRaporPja
         foreach ($bahaya as $x) {
             $hasil[(string) $x[self::B_HID]] = [
                 'a' => (string) ($x[1] ?? ''), 'an' => (string) ($x[self::B_AN] ?? ''), 'sn' => (string) ($x[self::B_SN] ?? ''),
-                'bn' => (string) ($x[self::B_BN] ?? ''), 'n1' => (string) ($x[self::B_N1] ?? ''),
+                'bn' => (string) ($x[self::B_BN] ?? ''), 'p' => (string) ($x[self::B_P] ?? ''), 'n1' => (string) ($x[self::B_N1] ?? ''),
                 'k1' => (string) ($x[self::B_K1] ?? ''), 'c1' => (string) ($x[self::B_C1] ?? ''),
                 'n2' => (string) ($x[self::B_N2] ?? ''), 'k2' => (string) ($x[self::B_K2] ?? ''), 'c2' => (string) ($x[self::B_C2] ?? ''),
-                'proses' => (string) ($x[self::B_PROSES] ?? 'X'),
+                'kt' => (string) ($x[self::B_KT] ?? ''), 'proses' => (string) ($x[self::B_PROSES] ?? 'X'),
             ];
         }
 
@@ -216,8 +216,13 @@ final class DrmRaporPja
             }
             $h = $hira[$hid] ?? [];
             $bit = hexdec($gap[$w] ?? '0');
+            $kontrol = array_values(array_filter(array_map('trim', explode(' | ', (string) ($h['kt'] ?? '')))));
             $pilih[] = [
-                'aktivitas' => $h['an'] ?? '', 'sub' => $h['sn'] ?? '', 'bahaya' => $h['bn'] ?? '', 'level' => $lv, 'insiden' => $inc,
+                'aktivitas' => $h['an'] ?? '', 'sub' => $h['sn'] ?? '', 'bahaya' => $h['bn'] ?? '', 'potensi' => $h['p'] ?? '',
+                'level' => $lv, 'insiden' => $inc,
+                'n1' => $h['n1'] ?? '', 'k1' => $h['k1'] ?? '', 'c1' => $h['c1'] ?? '',
+                'n2' => $h['n2'] ?? '', 'k2' => $h['k2'] ?? '', 'c2' => $h['c2'] ?? '',
+                'kontrol' => $kontrol,
                 'masalah' => array_values(array_filter([
                     $bit & 1 ? 'belum closed' : null, $bit & 2 ? 'berulang' : null, $bit & 4 ? 'OAK Stop' : null, $bit & 8 ? 'butir OAK tidak sesuai' : null,
                 ])),
