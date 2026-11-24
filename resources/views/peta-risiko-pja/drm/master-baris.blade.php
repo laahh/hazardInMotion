@@ -246,7 +246,7 @@
   }
 
   // Kolom Aktivitas / Sub aktivitas / Bahaya-risiko sama persis di kedua pov (baseline-nya cuma beda: baris apa
-  // adanya, atau dikelompokkan per perusahaan lewat header suntikan di drawCallback — lihat buatRowsPerusahaan).
+  // adanya, atau dikelompokkan per perusahaan lewat header suntikan di drawCallback — lihat rowsUntukPerusahaan).
   const kolomABS = [
     { data: 'a', className: 'hira', render: (d, type, r) => type !== 'display' ? d + ' ' + r.ri
         : esc(d) + '<small>ID ' + r.ri + '</small>' + (BOLEH ? '<a class="mb-ubah" href="' + esc(urlUbah(r.ri)) + '">Ubah baris</a>' : '')
@@ -282,39 +282,30 @@
   }
 
   /**
-   * Pov Perusahaan (2026-11-24, keputusan user): baseline-nya perusahaan — "perusahaan ada apa saja, lalu dia
-   * punya Aktivitas/Sub/Bahaya/Departemen/Item Sumber ...". Satu baris tabel per (perusahaan × baris HIRA) yang
-   * terhubung lewat lokasi PJA-nya; dikelompokkan visual lewat header suntikan per perusahaan di drawCallback
-   * (bukan kolom terpisah). Perusahaan dirinci PER DETAIL LOKASI (bukan digabung rata se-grup — lihat kolomsPerusahaan).
-   *
-   * Dibangun MALAS (sekali saja, saat pertama kali pindah ke mode ini) karena hasilnya bisa puluhan ribu baris
-   * (satu baris HIRA × semua perusahaan yang pernah menyentuh grup lokasinya) — grup lokasi memang luas (banyak
-   * detail lokasi sekaligus), jadi silang (perusahaan × baris) bisa sangat besar kalau SEMUA perusahaan ditampilkan
-   * tanpa dipilih dulu. Makanya tabel ini TIDAK menampilkan apa pun sebelum satu Perusahaan dipilih di dropdown
-   * (lihat filter fPja di bawah) — baru di situ rantai Perusahaan → Lokasi & Detail Lokasi → Aktivitas kelihatan.
+   * Pov Perusahaan (koreksi 2026-11-24): baseline-nya SATU perusahaan yang dipilih dulu di dropdown #mb-f-pja —
+   * rantainya Perusahaan → (PJA-nya) → Lokasi & Detail Lokasi (M06) → Group Lokasi (M05) → Baris HIRA →
+   * Aktivitas/Sub/Bahaya, cuma untuk perusahaan ITU, BUKAN semua perusahaan sekaligus. Dihitung per perusahaan
+   * (bukan satu array gabungan semua perusahaan × semua baris — itu yang dulu bikin "total 99.767 baris" muncul
+   * di info tabel padahal belum ada yang dipilih: datanya SENDIRI sudah sebesar itu sebelum difilter). Di-cache
+   * per nama perusahaan (Map) supaya pindah-pindah dropdown ke perusahaan yang sama tidak hitung ulang.
    */
-  let ROWS_PERUSAHAAN = null;
-  function dapatkanRowsPerusahaan() {
-    if (ROWS_PERUSAHAAN) return ROWS_PERUSAHAAN;
+  const CACHE_PERUSAHAAN = new Map();
+  function rowsUntukPerusahaan(nama) {
+    if (CACHE_PERUSAHAAN.has(nama)) return CACHE_PERUSAHAAN.get(nama);
     const out = [];
     ROWS.forEach((r) => {
-      const perNama = {};
+      const lokSet = {};
       r.pja.forEach((p) => {
+        if (!p.perusahaan.includes(nama)) return;
         // "Lokasi" di pov ini = lokasi + detail lokasi (M06, label SAP yang sama dipakai di /master/grup) yang
         // benar-benar menghubungkan grup baris ini ke PJA/perusahaan itu — rantai PJA → lokasi/detail lokasi →
         // aktivitas yang sudah termapping di master/grup (keputusan user 24 Nov 2026).
-        const label = p.site + ' · ' + p.lokasi + (p.detail && p.detail.length ? ' (' + p.detail.join(', ') + ')' : '');
-        p.perusahaan.forEach((nama) => {
-          (perNama[nama] || (perNama[nama] = {}))[label] = true;
-        });
+        lokSet[p.site + ' · ' + p.lokasi + (p.detail && p.detail.length ? ' (' + p.detail.join(', ') + ')' : '')] = true;
       });
-      Object.keys(perNama).forEach((nama) => {
-        out.push({ ...r, perusahaan: nama, lok: Object.keys(perNama[nama]).sort() });
-      });
+      if (Object.keys(lokSet).length) out.push({ ...r, perusahaan: nama, lok: Object.keys(lokSet).sort() });
     });
-    out.sort((a, b) => a.perusahaan.localeCompare(b.perusahaan, 'id', { sensitivity: 'base' })
-      || a.a.localeCompare(b.a, 'id', { sensitivity: 'base' }));
-    ROWS_PERUSAHAAN = out;
+    out.sort((a, b) => a.a.localeCompare(b.a, 'id', { sensitivity: 'base' }));
+    CACHE_PERUSAHAAN.set(nama, out);
     return out;
   }
 
@@ -331,7 +322,7 @@
     if (tabel) { tabel.destroy(); tabel = null; }
     document.querySelector('#mb-tabel tbody').innerHTML = '';
     tabel = new DataTable('#mb-tabel', {
-      data: mode === 'perusahaan' ? dapatkanRowsPerusahaan() : ROWS,
+      data: mode === 'perusahaan' ? (fPja.value ? rowsUntukPerusahaan(fPja.value) : []) : ROWS,
       deferRender: true,
       pageLength: 25,
       lengthMenu: [10, 25, 50, 100, 250],
@@ -345,8 +336,8 @@
         paginate: { first: '«', previous: '‹', next: '›', last: '»' },
       },
       columns: mode === 'perusahaan' ? kolomsPerusahaan() : kolomsAktivitas(),
-      // Pov Perusahaan: suntik baris header "Perusahaan: NAMA" tiap kali grupnya ganti (data sudah diurutkan per
-      // perusahaan di dapatkanRowsPerusahaan) — teknik resmi DataTables untuk grouping tanpa plugin RowGroup terpisah.
+      // Pov Perusahaan: suntik baris header "Perusahaan: NAMA (N baris)" di atas (data sudah 1 perusahaan saja,
+      // lihat rowsUntukPerusahaan) — teknik resmi DataTables untuk grouping tanpa plugin RowGroup terpisah.
       drawCallback: function (settings) {
         if (mode !== 'perusahaan') return;
         const api = new DataTable.Api(settings);
@@ -365,16 +356,11 @@
     DataTable.ext.search.length = 0;
     DataTable.ext.search.push((settings, _data, idx) => {
       if (settings.nTable.id !== 'mb-tabel') return true;
-      // Pov Perusahaan: jangan tampilkan APA PUN sebelum satu perusahaan dipilih — hasil silang (perusahaan ×
-      // baris) tanpa pilihan bisa puluhan ribu baris (lihat catatan di dapatkanRowsPerusahaan), jadi dropdown
-      // #mb-f-pja WAJIB diisi dulu di mode ini (bukan sekadar filter opsional seperti di mode Per Aktivitas).
-      if (mode === 'perusahaan' && ! fPja.value) return false;
       const r = new DataTable.Api(settings).row(idx).data();
       if (!r) return true;
       if (fKb.value && r.kb !== fKb.value) return false;
       if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
       if (fSite.value && !(mode === 'perusahaan' ? r.lok.some((l) => l.startsWith(fSite.value + ' ·')) : r.st.includes(fSite.value))) return false;
-      if (mode === 'perusahaan' && r.perusahaan !== fPja.value) return false;
       const k = fKosong.value;
       if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
       if (k) return !r[k].length;
@@ -394,18 +380,22 @@
 
   bangunTabel();
 
-  [fKb, fKosong, fDep, fSite, fPja].forEach((el) => el.addEventListener('change', () => {
-    // Pesan "tidak ada baris" beda sebelum vs sesudah perusahaan dipilih (lihat PESAN_PILIH_PERUSAHAAN).
+  // Ganti perusahaan di mode Per Perusahaan = ganti SUMBER data tabel (lihat rowsUntukPerusahaan), jadi perlu
+  // bangunTabel() (bukan cuma tabel.draw()) supaya DataTables memuat ulang data barunya, bukan cuma menyaring data lama.
+  fPja.addEventListener('change', () => { if (mode === 'perusahaan') bangunTabel(); });
+  [fKb, fKosong, fDep, fSite].forEach((el) => el.addEventListener('change', () => {
     tabel.settings()[0].oLanguage.sZeroRecords = mode === 'perusahaan' && ! fPja.value ? PESAN_PILIH_PERUSAHAAN : 'Tidak ada baris yang cocok.';
     tabel.draw();
   }));
   document.getElementById('mb-reset').addEventListener('click', () => {
+    const adaPerusahaan = mode === 'perusahaan' && fPja.value;
     fKb.value = '';
     fKosong.value = '';
     fDep.value = '';
     fSite.value = '';
     fPja.value = '';
     tabel.settings()[0].oLanguage.sZeroRecords = mode === 'perusahaan' ? PESAN_PILIH_PERUSAHAAN : 'Tidak ada baris yang cocok.';
+    if (adaPerusahaan) { bangunTabel(); return; } // sumber data ikut kosong (lihat rowsUntukPerusahaan)
     tabel.search('').order(mode === 'perusahaan' ? [] : [0, 'asc']).page(0).draw();
   });
   // Unduh Excel mengikuti filter + kata cari yang sedang aktif (disaring ulang di server dengan aturan yang sama).
