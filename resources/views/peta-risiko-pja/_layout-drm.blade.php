@@ -1,8 +1,13 @@
 {{--
   Layout Peta Risiko PJA (DRM 2.1) dengan konsep template /peer-pressure-edukasi/dashboard-peer.
+  Tautan "ke halaman lain" (keputusan user 24 Nov 2026 — dulu tiap halaman mengisi hero-aksi dengan daftar
+  tautan BEDA-BEDA ke halaman lain, ada yang menyebut tujuan yang sama dengan label berbeda; orang jadi salah
+  masuk). SEKARANG: satu set tautan TETAP, sama persis di semua halaman, didefinisikan di layout ini saja —
+  halaman masing-masing tidak lagi boleh menambah tautan "ke halaman lain" sendiri di hero-aksi.
   Section:
+    hero-aksi    HANYA untuk aksi KONTEKSTUAL halaman itu sendiri (unduh, kembali ke item asal) — bukan tautan
+                 ke halaman lain; tautan ke halaman lain sudah otomatis dari layout ini
     nav          menu di bilah atas (halaman indeks mengisi dengan tombol tab; bawaan: tautan ke tab indeks)
-    hero-aksi    tombol di kanan bilah atas
     hero         breadcrumb (.pr-kicker), judul (.pr-title), subjudul (.pr-sub)
     header-aksi  filter / tombol di kanan judul halaman
     content, scripts
@@ -42,7 +47,20 @@
           @endforeach
         </nav>
       @endif
-      <div class="tp-aksi">@yield('hero-aksi')</div>
+      <div class="tp-aksi">
+        @yield('hero-aksi')
+        <nav class="tp-aksi-nav" aria-label="Ke halaman lain">
+          <a class="pr-back" href="{{ route('peta-risiko-pja.index') }}" @if (request()->routeIs('peta-risiko-pja.index')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">dashboard</span> Dashboard</a>
+          <a class="pr-back" href="{{ route('peta-risiko-pja.master.index') }}" @if (request()->routeIs('peta-risiko-pja.master.index')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">table_view</span> Tabel Master</a>
+          <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}" @if (request()->routeIs('peta-risiko-pja.master.baris.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">view_list</span> Master per Baris</a>
+          <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}" @if (request()->routeIs('peta-risiko-pja.master.grup.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup Lokasi &amp; Aktivitas</a>
+          @if (\App\Services\PetaRisiko\Drm\Master\DrmMasterDb::siap())
+            <a class="pr-back" href="{{ route('peta-risiko-pja.master.log') }}" @if (request()->routeIs('peta-risiko-pja.master.log')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">history</span> Riwayat</a>
+          @endif
+          <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}" @if (request()->routeIs('peta-risiko-pja.korelasi.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">alt_route</span> Alur Baseline</a>
+          <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}" @if (request()->routeIs('peta-risiko-pja.arsip.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">inventory_2</span> Versi Lama</a>
+        </nav>
+      </div>
     </div>
   </header>
   <main class="pr-main tp-main">

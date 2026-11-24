@@ -30,7 +30,8 @@
   .tp-nav a, body.tp .dr-tabs.tp-nav button { font-size: 14px !important; font-weight: 600; letter-spacing: -.01em; color: var(--mute); padding: 6px 0 5px; border: 0; border-bottom: 2px solid transparent; background: none; white-space: nowrap; cursor: pointer; transition: color .15s; }
   .tp-nav a:hover, body.tp .dr-tabs.tp-nav button:hover { color: var(--primary); }
   .tp-nav a[aria-current="page"], body.tp .dr-tabs.tp-nav button[aria-selected="true"] { color: var(--primary); font-weight: 700; border-bottom-color: var(--primary); }
-  .tp-aksi { display: flex; gap: 8px; flex: none; margin-left: auto; }
+  .tp-aksi { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+  .tp-aksi-nav { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
   /* ---- Area utama + judul halaman ---- */
   body.tp .pr-main.tp-main { margin: 0; padding: 32px 32px 64px; }
@@ -47,6 +48,8 @@
   /* ---- Tombol aksi ---- */
   body.tp .pr-back { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; background: #fff; border: 1px solid rgba(171, 173, 175, .45); color: var(--ink); font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .05); transition: background .15s, border-color .15s; }
   body.tp .pr-back:hover { background: #f5f7f9; border-color: var(--primary); color: var(--primary); }
+  body.tp .pr-back[aria-current="page"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+  body.tp .pr-back[aria-current="page"]:hover { background: var(--primary-dim); color: #fff; }
 
   /* ---- Kartu (anchored-card) ---- */
   body.tp .pr-card { background: #fff; border: 1px solid rgba(0, 0, 0, .08); border-radius: 16px; box-shadow: var(--shadow); }

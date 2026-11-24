@@ -2,14 +2,6 @@
 
 @section('title', 'Master Grup Lokasi & Aktivitas · Peta Risiko PJA')
 
-@section('hero-aksi')
-  <a class="pr-back" href="{{ route('peta-risiko-pja.index') }}"><span class="material-symbols-outlined" style="font-size:18px">dashboard</span> Dashboard</a>
-  <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}"><span class="material-symbols-outlined" style="font-size:18px">table_rows</span> Master per baris</a>
-  @if ($siap)
-    <a class="pr-back" href="{{ route('peta-risiko-pja.master.log') }}"><span class="material-symbols-outlined" style="font-size:18px">history</span> Riwayat</a>
-  @endif
-@endsection
-
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Peta Risiko PJA</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Grup lokasi & aktivitas</span></p>
   <h1 class="pr-title">Grup lokasi & aktivitas HIRA</h1>

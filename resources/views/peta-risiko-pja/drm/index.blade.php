@@ -6,9 +6,6 @@
   @if ($adaExcel)
     <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh Excel mapping</a>
   @endif
-  <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}"><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Alur baseline</a>
-  <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}"><span class="material-symbols-outlined" style="font-size:18px">tune</span> Master mapping</a>
-  <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}"><span class="material-symbols-outlined" style="font-size:18px">history</span> Versi lama</a>
 @endsection
 
 @section('hero')

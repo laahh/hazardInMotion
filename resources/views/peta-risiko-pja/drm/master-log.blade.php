@@ -2,10 +2,6 @@
 
 @section('title', 'Riwayat Master Mapping · Peta Risiko PJA')
 
-@section('hero-aksi')
-  <a class="pr-back" href="{{ route('peta-risiko-pja.master.index') }}"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span> Master mapping</a>
-@endsection
-
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Master Mapping</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Riwayat</span></p>
   <h1 class="pr-title">Riwayat perubahan master</h1>
