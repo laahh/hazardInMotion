@@ -70,6 +70,11 @@
   .mb-unggah { display: inline-flex; align-items: center; gap: 6px; }
   .mb-unggah input[type=file] { font-size: 12.5px; max-width: 230px; }
   .mb-tag.cocok { background: #e9f7ee; color: #146c34; } .mb-tag.kosong { background: #fff7e6; color: #8a5300; } .mb-tag.hilang { background: #fdecef; color: #9b1c31; }
+  /* Switch pov: Per Baris / Per Perusahaan */
+  .mb-switch { display: inline-flex; border: 1px solid rgba(171, 173, 175, .45); border-radius: 999px; overflow: hidden; }
+  .mb-switch-btn { border: 0; background: #fff; color: #595c5e; font-size: 12.5px; font-weight: 600; padding: 8px 14px; cursor: pointer; }
+  .mb-switch-btn.mb-aktif { background: #3952bc; color: #fff; }
+  tr.mb-grp td { background: #eef1f6; font-weight: 700; padding: 9px 14px; border-top: 2px solid #c7ccd6; font-size: 12.5px; color: #1f2937; }
 </style>
 
 @if (session('pesan'))
@@ -99,6 +104,10 @@
 @else
   <div class="pr-card">
     <div class="mb-bar">
+      <div class="mb-switch" role="tablist" aria-label="Lihat dari">
+        <button type="button" class="mb-switch-btn mb-aktif" data-mode="baris">Per Aktivitas</button>
+        <button type="button" class="mb-switch-btn" data-mode="perusahaan">Per Perusahaan</button>
+      </div>
       <select id="mb-f-kb" aria-label="Risiko awal">
         <option value="">Semua risiko</option>
         @foreach (['Significant', 'High', 'Medium', 'Low'] as $lv)
@@ -118,7 +127,7 @@
           <option value="{{ $st }}">{{ $st }}</option>
         @endforeach
       </select>
-      <select id="mb-f-pja" aria-label="Perusahaan" style="max-width:220px">
+      <select id="mb-f-pja" aria-label="Perusahaan" style="max-width:220px;display:none">
         <option value="">Semua perusahaan</option>
         @foreach ($perusahaan as $p)
           <option value="{{ $p }}">{{ $p }}</option>
@@ -245,64 +254,135 @@
         + (!x.ada ? '<span class="mb-tag hilang">tidak ada</span>' : '') + '</span>').join('')).join('');
   }
 
-  /**
-   * Perusahaan per detail lokasi (keputusan user: JANGAN digabung rata se-grup — satu grup lokasi bisa mencakup
-   * banyak detail lokasi dengan PJA/perusahaan berbeda-beda; tanpa rincian lokasi, asal satu nama perusahaan
-   * jadi tidak bisa ditelusuri / tampak nyasar dari lokasi lain di grup yang sama yang sebenarnya tidak terkait).
-   */
-  function kolomPja(pja) {
-    if (!pja.length) return '<i>tidak ada data</i>';
-    return pja.map((p) => '<div><b>' + esc(p.site) + ' · ' + esc(p.lokasi) + ':</b> ' + esc(p.perusahaan.join(', ')) + '</div>').join('');
+  // Kolom Aktivitas / Sub aktivitas / Bahaya-risiko sama persis di kedua pov (baseline-nya cuma beda: baris apa
+  // adanya, atau dikelompokkan per perusahaan lewat header suntikan di drawCallback — lihat buatRowsPerusahaan).
+  const kolomABS = [
+    { data: 'a', className: 'hira', render: (d, type, r) => type !== 'display' ? d + ' ' + r.ri
+        : esc(d) + '<small>ID ' + r.ri + '</small>' + (BOLEH ? '<a class="mb-ubah" href="' + esc(urlUbah(r.ri)) + '">Ubah baris</a>' : '')
+          + (r.u ? '<span class="mb-oleh">Diubah ' + esc(r.u[1]) + ' oleh ' + esc(r.u[0] || '-') + ' · <a href="' + esc(URL_RIWAYAT + '&kunci=' + r.ri) + '">riwayat</a></span>' : '') },
+    { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
+    { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
+        ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
+  ];
+  const kolomLabelSet = [kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET')];
+
+  function kolomsAktivitas() {
+    return [
+      ...kolomABS,
+      { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display'
+          ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ')
+          : kolomDep(d) + '<span class="mb-site" title="Site tempat baris ini dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA)">Site: '
+            + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>' },
+      ...kolomLabelSet,
+    ];
   }
 
-  const tabel = new DataTable('#mb-tabel', {
-    data: ROWS,
-    deferRender: true,
-    stateSave: true,
-    pageLength: 25,
-    lengthMenu: [10, 25, 50, 100, 250],
-    order: [[0, 'asc']],
-    autoWidth: false,
-    language: {
-      search: 'Cari:', searchPlaceholder: 'aktivitas, bahaya, label, ID…',
-      lengthMenu: 'Tampilkan _MENU_ baris', info: '_START_–_END_ dari _TOTAL_ baris',
-      infoEmpty: 'Tidak ada baris', infoFiltered: '(disaring dari _MAX_)', zeroRecords: 'Tidak ada baris yang cocok.',
-      paginate: { first: '«', previous: '‹', next: '›', last: '»' },
-    },
-    columns: [
-      { data: 'a', className: 'hira', render: (d, type, r) => type !== 'display' ? d + ' ' + r.ri
-          : esc(d) + '<small>ID ' + r.ri + '</small>' + (BOLEH ? '<a class="mb-ubah" href="' + esc(urlUbah(r.ri)) + '">Ubah baris</a>' : '')
-            + (r.u ? '<span class="mb-oleh">Diubah ' + esc(r.u[1]) + ' oleh ' + esc(r.u[0] || '-') + ' · <a href="' + esc(URL_RIWAYAT + '&kunci=' + r.ri) + '">riwayat</a></span>' : '') },
-      { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
-      { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
-          ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
+  // Pov Perusahaan: Departemen tetap, tapi "Site" dipersempit jadi "Lokasi" khusus lokasi tempat PERUSAHAAN itu
+  // terhubung ke baris ini (bukan semua lokasi baris) — supaya asal nama perusahaan tetap bisa ditelusuri.
+  function kolomsPerusahaan() {
+    return [
+      ...kolomABS,
       { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display'
-          ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ') + ' ' + r.pja.map((p) => p.site + ' ' + p.lokasi + ' ' + p.perusahaan.join(' ')).join(' ')
-          : kolomDep(d) + '<span class="mb-site" title="Site tempat baris ini dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA)">Site: '
-            + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>'
-            + '<span class="mb-site" title="Perusahaan personil PJA, dirinci per detail lokasi (satu grup bisa mencakup beberapa lokasi dengan perusahaan berbeda)">Perusahaan:<br>'
-            + kolomPja(r.pja) + '</span>' },
-      kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
-    ],
-  });
+          ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.lok.join(' ')
+          : kolomDep(d) + '<span class="mb-site" title="Lokasi tempat perusahaan ini terhubung ke baris ini">Lokasi: '
+            + (r.lok.length ? '<b>' + r.lok.map(esc).join(', ') + '</b>' : '<i>tidak diketahui</i>') + '</span>' },
+      ...kolomLabelSet,
+    ];
+  }
 
+  /**
+   * Pov Perusahaan (2026-11-24, keputusan user): baseline-nya perusahaan — "perusahaan ada apa saja, lalu dia
+   * punya Aktivitas/Sub/Bahaya/Departemen/Item Sumber ...". Satu baris tabel per (perusahaan × baris HIRA) yang
+   * terhubung lewat lokasi PJA-nya; dikelompokkan visual lewat header suntikan per perusahaan di drawCallback
+   * (bukan kolom terpisah). Perusahaan dirinci PER DETAIL LOKASI (bukan digabung rata se-grup — lihat kolomsPerusahaan).
+   */
+  function buatRowsPerusahaan() {
+    const out = [];
+    ROWS.forEach((r) => {
+      const perNama = {};
+      r.pja.forEach((p) => p.perusahaan.forEach((nama) => {
+        (perNama[nama] || (perNama[nama] = {}))[p.site + ' · ' + p.lokasi] = true;
+      }));
+      Object.keys(perNama).forEach((nama) => {
+        out.push({ ...r, perusahaan: nama, lok: Object.keys(perNama[nama]).sort() });
+      });
+    });
+    out.sort((a, b) => a.perusahaan.localeCompare(b.perusahaan, 'id', { sensitivity: 'base' })
+      || a.a.localeCompare(b.a, 'id', { sensitivity: 'base' }));
+    return out;
+  }
+  const ROWS_PERUSAHAAN = buatRowsPerusahaan();
+
+  let mode = 'baris';
+  let tabel = null;
   const fKb = document.getElementById('mb-f-kb');
   const fKosong = document.getElementById('mb-f-kosong');
   const fDep = document.getElementById('mb-f-dep');
   const fSite = document.getElementById('mb-f-site');
   const fPja = document.getElementById('mb-f-pja');
-  DataTable.ext.search.push((settings, _data, idx) => {
-    if (settings.nTable.id !== 'mb-tabel') return true;
-    const r = ROWS[idx];
-    if (fKb.value && r.kb !== fKb.value) return false;
-    if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
-    if (fSite.value && !r.st.includes(fSite.value)) return false;
-    if (fPja.value && !r.pja.some((p) => p.perusahaan.includes(fPja.value))) return false;
-    const k = fKosong.value;
-    if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
-    if (k) return !r[k].length;
-    return true;
-  });
+
+  function bangunTabel() {
+    if (tabel) { tabel.destroy(); tabel = null; }
+    document.querySelector('#mb-tabel tbody').innerHTML = '';
+    tabel = new DataTable('#mb-tabel', {
+      data: mode === 'perusahaan' ? ROWS_PERUSAHAAN : ROWS,
+      deferRender: true,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100, 250],
+      order: mode === 'perusahaan' ? [] : [[0, 'asc']],
+      autoWidth: false,
+      language: {
+        search: 'Cari:', searchPlaceholder: 'aktivitas, bahaya, label, ID…',
+        lengthMenu: 'Tampilkan _MENU_ baris', info: '_START_–_END_ dari _TOTAL_ baris',
+        infoEmpty: 'Tidak ada baris', infoFiltered: '(disaring dari _MAX_)', zeroRecords: 'Tidak ada baris yang cocok.',
+        paginate: { first: '«', previous: '‹', next: '›', last: '»' },
+      },
+      columns: mode === 'perusahaan' ? kolomsPerusahaan() : kolomsAktivitas(),
+      // Pov Perusahaan: suntik baris header "Perusahaan: NAMA" tiap kali grupnya ganti (data sudah diurutkan per
+      // perusahaan di buatRowsPerusahaan) — teknik resmi DataTables untuk grouping tanpa plugin RowGroup terpisah.
+      drawCallback: function (settings) {
+        if (mode !== 'perusahaan') return;
+        const api = new DataTable.Api(settings);
+        let terakhir = null;
+        api.rows({ page: 'current' }).every(function () {
+          const d = this.data();
+          if (d.perusahaan !== terakhir) {
+            const total = api.rows({ search: 'applied' }).data().toArray().filter((x) => x.perusahaan === d.perusahaan).length;
+            $(this.node()).before('<tr class="mb-grp"><td colspan="7">Perusahaan: <b>' + esc(d.perusahaan)
+              + '</b> <span style="font-weight:400;color:#767a7d">(' + total + ' baris)</span></td></tr>');
+            terakhir = d.perusahaan;
+          }
+        });
+      },
+    });
+    DataTable.ext.search.length = 0;
+    DataTable.ext.search.push((settings, _data, idx) => {
+      if (settings.nTable.id !== 'mb-tabel') return true;
+      const r = new DataTable.Api(settings).row(idx).data();
+      if (!r) return true;
+      if (fKb.value && r.kb !== fKb.value) return false;
+      if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
+      if (fSite.value && !(mode === 'perusahaan' ? r.lok.some((l) => l.startsWith(fSite.value + ' ·')) : r.st.includes(fSite.value))) return false;
+      if (mode === 'perusahaan' && fPja.value && r.perusahaan !== fPja.value) return false;
+      const k = fKosong.value;
+      if (k === 'SEMUA') return !r.OBS.length && !r.OAK.length && !r.KET.length;
+      if (k) return !r[k].length;
+      return true;
+    });
+  }
+
+  function gantiMode(baru) {
+    if (mode === baru) return;
+    mode = baru;
+    document.querySelectorAll('.mb-switch-btn').forEach((b) => b.classList.toggle('mb-aktif', b.dataset.mode === mode));
+    fPja.style.display = mode === 'perusahaan' ? '' : 'none';
+    if (mode !== 'perusahaan') fPja.value = '';
+    bangunTabel();
+  }
+  document.querySelectorAll('.mb-switch-btn').forEach((b) => b.addEventListener('click', () => gantiMode(b.dataset.mode)));
+
+  bangunTabel();
+
   [fKb, fKosong, fDep, fSite, fPja].forEach((el) => el.addEventListener('change', () => tabel.draw()));
   document.getElementById('mb-reset').addEventListener('click', () => {
     fKb.value = '';
@@ -310,7 +390,7 @@
     fDep.value = '';
     fSite.value = '';
     fPja.value = '';
-    tabel.search('').order([0, 'asc']).page(0).draw();
+    tabel.search('').order(mode === 'perusahaan' ? [] : [0, 'asc']).page(0).draw();
   });
   // Unduh Excel mengikuti filter + kata cari yang sedang aktif (disaring ulang di server dengan aturan yang sama).
   document.getElementById('mb-unduh').addEventListener('click', (e) => {
@@ -319,7 +399,7 @@
     if (fKosong.value) q.set('kosong', fKosong.value);
     if (fDep.value) q.set('dep', fDep.value);
     if (fSite.value) q.set('site', fSite.value);
-    if (fPja.value) q.set('pja', fPja.value);
+    if (mode === 'perusahaan' && fPja.value) q.set('pja', fPja.value);
     if (tabel.search()) q.set('q', tabel.search());
     e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });

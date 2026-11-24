@@ -139,7 +139,9 @@ final class PeerPressureBerecordNitipService
     /**
      * Baris baseline BeRecord (filter periode + golden_rules sama {@see countDistinctIdsGoldenRulesBaseline}):
      * satu baris per `id` OLAP (bukan dedup per nilai BeRecord), dipakai agar total baseline pelaksanaan
-     * sama persis dengan kartu "Total Deviasi Pelanggaran".
+     * sama persis dengan kartu "Total Deviasi Pelanggaran". Dikelompokkan per `id` (GROUP BY) karena view
+     * `bcsid.bep_vw_berecord` bisa menghasilkan lebih dari satu baris untuk `id` yang sama — tanpa ini,
+     * jumlahnya bisa melampaui `COUNT(DISTINCT id)` yang dipakai kartu tersebut.
      *
      * @return list<array{id: string, be_record_norm: string, perusahaan: string}>
      */
@@ -152,8 +154,8 @@ final class PeerPressureBerecordNitipService
         [$where, $params] = $this->deviationModalBeRecordWhere($year, $month);
 
         try {
-            $sql = 'SELECT id::text AS id, lower(trim("BeRecord"::text)) AS b, trim(COALESCE(perusahaan, \'\')) AS co'
-                .' FROM '.self::TABLE.' '.$where.' ORDER BY id';
+            $sql = 'SELECT id::text AS id, MAX(lower(trim("BeRecord"::text))) AS b, MAX(trim(COALESCE(perusahaan, \'\'))) AS co'
+                .' FROM '.self::TABLE.' '.$where.' GROUP BY id ORDER BY id';
             $rows = $this->select($sql, $params);
             $out = [];
             foreach ($rows as $row) {
