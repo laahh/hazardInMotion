@@ -306,6 +306,7 @@ Route::middleware(['auth', 'evaluasi-well.mitra-only'])->group(function () {
     Route::get('/peer-pressure-edukasi/dashboard-performance', [PeerPressureEdukasiController::class, 'dashboard'])->name('peer-pressure-edukasi.dashboard-performance');
     Route::get('/peer-pressure-edukasi/tematic', [PeerPressureEdukasiController::class, 'dashboard'])->name('peer-pressure-edukasi.tematic');
     Route::get('/peer-pressure-edukasi/dashboard-peer', [PeerPressureEdukasiController::class, 'dashboard'])->name('peer-pressure-edukasi.dashboard-peer');
+    Route::get('/peer-pressure-edukasi/dashboard/kejadian-unduh', [PeerPressureEdukasiController::class, 'exportDashboardPeerKejadian'])->name('peer-pressure-edukasi.dashboard.kejadian-unduh');
 
     Route::get('/oak-ccv/dashboard', [OakCcvDashboardController::class, 'dashboard'])->name('oak-ccv.dashboard');
     Route::get('/peer-pressure-edukasi/dashboard-risk-score', function () {

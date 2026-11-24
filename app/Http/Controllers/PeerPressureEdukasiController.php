@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\PeerPressure\ExportPeerPressureDashboardKejadianAction;
 use App\Actions\PeerPressure\GeneratePeerPressureDashboardHighlightIssueRecommendationAction;
 use App\Actions\PeerPressure\GetPeerPressureDeviationModalBreakdownAction;
 use App\Actions\PeerPressure\GetPeerPressureDashboardGapMatrixAction;
@@ -27,6 +28,7 @@ use App\Services\PeerPressure\PeerPressureResourcesDataAiSummaryService;
 use App\Services\PeerPressure\SitePerformanceBriefAnalysisService;
 use App\Services\ClickHouseService;
 use App\Services\PeerPressure\PeerPressureKejadianEdukasiExcelImportService;
+use App\Support\SpreadsheetExporter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -161,6 +163,54 @@ class PeerPressureEdukasiController extends Controller
             'deviationModalBreakdown' => $deviationModalBreakdownData,
             ...$siteJson,
         ]);
+    }
+
+    /**
+     * Unduh Excel tabel "Data Peer Pressure" (dashboard-peer) — filter pencarian (q) sama dengan di halaman,
+     * tapi mengunduh SEMUA baris yang cocok (bukan cuma satu halaman paginasi yang sedang tampil).
+     */
+    public function exportDashboardPeerKejadian(Request $request, ExportPeerPressureDashboardKejadianAction $action): never
+    {
+        $q = trim((string) $request->get('q', ''));
+        $rows = $action($q !== '' ? $q : null);
+
+        $headers = [
+            'Tanggal Temuan', 'Jam Temuan', 'Lokasi Temuan', 'Site', 'Kategori Deviasi',
+            'Departemen', 'Aktivitas Pekerjaan',
+            'SID Pelanggar', 'Nama Pelanggar',
+            'Peer (SID - Nama)', 'Leader',
+            'Durasi (menit)', 'Evidence URL', 'Status Pelaksanaan',
+        ];
+        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders($headers);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $rowNumber = 2;
+        foreach ($rows as $k) {
+            $pelanggar = $k->peserta->firstWhere('peran', 'pelanggar');
+            $peerText = $k->peserta->where('peran', 'peer')->values()
+                ->map(static fn ($p) => trim($p->sid . ' - ' . $p->nama))
+                ->implode('; ');
+
+            $sheet->fromArray([
+                $k->tanggal_temuan?->format('Y-m-d') ?? '',
+                (string) $k->jam_temuan,
+                (string) $k->lokasi_temuan,
+                (string) $k->site,
+                (string) $k->kategori_deviasi,
+                (string) $k->departemen,
+                (string) $k->aktivitas_pekerjaan,
+                $pelanggar->sid ?? '',
+                $pelanggar->nama ?? '',
+                $peerText,
+                (string) $k->pemimpin_edukasi,
+                $k->durasi_edukasi_menit,
+                (string) $k->evidence_url,
+                (string) $k->status_pelaksanaan_edukasi,
+            ], null, 'A' . $rowNumber);
+            $rowNumber++;
+        }
+
+        SpreadsheetExporter::download($spreadsheet, 'data-peer-pressure-' . now()->format('Ymd-His') . '.xlsx');
     }
 
     /**

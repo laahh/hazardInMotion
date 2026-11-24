@@ -708,9 +708,9 @@
                      <button type="button" class="px-4 py-2 bg-white text-xs font-bold rounded-xl hover:bg-surface-container-high transition-colors flex items-center gap-2 border border-outline-variant/30 shadow-sm">
                      <span class="material-symbols-outlined text-sm">filter_list</span> Filters
                      </button>
-                     <button type="button" class="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl shadow-md transition-transform active:scale-95 flex items-center gap-2">
-                     <span class="material-symbols-outlined text-sm">download</span> CSV
-                     </button>
+                     <a href="{{ route('peer-pressure-edukasi.dashboard.kejadian-unduh', array_filter(['q' => $q ?? null])) }}" class="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl shadow-md transition-transform active:scale-95 flex items-center gap-2" title="Unduh semua baris yang cocok dengan pencarian saat ini sebagai Excel">
+                     <span class="material-symbols-outlined text-sm">download</span> Excel
+                     </a>
                   </div>
                </div>
             </div>
