@@ -49,6 +49,23 @@
   .mg-bulk select { padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(171, 173, 175, .45); font-size: 13px; }
   .mg-dl { columns: 3 260px; font-size: 12.5px; color: #475569; padding: 4px 18px 16px; }
   .mg-dl div { break-inside: avoid; padding: 2px 0; }
+  .mg-tbl td.hira2 { min-width: 160px; max-width: 220px; }
+  /* Chip "Asal HIRA" + isi modal (sama konsep dengan Dashboard → Per Kelompok Aktivitas). */
+  .dr-hira { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; max-width: 190px; padding: 4px 8px; border: 1px solid rgba(57, 82, 188, .2);
+    border-radius: 8px; background: #f5f7ff; font-size: 12px; font-weight: 600; color: #2c2f31; cursor: pointer; text-align: left; }
+  .dr-hira:hover, .dr-hira:focus-visible { border-color: #3952bc; outline: none; }
+  .dr-hira small { max-width: 172px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #595c5e; font-size: 11px; }
+  .dr-hira-n { color: #3952bc; font-weight: 700; }
+  .dr-hira-kosong { color: #9a5b00; font-weight: 700; }
+  .dr-hira-dok { margin-bottom: 14px; }
+  .dr-hira-dok-k { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 14px; }
+  .dr-hira-dok th { text-align: left; color: #595c5e; font-weight: 600; }
+  .dr-pl-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; margin-left: 4px; background: #eef1fd; color: #3952bc; }
+  .dr-pl-tag.milik { background: #e6f4ea; color: #1e7a3c; }
+  .br-red { color: #b42318; font-weight: 700; }
+  .dr-mute { color: #595c5e; font-size: 13px; }
+  .dr-tbl td, .dr-tbl th { padding: 10px 14px; }
+  .dr-tbl td { font-size: 14px; }
 </style>
 
 @if (session('pesan'))
@@ -110,7 +127,7 @@
       <table class="mg-tbl" id="mg-tabel" style="width:100%">
         <thead><tr>
           @if ($bolehUbah)<th style="width:30px"><input type="checkbox" id="mg-semua" aria-label="Pilih semua baris yang tampil"></th>@endif
-          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Kelompok aktivitas</th><th>Grup lokasi</th>
+          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Asal HIRA</th><th>Kelompok aktivitas</th><th>Grup lokasi</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -147,6 +164,7 @@
   const URL_TAMBAH = @json(route('peta-risiko-pja.master.grup.tambah', ['gid' => 0]));
   const URL_HAPUS = @json(route('peta-risiko-pja.master.grup.baris', ['gid' => 0]));
   const URL_KELOMPOK = @json(route('peta-risiko-pja.master.grup.kelompok', ['aid' => 0]));
+  const URL_HIRA = @json(route('peta-risiko-pja.hira.sumber'));
   const PETA_ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => PETA_ESC[c]);
   const urlTambah = (gid) => URL_TAMBAH.replace(/\/0\/tambah$/, '/' + gid + '/tambah');
@@ -154,6 +172,71 @@
   const urlKelompok = (aid) => URL_KELOMPOK.replace(/\/0\/kelompok$/, '/' + aid + '/kelompok');
   const token = () => '<input type="hidden" name="_token" value="' + esc(CSRF) + '">';
   const riHidden = (ri) => '<input type="hidden" name="ri[]" value="' + ri + '">';
+
+  // ---- Asal HIRA (dokumen id_hira_master) per baris, sama pola dengan Dashboard → Per Kelompok Aktivitas. ----
+  const hiraCache = {};
+
+  /** Ambil asal HIRA untuk ri yang belum ada di cache (maks 300 per permintaan). */
+  async function muatHira(ris) {
+    const perlu = [...new Set(ris)].filter((r) => !(r in hiraCache));
+    for (let i = 0; i < perlu.length; i += 300) {
+      const potong = perlu.slice(i, i + 300);
+      const r = await fetch(`${URL_HIRA}?ri=${potong.join(',')}`, { headers: { Accept: 'application/json' } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.pesan || `Gagal memuat HIRA (HTTP ${r.status}).`);
+      potong.forEach((h) => { hiraCache[h] = (j.baris || {})[h] || []; });
+    }
+  }
+
+  /** Isi sel [data-hira] di dalam el: chip "id · rev" + departemen singkat; klik → detail dokumen. */
+  function isiHira(el, ris) {
+    muatHira(ris).then(() => {
+      el.querySelectorAll('td[data-hira]').forEach((td) => {
+        const L = hiraCache[td.dataset.hira] || [], d = L[0];
+        if (!d) { td.innerHTML = '<span class="dr-mute">-</span>'; return; }
+        td.innerHTML = `<button type="button" class="dr-hira" aria-haspopup="dialog" title="Lihat dokumen HIRA">
+            <span><b>${esc(d.idh)}</b>${d.ada ? ` · rev ${esc(d.rev)}` : ''}${L.length > 1 ? ` <span class="dr-hira-n">+${L.length - 1}</span>` : ''}</span>
+            <small>${d.ada ? (d.kosong ? '<span class="dr-hira-kosong">kosong</span> ' : '') + esc(d.dept || '-') : 'tidak ditemukan di HIRA'}</small></button>`;
+        td.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); bukaHira(td.dataset.hira, td.dataset.bahaya || ''); });
+      });
+    }).catch((e) => {
+      el.querySelectorAll('td[data-hira]').forEach((td) => { td.innerHTML = `<span class="br-red" title="${esc(e.message)}">gagal</span>`; });
+    });
+  }
+
+  function dialogHira() {
+    let d = document.getElementById('dr-item-modal');
+    if (d) return d;
+    d = document.createElement('dialog');
+    d.id = 'dr-item-modal';
+    d.className = 'dr-item-modal';
+    d.setAttribute('aria-labelledby', 'dr-item-judul');
+    d.innerHTML = `<div class="dr-item-kepala"><h3 id="dr-item-judul"></h3>
+        <button type="button" class="dr-item-tutup" aria-label="Tutup"><span class="material-symbols-outlined">close</span></button></div>
+      <div class="dr-item-isi" id="dr-item-isi"></div>`;
+    document.body.appendChild(d);
+    d.querySelector('.dr-item-tutup').addEventListener('click', () => d.close());
+    d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+    return d;
+  }
+
+  function bukaHira(ri, bahaya) {
+    const L = hiraCache[ri] || [], d = dialogHira(), isi = d.querySelector('#dr-item-isi');
+    d.querySelector('#dr-item-judul').textContent = `Asal HIRA${bahaya ? ' · ' + bahaya : ''}`;
+    const baris = (k, v) => (v ? `<tr><th style="width:170px">${k}</th><td>${v}</td></tr>` : '');
+    isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
+        <div class="dr-hira-dok-k"><b>HIRA ${esc(x.idh)}</b>${x.ada ? ` · rev ${esc(x.rev)}` : ''}
+          ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.kosong ? '<span class="dr-pl-tag" style="background:#fff4e5;color:#9a5b00">dokumen kosong</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
+          ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
+        ${x.kosong ? '<p class="dr-mute" style="margin:0 0 6px">Dokumen ini ada di HIRA (hira_master) tetapi belum berisi bahaya-risiko, site, maupun section, sehingga tidak muncul di mv_hira_master. Nilai risiko baris baseline ini tidak berasal dari dokumen ini.</p>' : ''}
+        ${x.ada ? `<table class="pr-tbl dr-tbl"><tbody>
+          ${baris('Departemen', esc(x.dept))}${baris('Aktivitas spesifik', esc(x.spesifik))}
+          ${baris('Aktivitas · sub', esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site', esc((x.site || []).join(', ')))}
+          ${baris('Bagian', esc(x.bagian))}${baris('Perusahaan', esc(x.perusahaan))}${baris('Klasifikasi', esc(x.rutin))}${baris('Diperbarui', esc(x.diperbarui))}
+        </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di HIRA (hira_master maupun mv_hira_master).</p>'}</div>`).join('')
+      || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>';
+    if (!d.open) d.showModal();
+  }
 
   function chipGrup(g, ri) {
     const hapus = BOLEH
@@ -178,6 +261,11 @@
     const isi = d.length ? d.map((g) => chipGrup(g, r.ri)).join('') : '<div class="mg-kosong">Belum ada grup</div>';
     return isi + (BOLEH ? formTambahGrup(r.ri, d.map((g) => g.gid)) : '');
   } };
+
+  // Asal HIRA: chip "id · rev" + departemen singkat (diisi lewat AJAX setelah draw, lihat isiHira); klik → detail dokumen.
+  const kolomHira = { data: 'ri', orderable: false, className: 'hira2',
+    render: (d, type) => type === 'display' ? '<span class="dr-mute">…</span>' : d,
+    createdCell: (td, _d, r) => { td.dataset.hira = r.ri; td.dataset.bahaya = r.b; } };
 
   const kolomKelompok = { data: 'kelompok', className: 'kel', render: (d, type, r) => {
     if (type !== 'display') return (KELOMPOK[d] || d);
@@ -208,8 +296,14 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mg-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      kolomKelompok, kolomGrup,
+      kolomHira, kolomKelompok, kolomGrup,
     ],
+  });
+
+  // Isi chip "Asal HIRA" halaman yang sedang tampil setiap kali tabel digambar ulang (deferRender: baru ada di DOM).
+  tabel.on('draw', () => {
+    const tds = document.querySelectorAll('#mg-tabel td[data-hira]');
+    if (tds.length) isiHira(document.getElementById('mg-tabel'), [...tds].map((td) => td.dataset.hira));
   });
 
   // Tabel disaring di bawah search bawaan DataTables; filter kustom (risiko, kelompok, grup/tanpa grup).
