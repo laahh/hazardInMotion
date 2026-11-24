@@ -452,10 +452,11 @@
                 ['perusahaan', 'Perusahaan', ''], ['nama', 'Nama', ''],
                 ['jabatan', 'Jabatan', ''], ['site', 'Site', ''], ['roster', 'Roster', 'num'],
                 ['hadir', 'On-site', 'num'], ['pagi', 'Pagi', 'num'], ['malam', 'Malam', 'num'],
-                ['off', 'Off', 'num'], ['cutiCur', 'Cuti', 'num'], ['status', 'Status', ''],
+                ['off', 'Off', 'num'], ['cutiCur', 'Cuti', 'num'],
+                ['jamKerja', 'Total Jam Kerja', 'num'], ['status', 'Status', ''],
               ] as [$kunci, $judulKolom, $kelas])
                 <th class="{{ $kelas }}">
-                  @if ($live)
+                  @if ($live && $kunci !== 'jamKerja')
                     <a href="{{ $tautanUrut($kunci) }}" class="ro-sc-sort {{ $urutKini === $kunci ? 'is-aktif' : '' }}"
                        title="Urutkan menurut {{ $judulKolom }}">{{ $judulKolom }}{{ $panahUrut($kunci) }}</a>
                   @else
@@ -487,6 +488,10 @@
                 <td class="num">{{ $r['malam'] }}</td>
                 <td class="num">{{ $r['off'] }}</td>
                 <td class="num">{{ $r['cuti'] }}</td>
+                <td class="num" title="Jumlah tap RFID masuk→keluar sepanjang periode ini (dms_roster_scan_harian)">
+                  @php $menitKerja = (int) ($r['jamKerjaMenit'] ?? 0); @endphp
+                  {{ intdiv($menitKerja, 60) }}j {{ str_pad((string) ($menitKerja % 60), 2, '0', STR_PAD_LEFT) }}m
+                </td>
                 <td class="ro-sc-status">
                   <span class="ro-sc-pill {{ $statusPill[$r['status']] ?? 'is-off' }}">{{ $r['status'] }}</span>
                   @if (! empty($r['checkin']))
@@ -514,7 +519,7 @@
                 $pola = $gridDari($polaStr, $merahArr, $r['scan'] ?? []);
               @endphp
               <tr>
-                <td colspan="14" style="padding:0;border-bottom:0">
+                <td colspan="15" style="padding:0;border-bottom:0">
                   <div class="collapse" id="tl-{{ $r['sid'] }}">
                     <div class="ro-sc-detail">
                      <div class="ro-sc-detail__panel">

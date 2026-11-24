@@ -76,17 +76,21 @@ final class DmsRosterOverviewKaryawanReader
             $checkinHalaman = null;
         }
 
-        // Jam check-in/out per hari untuk tooltip kalender; pelengkap juga.
+        // Jam check-in/out per hari untuk tooltip kalender & total jam kerja;
+        // mentahnya dipakai ulang untuk keduanya supaya tidak query dua kali.
         try {
-            $scanHalaman = $this->scanHarian(array_column($payload['baris'], 'sid'), (int) $payload['tahun']);
+            $mentahHalaman = $this->mentahScan(array_column($payload['baris'], 'sid'), (int) $payload['tahun']);
+            $scanHalaman = array_map(self::teksScan(...), $mentahHalaman);
         } catch (Throwable $e) {
             Log::warning('DmsRoster scan harian scorecard gagal: '.$e->getMessage());
+            $mentahHalaman = [];
             $scanHalaman = [];
         }
 
         $ambang = $this->engine->ambang();
         $pg = $payload['paginasi'];
         $panjang = (int) $payload['meta']['panjang'];
+        $jamHalaman = $this->totalJamKerja($mentahHalaman, $panjang);
         $baris = [];
 
         foreach ($payload['baris'] as $i => $r) {
@@ -115,6 +119,9 @@ final class DmsRosterOverviewKaryawanReader
                 'malam' => (int) $r['malam'],
                 'off' => (int) $r['off'],
                 'cuti' => (int) $r['cutiCur'],
+                // Total menit kerja aktual (tap RFID masuk→keluar) sepanjang
+                // periode yang sama dengan kolom On-site/Pagi/Malam di atas.
+                'jamKerjaMenit' => $jamHalaman[(string) $r['sid']] ?? 0,
                 'shiftMaks' => [
                     $r['onNoOff'].' hari beruntun',
                     $r['rentang_onNoOff'] !== '' ? $r['rentang_onNoOff'] : '—',
@@ -314,13 +321,15 @@ final class DmsRosterOverviewKaryawanReader
     private const MENIT_SHIFT_MALAM = 720;
 
     /**
-     * Check-in & check-out per hari sepanjang tahun untuk satu halaman SID,
-     * dari tabel lokal dms_roster_scan_harian (tidak menyentuh OLAP).
+     * Check-in & check-out mentah per hari sepanjang tahun untuk satu halaman
+     * SID, dari tabel lokal dms_roster_scan_harian (tidak menyentuh OLAP).
+     * Dipakai baik untuk teks tooltip kalender (teksScan) maupun jumlah menit
+     * kerja aktual (totalJamKerja) — satu query untuk keduanya.
      *
      * @param  list<string>  $sids
-     * @return array<string, array<int, array{masuk:?string,keluar:?string}>> SID => indeks hari sejak 1 Jan => teks
+     * @return array<string, array<int, array{masuk:?int,keluar:?int,gate_masuk:string,gate_keluar:string}>> SID => indeks hari sejak 1 Jan
      */
-    private function scanHarian(array $sids, int $tahun): array
+    private function mentahScan(array $sids, int $tahun): array
     {
         if ($sids === []) {
             return [];
@@ -346,7 +355,39 @@ final class DmsRosterOverviewKaryawanReader
             ];
         }
 
-        return array_map(self::teksScan(...), $mentah);
+        return $mentah;
+    }
+
+    /**
+     * Total menit kerja aktual (tap RFID masuk→keluar) per SID, dari hari ke-0
+     * sampai ke-($panjang-1) sejak 1 Jan — rentang yang sama dengan kolom
+     * On-site/Pagi/Malam (lihat $panjang di ambil()). Pasangan masuk→keluar
+     * memakai aturan lintas tengah malam yang sama dengan teksScan().
+     *
+     * @param  array<string, array<int, array{masuk:?int,keluar:?int,gate_masuk:string,gate_keluar:string}>>  $mentah
+     * @return array<string, int>
+     */
+    private function totalJamKerja(array $mentah, int $panjang): array
+    {
+        $out = [];
+        foreach ($mentah as $sid => $hari) {
+            $total = 0;
+            foreach ($hari as $i => $h) {
+                if ($i >= $panjang) {
+                    continue;
+                }
+                $besok = $hari[$i + 1] ?? null;
+                if ($h['masuk'] !== null && $h['keluar'] !== null && $h['keluar'] > $h['masuk']) {
+                    $total += $h['keluar'] - $h['masuk'];
+                } elseif ($h['masuk'] !== null && $h['masuk'] >= self::MENIT_SHIFT_MALAM && $besok !== null && $besok['keluar'] !== null
+                    && ($besok['masuk'] === null || $besok['keluar'] < $besok['masuk'])) {
+                    $total += (1440 - $h['masuk']) + $besok['keluar'];
+                }
+            }
+            $out[$sid] = $total;
+        }
+
+        return $out;
     }
 
     /**
