@@ -90,18 +90,22 @@ final class DrmMasterBarisUnggah
     }
 
     /**
-     * "Perusahaan" tempat tiap baris berlaku: nama PJA di lokasi (site, lokasi) tempat grup baris itu punya detail
-     * lokasi (M07/M08, drm_master_lokasi_pja) — keputusan user: perusahaan dari PJA-nya, bukan dari data personil
-     * (data personil per detail lokasi hanya ada di snapshot ClickHouse, tidak tersimpan di database master lokal).
+     * "Perusahaan" tempat tiap baris berlaku: nama perusahaan PERSONIL PJA di lokasi (site, lokasi) tempat grup
+     * baris itu punya detail lokasi (M07/M08, drm_master_lokasi_pja.perusahaan) — keputusan user: perusahaan dari
+     * PJA-nya ("dia punya perusahaan"), BUKAN nama PJA itu sendiri. Kolom perusahaan diisi dari ClickHouse personil
+     * (DrmSql::perusahaanPerPja) saat `peta-risiko:master-db --isi`; kosong sampai perintah itu dijalankan ulang
+     * setelah migrasi menambah kolomnya.
      *
-     * @return array<int, list<string>>  ri => nama PJA terurut
+     * @return array<int, list<string>>  ri => nama perusahaan terurut
      */
     public function perusahaanPerBaris(): array
     {
         $pjaPerLokasi = [];
-        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->select('site', 'lokasi', 'nama_pja')->distinct()->get() as $p) {
+        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->select('site', 'lokasi', 'perusahaan')->distinct()->get() as $p) {
             $kunci = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
-            $pjaPerLokasi[$kunci][(string) $p->nama_pja] = true;
+            foreach (DrmMasterDb::pisahLabel($p->perusahaan ?? '') as $nama) {
+                $pjaPerLokasi[$kunci][$nama] = true;
+            }
         }
         $pjaPerGrup = [];
         foreach (DB::table('drm_master_dl')->where('aktif', true)->select('gid', 'site', 'lokasi')->distinct()->get() as $d) {

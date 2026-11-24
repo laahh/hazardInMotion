@@ -61,7 +61,7 @@ final class PetaRisikoMasterBarisController extends Controller
         // Site tempat baris dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA).
         $unggah = app(DrmMasterBarisUnggah::class);
         $sitePer = $unggah->sitePerBaris($hira);
-        // Perusahaan = nama PJA di lokasi tempat grup baris itu punya detail lokasi (M07/M08) — bukan data personil.
+        // Perusahaan = nama perusahaan personil PJA di lokasi tempat grup baris itu punya detail lokasi (M07/M08 + personil).
         $pjaPer = $unggah->perusahaanPerBaris();
         $rows = array_map(fn ($b) => [
             'ri' => (int) $b->ri,

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\PetaRisiko\Drm\DrmMaster;
+use App\Services\PetaRisiko\Drm\DrmSql;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use App\Services\SportEvaluation\RfidClickHouseClient;
 use Illuminate\Console\Command;
@@ -69,7 +70,9 @@ FROM obds.aaj_lokasi_dan_pja
 WHERE ifNull(nama_pja, \'\') != \'\' AND ifNull(site, \'\') != \'\' AND ifNull(lokasi, \'\') != \'\'
 GROUP BY site, lokasi, pja
 ORDER BY site, lokasi, pja', 120));
-            $jumlah = $db->isi($master, (array) config('peta_risiko_drm'), $lokasiPja);
+            $this->line('Mengambil perusahaan per PJA dari personil (bukan nama PJA)…');
+            $perusahaanPerPja = $ch->select((new DrmSql((array) config('peta_risiko_drm'), now()->toImmutable(), []))->perusahaanPerPja(), 120);
+            $jumlah = $db->isi($master, (array) config('peta_risiko_drm'), $lokasiPja, $perusahaanPerPja);
         } catch (Throwable $e) {
             $this->error('Gagal: '.$e->getMessage());
 

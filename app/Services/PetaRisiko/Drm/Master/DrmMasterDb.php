@@ -63,9 +63,11 @@ final class DrmMasterDb
      *
      * @param  array<string, mixed>  $cfg  config peta_risiko_drm
      * @param  list<array{0: string, 1: string, 2: string}>  $lokasiPja  [site, lokasi, nama PJA]
+     * @param  list<array{pja: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja() (ClickHouse, dari personil —
+     *   nama PJA TIDAK mewakili nama perusahaan, lihat catatan di drm_master_lokasi_pja.perusahaan)
      * @return array<string, int>  jumlah baris per tabel
      */
-    public function isi(DrmMaster $master, array $cfg, array $lokasiPja): array
+    public function isi(DrmMaster $master, array $cfg, array $lokasiPja, array $perusahaanPerPja = []): array
     {
         if (! self::siap()) {
             throw new RuntimeException('Tabel master belum dimigrasi (2026_11_17_100000_create_drm_master_tables).');
@@ -74,6 +76,19 @@ final class DrmMasterDb
         $sekarang = now();
         $cap = fn (array $r) => $r + ['created_at' => $sekarang, 'updated_at' => $sekarang];
         $kelBaris = $master->kelompokBaris($cfg['proses_bisnis']);
+        // nama PJA (dinormalisasi) => daftar nama perusahaan unik personilnya, dari DrmSql::perusahaanPerPja().
+        $perusahaanPerNamaPja = [];
+        foreach ($perusahaanPerPja as $r) {
+            $kunci = self::normNamaPja((string) ($r['pja'] ?? ''));
+            $nama = trim((string) ($r['perusahaan'] ?? ''));
+            if ($kunci !== '' && $nama !== '' && ! in_array($nama, $perusahaanPerNamaPja[$kunci] ?? [], true)) {
+                $perusahaanPerNamaPja[$kunci][] = $nama;
+            }
+        }
+        foreach ($perusahaanPerNamaPja as &$p) {
+            sort($p, SORT_NATURAL | SORT_FLAG_CASE);
+        }
+        unset($p);
 
         $isi = [
             'drm_master_baris' => array_map(fn ($b) => $cap([
@@ -90,7 +105,8 @@ final class DrmMasterDb
             'drm_master_grup' => array_map(fn ($gid, $nama) => $cap(['gid' => (int) $gid, 'nama' => $nama, 'aktif' => true]), array_keys($d['grup']), $d['grup']),
             'drm_master_grup_baris' => $this->rata($d['grupBaris'], fn ($gid, $ri) => $cap(['gid' => (int) $gid, 'ri' => $ri])),
             'drm_master_dl' => array_map(fn ($x) => $cap(['site' => $x['site'], 'lokasi' => $x['lokasi'], 'detail' => $x['detail'], 'gid' => $x['gid'], 'aktif' => true]), $d['dl']),
-            'drm_master_lokasi_pja' => array_map(fn ($x) => $cap(['site' => $x[0], 'lokasi' => $x[1], 'nama_pja' => $x[2], 'aktif' => true]), $lokasiPja),
+            'drm_master_lokasi_pja' => array_map(fn ($x) => $cap(['site' => $x[0], 'lokasi' => $x[1], 'nama_pja' => $x[2], 'aktif' => true,
+                'perusahaan' => implode("\n", $perusahaanPerNamaPja[self::normNamaPja($x[2])] ?? [])]), $lokasiPja),
             'drm_master_label' => array_merge([], ...array_map(fn ($l) => array_map(fn ($ri) => $cap([
                 'ketidaksesuaian' => mb_substr($l['k'], 0, 300), 'subketidaksesuaian' => mb_substr($l['sk'], 0, 300), 'ri' => $ri, 'sumber' => mb_substr($l['sumber'], 0, 100), 'aktif' => true,
             ]), $l['ri']), $d['label'])),
@@ -283,6 +299,12 @@ final class DrmMasterDb
         $i = strpos($label, ' / ');
 
         return $i === false ? [trim($label), ''] : [trim(substr($label, 0, $i)), trim(substr($label, $i + 3))];
+    }
+
+    /** Kunci pencocokan nama PJA (obds.aaj_lokasi_dan_pja.nama_pja ↔ DrmSql::perusahaanPerPja().pja): huruf kecil, spasi rapat. */
+    public static function normNamaPja(string $nama): string
+    {
+        return trim(preg_replace('/\s+/u', ' ', mb_strtolower($nama)) ?? '');
     }
 
     /**

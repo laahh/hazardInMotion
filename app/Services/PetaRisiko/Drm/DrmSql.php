@@ -610,6 +610,20 @@ FROM orang_pja o LEFT JOIN hr ON hr.sid = o.sid';
     }
 
     /**
+     * Perusahaan per nama PJA (dari personil, BUKAN nama PJA Mitra Kerja — keputusan user: nama PJA tidak
+     * mewakili nama perusahaan, personilnya yang punya kolom perusahaan). Dipakai `peta-risiko:master-db --isi`
+     * untuk mengisi kolom drm_master_lokasi_pja.perusahaan (dicocokkan ke nama_pja per baris, lihat DrmMasterDb::isi).
+     */
+    public function perusahaanPerPja(): string
+    {
+        return '
+WITH '.$this->personilCte().'
+SELECT DISTINCT trim(pja) AS pja, trim(perusahaan) AS perusahaan
+FROM orang_pja
+WHERE ifNull(pja, \'\') != \'\' AND ifNull(perusahaan, \'\') != \'\'';
+    }
+
+    /**
      * Personil per PJA dari penugasan resmi `m_pja_emp` (berdasarkan ID PJA, lengkap tipe BC/Mitra
      * dan kategori Layer/Superior/Inspector). id_employee diterjemahkan ke SID lewat
      * bep_vw_safety_all_karyawan. (bep_vw_pja_employee tidak lengkap: ±420 orang di 120 PJA.)

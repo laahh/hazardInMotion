@@ -95,6 +95,17 @@ class DrmSnapshotBuilderTest extends TestCase
         $this->assertStringContainsString("concat(ifNull(`aktivitas pekerjaan OAK`, ''), ' / ', ifNull(`sub aktivitas pekerjaan OAK`, ''))", $status);
     }
 
+    public function test_sql_perusahaan_per_pja_dari_personil_bukan_nama_pja(): void
+    {
+        $sql = $this->sql()->perusahaanPerPja();
+
+        // Dipakai peta-risiko:master-db --isi untuk mengisi drm_master_lokasi_pja.perusahaan — dari CTE personil
+        // (m_pja_emp ↔ bep_vw_safety_all_karyawan), bukan sekadar nama PJA (m_pja.name).
+        $this->assertStringContainsString('orang_pja AS (', $sql);
+        $this->assertStringContainsString('SELECT DISTINCT trim(pja) AS pja, trim(perusahaan) AS perusahaan', $sql);
+        $this->assertStringContainsString("WHERE ifNull(pja, '') != '' AND ifNull(perusahaan, '') != ''", $sql);
+    }
+
     public function test_berulang_dari_root_cause_insiden_di_lokasi_mana_pun(): void
     {
         $sql = $this->sql()->berandaSpesifik();

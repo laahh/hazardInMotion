@@ -31,7 +31,8 @@ class DrmMasterBarisUnggahTest extends TestCase
         $this->koneksiAsal = (string) config('database.default');
         config(['database.connections.uji_drm' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         DB::setDefaultConnection('uji_drm');
-        foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_18_120000_add_item_sumber_to_drm_master_baris_table'] as $m) {
+        foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_18_120000_add_item_sumber_to_drm_master_baris_table',
+            '2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table'] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
         $kini = now();
@@ -206,18 +207,19 @@ class DrmMasterBarisUnggahTest extends TestCase
             ['site' => 'LMO', 'lokasi' => 'Pit B', 'detail' => 'Front', 'gid' => 1, 'aktif' => true],
         ]);
         DB::table('drm_master_lokasi_pja')->insert([
-            ['site' => 'LMO', 'lokasi' => 'Pit A', 'nama_pja' => 'PJA Pit A BC', 'aktif' => true],
-            ['site' => 'LMO', 'lokasi' => 'Pit A', 'nama_pja' => 'PJA Mitra Pit A', 'aktif' => true],
-            ['site' => 'LMO', 'lokasi' => 'Pit B', 'nama_pja' => 'PJA Pit B', 'aktif' => true],
-            ['site' => 'LMO', 'lokasi' => 'Pit C', 'nama_pja' => 'PJA Tidak Terpakai', 'aktif' => false],
+            // Perusahaan = personil PJA (kolom "perusahaan", dari DrmSql::perusahaanPerPja), BUKAN nama_pja.
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'nama_pja' => 'PJA Pit A BC', 'perusahaan' => "BC", 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'nama_pja' => 'PJA Mitra Pit A', 'perusahaan' => "PT Mitra Jaya", 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit B', 'nama_pja' => 'PJA Pit B', 'perusahaan' => "BC\nPT Kontraktor B", 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit C', 'nama_pja' => 'PJA Tidak Terpakai', 'perusahaan' => "PT Tidak Terpakai", 'aktif' => false],
         ]);
         DB::table('drm_master_grup_baris')->insert(['gid' => 1, 'ri' => 1]); // ri 1 sudah di gid 2 (fixture dasar); jadi ikut 2 grup
         $u = app(DrmMasterBarisUnggah::class);
 
-        // ri 1: grup 1 (Pit B) + grup 2 (Pit A) → union PJA kedua lokasi. ri 2: tidak di grup mana pun → kosong.
-        $this->assertSame([1 => ['PJA Mitra Pit A', 'PJA Pit A BC', 'PJA Pit B']], $u->perusahaanPerBaris());
-        $this->assertSame([1], array_column($u->ekspor(['pja' => 'PJA Pit B'], []), 'ri'));
-        $this->assertSame([], array_column($u->ekspor(['pja' => 'PJA Tidak Terpakai'], []), 'ri'));
+        // ri 1: grup 1 (Pit B: BC, PT Kontraktor B) + grup 2 (Pit A: BC, PT Mitra Jaya) → union nama perusahaan, bukan nama PJA.
+        $this->assertSame([1 => ['BC', 'PT Kontraktor B', 'PT Mitra Jaya']], $u->perusahaanPerBaris());
+        $this->assertSame([1], array_column($u->ekspor(['pja' => 'PT Kontraktor B'], []), 'ri'));
+        $this->assertSame([], array_column($u->ekspor(['pja' => 'PT Tidak Terpakai'], []), 'ri'));
     }
 
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */

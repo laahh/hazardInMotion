@@ -269,8 +269,8 @@
       { data: 'h', className: 'dep', render: (d, type, r) => type !== 'display' ? d.map((x) => x.dept + ' ' + x.idh).join(' ') + ' ' + r.st.join(' ') + ' ' + r.pja.join(' ')
           : kolomDep(d) + '<span class="mb-site" title="Site tempat baris ini dihitung (grup lokasi → detail lokasi; MARINE / EKSPLORASI menurut departemen HIRA)">Site: '
             + (r.st.length ? '<b>' + r.st.map(esc).join(', ') + '</b>' : '<i>tidak ada detail lokasi</i>') + '</span>'
-            + '<span class="mb-site" title="Nama PJA di lokasi tempat grup baris ini punya detail lokasi (M07/M08) — bukan data personil">Perusahaan: '
-            + (r.pja.length ? '<b>' + r.pja.map(esc).join(', ') + '</b>' : '<i>tidak ada PJA</i>') + '</span>' },
+            + '<span class="mb-site" title="Nama perusahaan personil PJA di lokasi tempat grup baris ini punya detail lokasi (M07/M08 + personil)">Perusahaan: '
+            + (r.pja.length ? '<b>' + r.pja.map(esc).join(', ') + '</b>' : '<i>tidak ada data</i>') + '</span>' },
       kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET'),
     ],
   });
