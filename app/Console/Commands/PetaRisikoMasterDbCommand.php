@@ -70,9 +70,11 @@ FROM obds.aaj_lokasi_dan_pja
 WHERE ifNull(nama_pja, \'\') != \'\' AND ifNull(site, \'\') != \'\' AND ifNull(lokasi, \'\') != \'\'
 GROUP BY site, lokasi, pja
 ORDER BY site, lokasi, pja', 120));
-            $this->line('Mengambil perusahaan per PJA dari personil (bukan nama PJA)…');
-            $perusahaanPerPja = $ch->select((new DrmSql((array) config('peta_risiko_drm'), now()->toImmutable(), []))->perusahaanPerPja(), 120);
-            $jumlah = $db->isi($master, (array) config('peta_risiko_drm'), $lokasiPja, $perusahaanPerPja);
+            $this->line('Mengambil hierarki PJA (BC/Mitra) dan perusahaan per PJA dari personil…');
+            $sql = new DrmSql((array) config('peta_risiko_drm'), now()->toImmutable(), []);
+            $pjaList = $ch->select($sql->pja(), 120);
+            $perusahaanPerPja = $ch->select($sql->perusahaanPerPja(), 120);
+            $jumlah = $db->isi($master, (array) config('peta_risiko_drm'), $lokasiPja, $pjaList, $perusahaanPerPja);
         } catch (Throwable $e) {
             $this->error('Gagal: '.$e->getMessage());
 

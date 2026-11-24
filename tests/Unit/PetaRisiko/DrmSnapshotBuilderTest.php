@@ -100,10 +100,10 @@ class DrmSnapshotBuilderTest extends TestCase
         $sql = $this->sql()->perusahaanPerPja();
 
         // Dipakai peta-risiko:master-db --isi untuk mengisi drm_master_lokasi_pja.perusahaan — dari CTE personil
-        // (m_pja_emp ↔ bep_vw_safety_all_karyawan), bukan sekadar nama PJA (m_pja.name).
+        // (m_pja_emp ↔ bep_vw_safety_all_karyawan), per ID PJA (digabung BC + mitra anak di PHP), bukan per nama.
         $this->assertStringContainsString('orang_pja AS (', $sql);
-        $this->assertStringContainsString('SELECT DISTINCT trim(pja) AS pja, trim(perusahaan) AS perusahaan', $sql);
-        $this->assertStringContainsString("WHERE ifNull(pja, '') != '' AND ifNull(perusahaan, '') != ''", $sql);
+        $this->assertStringContainsString('SELECT DISTINCT toString(pja_num) AS pja_id, trim(perusahaan) AS perusahaan', $sql);
+        $this->assertStringContainsString("WHERE ifNull(perusahaan, '') != ''", $sql);
     }
 
     public function test_berulang_dari_root_cause_insiden_di_lokasi_mana_pun(): void

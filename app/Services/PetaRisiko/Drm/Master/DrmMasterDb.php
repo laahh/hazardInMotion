@@ -63,11 +63,11 @@ final class DrmMasterDb
      *
      * @param  array<string, mixed>  $cfg  config peta_risiko_drm
      * @param  list<array{0: string, 1: string, 2: string}>  $lokasiPja  [site, lokasi, nama PJA]
-     * @param  list<array{pja: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja() (ClickHouse, dari personil —
-     *   nama PJA TIDAK mewakili nama perusahaan, lihat catatan di drm_master_lokasi_pja.perusahaan)
+     * @param  list<array{id: string, nama: string, parent: string, tipe?: string, id_site?: string}>  $pjaList  dari DrmSql::pja() (hierarki BC/Mitra)
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja() (ClickHouse, per ID PJA)
      * @return array<string, int>  jumlah baris per tabel
      */
-    public function isi(DrmMaster $master, array $cfg, array $lokasiPja, array $perusahaanPerPja = []): array
+    public function isi(DrmMaster $master, array $cfg, array $lokasiPja, array $pjaList = [], array $perusahaanPerPja = []): array
     {
         if (! self::siap()) {
             throw new RuntimeException('Tabel master belum dimigrasi (2026_11_17_100000_create_drm_master_tables).');
@@ -76,19 +76,8 @@ final class DrmMasterDb
         $sekarang = now();
         $cap = fn (array $r) => $r + ['created_at' => $sekarang, 'updated_at' => $sekarang];
         $kelBaris = $master->kelompokBaris($cfg['proses_bisnis']);
-        // nama PJA (dinormalisasi) => daftar nama perusahaan unik personilnya, dari DrmSql::perusahaanPerPja().
-        $perusahaanPerNamaPja = [];
-        foreach ($perusahaanPerPja as $r) {
-            $kunci = self::normNamaPja((string) ($r['pja'] ?? ''));
-            $nama = trim((string) ($r['perusahaan'] ?? ''));
-            if ($kunci !== '' && $nama !== '' && ! in_array($nama, $perusahaanPerNamaPja[$kunci] ?? [], true)) {
-                $perusahaanPerNamaPja[$kunci][] = $nama;
-            }
-        }
-        foreach ($perusahaanPerNamaPja as &$p) {
-            sort($p, SORT_NATURAL | SORT_FLAG_CASE);
-        }
-        unset($p);
+        // nama PJA (dinormalisasi) => daftar nama perusahaan unik personilnya (PJA itu + mitra anaknya digabung).
+        $perusahaanPerNamaPja = self::perusahaanPerNamaPja($pjaList, $perusahaanPerPja);
 
         $isi = [
             'drm_master_baris' => array_map(fn ($b) => $cap([
@@ -301,10 +290,58 @@ final class DrmMasterDb
         return $i === false ? [trim($label), ''] : [trim(substr($label, 0, $i)), trim(substr($label, $i + 3))];
     }
 
-    /** Kunci pencocokan nama PJA (obds.aaj_lokasi_dan_pja.nama_pja ↔ DrmSql::perusahaanPerPja().pja): huruf kecil, spasi rapat. */
+    /** Kunci pencocokan nama PJA (obds.aaj_lokasi_dan_pja.nama_pja ↔ DrmSql::pja().nama): huruf kecil, spasi rapat. */
     public static function normNamaPja(string $nama): string
     {
         return trim(preg_replace('/\s+/u', ' ', mb_strtolower($nama)) ?? '');
+    }
+
+    /**
+     * Nama PJA (dinormalisasi, normNamaPja) => daftar nama perusahaan personilnya, PJA itu sendiri DIGABUNG dengan
+     * personil PJA Mitra anaknya (sama pola dengan DrmSnapshotBuilder::pjaBc()/berkasPja() di sync utama — "yang
+     * parent atau BC atau Mitra Kerja semuanya masuk", keputusan user 24 Nov 2026: jangan cuma personil yang
+     * ditugaskan langsung ke ID PJA itu, anak Mitra-nya juga harus ikut).
+     *
+     * @param  list<array{id: string, nama: string, parent: string, tipe?: string, id_site?: string}>  $pjaList  dari DrmSql::pja()
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
+     * @return array<string, list<string>>
+     */
+    public static function perusahaanPerNamaPja(array $pjaList, array $perusahaanPerPja): array
+    {
+        $anak = [];
+        foreach ($pjaList as $p) {
+            $parent = (string) ($p['parent'] ?? '0');
+            if ($parent !== '0' && $parent !== '') {
+                $anak[$parent][] = (string) $p['id'];
+            }
+        }
+        $perIdLangsung = [];
+        foreach ($perusahaanPerPja as $r) {
+            $id = (string) ($r['pja_id'] ?? '');
+            $nama = trim((string) ($r['perusahaan'] ?? ''));
+            if ($id !== '' && $nama !== '' && ! in_array($nama, $perIdLangsung[$id] ?? [], true)) {
+                $perIdLangsung[$id][] = $nama;
+            }
+        }
+        $hasil = [];
+        foreach ($pjaList as $p) {
+            $id = (string) $p['id'];
+            $gabung = $perIdLangsung[$id] ?? [];
+            foreach ($anak[$id] ?? [] as $idAnak) {
+                foreach ($perIdLangsung[$idAnak] ?? [] as $nama) {
+                    if (! in_array($nama, $gabung, true)) {
+                        $gabung[] = $nama;
+                    }
+                }
+            }
+            if ($gabung === []) {
+                continue;
+            }
+            sort($gabung, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[self::normNamaPja((string) $p['nama'])] = $gabung;
+        }
+
+        return $hasil;
     }
 
     /**

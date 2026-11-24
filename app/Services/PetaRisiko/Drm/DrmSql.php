@@ -610,17 +610,18 @@ FROM orang_pja o LEFT JOIN hr ON hr.sid = o.sid';
     }
 
     /**
-     * Perusahaan per nama PJA (dari personil, BUKAN nama PJA Mitra Kerja — keputusan user: nama PJA tidak
-     * mewakili nama perusahaan, personilnya yang punya kolom perusahaan). Dipakai `peta-risiko:master-db --isi`
-     * untuk mengisi kolom drm_master_lokasi_pja.perusahaan (dicocokkan ke nama_pja per baris, lihat DrmMasterDb::isi).
+     * Perusahaan personil per ID PJA (BUKAN per nama — satu nama PJA di aaj_lokasi_dan_pja bisa punya personil
+     * tersebar di PJA itu sendiri DAN PJA Mitra anaknya; penggabungan BC + mitra anak per ID dikerjakan di PHP,
+     * lihat DrmMasterDb::perusahaanPerNamaPja — sama pola dengan DrmSnapshotBuilder::pjaBc()/berkasPja() di sync
+     * utama). Dipakai `peta-risiko:master-db --isi` untuk mengisi drm_master_lokasi_pja.perusahaan.
      */
     public function perusahaanPerPja(): string
     {
         return '
 WITH '.$this->personilCte().'
-SELECT DISTINCT trim(pja) AS pja, trim(perusahaan) AS perusahaan
+SELECT DISTINCT toString(pja_num) AS pja_id, trim(perusahaan) AS perusahaan
 FROM orang_pja
-WHERE ifNull(pja, \'\') != \'\' AND ifNull(perusahaan, \'\') != \'\'';
+WHERE ifNull(perusahaan, \'\') != \'\'';
     }
 
     /**
