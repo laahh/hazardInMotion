@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterGrup;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -42,7 +43,7 @@ final class PetaRisikoMasterGrupController extends Controller
     }
 
     /** Tambahkan baris terpilih (bisa lintas aktivitas) ke grup — chip "+ Tambah ke grup" per baris atau aksi borongan. */
-    public function tambah(Request $request, int $gid): RedirectResponse
+    public function tambah(Request $request, int $gid): RedirectResponse|JsonResponse
     {
         $this->izin($request);
         $v = $request->validate([
@@ -51,11 +52,11 @@ final class PetaRisikoMasterGrupController extends Controller
         ], ['ri.required' => 'Pilih minimal satu baris.']);
         $ri = array_map('intval', $v['ri']);
 
-        return $this->jalankan(fn () => $this->grup->tambahBaris($gid, $ri), fn ($n) => $n ? "{$n} baris ditambahkan ke grup." : 'Baris terpilih sudah ada di grup ini.');
+        return $this->jalankan($request, fn () => $this->grup->tambahBaris($gid, $ri), fn ($n) => $n ? "{$n} baris ditambahkan ke grup." : 'Baris terpilih sudah ada di grup ini.');
     }
 
     /** Keluarkan baris terpilih dari grup $gid (chip hapus per baris, atau aksi borongan). */
-    public function ubahBaris(Request $request, int $gid): RedirectResponse
+    public function ubahBaris(Request $request, int $gid): RedirectResponse|JsonResponse
     {
         $this->izin($request);
         $v = $request->validate([
@@ -64,29 +65,40 @@ final class PetaRisikoMasterGrupController extends Controller
         ], ['ri.required' => 'Pilih minimal satu baris.']);
         $ri = array_map('intval', $v['ri']);
 
-        return $this->jalankan(fn () => $this->grup->hapus($gid, $ri), fn ($n) => "{$n} baris dikeluarkan dari grup.");
+        return $this->jalankan($request, fn () => $this->grup->hapus($gid, $ri), fn ($n) => "{$n} baris dikeluarkan dari grup.");
     }
 
     /** Ubah kelompok aktivitas (M02). */
-    public function kelompok(Request $request, int $aid): RedirectResponse
+    public function kelompok(Request $request, int $aid): RedirectResponse|JsonResponse
     {
         $this->izin($request);
         $v = $request->validate(['kelompok' => ['required', 'string', 'max:10']]);
 
-        return $this->jalankan(fn () => $this->grup->ubahKelompok($aid, $v['kelompok']), fn ($ubah) => $ubah ? 'Kelompok aktivitas diperbarui.' : 'Kelompok aktivitas tidak berubah.');
+        return $this->jalankan($request, fn () => $this->grup->ubahKelompok($aid, $v['kelompok']), fn ($ubah) => $ubah ? 'Kelompok aktivitas diperbarui.' : 'Kelompok aktivitas tidak berubah.');
     }
 
-    private function jalankan(callable $aksi, callable $pesan): RedirectResponse
+    /**
+     * Jalankan aksi; AJAX (Accept: application/json, dipakai halaman ini supaya tidak reload) dapat JSON,
+     * request biasa tetap dapat redirect + flash (fallback kalau JS mati).
+     */
+    private function jalankan(Request $request, callable $aksi, callable $pesan): RedirectResponse|JsonResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
         try {
             $hasil = $aksi();
         } catch (InvalidArgumentException $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['pesan' => $e->getMessage()], 422);
+            }
+
             return redirect()->route('peta-risiko-pja.master.grup.index')->withErrors(['grup' => $e->getMessage()]);
         }
+        $teks = $pesan($hasil).' Berlaku setelah peta-risiko:sync berikutnya.';
+        if ($request->wantsJson()) {
+            return response()->json(['pesan' => $teks]);
+        }
 
-        return redirect()->route('peta-risiko-pja.master.grup.index')
-            ->with('pesan', $pesan($hasil).' Berlaku setelah peta-risiko:sync berikutnya.');
+        return redirect()->route('peta-risiko-pja.master.grup.index')->with('pesan', $teks);
     }
 
     private function izin(Request $request): void

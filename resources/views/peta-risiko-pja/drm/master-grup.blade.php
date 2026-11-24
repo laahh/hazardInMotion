@@ -74,6 +74,8 @@
 @if ($errors->any())
   <div class="mg-banner err"><span class="material-symbols-outlined">error</span><div>{!! implode('<br>', array_map('e', $errors->all())) !!}</div></div>
 @endif
+{{-- Pesan hasil aksi AJAX (tambah/keluarkan grup, ubah kelompok) tanpa reload halaman — lihat tampilkanPesan() di scripts. --}}
+<div class="mg-banner" id="mg-flash" style="display:none"><span class="material-symbols-outlined" id="mg-flash-ikon"></span><div id="mg-flash-teks"></div></div>
 
 @if (! $siap)
   <div class="mg-banner warn"><span class="material-symbols-outlined">database</span><div>Master database belum siap. Isi dulu tabel master (<code>php artisan peta-risiko:master-db --isi</code>) sebelum memakai halaman ini.</div></div>
@@ -106,14 +108,14 @@
     <div class="mg-bulk" id="mg-bulk">
       <span id="mg-bulk-n"></span>
       @if ($bolehUbah)
-        <form method="post" id="mg-bulk-tambah" onsubmit="return mgBulk(this, 'ditambahkan ke')">@csrf
+        <form method="post" id="mg-bulk-tambah">@csrf
           <select name="gidTarget" aria-label="Grup tujuan (tambah)" required>
             <option value="">Tambahkan ke grup…</option>
             @foreach ($daftarGrup as $g)<option value="{{ $g['gid'] }}">{{ $g['nama'] }}</option>@endforeach
           </select>
           <button class="mg-btn sek" type="submit"><span class="material-symbols-outlined" style="font-size:17px">add</span> Tambahkan</button>
         </form>
-        <form method="post" id="mg-bulk-hapus" onsubmit="return mgBulk(this, 'dikeluarkan dari')">@csrf
+        <form method="post" id="mg-bulk-hapus">@csrf
           <select name="gidTarget" aria-label="Grup sumber (keluarkan)" required>
             <option value="">Keluarkan dari grup…</option>
             @foreach ($daftarGrup as $g)<option value="{{ $g['gid'] }}">{{ $g['nama'] }}</option>@endforeach
@@ -240,7 +242,8 @@
 
   function chipGrup(g, ri) {
     const hapus = BOLEH
-      ? '<form method="post" action="' + esc(urlHapus(g.gid)) + '" data-konfirmasi="Keluarkan baris ' + ri + ' dari grup ' + esc(g.nama) + '?">'
+      ? '<form method="post" action="' + esc(urlHapus(g.gid)) + '" data-aksi="hapus" data-ri="' + ri + '" data-gid="' + g.gid + '"'
+        + ' data-konfirmasi="Keluarkan baris ' + ri + ' dari grup ' + esc(g.nama) + '?">'
         + token() + riHidden(ri) + '<button type="submit" title="Keluarkan dari grup" aria-label="Keluarkan dari grup">×</button></form>'
       : '';
     return '<div class="mg-chip"><span>' + esc(g.nama) + '</span>' + hapus + '</div>';
@@ -251,7 +254,7 @@
       .map((g) => '<option value="' + g.gid + '">' + esc(g.nama) + '</option>').join('');
     if (!opsi) return '';
     return '<details class="mg-tambah"><summary>+ Tambah ke grup</summary>'
-      + '<form method="post" action="' + esc(URL_TAMBAH) + '" data-ri="' + ri + '" onsubmit="return mgTambahSatu(this)">' + token()
+      + '<form method="post" action="' + esc(URL_TAMBAH) + '" data-aksi="tambah" data-ri="' + ri + '">' + token()
       + riHidden(ri) + '<select name="gid"><option value="">Pilih grup…</option>' + opsi + '</select>'
       + '<button type="submit">Tambahkan</button></form></details>';
   }
@@ -271,7 +274,8 @@
     if (type !== 'display') return (KELOMPOK[d] || d);
     if (!BOLEH) return esc(KELOMPOK[d] || d);
     const opsi = Object.entries(KELOMPOK).map(([kode, nama]) => '<option value="' + kode + '"' + (kode === d ? ' selected' : '') + '>' + esc(nama) + '</option>').join('');
-    return '<form method="post" class="mg-kel-form" action="' + esc(urlKelompok(r.aid)) + '" data-konfirmasi="Ubah kelompok aktivitas ini? Berlaku untuk semua baris aktivitas ini di semua grup.">'
+    return '<form method="post" class="mg-kel-form" action="' + esc(urlKelompok(r.aid)) + '" data-aksi="kelompok" data-aid="' + r.aid + '"'
+      + ' data-konfirmasi="Ubah kelompok aktivitas ini? Berlaku untuk semua baris aktivitas ini di semua grup.">'
       + token() + '<select name="kelompok" onchange="this.form.requestSubmit()">' + opsi + '</select></form>';
   } };
 
@@ -344,19 +348,76 @@
   const qGid = new URLSearchParams(location.search).get('gid');
   if (qGid && [...fGrup.options].some((o) => o.value === qGid)) { fGrup.value = qGid; tabel.draw(); tampilkanDl(); }
 
-  document.getElementById('mg-tabel').addEventListener('submit', (e) => {
-    const pesan = e.target.dataset.konfirmasi;
-    if (pesan && !confirm(pesan)) e.preventDefault();
-  });
-
   if (!BOLEH) return;
 
-  /** Tolak submit bila grup tujuan belum dipilih di chip "+ Tambah ke grup". */
-  window.mgTambahSatu = function (form) {
-    if (!form.gid.value) { alert('Pilih grup tujuan.'); return false; }
-    form.action = urlTambah(form.gid.value);
-    return true;
-  };
+  // ---- Semua form (hapus/tambah/ubah kelompok/bulk) dikirim lewat AJAX — tidak ada reload, halaman tetap di
+  // posisi & filter yang sama (keputusan user 24 Nov 2026: reload itu "kritikal", bikin kehilangan posisi/filter).
+  const flash = document.getElementById('mg-flash');
+  let flashTimer;
+  function tampilkanPesan(teks, jenis) {
+    flash.className = 'mg-banner ' + jenis;
+    flash.querySelector('.material-symbols-outlined').textContent = jenis === 'ok' ? 'check_circle' : 'error';
+    flash.querySelector('div').textContent = teks;
+    flash.style.display = 'flex';
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { flash.style.display = 'none'; }, jenis === 'ok' ? 4000 : 8000);
+  }
+
+  async function kirim(url, formData) {
+    const r = await fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'X-CSRF-TOKEN': CSRF }, body: formData });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.pesan || j.message || `Gagal (HTTP ${r.status}).`);
+    return j;
+  }
+
+  function namaGrup(gid) { return (DAFTAR_GRUP.find((g) => String(g.gid) === String(gid)) || {}).nama || ('#' + gid); }
+  function tambahGrupKe(ri, gid) {
+    const r = ROWS.find((x) => x.ri === ri);
+    if (r && !r.grup.some((g) => g.gid === gid)) { r.grup.push({ gid, nama: namaGrup(gid) }); r.grup.sort((a, b) => a.nama.localeCompare(b.nama, 'id')); }
+  }
+  function hapusGrupDari(ri, gid) {
+    const r = ROWS.find((x) => x.ri === ri);
+    if (r) r.grup = r.grup.filter((g) => g.gid !== gid);
+  }
+  /** Gambar ulang HANYA baris yang datanya berubah, tanpa reset halaman/urutan/pencarian yang sedang aktif. */
+  function segarkanBaris(risBerubah) {
+    const set = new Set(risBerubah);
+    tabel.rows((idx, data) => set.has(data.ri)).invalidate('data');
+    tabel.draw(false);
+  }
+
+  document.getElementById('mg-tabel').addEventListener('submit', async (e) => {
+    const form = e.target;
+    e.preventDefault();
+    const pesan = form.dataset.konfirmasi;
+    if (pesan && !confirm(pesan)) return;
+    const aksi = form.dataset.aksi;
+    try {
+      if (aksi === 'hapus') {
+        const ri = Number(form.dataset.ri), gid = Number(form.dataset.gid);
+        const j = await kirim(form.action, new FormData(form));
+        hapusGrupDari(ri, gid);
+        segarkanBaris([ri]);
+        tampilkanPesan(j.pesan, 'ok');
+      } else if (aksi === 'tambah') {
+        const gid = form.gid.value;
+        if (!gid) { alert('Pilih grup tujuan.'); return; }
+        const ri = Number(form.dataset.ri);
+        const j = await kirim(urlTambah(gid), new FormData(form));
+        tambahGrupKe(ri, Number(gid));
+        segarkanBaris([ri]);
+        tampilkanPesan(j.pesan, 'ok');
+      } else if (aksi === 'kelompok') {
+        const aid = Number(form.dataset.aid), kelompok = form.kelompok.value;
+        const j = await kirim(form.action, new FormData(form));
+        const risBerubah = ROWS.filter((r) => r.aid === aid).map((r) => { r.kelompok = kelompok; return r.ri; });
+        segarkanBaris(risBerubah);
+        tampilkanPesan(j.pesan, 'ok');
+      }
+    } catch (err) {
+      tampilkanPesan(err.message, 'err');
+    }
+  });
 
   const cekSemua = document.getElementById('mg-semua');
   const bulkBar = document.getElementById('mg-bulk');
@@ -376,17 +437,27 @@
   });
   tabel.on('draw', () => { if (cekSemua) cekSemua.checked = false; perbaruiBulk(); });
 
-  window.mgBulk = function (form, kataKerja) {
-    const ri = baitSemua().map((c) => c.value);
-    if (!ri.length) { alert('Pilih minimal satu baris.'); return false; }
-    const gid = form.gidTarget.value;
-    if (!gid) { alert('Pilih grup.'); return false; }
-    const nama = (DAFTAR_GRUP.find((g) => String(g.gid) === gid) || {}).nama || gid;
-    if (!confirm(ri.length + ' baris akan ' + kataKerja + ' grup "' + nama + '". Lanjutkan?')) return false;
-    form.action = form === document.getElementById('mg-bulk-tambah') ? urlTambah(gid) : urlHapus(gid);
-    ri.forEach((r) => form.insertAdjacentHTML('beforeend', riHidden(r)));
-    return true;
-  };
+  bulkBar.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const ri = baitSemua().map((c) => Number(c.value));
+    if (!ri.length) { alert('Pilih minimal satu baris.'); return; }
+    const gid = Number(form.gidTarget.value);
+    if (!gid) { alert('Pilih grup.'); return; }
+    const tambah = form.id === 'mg-bulk-tambah';
+    if (!confirm(ri.length + ' baris akan ' + (tambah ? 'ditambahkan ke' : 'dikeluarkan dari') + ' grup "' + namaGrup(gid) + '". Lanjutkan?')) return;
+    const fd = new FormData(form);
+    ri.forEach((r) => fd.append('ri[]', r));
+    try {
+      const j = await kirim(tambah ? urlTambah(gid) : urlHapus(gid), fd);
+      ri.forEach((r) => (tambah ? tambahGrupKe(r, gid) : hapusGrupDari(r, gid)));
+      form.reset();
+      segarkanBaris(ri);
+      tampilkanPesan(j.pesan, 'ok');
+    } catch (err) {
+      tampilkanPesan(err.message, 'err');
+    }
+  });
 })();
 </script>
 @endif
