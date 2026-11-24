@@ -6,6 +6,9 @@
   @if ($adaExcel)
     <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh Excel mapping</a>
   @endif
+  <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}"><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Alur baseline</a>
+  <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}"><span class="material-symbols-outlined" style="font-size:18px">tune</span> Master mapping</a>
+  <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}"><span class="material-symbols-outlined" style="font-size:18px">history</span> Versi lama</a>
 @endsection
 
 @section('hero')
@@ -23,8 +26,8 @@
 
 @if ($meta)
   @section('nav')
-    {{-- Sub-tab sudut pandang di baris ke-2 bilah atas; JS memakai .dr-tabs button[data-tab]. --}}
-    <nav class="dr-tabs tp-subnav" role="tablist" aria-label="Sudut pandang">
+    {{-- Tombol tab di bilah atas (konsep template dashboard-peer); JS memakai .dr-tabs button[data-tab]. --}}
+    <nav class="dr-tabs tp-nav" role="tablist" aria-label="Sudut pandang">
       <button type="button" role="tab" data-tab="site" aria-selected="true">Overview</button>
       <button type="button" role="tab" data-tab="grup" aria-selected="false">Per Group Lokasi</button>
       <button type="button" role="tab" data-tab="proses" aria-selected="false">Per Kelompok Aktivitas</button>

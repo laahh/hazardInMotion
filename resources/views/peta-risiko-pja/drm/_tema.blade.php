@@ -31,13 +31,6 @@
   .tp-nav a:hover, body.tp .dr-tabs.tp-nav button:hover { color: var(--primary); }
   .tp-nav a[aria-current="page"], body.tp .dr-tabs.tp-nav button[aria-selected="true"] { color: var(--primary); font-weight: 700; border-bottom-color: var(--primary); }
   .tp-aksi { display: flex; gap: 8px; flex: none; margin-left: auto; }
-  /* ---- Sub-tab bagian yang sedang aktif (baris ke-2 bilah atas) ---- */
-  .tp-subbar { background: var(--sky); border-top: 1px solid var(--line-2); }
-  .tp-subbar-in { padding: 9px 32px; }
-  .tp-subnav, body.tp .dr-tabs.tp-subnav { display: flex; gap: 6px; flex-wrap: wrap; border: 0; margin: 0; }
-  .tp-subnav a, body.tp .dr-tabs.tp-subnav button { font-size: 13px !important; font-weight: 600; color: var(--mute); padding: 7px 14px; border-radius: 999px; border: 1px solid transparent; background: none; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-  .tp-subnav a:hover, body.tp .dr-tabs.tp-subnav button:hover { color: var(--primary); }
-  .tp-subnav a[aria-current="page"], body.tp .dr-tabs.tp-subnav button[aria-selected="true"] { background: #fff; color: var(--primary); border-color: rgba(171, 173, 175, .4); box-shadow: 0 1px 2px rgba(0, 0, 0, .05); }
 
   /* ---- Area utama + judul halaman ---- */
   body.tp .pr-main.tp-main { margin: 0; padding: 32px 32px 64px; }
@@ -207,7 +200,6 @@
     .tp-bar-in { flex-wrap: wrap; gap: 12px 16px; padding: 12px 16px; }
     .tp-sep { display: none; }
     .tp-nav, body.tp .dr-tabs.tp-nav { order: 3; flex-basis: 100%; gap: 18px; }
-    .tp-subbar-in { padding: 9px 16px; }
     body.tp .pr-main.tp-main { padding: 20px 16px 48px; }
   }
 </style>
