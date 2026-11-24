@@ -8,6 +8,8 @@ use App\Models\PeerPressureKejadianEdukasi;
 use App\Models\PeerPressurePesertaEdukasi;
 use App\Services\PeerPressure\PeerPressurePelaksanaanBaselineService;
 use App\Support\PeerPressure\KategoriDeviasiBucket;
+use App\Support\PeerPressure\PelaksanaanComplianceEvaluator;
+use App\Support\PeerPressure\PeerPressureDashboardRestrictedContractors;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -138,6 +140,10 @@ final class GetPeerPressureDashboardKpiStatsAction
 
         $completionDelta = $this->completionRateDeltaMonthVsPreviousMonth($start);
 
+        [$kkTotal, $kkClosed] = $this->restrictedCompletionCounts($base);
+        $kelompokKerjaCompletionRate = $kkTotal > 0 ? round(($kkClosed / $kkTotal) * 100, 1) : 0.0;
+        $kelompokKerjaCompletionDelta = $this->restrictedCompletionRateDeltaMonthVsPreviousMonth($start);
+
         $compliance = $this->complianceFromComputedPelaksanaan($pelBase);
         $statusKosong = $this->countPelaksanaanStatusKosong($base);
         $kkRows = $this->pelaksanaanKelompokKerjaBreakdown($base);
@@ -150,6 +156,8 @@ final class GetPeerPressureDashboardKpiStatsAction
             'total_cases_trend_label' => $trendLabel,
             'completion_rate' => $completionRate,
             'completion_rate_delta_pp' => $completionDelta,
+            'kelompok_kerja_completion_rate' => $kelompokKerjaCompletionRate,
+            'kelompok_kerja_completion_rate_delta_pp' => $kelompokKerjaCompletionDelta,
             'avg_peer_count' => $avgPeerCount,
             'avg_duration_minutes' => $avgDurationMinutes,
             'pelaksanaan_baseline_total' => $pelBase['baseline_total'],
@@ -213,12 +221,90 @@ final class GetPeerPressureDashboardKpiStatsAction
     }
 
     /**
+     * Total & selesai (CLOSED/SELESAI) hanya untuk kejadian dari tujuh kontraktor terpilih
+     * (sama scope dengan {@see PeerPressurePelaksanaanBaselineService}), dipakai kartu "Evaluasi Kelompok Kerja".
+     *
+     * @return array{0: int, 1: int} [total, selesai]
+     */
+    private function restrictedCompletionCounts(Builder $base): array
+    {
+        $total = 0;
+        $closed = 0;
+        foreach ((clone $base)->cursor(['perusahaan', 'status_pelaksanaan_edukasi']) as $row) {
+            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
+                continue;
+            }
+            $total++;
+            if (PelaksanaanComplianceEvaluator::isPelaksanaanClosed($row->status_pelaksanaan_edukasi ?? null)) {
+                $closed++;
+            }
+        }
+
+        return [$total, $closed];
+    }
+
+    private function restrictedCompletionRateDeltaMonthVsPreviousMonth(Carbon $monthStart): ?float
+    {
+        $startS = $monthStart->copy()->startOfMonth()->toDateString();
+        $endS = $monthStart->copy()->endOfMonth()->toDateString();
+
+        [$currTotal, $currClosed] = $this->restrictedCompletionCounts(
+            PeerPressureKejadianEdukasi::query()->where('tanggal_temuan', '>=', $startS)->where('tanggal_temuan', '<=', $endS)
+        );
+        if ($currTotal === 0) {
+            return null;
+        }
+
+        $prevStart = $monthStart->copy()->subMonth()->startOfMonth();
+        $prevEnd = $prevStart->copy()->endOfMonth();
+        [$prevTotal, $prevClosed] = $this->restrictedCompletionCounts(
+            PeerPressureKejadianEdukasi::query()->where('tanggal_temuan', '>=', $prevStart->toDateString())->where('tanggal_temuan', '<=', $prevEnd->toDateString())
+        );
+        if ($prevTotal === 0) {
+            return null;
+        }
+
+        $rateRecent = ($currClosed / $currTotal) * 100;
+        $ratePrev = ($prevClosed / $prevTotal) * 100;
+
+        return round($rateRecent - $ratePrev, 1);
+    }
+
+    private function restrictedCompletionRateDeltaLast30VsPrev30(): ?float
+    {
+        $now = Carbon::now();
+        $last30Start = $now->copy()->subDays(30)->startOfDay()->toDateString();
+
+        [$last30Total, $last30Closed] = $this->restrictedCompletionCounts(
+            PeerPressureKejadianEdukasi::query()->where('tanggal_temuan', '>=', $last30Start)
+        );
+        if ($last30Total === 0) {
+            return null;
+        }
+
+        $prev30Start = $now->copy()->subDays(60)->startOfDay()->toDateString();
+        [$prev30Total, $prev30Closed] = $this->restrictedCompletionCounts(
+            PeerPressureKejadianEdukasi::query()->where('tanggal_temuan', '>=', $prev30Start)->where('tanggal_temuan', '<', $last30Start)
+        );
+        if ($prev30Total === 0) {
+            return null;
+        }
+
+        $rateRecent = ($last30Closed / $last30Total) * 100;
+        $ratePrev = ($prev30Closed / $prev30Total) * 100;
+
+        return round($rateRecent - $ratePrev, 1);
+    }
+
+    /**
      * @return array{
      *   total_cases: int,
      *   total_cases_trend_pct: float|null,
      *   total_cases_trend_label: string,
      *   completion_rate: float,
      *   completion_rate_delta_pp: float|null,
+     *   kelompok_kerja_completion_rate: float,
+     *   kelompok_kerja_completion_rate_delta_pp: float|null,
      *   avg_peer_count: float,
      *   avg_duration_minutes: float,
      *   peer_pressure_compliance_pct: float,
@@ -281,6 +367,10 @@ final class GetPeerPressureDashboardKpiStatsAction
         $completionDelta = $this->completionRateDeltaLast30VsPrev30();
 
         $baseGlobal = PeerPressureKejadianEdukasi::query();
+        [$kkTotal, $kkClosed] = $this->restrictedCompletionCounts($baseGlobal);
+        $kelompokKerjaCompletionRate = $kkTotal > 0 ? round(($kkClosed / $kkTotal) * 100, 1) : 0.0;
+        $kelompokKerjaCompletionDelta = $this->restrictedCompletionRateDeltaLast30VsPrev30();
+
         $compliance = $this->complianceFromComputedPelaksanaan($pelBase);
         $statusKosong = $this->countPelaksanaanStatusKosong($baseGlobal);
         $kkRows = $this->pelaksanaanKelompokKerjaBreakdown($baseGlobal);
@@ -293,6 +383,8 @@ final class GetPeerPressureDashboardKpiStatsAction
             'total_cases_trend_label' => $trendLabel,
             'completion_rate' => $completionRate,
             'completion_rate_delta_pp' => $completionDelta,
+            'kelompok_kerja_completion_rate' => $kelompokKerjaCompletionRate,
+            'kelompok_kerja_completion_rate_delta_pp' => $kelompokKerjaCompletionDelta,
             'avg_peer_count' => $avgPeerCount,
             'avg_duration_minutes' => $avgDurationMinutes,
             'pelaksanaan_baseline_total' => $pelBase['baseline_total'],
@@ -527,11 +619,23 @@ SQL;
         ];
     }
 
+    /**
+     * Dibatasi ke tujuh kontraktor terpilih (sama scope dengan baseline pelaksanaan), karena dipakai di bagian
+     * modal "Pelaksanaan Peer Pressure" / "Evaluasi Kelompok Kerja" yang sudah menyatakan scope tersebut.
+     */
     private function countPelaksanaanStatusKosong(Builder $base): int
     {
-        return (clone $base)
-            ->whereRaw('TRIM(COALESCE(status_pelaksanaan_edukasi, \'\')) = \'\'')
-            ->count();
+        $n = 0;
+        foreach ((clone $base)->cursor(['perusahaan', 'status_pelaksanaan_edukasi']) as $row) {
+            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($row->perusahaan ?? null)) {
+                continue;
+            }
+            if (trim((string) ($row->status_pelaksanaan_edukasi ?? '')) === '') {
+                $n++;
+            }
+        }
+
+        return $n;
     }
 
     /**
@@ -559,33 +663,28 @@ SQL;
     /**
      * Agregasi per jenis kelompok kerja: selesai (CLOSED/SELESAI) vs belum, untuk modal pelaksanaan.
      * Variasi label (mis. GRUP SBS COACHING + Grup SBS, Grup Kerja (Under 1 GL) + Fleet) dilebur per {@see canonicalKelompokKerjaLabel}.
+     * Dibatasi ke tujuh kontraktor terpilih (sama scope dengan baseline pelaksanaan).
      *
      * @return list<array{kelompok: string, selesai: int, belum: int, total: int, pct_selesai: float}>
      */
     private function pelaksanaanKelompokKerjaBreakdown(Builder $base): array
     {
-        $labelExpr = "COALESCE(NULLIF(TRIM(jenis_kelompok_kerja), ''), '(Tidak diisi)')";
-        $selesaiWhen = '(UPPER(TRIM(COALESCE(status_pelaksanaan_edukasi, \'\'))) LIKE \'%CLOSE%\' OR UPPER(TRIM(COALESCE(status_pelaksanaan_edukasi, \'\'))) LIKE \'%SELESAI%\')';
-
-        $rows = (clone $base)
-            ->selectRaw($labelExpr.' as kelompok')
-            ->selectRaw('COUNT(*) as total')
-            ->selectRaw('SUM(CASE WHEN '.$selesaiWhen.' THEN 1 ELSE 0 END) as selesai')
-            ->groupBy(DB::raw($labelExpr))
-            ->orderByDesc('total')
-            ->limit(80)
-            ->get();
-
         /** @var array<string, array{selesai: int, total: int}> $merged */
         $merged = [];
-        foreach ($rows as $r) {
-            $rawLabel = (string) $r->kelompok;
+        foreach ((clone $base)->cursor(['perusahaan', 'jenis_kelompok_kerja', 'status_pelaksanaan_edukasi']) as $r) {
+            if (! PeerPressureDashboardRestrictedContractors::isAllowedCompanyLabel($r->perusahaan ?? null)) {
+                continue;
+            }
+            $rawLabel = trim((string) ($r->jenis_kelompok_kerja ?? ''));
+            $rawLabel = $rawLabel === '' ? '(Tidak diisi)' : $rawLabel;
             $key = $this->canonicalKelompokKerjaLabel($rawLabel);
             if (! isset($merged[$key])) {
                 $merged[$key] = ['selesai' => 0, 'total' => 0];
             }
-            $merged[$key]['total'] += (int) $r->total;
-            $merged[$key]['selesai'] += (int) $r->selesai;
+            $merged[$key]['total']++;
+            if (PelaksanaanComplianceEvaluator::isPelaksanaanClosed($r->status_pelaksanaan_edukasi ?? null)) {
+                $merged[$key]['selesai']++;
+            }
         }
 
         $out = [];

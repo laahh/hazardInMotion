@@ -212,7 +212,7 @@
             $kpiPctBelum = (float) ($kpi['pelaksanaan_belum_pct'] ?? ($kpiPelaksanaanBaseline > 0 ? round(100 * $kpiPelaksanaanBelum / $kpiPelaksanaanBaseline, 1) : 0));
             $kpiStatusKosong = (int) ($kpi['pelaksanaan_status_kosong_count'] ?? 0);
             $kpiKkRows = $kpi['pelaksanaan_kelompok_kerja_rows'] ?? [];
-            $kpiCompletion = (float) ($kpi['completion_rate'] ?? 0);
+            $kpiCompletion = (float) ($kpi['kelompok_kerja_completion_rate'] ?? 0);
             $kpiBarW = max(0, min(100, $kpiCompletion));
             $kpiTrendPct = $kpi['total_cases_trend_pct'] ?? null;
             $icPre = $insightCards ?? [];
@@ -288,13 +288,13 @@
                <div class="mt-4">
                   <div class="flex justify-between items-end gap-2">
                      <p id="peer-kpi-completion" class="font-headline font-extrabold text-4xl">{{ number_format($kpiCompletion, 1) }}%</p>
-                     @if(isset($kpi['completion_rate_delta_pp']) && $kpi['completion_rate_delta_pp'] !== null)
-                     <span id="peer-kpi-completion-delta" class="text-[11px] font-bold shrink-0 {{ ($kpi['completion_rate_delta_pp'] ?? 0) >= 0 ? 'text-[#16a34a]' : 'text-error' }}">{{ ($kpi['completion_rate_delta_pp'] ?? 0) >= 0 ? '+' : '' }}{{ number_format((float) $kpi['completion_rate_delta_pp'], 1) }} p.p.</span>
+                     @if(isset($kpi['kelompok_kerja_completion_rate_delta_pp']) && $kpi['kelompok_kerja_completion_rate_delta_pp'] !== null)
+                     <span id="peer-kpi-completion-delta" class="text-[11px] font-bold shrink-0 {{ ($kpi['kelompok_kerja_completion_rate_delta_pp'] ?? 0) >= 0 ? 'text-[#16a34a]' : 'text-error' }}">{{ ($kpi['kelompok_kerja_completion_rate_delta_pp'] ?? 0) >= 0 ? '+' : '' }}{{ number_format((float) $kpi['kelompok_kerja_completion_rate_delta_pp'], 1) }} p.p.</span>
                      @else
                      <span id="peer-kpi-completion-delta" class="text-[11px] font-bold text-on-surface-variant shrink-0">—</span>
                      @endif
                   </div>
-                  <p id="peer-kpi-completion-hint" class="text-on-surface-variant text-[10px] font-medium mt-1">{{ ($chartPeriodMonth ?? false) ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian pada bulan yang dipilih' : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (seluruh data)' }}</p>
+                  <p id="peer-kpi-completion-hint" class="text-on-surface-variant text-[10px] font-medium mt-1">{{ ($chartPeriodMonth ?? false) ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline) pada bulan yang dipilih' : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline)' }}</p>
                   <div class="w-full bg-[#f1f5f9] h-2 rounded-full mt-3 overflow-hidden border border-outline-variant/10">
                      <div id="peer-kpi-completion-bar" class="bg-[#16a34a] h-full rounded-full transition-all" style="width: {{ $kpiBarW }}%"></div>
                   </div>
@@ -2193,8 +2193,8 @@
           if (hintEl && periodScope) {
             hintEl.textContent =
               periodScope === 'month'
-                ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian pada bulan yang dipilih'
-                : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (seluruh data)';
+                ? 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline) pada bulan yang dipilih'
+                : 'Selesai (CLOSED/SELESAI) ÷ total kejadian (7 kontraktor · sama baseline)';
           }
           var totalEl = document.getElementById('peer-kpi-total');
           var trendEl = document.getElementById('peer-kpi-total-trend');
@@ -2230,11 +2230,11 @@
             }
           }
           if (compEl) {
-            var cr = Number(kpi.completion_rate != null ? kpi.completion_rate : 0);
+            var cr = Number(kpi.kelompok_kerja_completion_rate != null ? kpi.kelompok_kerja_completion_rate : 0);
             compEl.textContent = (isNaN(cr) ? 0 : cr).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
           }
           if (deltaEl) {
-            var d = kpi.completion_rate_delta_pp;
+            var d = kpi.kelompok_kerja_completion_rate_delta_pp;
             if (d !== null && d !== undefined && !isNaN(Number(d))) {
               var dn = Number(d);
               deltaEl.className =
@@ -2246,7 +2246,7 @@
             }
           }
           if (barEl) {
-            var w = Number(kpi.completion_rate != null ? kpi.completion_rate : 0);
+            var w = Number(kpi.kelompok_kerja_completion_rate != null ? kpi.kelompok_kerja_completion_rate : 0);
             if (isNaN(w)) w = 0;
             w = Math.min(100, Math.max(0, w));
             barEl.style.width = w + '%';
