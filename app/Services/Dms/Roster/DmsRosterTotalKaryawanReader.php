@@ -12,44 +12,43 @@ use Throwable;
 /**
  * Angka ringkasan karyawan untuk halaman Ringkasan Roster.
  *
- * Kartu "Total Karyawan" TIDAK lagi menghitung seluruh karyawan wajib dicek
- * (dms_roster_karyawan apa adanya) — sekarang hanya SID yang punya minimal
- * satu hari jadwal Master Roster (APPROVED) dengan jam kerja melebihi
- * ambang config dms_roster.total_karyawan.jam_kerja_lebih_jam (lihat
- * DmsRosterJamKerjaLebihCache). Breakdown WP grup & per-site di bawahnya
- * ikut disaring ke kohort yang sama supaya semua angka di kartu konsisten.
+ * Dibaca dari tabel lokal dms_roster_karyawan, BUKAN langsung dari OLAP.
+ * Sebelumnya kedua query ini menembak Postgres tiap kali halaman dibuka —
+ * lambat, dan sering gagal karena koneksi OLAP putus-sambung. Sekarang
+ * seluruh kolom yang dibutuhkan (wp_grup, simper_aktif, wajib_cek, site)
+ * sudah diisi tahap 1 sinkronisasi, jadi halaman cukup membaca MySQL.
  *
- * Identitas/WP grup/SIMPER/site tetap dibaca dari dms_roster_karyawan (sudah
- * diisi tahap 1 sinkronisasi) — hanya daftar SID yang disaring dulu dari
- * cache jam kerja roster, bukan query langsung ke OLAP.
+ * Isi tabelnya:
+ *   - seluruh baris  = karyawan AKTIF berjabatan operator/driver & mekanik
+ *   - wajib_cek=true = yang juga punya SIMPER aktif → inilah base yang dinilai
+ *
+ * 'jam_kerja_lebih' ditambahkan di sebelah total (bukan menggantikannya):
+ * jumlah SID dari base yang sama yang punya minimal satu hari jadwal Master
+ * Roster (APPROVED) dengan jam kerja > ambang config
+ * dms_roster.total_karyawan.jam_kerja_lebih_jam — lihat DmsRosterJamKerjaLebihCache.
  *
  * Mengembalikan null bila tabel belum terisi, supaya halaman jatuh ke angka
  * contoh alih-alih menampilkan nol yang menyesatkan.
  */
 final class DmsRosterTotalKaryawanReader
 {
-    private const CACHE_KEY = 'dms_roster:total_karyawan:v3';
+    private const CACHE_KEY = 'dms_roster:total_karyawan:v4';
 
-    private const CACHE_KEY_SITE = 'dms_roster:total_karyawan_site:v3';
+    private const CACHE_KEY_SITE = 'dms_roster:total_karyawan_site:v2';
 
     /**
      * @return array{
      *     total: int,
      *     punya_simper_aktif: int,
      *     tanpa_simper: int,
+     *     jam_kerja_lebih: int,
      *     kelompok: list<array{kelompok:string,total:int,punya_simper_aktif:int,tanpa_simper:int}>,
      * }|null
      */
     public function ambil(): ?array
     {
         return $this->cache(self::CACHE_KEY, function (): ?array {
-            $sidLebih = DmsRosterJamKerjaLebihCache::sidLebih();
-            if ($sidLebih === []) {
-                return null;
-            }
-
             $ringkas = DB::table('dms_roster_karyawan')
-                ->whereRaw('UPPER(TRIM(kode_sid)) IN ('.implode(',', array_fill(0, count($sidLebih), '?')).')', $sidLebih)
                 ->selectRaw('COUNT(*) AS total')
                 ->selectRaw('SUM(simper_aktif = 1) AS punya_simper')
                 ->first();
@@ -62,7 +61,6 @@ final class DmsRosterTotalKaryawanReader
             $punyaSimper = (int) ($ringkas->punya_simper ?? 0);
 
             $perGrup = DB::table('dms_roster_karyawan')
-                ->whereRaw('UPPER(TRIM(kode_sid)) IN ('.implode(',', array_fill(0, count($sidLebih), '?')).')', $sidLebih)
                 ->groupBy('wp_grup')
                 ->selectRaw('wp_grup')
                 ->selectRaw('COUNT(*) AS total')
@@ -86,10 +84,18 @@ final class DmsRosterTotalKaryawanReader
                 ];
             }
 
+            // Dari base karyawan AKTIF yang sama (dms_roster_karyawan), berapa yang
+            // punya minimal satu hari jam kerja roster > ambang (DmsRosterJamKerjaLebihCache).
+            $sidLebih = DmsRosterJamKerjaLebihCache::sidLebih();
+            $jamKerjaLebih = $sidLebih === [] ? 0 : (int) DB::table('dms_roster_karyawan')
+                ->whereRaw('UPPER(TRIM(kode_sid)) IN ('.implode(',', array_fill(0, count($sidLebih), '?')).')', $sidLebih)
+                ->count();
+
             return [
                 'total' => $total,
                 'punya_simper_aktif' => $punyaSimper,
                 'tanpa_simper' => $total - $punyaSimper,
+                'jam_kerja_lebih' => $jamKerjaLebih,
                 'kelompok' => $kelompok,
             ];
         });
@@ -108,15 +114,9 @@ final class DmsRosterTotalKaryawanReader
     public function perSite(): ?array
     {
         return $this->cache(self::CACHE_KEY_SITE, function (): ?array {
-            $sidLebih = DmsRosterJamKerjaLebihCache::sidLebih();
-            if ($sidLebih === []) {
-                return null;
-            }
-
             $kunci = $this->urutanTampil();
 
             $q = DB::table('dms_roster_karyawan')
-                ->whereRaw('UPPER(TRIM(kode_sid)) IN ('.implode(',', array_fill(0, count($sidLebih), '?')).')', $sidLebih)
                 ->selectRaw("COALESCE(NULLIF(TRIM(site), ''), '(tanpa site)') AS site")
                 ->selectRaw('SUM(simper_aktif = 1) AS total')
                 ->selectRaw('COUNT(*) AS total_aktif')

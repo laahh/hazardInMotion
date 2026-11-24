@@ -242,9 +242,8 @@
                   <iconify-icon icon="solar:users-group-rounded-bold" class="icon"></iconify-icon>
                 </span>
                 <div>
-                  <span class="text-secondary-light fw-medium text-sm d-block mb-2"
-                        title="Karyawan dengan minimal satu hari jadwal Master Roster (disetujui) yang jam kerjanya > {{ config('dms_roster.total_karyawan.jam_kerja_lebih_jam', 11) }} jam">
-                    Jam Kerja &gt; {{ config('dms_roster.total_karyawan.jam_kerja_lebih_jam', 11) }} Jam
+                  <span class="text-secondary-light fw-medium text-sm d-block mb-2">
+                    Total Karyawan
                     @if ($live)
                       <span class="text-success-600 fw-semibold" title="Diambil langsung dari database">&middot; live</span>
                       {{-- <span class="d-block" style="font-size:10.5px">punya SIMPER aktif</span> --}}
@@ -276,6 +275,12 @@
                     {{ $g['kelompok'] }}: <b class="text-primary-light">{{ number_format($g['punya_simper_aktif'], 0, ',', '.') }}</b>
                   </span>
                 @endforeach
+                @if (isset($live['jam_kerja_lebih']))
+                  <span class="bg-warning-focus text-warning-main px-10 py-2 radius-8 text-xs fw-medium"
+                        title="Dari {{ number_format($live['total'], 0, ',', '.') }} karyawan aktif, punya minimal satu hari jadwal Master Roster (disetujui) dengan jam kerja > {{ config('dms_roster.total_karyawan.jam_kerja_lebih_jam', 11) }} jam">
+                    Jam Kerja &gt; {{ config('dms_roster.total_karyawan.jam_kerja_lebih_jam', 11) }} Jam: <b>{{ number_format($live['jam_kerja_lebih'], 0, ',', '.') }}</b>
+                  </span>
+                @endif
               </div>
               {{-- <div class="text-secondary-light text-xs mt-8">
                 Karyawan AKTIF berjabatan operator/driver &amp; mekanik (daftar jabatan di
