@@ -300,9 +300,15 @@
     const out = [];
     ROWS.forEach((r) => {
       const perNama = {};
-      r.pja.forEach((p) => p.perusahaan.forEach((nama) => {
-        (perNama[nama] || (perNama[nama] = {}))[p.site + ' · ' + p.lokasi] = true;
-      }));
+      r.pja.forEach((p) => {
+        // "Lokasi" di pov ini = lokasi + detail lokasi (M06, label SAP yang sama dipakai di /master/grup) yang
+        // benar-benar menghubungkan grup baris ini ke PJA/perusahaan itu — rantai PJA → lokasi/detail lokasi →
+        // aktivitas yang sudah termapping di master/grup (keputusan user 24 Nov 2026).
+        const label = p.site + ' · ' + p.lokasi + (p.detail && p.detail.length ? ' (' + p.detail.join(', ') + ')' : '');
+        p.perusahaan.forEach((nama) => {
+          (perNama[nama] || (perNama[nama] = {}))[label] = true;
+        });
+      });
       Object.keys(perNama).forEach((nama) => {
         out.push({ ...r, perusahaan: nama, lok: Object.keys(perNama[nama]).sort() });
       });

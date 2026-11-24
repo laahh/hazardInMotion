@@ -204,6 +204,7 @@ class DrmMasterBarisUnggahTest extends TestCase
     {
         DB::table('drm_master_dl')->insert([
             ['site' => 'LMO', 'lokasi' => 'Pit A', 'detail' => 'Front', 'gid' => 2, 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'detail' => 'Workshop', 'gid' => 2, 'aktif' => true],
             ['site' => 'LMO', 'lokasi' => 'Pit B', 'detail' => 'Front', 'gid' => 1, 'aktif' => true],
         ]);
         DB::table('drm_master_lokasi_pja')->insert([
@@ -218,13 +219,15 @@ class DrmMasterBarisUnggahTest extends TestCase
 
         // ri 1: grup 1 (Pit B) + grup 2 (Pit A) → DIRINCI per lokasi (bukan digabung rata), masing-masing dengan
         // daftar perusahaannya sendiri; Pit A punya 2 PJA (BC + PT Mitra Jaya) tetap ditampilkan satu entri lokasi.
+        // "detail" = nama detail lokasi (M06) yang benar-benar menghubungkan grup baris ini ke lokasi tsb — rantai
+        // PJA → lokasi/detail lokasi → aktivitas yang sama dipetakan di /master/grup (keputusan user 24 Nov 2026).
         $this->assertSame([1 => [
-            ['site' => 'LMO', 'lokasi' => 'Pit A', 'perusahaan' => ['BC', 'PT Mitra Jaya']],
-            ['site' => 'LMO', 'lokasi' => 'Pit B', 'perusahaan' => ['BC', 'PT Kontraktor B']],
+            ['site' => 'LMO', 'lokasi' => 'Pit A', 'detail' => ['Front', 'Workshop'], 'perusahaan' => ['BC', 'PT Mitra Jaya']],
+            ['site' => 'LMO', 'lokasi' => 'Pit B', 'detail' => ['Front'], 'perusahaan' => ['BC', 'PT Kontraktor B']],
         ]], $u->perusahaanPerBaris());
         $this->assertSame([1], array_column($u->ekspor(['pja' => 'PT Kontraktor B'], []), 'ri'));
         $this->assertSame([], array_column($u->ekspor(['pja' => 'PT Tidak Terpakai'], []), 'ri'));
-        $this->assertSame("LMO · Pit A: BC, PT Mitra Jaya\nLMO · Pit B: BC, PT Kontraktor B", $u->ekspor(['pja' => 'BC'], [])[0]['pja']);
+        $this->assertSame("LMO · Pit A (Front, Workshop): BC, PT Mitra Jaya\nLMO · Pit B (Front): BC, PT Kontraktor B", $u->ekspor(['pja' => 'BC'], [])[0]['pja']);
     }
 
     /** @return array{0: DrmMasterBarisUnggah, 1: DrmMasterBarisExcel, 2: string} */

@@ -97,7 +97,13 @@ final class DrmMasterBarisUnggah
      * PERSONIL PJA (drm_master_lokasi_pja.perusahaan, diisi dari ClickHouse personil lewat
      * `peta-risiko:master-db --isi` — lihat DrmSql::perusahaanPerPja), BUKAN nama PJA itu sendiri.
      *
-     * @return array<int, list<array{site: string, lokasi: string, perusahaan: list<string>}>>  ri => rincian per (site, lokasi)
+     * Ikut disertakan nama Detail Lokasi (M06 drm_master_dl.detail — label SAP granular yang sama dipakai di
+     * /master/grup) yang benar-benar menghubungkan grup baris ini ke lokasi tersebut (bukan sekadar sama
+     * site+lokasi di grup lain yang tak terkait), supaya rantai PJA → lokasi/detail lokasi → aktivitas yang
+     * sudah termapping di /master/grup tetap kelihatan utuh di pov Perusahaan (keputusan user 24 Nov 2026).
+     * PJA/perusahaan sendiri melekat di level LOKASI (bukan detail) — detail lokasi mewarisi (lihat M07/M08).
+     *
+     * @return array<int, list<array{site: string, lokasi: string, detail: list<string>, perusahaan: list<string>}>>  ri => rincian per (site, lokasi)
      */
     public function perusahaanPerBaris(): array
     {
@@ -112,25 +118,28 @@ final class DrmMasterBarisUnggah
                 $pjaPerLokasi[$kunci]['perusahaan'][$nama] = true;
             }
         }
-        // Grup → kunci (site, lokasi) yang detail lokasinya aktif DAN punya data perusahaan.
-        $lokasiPerGrup = [];
-        foreach (DB::table('drm_master_dl')->where('aktif', true)->select('gid', 'site', 'lokasi')->distinct()->get() as $d) {
+        // gid → kunci (site, lokasi) → nama detail lokasi aktif di grup itu, HANYA untuk lokasi yang punya data perusahaan.
+        $detailPerGrupLokasi = [];
+        foreach (DB::table('drm_master_dl')->where('aktif', true)->select('gid', 'site', 'lokasi', 'detail')->get() as $d) {
             $kunci = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi));
             if (isset($pjaPerLokasi[$kunci])) {
-                $lokasiPerGrup[(int) $d->gid][$kunci] = true;
+                $detailPerGrupLokasi[(int) $d->gid][$kunci][trim((string) $d->detail)] = true;
             }
         }
         $hasil = [];
         foreach (DB::table('drm_master_grup_baris')->get(['gid', 'ri']) as $g) {
-            $hasil[(int) $g->ri] = ($hasil[(int) $g->ri] ?? []) + ($lokasiPerGrup[(int) $g->gid] ?? []);
+            foreach ($detailPerGrupLokasi[(int) $g->gid] ?? [] as $kunci => $detailSet) {
+                $hasil[(int) $g->ri][$kunci] = array_unique(array_merge($hasil[(int) $g->ri][$kunci] ?? [], array_keys($detailSet)));
+            }
         }
 
-        return array_map(function (array $kunciSet) use ($pjaPerLokasi) {
+        return array_map(function (array $perLokasi) use ($pjaPerLokasi) {
             $out = [];
-            foreach (array_keys($kunciSet) as $kunci) {
+            foreach ($perLokasi as $kunci => $detail) {
                 $nama = array_keys($pjaPerLokasi[$kunci]['perusahaan']);
                 sort($nama, SORT_NATURAL | SORT_FLAG_CASE);
-                $out[] = ['site' => $pjaPerLokasi[$kunci]['site'], 'lokasi' => $pjaPerLokasi[$kunci]['lokasi'], 'perusahaan' => $nama];
+                sort($detail, SORT_NATURAL | SORT_FLAG_CASE);
+                $out[] = ['site' => $pjaPerLokasi[$kunci]['site'], 'lokasi' => $pjaPerLokasi[$kunci]['lokasi'], 'detail' => $detail, 'perusahaan' => $nama];
             }
             usort($out, fn ($a, $b) => [$a['site'], $a['lokasi']] <=> [$b['site'], $b['lokasi']]);
 
@@ -228,7 +237,8 @@ final class DrmMasterBarisUnggah
                     continue 2;
                 }
             }
-            $teksPja = implode("\n", array_map(fn ($p) => $p['site'].' · '.$p['lokasi'].': '.implode(', ', $p['perusahaan']), $pja));
+            $teksPja = implode("\n", array_map(fn ($p) => $p['site'].' · '.$p['lokasi']
+                .(($p['detail'] ?? []) ? ' ('.implode(', ', $p['detail']).')' : '').': '.implode(', ', $p['perusahaan']), $pja));
             $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'site' => implode("\n", $site), 'pja' => $teksPja,
                 'kelompok' => (string) ($kelompok[$b['aid']] ?? ''), 'versi' => DrmMasterBarisExcel::versi($b)];
         }
