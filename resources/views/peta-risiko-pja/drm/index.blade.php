@@ -1679,8 +1679,8 @@
     const panel = $('#dr-panel-pja');
     if (!formatBaru()) { panel.innerHTML = pesanLama(); return; }
     const semua = dataPja();
-    const diSite = semua.filter((o) => (state.site === 'ALL' || o.site === state.site)
-      && (state.perusahaan === 'ALL' || (o.perusahaan || []).includes(state.perusahaan)));
+    const diPerusahaan = state.perusahaan === 'ALL' ? semua : semua.filter((o) => (o.perusahaan || []).includes(state.perusahaan));
+    const diSite = diPerusahaan.filter((o) => (state.site === 'ALL' || o.site === state.site));
     const tampil = diSite.filter((o) => (state.pri === 'all' || o.pri === state.pri) && (!state.cari || o.nama.toLowerCase().includes(state.cari)));
     const urut = {
       skor: (a, b) => b.skor - a.skor || (b.tot - b.full) - (a.tot - a.full), gap: (a, b) => b.gr - a.gr, gapn: (a, b) => (b.tot - b.full) - (a.tot - a.full),
@@ -1706,7 +1706,7 @@
         ${kpi(W.part, '#9A7300', 'Terkontrol sebagian', pctI(B.part, B.t), `${DR.fmt(B.part)} baris · gap total ${pctI(G, B.t)}`, 'part')}
         ${kpi(W.none, W.bm, 'Tanpa laporan', pctI(B.none, B.t), `${DR.fmt(B.none)} baris${B.gapo ? ` · ${DR.fmt(B.gapo)} hanya bermasalah` : ''}`, 'none')}
       </div>`)
-      + tabelSite(semua, wk) + tabelDaftar(tampil, semua.length, wk);
+      + tabelSite(diPerusahaan, wk) + tabelDaftar(tampil, semua.length, wk);
 
     panel.querySelectorAll('tr[data-site]').forEach((tr) => tr.addEventListener('click', () => {
       state.site = state.site === tr.dataset.site ? 'ALL' : tr.dataset.site; $('#dr-site').value = state.site; render();
