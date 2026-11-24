@@ -2,12 +2,6 @@
 
 @section('title', 'Alur Baseline · Peta Risiko PJA')
 
-@section('hero-aksi')
-  <a class="pr-back" href="{{ route('peta-risiko-pja.index') }}"><span class="material-symbols-outlined" style="font-size:18px">dashboard</span> Dashboard</a>
-  <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}"><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup lokasi & aktivitas</a>
-  <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}"><span class="material-symbols-outlined" style="font-size:18px">table_rows</span> Master per baris</a>
-@endsection
-
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Peta Risiko PJA</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Alur baseline</span></p>
   <h1 class="pr-title">Alur baseline: dari aktivitas sampai PJA</h1>

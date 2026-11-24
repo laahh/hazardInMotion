@@ -1,13 +1,26 @@
 {{--
   Layout Peta Risiko PJA (DRM 2.1) dengan konsep template /peer-pressure-edukasi/dashboard-peer.
+  Navigasi SATU bilah (keputusan user 24 Nov 2026 — sebelumnya nav tab + hero-aksi berisi tautan balik yang
+  sama-sama "navigasi" tumpang tindih di satu bilah, bikin orang tersesat): baris 1 = 4 bagian besar (Dashboard /
+  Master Mapping / Alur Baseline / Versi Lama), baris 2 = sub-tab bagian yang sedang aktif. Halaman detail
+  (pja.blade.php, master-baris-unggah.blade.php) boleh tetap punya SATU tautan "kembali" kontekstual di
+  hero-aksi; itu bukan navigasi umum jadi tidak didobel dengan bilah ini.
   Section:
-    nav          menu di bilah atas (halaman indeks mengisi dengan tombol tab; bawaan: tautan ke tab indeks)
-    hero-aksi    tombol di kanan bilah atas
+    hero-aksi    tombol aksi KONTEKSTUAL di kanan bilah atas (unduh, kembali ke item asal) — bukan navigasi umum
+    nav          HANYA dipakai halaman Dashboard (index.blade.php) untuk tombol sub-tab sudut pandang (.dr-tabs)
     hero         breadcrumb (.pr-kicker), judul (.pr-title), subjudul (.pr-sub)
     header-aksi  filter / tombol di kanan judul halaman
     content, scripts
   Halaman arsip (versi lama) tetap memakai _layout.
 --}}
+@php
+  $grupNavAktif = match (true) {
+    request()->routeIs('peta-risiko-pja.master.*') => 'master',
+    request()->routeIs('peta-risiko-pja.korelasi.*') => 'korelasi',
+    request()->routeIs('peta-risiko-pja.arsip.*') => 'arsip',
+    default => 'dashboard',
+  };
+@endphp
 <!doctype html>
 <html lang="id">
 <head>
@@ -33,17 +46,32 @@
         <div><b>PT. Berau Coal</b><span></span></div>
       </a>
       <div class="tp-sep" aria-hidden="true"></div>
-      @hasSection('nav')
-        @yield('nav')
-      @else
-        <nav class="tp-nav" aria-label="Menu Peta Risiko PJA">
-          @foreach (['site' => 'Overview', 'grup' => 'Per Group Lokasi', 'proses' => 'Per Kelompok Aktivitas', 'pja' => 'Semua PJA', 'bpja' => 'Beranda PJA'] as $tab => $label)
-            <a href="{{ route('peta-risiko-pja.index', ['tab' => $tab]) }}">{{ $label }}</a>
-          @endforeach
-        </nav>
-      @endif
+      <nav class="tp-nav" aria-label="Bagian Peta Risiko PJA">
+        <a href="{{ route('peta-risiko-pja.index') }}" @if ($grupNavAktif === 'dashboard') aria-current="page" @endif>Dashboard</a>
+        <a href="{{ route('peta-risiko-pja.master.index') }}" @if ($grupNavAktif === 'master') aria-current="page" @endif>Master Mapping</a>
+        <a href="{{ route('peta-risiko-pja.korelasi.index') }}" @if ($grupNavAktif === 'korelasi') aria-current="page" @endif>Alur Baseline</a>
+        <a href="{{ route('peta-risiko-pja.arsip.index') }}" @if ($grupNavAktif === 'arsip') aria-current="page" @endif>Versi Lama</a>
+      </nav>
       <div class="tp-aksi">@yield('hero-aksi')</div>
     </div>
+    @if ($grupNavAktif === 'master' || request()->routeIs('peta-risiko-pja.index'))
+      <div class="tp-subbar">
+        <div class="tp-subbar-in">
+          @if ($grupNavAktif === 'master')
+            <nav class="tp-subnav" aria-label="Master Mapping">
+              <a href="{{ route('peta-risiko-pja.master.index') }}" @if (request()->routeIs('peta-risiko-pja.master.index')) aria-current="page" @endif>Tabel Master</a>
+              <a href="{{ route('peta-risiko-pja.master.baris.index') }}" @if (request()->routeIs('peta-risiko-pja.master.baris.*')) aria-current="page" @endif>Master per Baris</a>
+              <a href="{{ route('peta-risiko-pja.master.grup.index') }}" @if (request()->routeIs('peta-risiko-pja.master.grup.*')) aria-current="page" @endif>Grup Lokasi &amp; Aktivitas</a>
+              @if (\App\Services\PetaRisiko\Drm\Master\DrmMasterDb::siap())
+                <a href="{{ route('peta-risiko-pja.master.log') }}" @if (request()->routeIs('peta-risiko-pja.master.log')) aria-current="page" @endif>Riwayat</a>
+              @endif
+            </nav>
+          @else
+            @yield('nav')
+          @endif
+        </div>
+      </div>
+    @endif
   </header>
   <main class="pr-main tp-main">
     <div class="tp-head">
