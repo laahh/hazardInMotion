@@ -236,6 +236,7 @@
             'malam' => $r['malam'],
             'off' => $r['off'],
             'cuti' => $r['cuti'],
+            'jamKerjaMenit' => $r['jamKerjaMenit'] ?? 0,
             'shiftMaks' => $r['shiftMaks'],
             'onsiteMaks' => $r['onsiteMaks'],
             'cutiMin' => $r['cutiMin'],
