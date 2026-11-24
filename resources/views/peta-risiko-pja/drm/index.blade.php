@@ -2,12 +2,6 @@
 
 @section('title', 'Peta Risiko PJA')
 
-@section('hero-aksi')
-  @if ($adaExcel)
-    <a class="pr-back" href="{{ route('peta-risiko-pja.unduh.mapping') }}"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh Excel mapping</a>
-  @endif
-@endsection
-
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Peta Risiko PJA</span></p>
   <h1 class="pr-title">Bahaya-risiko HIRA yang sudah teridentifikasi oleh SAP</h1>

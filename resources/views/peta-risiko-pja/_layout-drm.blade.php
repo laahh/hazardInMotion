@@ -54,11 +54,7 @@
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.index') }}" @if (request()->routeIs('peta-risiko-pja.master.index')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">table_view</span> Tabel Master</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}" @if (request()->routeIs('peta-risiko-pja.master.baris.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">view_list</span> Master per Baris</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}" @if (request()->routeIs('peta-risiko-pja.master.grup.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup Lokasi &amp; Aktivitas</a>
-          @if (\App\Services\PetaRisiko\Drm\Master\DrmMasterDb::siap())
-            <a class="pr-back" href="{{ route('peta-risiko-pja.master.log') }}" @if (request()->routeIs('peta-risiko-pja.master.log')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">history</span> Riwayat</a>
-          @endif
           <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}" @if (request()->routeIs('peta-risiko-pja.korelasi.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">alt_route</span> Alur Baseline</a>
-          <a class="pr-back" href="{{ route('peta-risiko-pja.arsip.index') }}" @if (request()->routeIs('peta-risiko-pja.arsip.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">inventory_2</span> Versi Lama</a>
         </nav>
       </div>
     </div>
