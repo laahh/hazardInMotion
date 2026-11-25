@@ -164,6 +164,9 @@
   #mg-tabel_wrapper .dt-layout-row { padding: 10px 20px; margin: 0; }
   #mg-tabel_wrapper .dt-length select { border-radius: 8px; padding: 4px 8px; }
   table.mg-tbl.dataTable > thead > tr > th { padding: 10px 12px; }
+  /* Kotak cari bawaan DataTables disembunyikan: dobel dengan #mg-cari di toolbar (koreksi 2026-11-25 — #mg-cari
+     dulu tidak tersambung ke apa pun, jadi kata yang diketik di situ tidak ikut menyaring tabel maupun unduhan). */
+  #mg-tabel_wrapper .dt-search { display: none; }
 </style>
 {{-- DataTables 2 tetap butuh jQuery; layout _layout-drm tidak memuatnya. --}}
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -359,8 +362,15 @@
   }
 
   [fKb, fKel, fGrup, fSite, fPja].forEach((el) => el.addEventListener('change', () => { tabel.draw(); if (el === fGrup) tampilkanDl(); }));
+
+  // Kotak cari di toolbar (koreksi 2026-11-25: dulu tidak tersambung ke tabel/unduhan sama sekali — lihat CSS
+  // #mg-tabel_wrapper .dt-search di atas).
+  const fCari = document.getElementById('mg-cari');
+  let tCari = 0;
+  fCari.addEventListener('input', () => { clearTimeout(tCari); tCari = setTimeout(() => tabel.search(fCari.value).draw(), 200); });
+
   document.getElementById('mg-reset').addEventListener('click', () => {
-    fKb.value = ''; fKel.value = ''; fGrup.value = ''; fSite.value = ''; fPja.value = '';
+    fKb.value = ''; fKel.value = ''; fGrup.value = ''; fSite.value = ''; fPja.value = ''; fCari.value = '';
     tampilkanDl();
     tabel.search('').order([BOLEH ? 1 : 0, 'asc']).page(0).draw();
   });
