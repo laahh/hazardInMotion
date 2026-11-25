@@ -8,16 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmKorelasi;
 use App\Services\PetaRisiko\Drm\Master\DrmAlurEdit;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
-use App\Support\SpreadsheetExporter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use InvalidArgumentException;
-use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Alur baseline DRM 2.1 (/peta-risiko-pja/korelasi): aktivitas → sub aktivitas → bahaya-risiko → label SAP →
@@ -50,76 +45,46 @@ final class PetaRisikoKorelasiController extends Controller
         }
     }
 
-    /** Header unduhan korelasi, dipakai di newKorelasiSpreadsheet() dan unduh(). */
+    /** Header unduhan korelasi, dipakai di unduh(). */
     private const HEADER_UNDUH = [
         'ID baris', 'Aktivitas HIRA', 'Kelompok aktivitas', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal',
         'Jenis label', 'Label SAP', 'Grup lokasi', 'Detail lokasi', 'PJA',
     ];
 
     /**
-     * Unduh Excel flat (1 baris = 1 label / 1 jalur lokasi, tidak ada sel digabung — lihat DrmKorelasi::eksporSemua),
-     * SEMUA aktivitas, bukan cuma fokus yang sedang dibuka di diagram.
+     * Unduh CSV flat (1 baris = 1 label / 1 jalur lokasi, tidak ada sel digabung — lihat
+     * DrmKorelasi::eksporSemuaLazy), SEMUA aktivitas, bukan cuma fokus yang sedang dibuka di diagram.
      *
-     * Sengaja TIDAK memakai SpreadsheetExporter::createSheetWithHeaders() (menyalakan setAutoSize per kolom —
-     * pada ekspor sebesar ini PhpSpreadsheet mengukur ulang lebar TIAP sel dan bisa timeout, lihat keluhan user
-     * 25 Nov 2026; lebar kolom di sini dipatok manual, pola yang sama dengan RoadSummaryController::newExportSpreadsheet).
-     * Ditulis per potongan 2000 baris (fromArray banyak sekaligus jauh lebih murah daripada satu per baris).
+     * CSV streaming, BUKAN Xlsx (koreksi 2026-11-25, setelah unduhan Xlsx kehabisan memori 2 GB): seluruh
+     * baseline × grup × lokasi × PJA bisa pecah jadi jutaan baris, dan PhpSpreadsheet (Xlsx) selalu menyimpan
+     * semua sel di memori sebelum menulis berkas — tidak ada cara menuliskannya langsung ke output seperti CSV.
+     * fputcsv per baris dari generator ini membuat memori tetap datar berapa pun totalnya (pola yang sama dengan
+     * RoadSummaryController::streamCsv() untuk ekspor besar lain di aplikasi ini).
      */
-    public function unduh(): Response
+    public function unduh(): StreamedResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
-        set_time_limit(0);
-        $this->raiseMemoryLimitTo(512);
-        $baris = $this->korelasi->eksporSemua();
-        $spreadsheet = $this->newKorelasiSpreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $baris = array_map(fn ($b) => [$b['ri'], $b['aktivitas'], $b['kelompok'], $b['sub'], $b['bahaya'], $b['kb'],
-            $b['jenis_label'], $b['label'], $b['grup'], $b['dl'], $b['pja']], $baris);
-        foreach (array_chunk($baris, 2000) as $i => $potong) {
-            $sheet->fromArray($potong, null, 'A'.(2 + $i * 2000));
-        }
 
-        SpreadsheetExporter::download($spreadsheet, 'peta-risiko-korelasi-semua-'.now()->format('Ymd-His').'.xlsx');
-    }
-
-    private function newKorelasiSpreadsheet(): Spreadsheet
-    {
-        $lebar = [10, 28, 18, 24, 42, 13, 16, 36, 24, 32, 24];
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->fromArray(self::HEADER_UNDUH, null, 'A1');
-        $lastCol = Coordinate::stringFromColumnIndex(count(self::HEADER_UNDUH));
-        $sheet->getStyle('A1:'.$lastCol.'1')->applyFromArray([
-            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
-            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        return response()->stream(function (): void {
+            set_time_limit(0);
+            $out = fopen('php://output', 'wb');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, self::HEADER_UNDUH, ';');
+            $ditulis = 0;
+            foreach ($this->korelasi->eksporSemuaLazy() as $b) {
+                fputcsv($out, [$b['ri'], $b['aktivitas'], $b['kelompok'], $b['sub'], $b['bahaya'], $b['kb'],
+                    $b['jenis_label'], $b['label'], $b['grup'], $b['dl'], $b['pja']], ';');
+                if ((++$ditulis % 5000) === 0) {
+                    flush();
+                }
+            }
+            fclose($out);
+        }, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="peta-risiko-korelasi-semua-'.now()->format('Ymd-His').'.csv"',
+            'Cache-Control' => 'no-store, no-cache',
+            'X-Accel-Buffering' => 'no',
         ]);
-        foreach ($lebar as $i => $w) {
-            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i + 1))->setWidth($w);
-        }
-        $sheet->freezePane('A2');
-
-        return $spreadsheet;
-    }
-
-    /** Naikkan memory_limit ke $megabytes bila saat ini lebih rendah (tidak pernah menurunkan). */
-    private function raiseMemoryLimitTo(int $megabytes): void
-    {
-        $current = trim((string) ini_get('memory_limit'));
-        if ($current === '-1') {
-            return;
-        }
-        $unit = strtolower(substr($current, -1));
-        $value = (int) $current;
-        $currentMb = match ($unit) {
-            'g' => $value * 1024,
-            'm' => $value,
-            'k' => intdiv($value, 1024),
-            default => intdiv($value, 1048576),
-        };
-        if ($currentMb < $megabytes) {
-            ini_set('memory_limit', $megabytes.'M');
-        }
     }
 
     public function cari(Request $request): JsonResponse

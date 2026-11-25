@@ -50,6 +50,8 @@
   .mg-dl { columns: 3 260px; font-size: 12.5px; color: #475569; padding: 4px 18px 16px; }
   .mg-dl div { break-inside: avoid; padding: 2px 0; }
   .mg-tbl td.hira2 { min-width: 160px; max-width: 220px; }
+  .mg-tbl td.loc { min-width: 150px; max-width: 220px; }
+  .mg-tbl td.loc .dr-pl-tag { display: inline-block; margin: 0 4px 4px 0; }
   /* Chip "Asal HIRA" + isi modal (sama konsep dengan Dashboard → Per Kelompok Aktivitas). */
   .dr-hira { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; max-width: 190px; padding: 4px 8px; border: 1px solid rgba(57, 82, 188, .2);
     border-radius: 8px; background: #f5f7ff; font-size: 12px; font-weight: 600; color: #2c2f31; cursor: pointer; text-align: left; }
@@ -103,6 +105,7 @@
         @endforeach
       </select>
       <button class="mg-btn sek" type="button" id="mg-reset">Reset filter</button>
+      <a class="mg-btn sek" id="mg-unduh" href="{{ route('peta-risiko-pja.master.grup.unduh') }}" title="Unduh baris yang sedang tersaring (filter + kata cari) sebagai CSV (bisa dibuka di Excel), satu baris satu grup/site/perusahaan (tidak digabung)"><span class="material-symbols-outlined" style="font-size:18px">download</span> Unduh CSV</a>
     </div>
 
     <div class="mg-bulk" id="mg-bulk">
@@ -129,7 +132,7 @@
       <table class="mg-tbl" id="mg-tabel" style="width:100%">
         <thead><tr>
           @if ($bolehUbah)<th style="width:30px"><input type="checkbox" id="mg-semua" aria-label="Pilih semua baris yang tampil"></th>@endif
-          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Asal HIRA</th><th>Kelompok aktivitas</th><th>Grup lokasi</th>
+          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Asal HIRA</th><th>Kelompok aktivitas</th><th>Grup lokasi</th><th>Site</th><th>Perusahaan</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -167,6 +170,7 @@
   const URL_HAPUS = @json(route('peta-risiko-pja.master.grup.baris', ['gid' => 0]));
   const URL_KELOMPOK = @json(route('peta-risiko-pja.master.grup.kelompok', ['aid' => 0]));
   const URL_HIRA = @json(route('peta-risiko-pja.hira.sumber'));
+  const URL_UNDUH = @json(route('peta-risiko-pja.master.grup.unduh'));
   const PETA_ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => PETA_ESC[c]);
   const urlTambah = (gid) => URL_TAMBAH.replace(/\/0\/tambah$/, '/' + gid + '/tambah');
@@ -265,6 +269,12 @@
     return isi + (BOLEH ? formTambahGrup(r.ri, d.map((g) => g.gid)) : '');
   } };
 
+  // Site & Perusahaan: info saja (lewat PJA di grup lokasi baris ini), tidak bisa diedit dari sini — lihat
+  // DrmMasterGrup::siteDanPerusahaanPerBaris. Tambah/keluarkan grup lokasi mengubah ini lewat peta-risiko:sync berikutnya.
+  const tagList = (d) => d.length ? d.map((x) => '<span class="dr-pl-tag">' + esc(x) + '</span>').join('') : '<span class="mg-kosong">-</span>';
+  const kolomSite = { data: 'site', orderable: false, className: 'loc', render: (d, type) => type !== 'display' ? d.join(' | ') : tagList(d) };
+  const kolomPerusahaan = { data: 'perusahaan', orderable: false, className: 'loc', render: (d, type) => type !== 'display' ? d.join(' | ') : tagList(d) };
+
   // Asal HIRA: chip "id · rev" + departemen singkat (diisi lewat AJAX setelah draw, lihat isiHira); klik → detail dokumen.
   const kolomHira = { data: 'ri', orderable: false, className: 'hira2',
     render: (d, type) => type === 'display' ? '<span class="dr-mute">…</span>' : d,
@@ -300,7 +310,7 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mg-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      kolomHira, kolomKelompok, kolomGrup,
+      kolomHira, kolomKelompok, kolomGrup, kolomSite, kolomPerusahaan,
     ],
     // Isi chip "Asal HIRA" halaman yang sedang tampil setiap draw (termasuk draw pertama saat tabel dibuat;
     // .on('draw', …) SETELAH new DataTable() sudah kelewat draw pertama karena draw itu terjadi sinkron di konstruktor).
@@ -342,6 +352,16 @@
     fKb.value = ''; fKel.value = ''; fGrup.value = '';
     tampilkanDl();
     tabel.search('').order([BOLEH ? 1 : 0, 'asc']).page(0).draw();
+  });
+
+  // Unduh Excel mengikuti filter + kata cari yang sedang aktif (disaring ulang di server dengan aturan yang sama).
+  document.getElementById('mg-unduh').addEventListener('click', (e) => {
+    const q = new URLSearchParams();
+    if (fKb.value) q.set('kb', fKb.value);
+    if (fKel.value) q.set('kelompok', fKel.value);
+    if (fGrup.value) q.set('grup', fGrup.value);
+    if (tabel.search()) q.set('q', tabel.search());
+    e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });
 
   // Deep-link dari Alur baseline (korelasi): ?gid=X membuka grup itu langsung.

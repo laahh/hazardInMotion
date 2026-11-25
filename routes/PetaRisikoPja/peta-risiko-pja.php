@@ -53,6 +53,7 @@ Route::prefix('peta-risiko-pja')
         // Master grup lokasi & aktivitas (M05 per aktivitas + kelompok aktivitas M02), didaftarkan sebelum /{tabel}.
         Route::prefix('master/grup')->name('master.grup.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoMasterGrupController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::get('/unduh', 'unduh')->middleware('throttle:20,1')->name('unduh');
             Route::post('/{gid}/tambah', 'tambah')->whereNumber('gid')->middleware('throttle:60,1')->name('tambah');
             Route::post('/{gid}/baris', 'ubahBaris')->whereNumber('gid')->middleware('throttle:60,1')->name('baris');
             Route::post('/aktivitas/{aid}/kelompok', 'kelompok')->whereNumber('aid')->middleware('throttle:60,1')->name('kelompok');

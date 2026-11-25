@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Master "Grup lokasi & aktivitas" (/peta-risiko-pja/master/grup): lihat dan edit M05 (grup lokasi → baris HIRA)
@@ -33,12 +34,58 @@ final class PetaRisikoMasterGrupController extends Controller
         if (! $data['siap']) {
             return view('peta-risiko-pja.drm.master-grup', $data);
         }
+        // Site & Perusahaan (lewat PJA): info tambahan per baris, keputusan user 25 Nov 2026.
+        $lokasi = $this->grup->siteDanPerusahaanPerBaris();
+        $rows = array_map(fn (array $r) => $r + ($lokasi[$r['ri']] ?? ['site' => [], 'perusahaan' => []]), $this->grup->semuaBaris());
 
         return view('peta-risiko-pja.drm.master-grup', $data + [
             'daftarGrup' => $this->grup->daftarGrup(),
-            'rows' => $this->grup->semuaBaris(),
+            'rows' => $rows,
             'dlPerGrup' => $this->grup->semuaDetailLokasi(),
             'kelompok' => $this->grup->kelompok(),
+        ]);
+    }
+
+    /** Header unduhan grup, dipakai di unduh(). */
+    private const HEADER_UNDUH = ['ID baris', 'Aktivitas HIRA', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal', 'Kelompok aktivitas', 'Grup lokasi', 'Site', 'Detail lokasi', 'Perusahaan'];
+
+    /**
+     * Unduh CSV flat (1 baris = 1 grup × site/lokasi/detail × perusahaan, lihat DrmMasterGrup::eksporBarisLazy),
+     * mengikuti filter yang sedang aktif di tabel.
+     *
+     * CSV streaming, BUKAN Xlsx (koreksi 2026-11-25, setelah unduhan serupa di /peta-risiko-pja/korelasi
+     * kehabisan memori 2 GB): grup × lokasi × PJA bisa pecah jadi sangat banyak baris, dan PhpSpreadsheet (Xlsx)
+     * selalu menyimpan semua sel di memori sebelum menulis berkas. fputcsv per baris dari generator ini membuat
+     * memori tetap datar berapa pun totalnya (pola yang sama dengan RoadSummaryController::streamCsv()).
+     */
+    public function unduh(Request $request): StreamedResponse
+    {
+        abort_unless(DrmMasterDb::terisi(), 404);
+        $v = $request->validate([
+            'kb' => ['nullable', 'in:Significant,High,Medium,Low'],
+            'kelompok' => ['nullable', 'string', 'max:10'],
+            'grup' => ['nullable', 'string', 'max:20'],
+            'q' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        return response()->stream(function () use ($v): void {
+            set_time_limit(0);
+            $out = fopen('php://output', 'wb');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, self::HEADER_UNDUH, ';');
+            $ditulis = 0;
+            foreach ($this->grup->eksporBarisLazy($v) as $b) {
+                fputcsv($out, [$b['ri'], $b['aktivitas'], $b['sub'], $b['bahaya'], $b['kb'], $b['kelompok'], $b['grup'], $b['site'], $b['detail'], $b['perusahaan']], ';');
+                if ((++$ditulis % 5000) === 0) {
+                    flush();
+                }
+            }
+            fclose($out);
+        }, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="peta-risiko-grup-lokasi-aktivitas-'.now()->format('Ymd-His').'.csv"',
+            'Cache-Control' => 'no-store, no-cache',
+            'X-Accel-Buffering' => 'no',
         ]);
     }
 

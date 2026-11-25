@@ -131,6 +131,151 @@ final class DrmMasterGrup
     }
 
     /**
+     * Detail lokasi aktif (lewat grup M05) per baris HIRA, plus perusahaan yang terhubung di site+lokasi itu
+     * (lewat PJA, drm_master_lokasi_pja — sama rantai dengan DrmMasterBarisUnggah::perusahaanPerBaris, tapi di
+     * sini DIRINCI PER GRUP juga karena halaman ini mengedit keanggotaan grup per baris). Batch (3 query), bukan
+     * N+1 — sumber kolom info Site/Perusahaan di tabel dan unduhan Excel (keputusan user 25 Nov 2026).
+     *
+     * @return array<int, list<array{gid: int, grup: string, site: string, lokasi: string, detail: string, perusahaan: list<string>}>>
+     */
+    private function lokasiPerRi(): array
+    {
+        $namaGrup = DB::table('drm_master_grup')->pluck('nama', 'gid');
+        $grupPerRi = [];
+        foreach (DB::table('drm_master_grup_baris')->get(['ri', 'gid']) as $g) {
+            $grupPerRi[(int) $g->ri][(int) $g->gid] = true;
+        }
+        $gids = collect($grupPerRi)->map(fn ($g) => array_keys($g))->flatten()->unique()->values()->all();
+        $dlPerGrup = [];
+        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get() as $d) {
+            $dlPerGrup[(int) $d->gid][] = $d;
+        }
+        $sites = [];
+        foreach ($dlPerGrup as $list) {
+            foreach ($list as $d) {
+                $sites[(string) $d->site] = true;
+            }
+        }
+        $pjaPerLokasi = [];
+        if ($sites !== []) {
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'nama_pja']) as $p) {
+                $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
+                $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
+            }
+        }
+        $hasil = [];
+        foreach ($grupPerRi as $ri => $gidSet) {
+            foreach (array_keys($gidSet) as $gid) {
+                $nama = (string) ($namaGrup[$gid] ?? ('#'.$gid));
+                $dlList = $dlPerGrup[$gid] ?? [];
+                if ($dlList === []) {
+                    $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => '', 'lokasi' => '', 'detail' => '', 'perusahaan' => []];
+
+                    continue;
+                }
+                foreach ($dlList as $d) {
+                    $k = mb_strtolower(trim($d->site).'|'.trim($d->lokasi));
+                    $perusahaan = array_keys($pjaPerLokasi[$k] ?? []);
+                    sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
+                    $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail, 'perusahaan' => $perusahaan];
+                }
+            }
+        }
+
+        return $hasil;
+    }
+
+    /** @return array<int, array{site: list<string>, perusahaan: list<string>}> ri => Site/Perusahaan unik, untuk kolom info di tabel. */
+    public function siteDanPerusahaanPerBaris(): array
+    {
+        $hasil = [];
+        foreach ($this->lokasiPerRi() as $ri => $list) {
+            $site = $perusahaan = [];
+            foreach ($list as $l) {
+                if ($l['site'] !== '') {
+                    $site[$l['site']] = true;
+                }
+                foreach ($l['perusahaan'] as $p) {
+                    $perusahaan[$p] = true;
+                }
+            }
+            $site = array_keys($site);
+            sort($site, SORT_NATURAL);
+            $perusahaan = array_keys($perusahaan);
+            sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[$ri] = ['site' => $site, 'perusahaan' => $perusahaan];
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * Baris datar untuk unduhan CSV: SATU baris = SATU (grup lokasi × site/lokasi/detail × perusahaan), tidak
+     * digabung jadi teks (keputusan user 25 Nov 2026, pola sama dengan unduhan Alur Baseline/Korelasi). Filter
+     * sama dengan yang di tabel browser (kb, kelompok, grup/tanpa grup, kata cari) — HANYA menyaring baris HIRA
+     * mana yang disertakan; grup/site/perusahaan yang tampil per baris tetap SEMUA, sama seperti di layar
+     * (filter grup di layar juga cuma menyembunyikan baris, bukan memotong chip grup yang tampil).
+     *
+     * GENERATOR, bukan array penuh (koreksi 2026-11-25, setelah unduhan serupa di /peta-risiko-pja/korelasi
+     * kehabisan memori 2 GB pada baseline sebesar ini): baris HIRA dibaca lewat cursor() dan tiap hasil pecah
+     * langsung di-yield, controller menulisnya sebagai CSV streaming (fputcsv per baris) — BUKAN Xlsx, karena
+     * PhpSpreadsheet tetap menyimpan semua sel di memori sebelum menulis berkas.
+     *
+     * @param  array{kb?: string, kelompok?: string, grup?: string, q?: string}  $filter
+     * @return \Generator<int, array<string, string>>
+     */
+    public function eksporBarisLazy(array $filter = []): \Generator
+    {
+        $baris = DB::table('drm_master_baris as b')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
+            ->orderBy('b.aktivitas')->orderBy('b.sub')->orderBy('b.bahaya')
+            ->select(['b.ri', 'b.aktivitas', 'b.sub', 'b.bahaya', 'b.kb', 'a.kelompok'])->cursor();
+        $namaKelompok = $this->kelompok();
+        $lokasi = $this->lokasiPerRi();
+        $kata = mb_strtolower(trim((string) ($filter['q'] ?? '')));
+        $grupFilter = (string) ($filter['grup'] ?? '');
+        foreach ($baris as $b) {
+            if (($filter['kb'] ?? '') !== '' && (string) $b->kb !== $filter['kb']) {
+                continue;
+            }
+            if (($filter['kelompok'] ?? '') !== '' && (string) $b->kelompok !== $filter['kelompok']) {
+                continue;
+            }
+            $list = $lokasi[(int) $b->ri] ?? [];
+            $gidList = array_unique(array_column($list, 'gid'));
+            if ($grupFilter === '__TANPA__' && $gidList !== []) {
+                continue;
+            }
+            if ($grupFilter !== '' && $grupFilter !== '__TANPA__' && ! in_array((int) $grupFilter, $gidList, true)) {
+                continue;
+            }
+            if ($kata !== '' && ! str_contains(mb_strtolower($b->aktivitas.' '.$b->sub.' '.$b->bahaya), $kata)) {
+                continue;
+            }
+            $dasar = [
+                'ri' => (string) $b->ri, 'aktivitas' => (string) $b->aktivitas,
+                'kelompok' => (string) ($namaKelompok[$b->kelompok] ?? ((string) $b->kelompok ?: 'K0')),
+                'sub' => (string) ($b->sub ?? ''), 'bahaya' => (string) $b->bahaya, 'kb' => (string) ($b->kb ?? ''),
+            ];
+            if ($list === []) {
+                yield $dasar + ['grup' => '', 'site' => '', 'detail' => '', 'perusahaan' => ''];
+
+                continue;
+            }
+            foreach ($list as $l) {
+                $detail = $l['lokasi'] !== '' ? $l['lokasi'].($l['detail'] !== '' ? ' ('.$l['detail'].')' : '') : '';
+                if ($l['perusahaan'] === []) {
+                    yield $dasar + ['grup' => $l['grup'], 'site' => $l['site'], 'detail' => $detail, 'perusahaan' => ''];
+
+                    continue;
+                }
+                foreach ($l['perusahaan'] as $p) {
+                    yield $dasar + ['grup' => $l['grup'], 'site' => $l['site'], 'detail' => $detail, 'perusahaan' => $p];
+                }
+            }
+        }
+    }
+
+    /**
      * Tambahkan baris (ri) langsung ke grup, lintas aktivitas (dipakai chip "+ Tambah ke grup" & aksi borongan di
      * master/grup — beda dengan tambah(), yang membatasi ke satu aktivitas untuk alur "Tambah aktivitas" / Alur baseline).
      * Mengembalikan jumlah baru.

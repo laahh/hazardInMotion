@@ -93,7 +93,7 @@ final class DrmKorelasi
 
     /**
      * Ekspor flat SELURUH baseline (semua aktivitas — keputusan user 25 Nov 2026: unduhan ini LEPAS dari fokus
-     * diagram yang sedang dibuka, bukan cuma aktivitas yang sedang dilihat) untuk unduhan Excel
+     * diagram yang sedang dibuka, bukan cuma aktivitas yang sedang dilihat) untuk unduhan CSV
      * (/peta-risiko-pja/korelasi/unduh): TIDAK ADA sel yang digabung/dipisah koma (koreksi 2026-11-25) — tiap
      * label SAP dan tiap jalur Grup lokasi → Detail lokasi → PJA jadi BARIS SENDIRI (aktivitas/sub/bahaya-risiko
      * diulang per baris, pola yang sama dengan "satu baris = satu label" di unduhan Master per Baris,
@@ -101,22 +101,24 @@ final class DrmKorelasi
      * (bukan satu label = satu lokasi tertentu — keduanya cabang independen dari bahaya yang sama), jadi baris
      * label kolom lokasinya kosong dan sebaliknya.
      *
-     * @return list<array<string, string>>
+     * GENERATOR, bukan array penuh (koreksi 2026-11-25 kedua): seluruh baseline × grup × lokasi × PJA bisa jadi
+     * jutaan baris hasil pecah — menumpuknya semua di satu array sekaligus (lalu Xlsx-nya) yang bikin unduhan
+     * kehabisan memori 2 GB. Baris HIRA dibaca lewat cursor() (bukan get()) dan tiap baris hasil pecah langsung
+     * di-yield, jadi memori tetap datar berapa pun totalnya. Controller menulisnya sebagai CSV streaming
+     * (fputcsv per baris), BUKAN Xlsx — PhpSpreadsheet tetap menyimpan semua sel di memori sebelum disimpan,
+     * jadi tidak cocok untuk jumlah baris sebesar ini walau ditulisnya per potongan.
+     *
+     * @return \Generator<int, array<string, string>>
      */
-    public function eksporSemua(): array
+    public function eksporSemuaLazy(): \Generator
     {
-        $baris = DB::table('drm_master_baris')->orderBy('aid')->orderBy('sub')->orderBy('bahaya')->get();
-
-        return $baris->isEmpty() ? [] : $this->flattenBaris($baris);
-    }
-
-    /** @return list<array<string, string>> */
-    private function flattenBaris(Collection $baris): array
-    {
-        $ri = $baris->pluck('ri')->all();
-        $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
         $this->namaKelompok ??= DB::table('drm_master_kelompok')->pluck('nama', 'kode')->all();
-        $grupPerRi = $this->grupPerBaris($ri);
+        $akt = DB::table('drm_master_aktivitas')->get()->keyBy('aid');
+        $namaGrup = DB::table('drm_master_grup')->pluck('nama', 'gid');
+        $grupPerRi = [];
+        foreach (DB::table('drm_master_grup_baris')->get(['ri', 'gid']) as $g) {
+            $grupPerRi[(int) $g->ri][] = [(int) $g->gid, (string) ($namaGrup[$g->gid] ?? ('#'.$g->gid))];
+        }
         $gids = collect($grupPerRi)->flatten(1)->map(fn ($g) => $g[0])->unique()->values()->all();
         $dlPerGrup = [];
         foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get() as $d) {
@@ -135,8 +137,7 @@ final class DrmKorelasi
                 $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
             }
         }
-        $hasil = [];
-        foreach ($baris as $b) {
+        foreach (DB::table('drm_master_baris')->orderBy('aid')->orderBy('sub')->orderBy('bahaya')->cursor() as $b) {
             $a = $akt[$b->aid] ?? null;
             $dasar = [
                 'ri' => (string) $b->ri,
@@ -146,18 +147,20 @@ final class DrmKorelasi
                 'bahaya' => (string) $b->bahaya,
                 'kb' => (string) ($b->kb ?? ''),
             ];
-            $barisUntukB = [];
+            $adaBaris = false;
             $label = [];
             foreach ($this->labelBaris($b) as [$j, $teks]) {
                 $label[$j.'|'.$teks] = [$j, $teks];
             }
             foreach ($label as [$j, $teks]) {
-                $barisUntukB[] = $dasar + ['jenis_label' => self::NAMA_JENIS_LABEL[$j] ?? $j, 'label' => $teks, 'grup' => '', 'dl' => '', 'pja' => ''];
+                $adaBaris = true;
+                yield $dasar + ['jenis_label' => self::NAMA_JENIS_LABEL[$j] ?? $j, 'label' => $teks, 'grup' => '', 'dl' => '', 'pja' => ''];
             }
-            foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $namaGrup]) {
+            foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $namaG]) {
                 $dlList = $dlPerGrup[$gid] ?? [];
                 if ($dlList === []) {
-                    $barisUntukB[] = $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaGrup, 'dl' => '', 'pja' => ''];
+                    $adaBaris = true;
+                    yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaG, 'dl' => '', 'pja' => ''];
 
                     continue;
                 }
@@ -166,19 +169,21 @@ final class DrmKorelasi
                     $pja = array_keys($pjaPerLokasi[mb_strtolower(trim($d->site).'|'.trim($d->lokasi))] ?? []);
                     sort($pja, SORT_NATURAL | SORT_FLAG_CASE);
                     if ($pja === []) {
-                        $barisUntukB[] = $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaGrup, 'dl' => $labelDl, 'pja' => ''];
+                        $adaBaris = true;
+                        yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaG, 'dl' => $labelDl, 'pja' => ''];
 
                         continue;
                     }
                     foreach ($pja as $nama) {
-                        $barisUntukB[] = $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaGrup, 'dl' => $labelDl, 'pja' => $nama];
+                        $adaBaris = true;
+                        yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaG, 'dl' => $labelDl, 'pja' => $nama];
                     }
                 }
             }
-            $hasil = array_merge($hasil, $barisUntukB ?: [$dasar + ['jenis_label' => '', 'label' => '', 'grup' => '', 'dl' => '', 'pja' => '']]);
+            if (! $adaBaris) {
+                yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => '', 'dl' => '', 'pja' => ''];
+            }
         }
-
-        return $hasil;
     }
 
     /**

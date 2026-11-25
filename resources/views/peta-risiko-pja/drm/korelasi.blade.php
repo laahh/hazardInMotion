@@ -98,7 +98,7 @@
     @if ($bolehUbah)
       <button type="button" class="al-edit-btn" id="al-edit" aria-pressed="false"><span class="material-symbols-outlined" style="font-size:18px">edit</span> Mode edit</button>
     @endif
-    <a class="al-edit-btn" href="{{ route('peta-risiko-pja.korelasi.unduh') }}" title="Unduh SEMUA aktivitas (bukan cuma yang sedang difokuskan) sebagai Excel, satu baris satu bahaya-risiko"><span class="material-symbols-outlined" style="font-size:18px">download</span><span>Unduh Excel (semua)</span></a>
+    <a class="al-edit-btn" href="{{ route('peta-risiko-pja.korelasi.unduh') }}" title="Unduh SEMUA aktivitas (bukan cuma yang sedang difokuskan) sebagai CSV (bisa dibuka di Excel), satu baris satu bahaya-risiko — bisa jadi berkas besar"><span class="material-symbols-outlined" style="font-size:18px">download</span><span>Unduh CSV (semua)</span></a>
     <button type="button" class="al-edit-btn" id="al-penuh" aria-pressed="false" title="Perbesar diagram memenuhi layar (Esc untuk kembali)"><span class="material-symbols-outlined" style="font-size:18px">open_in_full</span><span>Perbesar</span></button>
   </div>
   <div class="al-sync" id="al-sync" hidden><span class="material-symbols-outlined">sync_problem</span><span>Master sudah diubah. Status SAP dan angka dashboard baru ikut berubah setelah <code>php artisan peta-risiko:sync</code>.</span></div>
