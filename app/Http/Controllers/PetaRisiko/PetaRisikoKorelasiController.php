@@ -53,13 +53,13 @@ final class PetaRisikoKorelasiController extends Controller
         $baris = $this->korelasi->eksporSemua();
         $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
             'ID baris', 'Aktivitas HIRA', 'Kelompok aktivitas', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal',
-            'Label Observasi', 'Label OAK', 'Label Ketidaksesuaian', 'Grup lokasi', 'Detail lokasi', 'PJA',
+            'Jenis label', 'Label SAP', 'Grup lokasi', 'Detail lokasi', 'PJA',
         ]);
         $sheet = $spreadsheet->getActiveSheet();
         foreach ($baris as $i => $b) {
             $sheet->fromArray([
                 $b['ri'], $b['aktivitas'], $b['kelompok'], $b['sub'], $b['bahaya'], $b['kb'],
-                $b['obs'], $b['oak'], $b['ket'], $b['grup'], $b['dl'], $b['pja'],
+                $b['jenis_label'], $b['label'], $b['grup'], $b['dl'], $b['pja'],
             ], null, 'A'.($i + 2));
         }
 

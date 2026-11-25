@@ -88,12 +88,18 @@ final class DrmKorelasi
             'potong' => $this->potong, 'minggu' => $this->statusSap()['minggu']];
     }
 
+    /** Nama tampil jenis label, sama dengan kolom "Jenis" di unduhan Master per Baris. */
+    private const NAMA_JENIS_LABEL = ['OBS' => 'Observasi', 'OAK' => 'OAK', 'KET' => 'Ketidaksesuaian'];
+
     /**
      * Ekspor flat SELURUH baseline (semua aktivitas — keputusan user 25 Nov 2026: unduhan ini LEPAS dari fokus
      * diagram yang sedang dibuka, bukan cuma aktivitas yang sedang dilihat) untuk unduhan Excel
-     * (/peta-risiko-pja/korelasi/unduh): SATU baris Excel = satu bahaya-risiko (baris HIRA), kolom Label SAP /
-     * Grup lokasi / Detail lokasi / PJA digabung jadi teks dipisah koma (bisa >1 nilai per bahaya) — pola yang
-     * sama dengan unduhan Master per Baris (DrmMasterBarisUnggah::ekspor).
+     * (/peta-risiko-pja/korelasi/unduh): TIDAK ADA sel yang digabung/dipisah koma (koreksi 2026-11-25) — tiap
+     * label SAP dan tiap jalur Grup lokasi → Detail lokasi → PJA jadi BARIS SENDIRI (aktivitas/sub/bahaya-risiko
+     * diulang per baris, pola yang sama dengan "satu baris = satu label" di unduhan Master per Baris,
+     * DrmMasterBarisUnggah::ekspor / DrmMasterBarisExcel). Label dan jalur lokasi sengaja TIDAK disilangkan
+     * (bukan satu label = satu lokasi tertentu — keduanya cabang independen dari bahaya yang sama), jadi baris
+     * label kolom lokasinya kosong dan sebaliknya.
      *
      * @return list<array<string, string>>
      */
@@ -101,11 +107,11 @@ final class DrmKorelasi
     {
         $baris = DB::table('drm_master_baris')->orderBy('aid')->orderBy('sub')->orderBy('bahaya')->get();
 
-        return $baris->isEmpty() ? [] : $this->gabunganPerBaris($baris);
+        return $baris->isEmpty() ? [] : $this->flattenBaris($baris);
     }
 
     /** @return list<array<string, string>> */
-    private function gabunganPerBaris(Collection $baris): array
+    private function flattenBaris(Collection $baris): array
     {
         $ri = $baris->pluck('ri')->all();
         $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
@@ -116,58 +122,60 @@ final class DrmKorelasi
         foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get() as $d) {
             $dlPerGrup[(int) $d->gid][] = $d;
         }
-        $kunciLokasi = [];
+        $sites = [];
         foreach ($dlPerGrup as $list) {
             foreach ($list as $d) {
-                $kunciLokasi[mb_strtolower(trim($d->site).'|'.trim($d->lokasi))] = (string) $d->site;
+                $sites[(string) $d->site] = true;
             }
         }
         $pjaPerLokasi = [];
-        if ($kunciLokasi !== []) {
-            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_unique(array_values($kunciLokasi)))->get(['site', 'lokasi', 'nama_pja']) as $p) {
+        if ($sites !== []) {
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'nama_pja']) as $p) {
                 $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
-                if (isset($kunciLokasi[$k])) {
-                    $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
-                }
+                $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
             }
         }
         $hasil = [];
         foreach ($baris as $b) {
             $a = $akt[$b->aid] ?? null;
-            $label = ['OBS' => [], 'OAK' => [], 'KET' => []];
-            foreach ($this->labelBaris($b) as [$j, $teks]) {
-                $label[$j][$teks] = true;
-            }
-            $grup = $grupPerRi[(int) $b->ri] ?? [];
-            $namaGrup = array_values(array_unique(array_map(fn ($g) => $g[1], $grup)));
-            sort($namaGrup, SORT_NATURAL | SORT_FLAG_CASE);
-            $dl = $pja = [];
-            foreach ($grup as [$gid]) {
-                foreach ($dlPerGrup[$gid] ?? [] as $d) {
-                    $dl[$d->site.' · '.$d->lokasi.' ('.$d->detail.')'] = true;
-                    foreach ($pjaPerLokasi[mb_strtolower(trim($d->site).'|'.trim($d->lokasi))] ?? [] as $nama => $x) {
-                        $pja[$nama] = true;
-                    }
-                }
-            }
-            $dl = array_keys($dl);
-            sort($dl, SORT_NATURAL | SORT_FLAG_CASE);
-            $pja = array_keys($pja);
-            sort($pja, SORT_NATURAL | SORT_FLAG_CASE);
-            $hasil[] = [
+            $dasar = [
                 'ri' => (string) $b->ri,
                 'aktivitas' => (string) ($a->aktivitas ?? $b->aktivitas),
                 'kelompok' => (string) ($this->namaKelompok[$a->kelompok ?? ''] ?? ($a->kelompok ?? '')),
                 'sub' => (string) ($b->sub ?? ''),
                 'bahaya' => (string) $b->bahaya,
                 'kb' => (string) ($b->kb ?? ''),
-                'obs' => implode(', ', array_keys($label['OBS'])),
-                'oak' => implode(', ', array_keys($label['OAK'])),
-                'ket' => implode(', ', array_keys($label['KET'])),
-                'grup' => implode(', ', $namaGrup),
-                'dl' => implode(', ', $dl),
-                'pja' => implode(', ', $pja),
             ];
+            $barisUntukB = [];
+            $label = [];
+            foreach ($this->labelBaris($b) as [$j, $teks]) {
+                $label[$j.'|'.$teks] = [$j, $teks];
+            }
+            foreach ($label as [$j, $teks]) {
+                $barisUntukB[] = $dasar + ['jenis_label' => self::NAMA_JENIS_LABEL[$j] ?? $j, 'label' => $teks, 'grup' => '', 'dl' => '', 'pja' => ''];
+            }
+            foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $namaGrup]) {
+                $dlList = $dlPerGrup[$gid] ?? [];
+                if ($dlList === []) {
+                    $barisUntukB[] = $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaGrup, 'dl' => '', 'pja' => ''];
+
+                    continue;
+                }
+                foreach ($dlList as $d) {
+                    $labelDl = $d->site.' · '.$d->lokasi.' ('.$d->detail.')';
+                    $pja = array_keys($pjaPerLokasi[mb_strtolower(trim($d->site).'|'.trim($d->lokasi))] ?? []);
+                    sort($pja, SORT_NATURAL | SORT_FLAG_CASE);
+                    if ($pja === []) {
+                        $barisUntukB[] = $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaGrup, 'dl' => $labelDl, 'pja' => ''];
+
+                        continue;
+                    }
+                    foreach ($pja as $nama) {
+                        $barisUntukB[] = $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaGrup, 'dl' => $labelDl, 'pja' => $nama];
+                    }
+                }
+            }
+            $hasil = array_merge($hasil, $barisUntukB ?: [$dasar + ['jenis_label' => '', 'label' => '', 'grup' => '', 'dl' => '', 'pja' => '']]);
         }
 
         return $hasil;
