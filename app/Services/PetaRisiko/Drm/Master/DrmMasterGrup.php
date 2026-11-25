@@ -156,11 +156,16 @@ final class DrmMasterGrup
                 $sites[(string) $d->site] = true;
             }
         }
+        // Nama PERUSAHAAN (bukan nama PJA/nama_pja — itu judul dokumen, bukan perusahaan; lihat migrasi
+        // 2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table), pola sama dengan
+        // DrmMasterBarisUnggah::perusahaanPerBaris().
         $pjaPerLokasi = [];
         if ($sites !== []) {
-            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'nama_pja']) as $p) {
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'perusahaan']) as $p) {
                 $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
-                $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
+                foreach (DrmMasterDb::pisahLabel($p->perusahaan ?? '') as $nama) {
+                    $pjaPerLokasi[$k][$nama] = true;
+                }
             }
         }
         $hasil = [];
@@ -185,28 +190,49 @@ final class DrmMasterGrup
         return $hasil;
     }
 
-    /** @return array<int, array{site: list<string>, perusahaan: list<string>}> ri => Site/Perusahaan unik, untuk kolom info di tabel. */
-    public function siteDanPerusahaanPerBaris(): array
+    /**
+     * Pasangan (site, perusahaan) ASLI per baris — BUKAN dua daftar terpisah (site unik + perusahaan unik),
+     * supaya filter Site & Perusahaan bisa mensyaratkan keduanya cocok di lokasi yang SAMA (pelajaran dari
+     * koreksi "Per Perusahaan" Master per Baris 24-25 Nov 2026: menggabungkan rata membuat BMO3 kelihatan
+     * terhubung ke perusahaan yang sebenarnya cuma ada di BMO1). Dipakai sebagai filter di tabel (bukan kolom),
+     * keputusan user 25 Nov 2026.
+     *
+     * @return array<int, list<array{site: string, perusahaan: list<string>}>>
+     */
+    public function lokasiRingkasPerBaris(): array
     {
         $hasil = [];
         foreach ($this->lokasiPerRi() as $ri => $list) {
-            $site = $perusahaan = [];
             foreach ($list as $l) {
-                if ($l['site'] !== '') {
-                    $site[$l['site']] = true;
+                if ($l['site'] === '') {
+                    continue;
                 }
-                foreach ($l['perusahaan'] as $p) {
-                    $perusahaan[$p] = true;
-                }
+                $hasil[$ri][] = ['site' => $l['site'], 'perusahaan' => $l['perusahaan']];
             }
-            $site = array_keys($site);
-            sort($site, SORT_NATURAL);
-            $perusahaan = array_keys($perusahaan);
-            sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
-            $hasil[$ri] = ['site' => $site, 'perusahaan' => $perusahaan];
         }
 
         return $hasil;
+    }
+
+    /** @return list<string> Site aktif, untuk opsi dropdown filter. */
+    public function daftarSite(): array
+    {
+        return DB::table('drm_master_dl')->where('aktif', true)->distinct()->orderBy('site')->pluck('site')->map(fn ($v) => (string) $v)->all();
+    }
+
+    /** @return list<string> Nama perusahaan (lewat PJA) aktif, untuk opsi dropdown filter. */
+    public function daftarPerusahaan(): array
+    {
+        $unik = [];
+        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->pluck('perusahaan') as $isi) {
+            foreach (DrmMasterDb::pisahLabel($isi) as $p) {
+                $unik[$p] = true;
+            }
+        }
+        $daftar = array_keys($unik);
+        sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $daftar;
     }
 
     /**
@@ -221,7 +247,11 @@ final class DrmMasterGrup
      * langsung di-yield, controller menulisnya sebagai CSV streaming (fputcsv per baris) — BUKAN Xlsx, karena
      * PhpSpreadsheet tetap menyimpan semua sel di memori sebelum menulis berkas.
      *
-     * @param  array{kb?: string, kelompok?: string, grup?: string, q?: string}  $filter
+     * Filter Site/Perusahaan mensyaratkan keduanya cocok di lokasi yang SAMA (bukan "ada site ini di baris" DAN
+     * terpisah "ada perusahaan ini di baris", yang bisa salah pasang — pelajaran dari koreksi "Per Perusahaan"
+     * Master per Baris 24-25 Nov 2026).
+     *
+     * @param  array{kb?: string, kelompok?: string, grup?: string, site?: string, pja?: string, q?: string}  $filter
      * @return \Generator<int, array<string, string>>
      */
     public function eksporBarisLazy(array $filter = []): \Generator
@@ -233,6 +263,8 @@ final class DrmMasterGrup
         $lokasi = $this->lokasiPerRi();
         $kata = mb_strtolower(trim((string) ($filter['q'] ?? '')));
         $grupFilter = (string) ($filter['grup'] ?? '');
+        $siteFilter = (string) ($filter['site'] ?? '');
+        $pjaFilter = (string) ($filter['pja'] ?? '');
         foreach ($baris as $b) {
             if (($filter['kb'] ?? '') !== '' && (string) $b->kb !== $filter['kb']) {
                 continue;
@@ -246,6 +278,11 @@ final class DrmMasterGrup
                 continue;
             }
             if ($grupFilter !== '' && $grupFilter !== '__TANPA__' && ! in_array((int) $grupFilter, $gidList, true)) {
+                continue;
+            }
+            if (($siteFilter !== '' || $pjaFilter !== '') && ! collect($list)->contains(
+                fn ($l) => ($siteFilter === '' || $l['site'] === $siteFilter) && ($pjaFilter === '' || in_array($pjaFilter, $l['perusahaan'], true))
+            )) {
                 continue;
             }
             if ($kata !== '' && ! str_contains(mb_strtolower($b->aktivitas.' '.$b->sub.' '.$b->bahaya), $kata)) {

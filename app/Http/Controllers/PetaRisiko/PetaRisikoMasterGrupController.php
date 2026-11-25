@@ -34,15 +34,18 @@ final class PetaRisikoMasterGrupController extends Controller
         if (! $data['siap']) {
             return view('peta-risiko-pja.drm.master-grup', $data);
         }
-        // Site & Perusahaan (lewat PJA): info tambahan per baris, keputusan user 25 Nov 2026.
-        $lokasi = $this->grup->siteDanPerusahaanPerBaris();
-        $rows = array_map(fn (array $r) => $r + ($lokasi[$r['ri']] ?? ['site' => [], 'perusahaan' => []]), $this->grup->semuaBaris());
+        // Site & Perusahaan (lewat PJA): FILTER di tabel, bukan kolom (koreksi user 25 Nov 2026 — awalnya
+        // ditampilkan sebagai kolom info, tapi yang dimaksud adalah dropdown filter seperti risiko/kelompok/grup).
+        $lokasi = $this->grup->lokasiRingkasPerBaris();
+        $rows = array_map(fn (array $r) => $r + ['lok' => $lokasi[$r['ri']] ?? []], $this->grup->semuaBaris());
 
         return view('peta-risiko-pja.drm.master-grup', $data + [
             'daftarGrup' => $this->grup->daftarGrup(),
             'rows' => $rows,
             'dlPerGrup' => $this->grup->semuaDetailLokasi(),
             'kelompok' => $this->grup->kelompok(),
+            'site' => $this->grup->daftarSite(),
+            'perusahaan' => $this->grup->daftarPerusahaan(),
         ]);
     }
 
@@ -65,6 +68,8 @@ final class PetaRisikoMasterGrupController extends Controller
             'kb' => ['nullable', 'in:Significant,High,Medium,Low'],
             'kelompok' => ['nullable', 'string', 'max:10'],
             'grup' => ['nullable', 'string', 'max:20'],
+            'site' => ['nullable', 'string', 'max:60'],
+            'pja' => ['nullable', 'string', 'max:200'],
             'q' => ['nullable', 'string', 'max:200'],
         ]);
 
