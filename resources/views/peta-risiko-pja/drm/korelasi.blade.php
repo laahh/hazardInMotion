@@ -98,7 +98,7 @@
     @if ($bolehUbah)
       <button type="button" class="al-edit-btn" id="al-edit" aria-pressed="false"><span class="material-symbols-outlined" style="font-size:18px">edit</span> Mode edit</button>
     @endif
-    <a class="al-edit-btn" id="al-unduh" href="{{ route('peta-risiko-pja.korelasi.unduh', $awal) }}" title="Unduh seluruh bahaya-risiko yang terhubung dengan fokus ini sebagai Excel, satu baris satu data (tidak dipotong seperti diagram)"><span class="material-symbols-outlined" style="font-size:18px">download</span><span>Unduh Excel</span></a>
+    <a class="al-edit-btn" href="{{ route('peta-risiko-pja.korelasi.unduh') }}" title="Unduh SEMUA aktivitas (bukan cuma yang sedang difokuskan) sebagai Excel, satu baris satu bahaya-risiko"><span class="material-symbols-outlined" style="font-size:18px">download</span><span>Unduh Excel (semua)</span></a>
     <button type="button" class="al-edit-btn" id="al-penuh" aria-pressed="false" title="Perbesar diagram memenuhi layar (Esc untuk kembali)"><span class="material-symbols-outlined" style="font-size:18px">open_in_full</span><span>Perbesar</span></button>
   </div>
   <div class="al-sync" id="al-sync" hidden><span class="material-symbols-outlined">sync_problem</span><span>Master sudah diubah. Status SAP dan angka dashboard baru ikut berubah setelah <code>php artisan peta-risiko:sync</code>.</span></div>
@@ -123,7 +123,6 @@
 <script>
 (function () {
   const URL_DATA = @json(route('peta-risiko-pja.korelasi.data'));
-  const URL_UNDUH = @json(route('peta-risiko-pja.korelasi.unduh'));
   const URL_CARI = @json(route('peta-risiko-pja.korelasi.cari'));
   const URL_GRUP = @json(route('peta-risiko-pja.master.grup.index'));
   const URL_UBAH = @json(route('peta-risiko-pja.master.index', ['t' => 'baris']));
@@ -365,8 +364,6 @@
       gambarJejak();
       gambar();
       history.replaceState(null, '', `${URL_SELF}?${new URLSearchParams({ jenis, id })}`);
-      // Unduh Excel ikut fokus yang sedang dilihat (lihat DrmKorelasi::eksporBaris — lengkap, tidak dipotong seperti diagram).
-      $('al-unduh').href = `${URL_UNDUH}?${new URLSearchParams({ jenis, id })}`;
       if (pusat) detail(pusat.key, jembatan(D.edge, new Set(Object.keys(posisi))));
       $('al-kanvas').scrollTo({ top: 0, left: 0 });
     } catch (e) {

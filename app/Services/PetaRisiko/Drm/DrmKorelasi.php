@@ -89,35 +89,19 @@ final class DrmKorelasi
     }
 
     /**
-     * Ekspor flat untuk unduhan Excel (/peta-risiko-pja/korelasi/unduh): SATU baris Excel = satu bahaya-risiko
-     * (baris HIRA) dalam cakupan fokus yang sama dengan diagram, kolom Label SAP / Grup lokasi / Detail lokasi /
-     * PJA digabung jadi teks dipisah koma (bisa >1 nilai per bahaya) — pola yang sama dengan unduhan Master per
-     * Baris (DrmMasterBarisUnggah::ekspor). TANPA batas MAKS/MAKS_DL_PER_GRUP yang dipakai diagram (keputusan
-     * user 25 Nov 2026: diagram sengaja dipotong supaya tetap terbaca, tapi unduhan harus lengkap).
+     * Ekspor flat SELURUH baseline (semua aktivitas — keputusan user 25 Nov 2026: unduhan ini LEPAS dari fokus
+     * diagram yang sedang dibuka, bukan cuma aktivitas yang sedang dilihat) untuk unduhan Excel
+     * (/peta-risiko-pja/korelasi/unduh): SATU baris Excel = satu bahaya-risiko (baris HIRA), kolom Label SAP /
+     * Grup lokasi / Detail lokasi / PJA digabung jadi teks dipisah koma (bisa >1 nilai per bahaya) — pola yang
+     * sama dengan unduhan Master per Baris (DrmMasterBarisUnggah::ekspor).
      *
      * @return list<array<string, string>>
      */
-    public function eksporBaris(string $jenis, string $id): array
+    public function eksporSemua(): array
     {
-        if (! in_array($jenis, self::JENIS, true)) {
-            throw new InvalidArgumentException('Jenis simpul tidak dikenal.');
-        }
-        $baris = match ($jenis) {
-            'aktivitas' => DB::table('drm_master_baris')->where('aid', (int) $id)->orderBy('sub')->orderBy('bahaya')->get(),
-            'bahaya' => DB::table('drm_master_baris')->where('ri', (int) $id)->get(),
-            'kelompok' => DB::table('drm_master_kelompok')->where('kode', $id)->exists() ? DB::table('drm_master_baris as b')
-                ->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')->where('a.kelompok', $id)->select('b.*')
-                ->orderBy('b.aid')->orderBy('b.sub')->get() : collect(),
-            'grup' => $this->barisUntukGrup((int) $id),
-            'dl' => $this->barisUntukDl((int) $id),
-            'pja' => $this->barisUntukPja($id),
-            default => $this->barisDenganLabel(self::LABEL_JENIS[$jenis], $id),
-        };
-        if ($baris->isEmpty()) {
-            throw new InvalidArgumentException('Simpul tidak ditemukan di master, atau tidak ada bahaya-risiko yang terhubung.');
-        }
+        $baris = DB::table('drm_master_baris')->orderBy('aid')->orderBy('sub')->orderBy('bahaya')->get();
 
-        return $this->gabunganPerBaris($baris);
+        return $baris->isEmpty() ? [] : $this->gabunganPerBaris($baris);
     }
 
     /** @return list<array<string, string>> */
@@ -187,41 +171,6 @@ final class DrmKorelasi
         }
 
         return $hasil;
-    }
-
-    /** @return Collection<int, object> baris HIRA yang masuk satu grup lokasi. */
-    private function barisUntukGrup(int $gid): Collection
-    {
-        return DB::table('drm_master_baris as b')->join('drm_master_grup_baris as g', 'g.ri', '=', 'b.ri')
-            ->where('g.gid', $gid)->select('b.*')->distinct()->orderBy('b.aid')->orderBy('b.sub')->get();
-    }
-
-    /** @return Collection<int, object> baris HIRA di grup lokasi yang memiliki detail lokasi ini (sama cakupan dengan dariDl). */
-    private function barisUntukDl(int $id): Collection
-    {
-        $d = DB::table('drm_master_dl')->where('id', $id)->first();
-
-        return $d === null ? collect() : $this->barisUntukGrup((int) $d->gid);
-    }
-
-    /** @return Collection<int, object> baris HIRA di grup lokasi yang detail lokasinya dimiliki PJA ini. */
-    private function barisUntukPja(string $nama): Collection
-    {
-        $lok = DB::table('drm_master_lokasi_pja')->where('nama_pja', $nama)->where('aktif', true)->get(['site', 'lokasi']);
-        if ($lok->isEmpty()) {
-            return collect();
-        }
-        $gids = DB::table('drm_master_dl')->where('aktif', true)->where(function ($q) use ($lok) {
-            foreach ($lok as $l) {
-                $q->orWhere(fn ($w) => $w->where('site', $l->site)->where('lokasi', $l->lokasi));
-            }
-        })->pluck('gid')->unique()->values()->all();
-        if ($gids === []) {
-            return collect();
-        }
-
-        return DB::table('drm_master_baris as b')->join('drm_master_grup_baris as g', 'g.ri', '=', 'b.ri')
-            ->whereIn('g.gid', $gids)->select('b.*')->distinct()->orderBy('b.aid')->orderBy('b.sub')->get();
     }
 
     /**

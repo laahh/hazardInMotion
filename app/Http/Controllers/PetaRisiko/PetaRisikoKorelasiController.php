@@ -46,16 +46,11 @@ final class PetaRisikoKorelasiController extends Controller
         }
     }
 
-    /** Unduh Excel flat (1 baris = 1 bahaya-risiko) untuk fokus yang sama dengan diagram, TANPA batas MAKS diagram. */
-    public function unduh(Request $request): Response
+    /** Unduh Excel flat (1 baris = 1 bahaya-risiko), SEMUA aktivitas — bukan cuma fokus yang sedang dibuka di diagram. */
+    public function unduh(): Response
     {
         abort_unless(DrmMasterDb::terisi(), 404);
-        $v = $request->validate(['jenis' => ['required', 'in:'.implode(',', DrmKorelasi::JENIS)], 'id' => ['required', 'string', 'max:600']]);
-        try {
-            $baris = $this->korelasi->eksporBaris($v['jenis'], $v['id']);
-        } catch (InvalidArgumentException $e) {
-            abort(404, $e->getMessage());
-        }
+        $baris = $this->korelasi->eksporSemua();
         $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
             'ID baris', 'Aktivitas HIRA', 'Kelompok aktivitas', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal',
             'Label Observasi', 'Label OAK', 'Label Ketidaksesuaian', 'Grup lokasi', 'Detail lokasi', 'PJA',
@@ -68,7 +63,7 @@ final class PetaRisikoKorelasiController extends Controller
             ], null, 'A'.($i + 2));
         }
 
-        SpreadsheetExporter::download($spreadsheet, 'peta-risiko-korelasi-'.$v['jenis'].'-'.now()->format('Ymd-His').'.xlsx');
+        SpreadsheetExporter::download($spreadsheet, 'peta-risiko-korelasi-semua-'.now()->format('Ymd-His').'.xlsx');
     }
 
     public function cari(Request $request): JsonResponse
