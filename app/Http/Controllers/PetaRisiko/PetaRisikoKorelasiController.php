@@ -8,9 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmKorelasi;
 use App\Services\PetaRisiko\Drm\Master\DrmAlurEdit;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
+use App\Support\SpreadsheetExporter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use InvalidArgumentException;
 
 /**
@@ -42,6 +44,31 @@ final class PetaRisikoKorelasiController extends Controller
         } catch (InvalidArgumentException $e) {
             return response()->json(['pesan' => $e->getMessage()], 404);
         }
+    }
+
+    /** Unduh Excel flat (1 baris = 1 bahaya-risiko) untuk fokus yang sama dengan diagram, TANPA batas MAKS diagram. */
+    public function unduh(Request $request): Response
+    {
+        abort_unless(DrmMasterDb::terisi(), 404);
+        $v = $request->validate(['jenis' => ['required', 'in:'.implode(',', DrmKorelasi::JENIS)], 'id' => ['required', 'string', 'max:600']]);
+        try {
+            $baris = $this->korelasi->eksporBaris($v['jenis'], $v['id']);
+        } catch (InvalidArgumentException $e) {
+            abort(404, $e->getMessage());
+        }
+        $spreadsheet = SpreadsheetExporter::createSheetWithHeaders([
+            'ID baris', 'Aktivitas HIRA', 'Kelompok aktivitas', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal',
+            'Label Observasi', 'Label OAK', 'Label Ketidaksesuaian', 'Grup lokasi', 'Detail lokasi', 'PJA',
+        ]);
+        $sheet = $spreadsheet->getActiveSheet();
+        foreach ($baris as $i => $b) {
+            $sheet->fromArray([
+                $b['ri'], $b['aktivitas'], $b['kelompok'], $b['sub'], $b['bahaya'], $b['kb'],
+                $b['obs'], $b['oak'], $b['ket'], $b['grup'], $b['dl'], $b['pja'],
+            ], null, 'A'.($i + 2));
+        }
+
+        SpreadsheetExporter::download($spreadsheet, 'peta-risiko-korelasi-'.$v['jenis'].'-'.now()->format('Ymd-His').'.xlsx');
     }
 
     public function cari(Request $request): JsonResponse

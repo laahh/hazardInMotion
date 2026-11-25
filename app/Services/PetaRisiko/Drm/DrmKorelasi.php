@@ -89,6 +89,142 @@ final class DrmKorelasi
     }
 
     /**
+     * Ekspor flat untuk unduhan Excel (/peta-risiko-pja/korelasi/unduh): SATU baris Excel = satu bahaya-risiko
+     * (baris HIRA) dalam cakupan fokus yang sama dengan diagram, kolom Label SAP / Grup lokasi / Detail lokasi /
+     * PJA digabung jadi teks dipisah koma (bisa >1 nilai per bahaya) — pola yang sama dengan unduhan Master per
+     * Baris (DrmMasterBarisUnggah::ekspor). TANPA batas MAKS/MAKS_DL_PER_GRUP yang dipakai diagram (keputusan
+     * user 25 Nov 2026: diagram sengaja dipotong supaya tetap terbaca, tapi unduhan harus lengkap).
+     *
+     * @return list<array<string, string>>
+     */
+    public function eksporBaris(string $jenis, string $id): array
+    {
+        if (! in_array($jenis, self::JENIS, true)) {
+            throw new InvalidArgumentException('Jenis simpul tidak dikenal.');
+        }
+        $baris = match ($jenis) {
+            'aktivitas' => DB::table('drm_master_baris')->where('aid', (int) $id)->orderBy('sub')->orderBy('bahaya')->get(),
+            'bahaya' => DB::table('drm_master_baris')->where('ri', (int) $id)->get(),
+            'kelompok' => DB::table('drm_master_kelompok')->where('kode', $id)->exists() ? DB::table('drm_master_baris as b')
+                ->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')->where('a.kelompok', $id)->select('b.*')
+                ->orderBy('b.aid')->orderBy('b.sub')->get() : collect(),
+            'grup' => $this->barisUntukGrup((int) $id),
+            'dl' => $this->barisUntukDl((int) $id),
+            'pja' => $this->barisUntukPja($id),
+            default => $this->barisDenganLabel(self::LABEL_JENIS[$jenis], $id),
+        };
+        if ($baris->isEmpty()) {
+            throw new InvalidArgumentException('Simpul tidak ditemukan di master, atau tidak ada bahaya-risiko yang terhubung.');
+        }
+
+        return $this->gabunganPerBaris($baris);
+    }
+
+    /** @return list<array<string, string>> */
+    private function gabunganPerBaris(Collection $baris): array
+    {
+        $ri = $baris->pluck('ri')->all();
+        $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
+        $this->namaKelompok ??= DB::table('drm_master_kelompok')->pluck('nama', 'kode')->all();
+        $grupPerRi = $this->grupPerBaris($ri);
+        $gids = collect($grupPerRi)->flatten(1)->map(fn ($g) => $g[0])->unique()->values()->all();
+        $dlPerGrup = [];
+        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get() as $d) {
+            $dlPerGrup[(int) $d->gid][] = $d;
+        }
+        $kunciLokasi = [];
+        foreach ($dlPerGrup as $list) {
+            foreach ($list as $d) {
+                $kunciLokasi[mb_strtolower(trim($d->site).'|'.trim($d->lokasi))] = (string) $d->site;
+            }
+        }
+        $pjaPerLokasi = [];
+        if ($kunciLokasi !== []) {
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_unique(array_values($kunciLokasi)))->get(['site', 'lokasi', 'nama_pja']) as $p) {
+                $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
+                if (isset($kunciLokasi[$k])) {
+                    $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
+                }
+            }
+        }
+        $hasil = [];
+        foreach ($baris as $b) {
+            $a = $akt[$b->aid] ?? null;
+            $label = ['OBS' => [], 'OAK' => [], 'KET' => []];
+            foreach ($this->labelBaris($b) as [$j, $teks]) {
+                $label[$j][$teks] = true;
+            }
+            $grup = $grupPerRi[(int) $b->ri] ?? [];
+            $namaGrup = array_values(array_unique(array_map(fn ($g) => $g[1], $grup)));
+            sort($namaGrup, SORT_NATURAL | SORT_FLAG_CASE);
+            $dl = $pja = [];
+            foreach ($grup as [$gid]) {
+                foreach ($dlPerGrup[$gid] ?? [] as $d) {
+                    $dl[$d->site.' · '.$d->lokasi.' ('.$d->detail.')'] = true;
+                    foreach ($pjaPerLokasi[mb_strtolower(trim($d->site).'|'.trim($d->lokasi))] ?? [] as $nama => $x) {
+                        $pja[$nama] = true;
+                    }
+                }
+            }
+            $dl = array_keys($dl);
+            sort($dl, SORT_NATURAL | SORT_FLAG_CASE);
+            $pja = array_keys($pja);
+            sort($pja, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[] = [
+                'ri' => (string) $b->ri,
+                'aktivitas' => (string) ($a->aktivitas ?? $b->aktivitas),
+                'kelompok' => (string) ($this->namaKelompok[$a->kelompok ?? ''] ?? ($a->kelompok ?? '')),
+                'sub' => (string) ($b->sub ?? ''),
+                'bahaya' => (string) $b->bahaya,
+                'kb' => (string) ($b->kb ?? ''),
+                'obs' => implode(', ', array_keys($label['OBS'])),
+                'oak' => implode(', ', array_keys($label['OAK'])),
+                'ket' => implode(', ', array_keys($label['KET'])),
+                'grup' => implode(', ', $namaGrup),
+                'dl' => implode(', ', $dl),
+                'pja' => implode(', ', $pja),
+            ];
+        }
+
+        return $hasil;
+    }
+
+    /** @return Collection<int, object> baris HIRA yang masuk satu grup lokasi. */
+    private function barisUntukGrup(int $gid): Collection
+    {
+        return DB::table('drm_master_baris as b')->join('drm_master_grup_baris as g', 'g.ri', '=', 'b.ri')
+            ->where('g.gid', $gid)->select('b.*')->distinct()->orderBy('b.aid')->orderBy('b.sub')->get();
+    }
+
+    /** @return Collection<int, object> baris HIRA di grup lokasi yang memiliki detail lokasi ini (sama cakupan dengan dariDl). */
+    private function barisUntukDl(int $id): Collection
+    {
+        $d = DB::table('drm_master_dl')->where('id', $id)->first();
+
+        return $d === null ? collect() : $this->barisUntukGrup((int) $d->gid);
+    }
+
+    /** @return Collection<int, object> baris HIRA di grup lokasi yang detail lokasinya dimiliki PJA ini. */
+    private function barisUntukPja(string $nama): Collection
+    {
+        $lok = DB::table('drm_master_lokasi_pja')->where('nama_pja', $nama)->where('aktif', true)->get(['site', 'lokasi']);
+        if ($lok->isEmpty()) {
+            return collect();
+        }
+        $gids = DB::table('drm_master_dl')->where('aktif', true)->where(function ($q) use ($lok) {
+            foreach ($lok as $l) {
+                $q->orWhere(fn ($w) => $w->where('site', $l->site)->where('lokasi', $l->lokasi));
+            }
+        })->pluck('gid')->unique()->values()->all();
+        if ($gids === []) {
+            return collect();
+        }
+
+        return DB::table('drm_master_baris as b')->join('drm_master_grup_baris as g', 'g.ri', '=', 'b.ri')
+            ->whereIn('g.gid', $gids)->select('b.*')->distinct()->orderBy('b.aid')->orderBy('b.sub')->get();
+    }
+
+    /**
      * Cari simpul di semua jenis (maks 8 per jenis).
      *
      * @return list<array{jenis: string, id: string, label: string, sub: string}>

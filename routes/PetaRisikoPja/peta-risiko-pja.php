@@ -44,6 +44,7 @@ Route::prefix('peta-risiko-pja')
         Route::prefix('korelasi')->name('korelasi.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoKorelasiController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/data', 'data')->middleware('throttle:120,1')->name('data');
+            Route::get('/unduh', 'unduh')->middleware('throttle:20,1')->name('unduh');
             Route::get('/cari', 'cari')->middleware('throttle:120,1')->name('cari');
             Route::get('/simpul', 'simpul')->middleware('throttle:120,1')->name('simpul');
             Route::post('/simpan', 'simpan')->middleware('throttle:60,1')->name('simpan');
