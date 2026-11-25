@@ -132,6 +132,19 @@ final class DrmMasterSkema
                 ],
                 'cari' => ['aktivitas_oak', 'aktivitas_hira'], 'urut' => 'aktivitas_oak',
             ],
+            'ikk' => [
+                'judul' => 'Aktivitas IKK', 'sheet' => 'IKK', 'tabel' => 'drm_master_ikk', 'kunci' => 'id', 'kunciManual' => false,
+                'catatan' => 'Daftar aktivitas/sub aktivitas pekerjaan OAK yang terkait IKK (Izin Kerja Khusus). Baris baseline (Master per Baris) ditandai IKK kalau salah satu Item Sumber OAK-nya cocok dengan salah satu baris di sini. '
+                    .'"Cek di luar workshop/pit stop": kalau dicentang, baris baseline yang teks aktivitas/sub/bahaya-risikonya SENDIRI menyebut "workshop" atau "pit stop" TIDAK ditandai IKK meski labelnya cocok (dipakai untuk kategori perbaikan/perawatan yang generik). Flag IKK dihitung langsung, tidak perlu peta-risiko:sync.',
+                'kolom' => [
+                    'aktivitas' => ['Aktivitas pekerjaan OAK', 'teks', ['required', 'string', 'max:255'], ['saran' => 'drm_master_ikk.aktivitas']],
+                    'sub_aktivitas' => ['Sub aktivitas pekerjaan OAK', 'teks', ['required', 'string', 'max:255'], []],
+                    'cek_luar_workshop' => ['Cek di luar workshop/pit stop', 'bool', ['boolean'], []],
+                    'aktif' => ['Aktif', 'bool', ['boolean'], []],
+                    'catatan' => ['Catatan', 'teks', ['nullable', 'string', 'max:500'], []],
+                ],
+                'cari' => ['aktivitas', 'sub_aktivitas', 'catatan'], 'urut' => 'aktivitas',
+            ],
             'tema' => [
                 'judul' => 'Tema checklist', 'sheet' => 'M15', 'tabel' => 'drm_master_tema', 'kunci' => 'id', 'kunciManual' => true,
                 'catatan' => 'Regex teks dipakai untuk butir checklist OAK dan teks OBS. Pasangan tema → baris diatur di tab Tema → baris.',
@@ -155,6 +168,9 @@ final class DrmMasterSkema
         ];
         if (! self::adaTabel('drm_master_oak_aktivitas')) {
             unset($semua['oak_aktivitas']);
+        }
+        if (! self::adaTabel('drm_master_ikk')) {
+            unset($semua['ikk']);
         }
         // Master satu tabel: tiga kolom label Item Sumber di baris HIRA (bila sudah dimigrasi).
         if (self::adaKolom('drm_master_baris', 'item_sumber_observasi')) {

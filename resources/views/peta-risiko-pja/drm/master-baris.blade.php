@@ -29,6 +29,7 @@
   .mb-lv { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; background: #f3f4f6; color: #4b5563; }
   .mb-lv.Significant { background: #fdecee; color: #b91c1c; } .mb-lv.High { background: #fff0e3; color: #b45309; }
   .mb-lv.Medium { background: #fef8e1; color: #92650a; } .mb-lv.Low { background: #eef8f0; color: #15803d; }
+  .mb-ikk { display: inline-block; margin-top: 4px; margin-left: 4px; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; background: #fdecee; color: #9b1c31; }
   .mb-chip { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 6px; padding: 5px 6px 5px 10px; border-radius: 10px; background: #f1f5f9; border: 1px solid #e2e8f0; font-size: 12px; line-height: 1.35; }
   .mb-chip.turunan { background: #fffbeb; border-color: #fde68a; }
   .mb-chip.manual { background: #ecfdf5; border-color: #a7f3d0; }
@@ -111,6 +112,11 @@
         <option value="OAK">Tanpa label OAK</option>
         <option value="KET">Tanpa label Ketidaksesuaian</option>
         <option value="SEMUA">Tanpa label sama sekali</option>
+      </select>
+      <select id="mb-f-ikk" aria-label="IKK">
+        <option value="">Semua (IKK/non-IKK)</option>
+        <option value="YA">IKK saja</option>
+        <option value="TIDAK">Bukan IKK saja</option>
       </select>
       <select id="mb-f-site" aria-label="Site">
         <option value="">Semua site</option>
@@ -253,7 +259,8 @@
           + (r.u ? '<span class="mb-oleh">Diubah ' + esc(r.u[1]) + ' oleh ' + esc(r.u[0] || '-') + ' · <a href="' + esc(URL_RIWAYAT + '&kunci=' + r.ri) + '">riwayat</a></span>' : '') },
     { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
     { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
-        ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
+        ? esc(d) + '<br><span class="mb-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' + (r.ikk ? '<span class="mb-ikk" title="Item Sumber OAK baris ini cocok daftar aktivitas IKK (/peta-risiko-pja/master, tab Aktivitas IKK)">IKK</span>' : '')
+        : d + ' ' + r.kb + (r.ikk ? ' ikk' : '') },
   ];
   const kolomLabelSet = [kolomLabel('OBS'), kolomLabel('OAK'), kolomLabel('KET')];
 
@@ -287,16 +294,24 @@
    * Aktivitas/Sub/Bahaya, cuma untuk perusahaan ITU, BUKAN semua perusahaan sekaligus. Dihitung per perusahaan
    * (bukan satu array gabungan semua perusahaan × semua baris — itu yang dulu bikin "total 99.767 baris" muncul
    * di info tabel padahal belum ada yang dipilih: datanya SENDIRI sudah sebesar itu sebelum difilter). Di-cache
-   * per nama perusahaan (Map) supaya pindah-pindah dropdown ke perusahaan yang sama tidak hitung ulang.
+   * per (perusahaan, site) supaya pindah-pindah dropdown ke kombinasi yang sama tidak hitung ulang.
+   *
+   * koreksi 2026-11-25: filter Site juga ikut membatasi lokasi PJA yang dipakai (bukan cuma jadi gerbang baris —
+   * itu dulu bikin baris tetap tampil dengan lokasi dari site LAIN ikut kelihatan di kolom Lokasi, asal salah
+   * satu PJA-nya kebetulan ada di site terpilih). Satu HIRA/aktivitas bisa dipakai di banyak site sekaligus
+   * (departemen pemilik HIRA ≠ site lokasinya), jadi yang benar difilter adalah PJA lokasi itu sendiri: site +
+   * perusahaan yang dipilih di dropdown (keputusan user 25 Nov 2026).
    */
   const CACHE_PERUSAHAAN = new Map();
-  function rowsUntukPerusahaan(nama) {
-    if (CACHE_PERUSAHAAN.has(nama)) return CACHE_PERUSAHAAN.get(nama);
+  function rowsUntukPerusahaan(nama, site) {
+    const kunci = nama + '|' + (site || '');
+    if (CACHE_PERUSAHAAN.has(kunci)) return CACHE_PERUSAHAAN.get(kunci);
     const out = [];
     ROWS.forEach((r) => {
       const lokSet = {};
       r.pja.forEach((p) => {
         if (!p.perusahaan.includes(nama)) return;
+        if (site && p.site !== site) return;
         // "Lokasi" di pov ini = lokasi + detail lokasi (M06, label SAP yang sama dipakai di /master/grup) yang
         // benar-benar menghubungkan grup baris ini ke PJA/perusahaan itu — rantai PJA → lokasi/detail lokasi →
         // aktivitas yang sudah termapping di master/grup (keputusan user 24 Nov 2026).
@@ -305,7 +320,7 @@
       if (Object.keys(lokSet).length) out.push({ ...r, perusahaan: nama, lok: Object.keys(lokSet).sort() });
     });
     out.sort((a, b) => a.a.localeCompare(b.a, 'id', { sensitivity: 'base' }));
-    CACHE_PERUSAHAAN.set(nama, out);
+    CACHE_PERUSAHAAN.set(kunci, out);
     return out;
   }
 
@@ -313,6 +328,7 @@
   let tabel = null;
   const fKb = document.getElementById('mb-f-kb');
   const fKosong = document.getElementById('mb-f-kosong');
+  const fIkk = document.getElementById('mb-f-ikk');
   const fDep = document.getElementById('mb-f-dep');
   const fSite = document.getElementById('mb-f-site');
   const fPja = document.getElementById('mb-f-pja');
@@ -322,7 +338,7 @@
     if (tabel) { tabel.destroy(); tabel = null; }
     document.querySelector('#mb-tabel tbody').innerHTML = '';
     tabel = new DataTable('#mb-tabel', {
-      data: mode === 'perusahaan' ? (fPja.value ? rowsUntukPerusahaan(fPja.value) : []) : ROWS,
+      data: mode === 'perusahaan' ? (fPja.value ? rowsUntukPerusahaan(fPja.value, fSite.value) : []) : ROWS,
       deferRender: true,
       pageLength: 25,
       lengthMenu: [10, 25, 50, 100, 250],
@@ -332,6 +348,9 @@
         search: 'Cari:', searchPlaceholder: 'aktivitas, bahaya, label, ID…',
         lengthMenu: 'Tampilkan _MENU_ baris', info: '_START_–_END_ dari _TOTAL_ baris',
         infoEmpty: 'Tidak ada baris', infoFiltered: '(disaring dari _MAX_)',
+        // emptyTable: sumber data KOSONG (mode Per Perusahaan sebelum dipilih, lihat rowsUntukPerusahaan).
+        // zeroRecords: sumber data ADA tapi tersaring habis oleh filter/kata cari lain.
+        emptyTable: mode === 'perusahaan' && ! fPja.value ? PESAN_PILIH_PERUSAHAAN : 'Tidak ada baris.',
         zeroRecords: mode === 'perusahaan' && ! fPja.value ? PESAN_PILIH_PERUSAHAAN : 'Tidak ada baris yang cocok.',
         paginate: { first: '«', previous: '‹', next: '›', last: '»' },
       },
@@ -359,6 +378,8 @@
       const r = new DataTable.Api(settings).row(idx).data();
       if (!r) return true;
       if (fKb.value && r.kb !== fKb.value) return false;
+      if (fIkk.value === 'YA' && !r.ikk) return false;
+      if (fIkk.value === 'TIDAK' && r.ikk) return false;
       if (fDep.value && !r.h.some((x) => x.dept === fDep.value)) return false;
       if (fSite.value && !(mode === 'perusahaan' ? r.lok.some((l) => l.startsWith(fSite.value + ' ·')) : r.st.includes(fSite.value))) return false;
       const k = fKosong.value;
@@ -380,10 +401,15 @@
 
   bangunTabel();
 
-  // Ganti perusahaan di mode Per Perusahaan = ganti SUMBER data tabel (lihat rowsUntukPerusahaan), jadi perlu
-  // bangunTabel() (bukan cuma tabel.draw()) supaya DataTables memuat ulang data barunya, bukan cuma menyaring data lama.
+  // Ganti perusahaan ATAU site di mode Per Perusahaan = ganti SUMBER data tabel (lihat rowsUntukPerusahaan, site
+  // ikut membatasi lokasi PJA-nya sejak koreksi 2026-11-25), jadi perlu bangunTabel() (bukan cuma tabel.draw())
+  // supaya DataTables memuat ulang data barunya, bukan cuma menyaring data lama.
   fPja.addEventListener('change', () => { if (mode === 'perusahaan') bangunTabel(); });
-  [fKb, fKosong, fDep, fSite].forEach((el) => el.addEventListener('change', () => {
+  fSite.addEventListener('change', () => {
+    if (mode === 'perusahaan') { bangunTabel(); return; }
+    tabel.draw();
+  });
+  [fKb, fKosong, fIkk, fDep].forEach((el) => el.addEventListener('change', () => {
     tabel.settings()[0].oLanguage.sZeroRecords = mode === 'perusahaan' && ! fPja.value ? PESAN_PILIH_PERUSAHAAN : 'Tidak ada baris yang cocok.';
     tabel.draw();
   }));
@@ -391,6 +417,7 @@
     const adaPerusahaan = mode === 'perusahaan' && fPja.value;
     fKb.value = '';
     fKosong.value = '';
+    fIkk.value = '';
     fDep.value = '';
     fSite.value = '';
     fPja.value = '';
@@ -403,6 +430,7 @@
     const q = new URLSearchParams();
     if (fKb.value) q.set('kb', fKb.value);
     if (fKosong.value) q.set('kosong', fKosong.value);
+    if (fIkk.value) q.set('ikk', fIkk.value);
     if (fDep.value) q.set('dep', fDep.value);
     if (fSite.value) q.set('site', fSite.value);
     if (mode === 'perusahaan' && fPja.value) q.set('pja', fPja.value);

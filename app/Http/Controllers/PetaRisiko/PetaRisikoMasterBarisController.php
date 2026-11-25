@@ -63,6 +63,13 @@ final class PetaRisikoMasterBarisController extends Controller
         $sitePer = $unggah->sitePerBaris($hira);
         // Perusahaan = nama perusahaan personil PJA di lokasi tempat grup baris itu punya detail lokasi (M07/M08 + personil).
         $pjaPer = $unggah->perusahaanPerBaris();
+        // Flag IKK: Item Sumber OAK baris ini cocok daftar drm_master_ikk (lihat DrmMasterBarisUnggah::ikkPerBaris()).
+        $ikkInput = [];
+        foreach ($baris as $b) {
+            $ikkInput[(int) $b->ri] = ['aktivitas' => (string) $b->aktivitas, 'sub' => (string) ($b->sub ?? ''), 'bahaya' => (string) $b->bahaya,
+                'OAK' => array_column($label[(int) $b->ri]['OAK'] ?? [], 'label')];
+        }
+        $ikkPer = $unggah->ikkPerBaris($ikkInput);
         $rows = array_map(fn ($b) => [
             'ri' => (int) $b->ri,
             'a' => (string) $b->aktivitas,
@@ -75,6 +82,7 @@ final class PetaRisikoMasterBarisController extends Controller
             'u' => $terakhir[(int) $b->ri] ?? null,
             'st' => $sitePer[(int) $b->ri] ?? [],
             'pja' => $pjaPer[(int) $b->ri] ?? [],
+            'ikk' => $ikkPer[(int) $b->ri] ?? false,
             'OBS' => $label[(int) $b->ri]['OBS'] ?? [],
             'OAK' => $label[(int) $b->ri]['OAK'] ?? [],
             'KET' => $label[(int) $b->ri]['KET'] ?? [],
@@ -104,7 +112,7 @@ final class PetaRisikoMasterBarisController extends Controller
         $filter = $request->validate([
             'kb' => ['nullable', 'in:Significant,High,Medium,Low'], 'kosong' => ['nullable', 'in:OBS,OAK,KET,SEMUA'],
             'dep' => ['nullable', 'string', 'max:150'], 'q' => ['nullable', 'string', 'max:200'], 'site' => ['nullable', 'string', 'max:60'],
-            'pja' => ['nullable', 'string', 'max:200'],
+            'pja' => ['nullable', 'string', 'max:200'], 'ikk' => ['nullable', 'in:YA,TIDAK'],
         ]);
         try {
             $baris = DB::table('drm_master_baris')->where('aktif', true)->get(['ri', 'idh', 'bahaya'])->all();

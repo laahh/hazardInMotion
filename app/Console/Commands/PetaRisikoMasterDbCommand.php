@@ -20,6 +20,9 @@ use Throwable;
  *   --turunkan-oak  turunkan kurasi itu menjadi label OAK "aktivitas / sub aktivitas" per baris di drm_master_teks
  *              (Item Sumber OAK master), memakai sub aktivitas aktif dari master OAK (ClickHouse). Kurasi sendiri
  *              tidak dihitung sync; yang dihitung hanya label per baris.
+ *   --isi-ikk  isi/timpa HANYA tabel daftar aktivitas/sub aktivitas OAK terkait IKK (drm_master_ikk) dari seed
+ *              tetap (DrmMasterDb::DAFTAR_IKK_AWAL); tabel master lain tidak tersentuh. Dikoreksi lebih lanjut
+ *              di /peta-risiko-pja/master (tab "Aktivitas IKK").
  * Tanpa opsi: tampilkan status (jumlah baris per tabel, perubahan terakhir).
  * Setelah tabel terisi, peta-risiko:sync memakai database, bukan master.json.
  */
@@ -30,6 +33,7 @@ class PetaRisikoMasterDbCommand extends Command
         {--isi-oak : Isi/timpa hanya tabel kurasi aktivitas OAK → aktivitas HIRA dari config}
         {--turunkan-oak : Turunkan kurasi aktivitas OAK menjadi label OAK per baris (Item Sumber OAK) di master}
         {--isi-label-baris : Satukan label OBS/OAK/Ketidaksesuaian ke kolom item_sumber_* drm_master_baris (master satu tabel)}
+        {--isi-ikk : Isi/timpa hanya tabel daftar aktivitas/sub aktivitas OAK terkait IKK dari seed tetap}
         {--force : Lewati konfirmasi saat menimpa tabel yang sudah berisi}';
 
     protected $description = 'Status / pengisian awal tabel master mapping Peta Risiko PJA (drm_master_*)';
@@ -47,6 +51,9 @@ class PetaRisikoMasterDbCommand extends Command
         }
         if ($this->option('isi-label-baris')) {
             return $this->isiLabelBaris($db);
+        }
+        if ($this->option('isi-ikk')) {
+            return $this->isiIkk($db);
         }
         if (! DrmMasterDb::siap()) {
             $this->error('Tabel master belum ada. Jalankan migrasi 2026_11_17_100000_create_drm_master_tables lebih dulu.');
@@ -108,6 +115,30 @@ ORDER BY site, lokasi, pja', 120));
         }
         $this->info("Tabel kurasi aktivitas OAK terisi: {$n} pasangan aktivitas OAK → aktivitas HIRA.");
         $this->line('Sesuaikan di /peta-risiko-pja/master (tab "Aktivitas OAK → aktivitas HIRA"), lalu jalankan peta-risiko:sync.');
+
+        return self::SUCCESS;
+    }
+
+    private function isiIkk(DrmMasterDb $db): int
+    {
+        if (! Schema::hasTable(DrmMasterDb::TABEL_IKK)) {
+            $this->error('Tabel '.DrmMasterDb::TABEL_IKK.' belum ada. Jalankan migrasi 2026_11_25_100000_create_drm_master_ikk_table lebih dulu.');
+
+            return self::FAILURE;
+        }
+        if (DB::table(DrmMasterDb::TABEL_IKK)->exists() && ! $this->option('force')
+            && ! $this->confirm('Tabel daftar IKK sudah berisi. Isinya akan ditimpa dari seed tetap (koreksi manual ikut tertimpa). Lanjutkan?')) {
+            return self::INVALID;
+        }
+        try {
+            $n = $db->isiIkk();
+        } catch (Throwable $e) {
+            $this->error('Gagal: '.$e->getMessage());
+
+            return self::FAILURE;
+        }
+        $this->info("Tabel daftar IKK terisi: {$n} pasangan aktivitas / sub aktivitas.");
+        $this->line('Koreksi di /peta-risiko-pja/master (tab "Aktivitas IKK") kalau ada perubahan; flag IKK di /peta-risiko-pja/master/baris dihitung langsung, tidak perlu sync.');
 
         return self::SUCCESS;
     }
@@ -174,7 +205,8 @@ ORDER BY akt, sub', 120) as $r) {
 
     private function status(): int
     {
-        $tabel = [...self::TABEL, ...(Schema::hasTable(DrmMasterDb::TABEL_OAK_AKTIVITAS) ? [DrmMasterDb::TABEL_OAK_AKTIVITAS] : [])];
+        $tabel = [...self::TABEL, ...(Schema::hasTable(DrmMasterDb::TABEL_OAK_AKTIVITAS) ? [DrmMasterDb::TABEL_OAK_AKTIVITAS] : []),
+            ...(Schema::hasTable(DrmMasterDb::TABEL_IKK) ? [DrmMasterDb::TABEL_IKK] : [])];
         $this->table(['Tabel', 'Baris'], array_map(fn ($t) => [$t, number_format(DB::table($t)->count(), 0, ',', '.')], $tabel));
         $terakhir = DB::table('drm_master_log')->orderByDesc('id')->first();
         $this->line(DrmMasterDb::terisi()

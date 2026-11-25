@@ -24,6 +24,35 @@ final class DrmMasterDb
     /** Kurasi aktivitas OAK → aktivitas HIRA (migrasi terpisah 2026_11_18_100000). */
     public const TABEL_OAK_AKTIVITAS = 'drm_master_oak_aktivitas';
 
+    /** Daftar aktivitas/sub aktivitas OAK terkait IKK (migrasi terpisah 2026_11_25_100000). */
+    public const TABEL_IKK = 'drm_master_ikk';
+
+    /**
+     * Seed awal daftar IKK (keputusan user 25 Nov 2026, dari daftar "aktivitas/sub aktivitas pekerjaan OAK terkait
+     * IKK"): [aktivitas, sub aktivitas, cek_luar_workshop]. cek_luar_workshop = true untuk kategori "Perbaikan,
+     * Perawatan & Fabrikasi" yang teksnya sendiri generik (tidak menyebut lokasi) — lihat ikkPerBaris().
+     * Diisi lewat `peta-risiko:master-db --isi-ikk`, dikoreksi lebih lanjut di /peta-risiko-pja/master.
+     */
+    public const DAFTAR_IKK_AWAL = [
+        ['Bekerja dengan Panas', '[CCV] Bekerja dengan Panas', false],
+        ['Bekerja dengan Panas', 'Pemotongan', false],
+        ['Bekerja dengan Panas', 'Pengelasan', false],
+        ['Bekerja dengan Panas', 'Penggerindaan', false],
+        ['Bekerja di Area Coal Processing Plant', '[CCV CPP] Perbaikan Unit di Luar Workshop (Area CPP)', false],
+        ['Bekerja di Dekat Air', '[CCV] Bekerja di Dekat Air', false],
+        ['Bekerja di Dekat Air', 'Bekerja di Dekat Air', false],
+        ['Bekerja di Dekat Air', 'Pit Dewatering', false],
+        ['Bekerja di Ketinggian', '[CCV] Bekerja di Ketinggian', false],
+        ['Bekerja di Ketinggian', 'Ketinggian <10 m', false],
+        ['Bekerja di Ketinggian', 'Ketinggian >10 m', false],
+        ['Bekerja di Ketinggian', 'Pemasangan dan atau Penggunaan Perancah', false],
+        ['Pengangkatan & Pengangkutan Unit/Material', '[CCV] Pengangkatan & Pengangkutan Unit/Material', false],
+        ['Pengangkatan & Pengangkutan Unit/Material', 'Pengangkatan', false],
+        ['Pengangkatan & Pengangkutan Unit/Material', 'Pengangkutan', false],
+        ['Perbaikan, Perawatan & Fabrikasi Unit/Fasilitas Tambang', '[CCV] Perbaikan, Perawatan & Fabrikasi Unit/Fasilitas Tambang', true],
+        ['Perbaikan, Perawatan & Fabrikasi Unit/Fasilitas Tambang', '[Trial CCV BMO1] Perbaikan dan fabrikasi unit/fasilitas tambang', true],
+    ];
+
     /** @var array<string, list<string>>|false|null cache oakAktivitas() per proses (false = belum dibaca) */
     private static array|false|null $cacheOak = false;
 
@@ -250,6 +279,26 @@ final class DrmMasterDb
         });
         $this->catat(self::TABEL_OAK_AKTIVITAS, '*', 'isi', null, ['baris' => count($rows)]);
         self::lupakanCacheOak();
+
+        return count($rows);
+    }
+
+    /** Isi (timpa) tabel daftar IKK dari DAFTAR_IKK_AWAL. Tabel master lain tidak tersentuh. */
+    public function isiIkk(): int
+    {
+        if (! Schema::hasTable(self::TABEL_IKK)) {
+            throw new RuntimeException('Tabel '.self::TABEL_IKK.' belum dimigrasi (2026_11_25_100000_create_drm_master_ikk_table).');
+        }
+        $sekarang = now();
+        $rows = array_map(fn (array $r) => ['aktivitas' => $r[0], 'sub_aktivitas' => $r[1], 'cek_luar_workshop' => $r[2],
+            'aktif' => true, 'created_at' => $sekarang, 'updated_at' => $sekarang], self::DAFTAR_IKK_AWAL);
+        DB::transaction(function () use ($rows) {
+            DB::table(self::TABEL_IKK)->delete();
+            foreach (array_chunk($rows, self::PECAH) as $potong) {
+                DB::table(self::TABEL_IKK)->insert($potong);
+            }
+        });
+        $this->catat(self::TABEL_IKK, '*', 'isi', null, ['baris' => count($rows)]);
 
         return count($rows);
     }

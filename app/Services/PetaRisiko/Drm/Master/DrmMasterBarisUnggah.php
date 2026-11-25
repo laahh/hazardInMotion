@@ -5,6 +5,7 @@ namespace App\Services\PetaRisiko\Drm\Master;
 use App\Services\PetaRisiko\Drm\DrmMaster;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
@@ -154,6 +155,54 @@ final class DrmMasterBarisUnggah
     }
 
     /**
+     * Flag IKK (Izin Kerja Khusus) per baris: true kalau salah satu Item Sumber OAK-nya cocok (DrmMaster::normTeks,
+     * format "aktivitas / sub aktivitas") dengan salah satu daftar drm_master_ikk aktif. Untuk entri yang ditandai
+     * cek_luar_workshop, baris yang teks aktivitas/sub/bahaya-risikonya SENDIRI menyebut "workshop" atau "pit stop"
+     * dikecualikan dari flag ini meski labelnya cocok — pekerjaan perbaikan/perawatan di workshop/pit stop dianggap
+     * bukan risiko lapangan IKK (keputusan user 25 Nov 2026).
+     *
+     * @param  array<int, array{aktivitas: string, sub: string, bahaya: string, OAK: list<string>}>  $isianDb  ri => isian (lihat isianDb())
+     * @return array<int, bool>  ri => true (hanya yang IKK; ri lain dianggap bukan IKK)
+     */
+    public function ikkPerBaris(array $isianDb): array
+    {
+        if (! Schema::hasTable(DrmMasterDb::TABEL_IKK)) {
+            return [];
+        }
+        $daftar = DB::table(DrmMasterDb::TABEL_IKK)->where('aktif', true)->get(['aktivitas', 'sub_aktivitas', 'cek_luar_workshop']);
+        if ($daftar->isEmpty()) {
+            return [];
+        }
+        $peta = [];
+        foreach ($daftar as $d) {
+            $kunci = DrmMaster::normTeks($d->aktivitas.' / '.$d->sub_aktivitas);
+            $peta[$kunci] = ($peta[$kunci] ?? false) || (bool) $d->cek_luar_workshop;
+        }
+        $hasil = [];
+        foreach ($isianDb as $ri => $b) {
+            foreach ($b['OAK'] as $label) {
+                $kunci = DrmMaster::normTeks($label);
+                if (! array_key_exists($kunci, $peta)) {
+                    continue;
+                }
+                if ($peta[$kunci] && self::sebutWorkshop($b['aktivitas'].' '.$b['sub'].' '.$b['bahaya'])) {
+                    continue; // cek_luar_workshop: teks baris ini sendiri menyebut workshop/pit stop → dikecualikan
+                }
+                $hasil[$ri] = true;
+                break;
+            }
+        }
+
+        return $hasil;
+    }
+
+    /** Teks menyebut "workshop" atau "pit stop" (huruf besar/kecil apa pun, boleh ada spasi di tengah "pit stop")? */
+    private static function sebutWorkshop(string $teks): bool
+    {
+        return (bool) preg_match('/workshop|pit\s*stop/iu', $teks);
+    }
+
+    /**
      * Isian semua baris aktif saat ini: ri => [aktivitas, sub, bahaya, kb, grup[], OBS[], OAK[], KET[], aid, idh].
      *
      * @return array<int, array<string, mixed>>
@@ -209,11 +258,14 @@ final class DrmMasterBarisUnggah
         $kata = array_filter(preg_split('/\s+/', mb_strtolower(trim((string) ($filter['q'] ?? '')))) ?: []);
         $sitePer = $this->sitePerBaris($hira);
         $pjaPer = $this->perusahaanPerBaris();
+        $isianDb = $this->isianDb();
+        $ikkPer = $this->ikkPerBaris($isianDb);
         $hasil = [];
-        foreach ($this->isianDb() as $ri => $b) {
+        foreach ($isianDb as $ri => $b) {
             $deptHira = array_values(array_unique(array_filter(array_column($hira[$ri] ?? [], 'dept'))));
             $site = $sitePer[$ri] ?? [];
             $pja = $pjaPer[$ri] ?? [];
+            $ikk = $ikkPer[$ri] ?? false;
             if (($filter['kb'] ?? '') !== '' && $b['kb'] !== $filter['kb']) {
                 continue;
             }
@@ -221,6 +273,12 @@ final class DrmMasterBarisUnggah
                 continue;
             }
             if (($filter['pja'] ?? '') !== '' && ! array_filter($pja, fn ($p) => in_array($filter['pja'], $p['perusahaan'], true))) {
+                continue;
+            }
+            if (($filter['ikk'] ?? '') === 'YA' && ! $ikk) {
+                continue;
+            }
+            if (($filter['ikk'] ?? '') === 'TIDAK' && $ikk) {
                 continue;
             }
             $k = (string) ($filter['kosong'] ?? '');
@@ -240,7 +298,7 @@ final class DrmMasterBarisUnggah
             $teksPja = implode("\n", array_map(fn ($p) => $p['site'].' · '.$p['lokasi']
                 .(($p['detail'] ?? []) ? ' ('.implode(', ', $p['detail']).')' : '').': '.implode(', ', $p['perusahaan']), $pja));
             $hasil[] = [...$b, 'dept_hira' => implode("\n", $deptHira), 'site' => implode("\n", $site), 'pja' => $teksPja,
-                'kelompok' => (string) ($kelompok[$b['aid']] ?? ''), 'versi' => DrmMasterBarisExcel::versi($b)];
+                'ikk' => $ikk ? 'Ya' : '', 'kelompok' => (string) ($kelompok[$b['aid']] ?? ''), 'versi' => DrmMasterBarisExcel::versi($b)];
         }
 
         return $hasil;

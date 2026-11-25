@@ -47,6 +47,7 @@ final class DrmMasterBarisExcel
         'kb' => ['Risiko awal (info)', 13, false],
         'site' => ['Site (info)', 14, false],
         'pja' => ['Perusahaan / PJA (info)', 28, false],
+        'ikk' => ['IKK (info)', 10, false],
         'dept_hira' => ['Departemen HIRA (info)', 26, false],
         'idh' => ['ID HIRA (info)', 13, false],
         'kelompok' => ['Kelompok aktivitas (info)', 22, false],
