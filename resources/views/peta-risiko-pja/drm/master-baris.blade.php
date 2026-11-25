@@ -248,6 +248,7 @@
       '<span class="mb-hid">HIRA <b>' + x.idh + '</b>' + (x.ada ? ' · rev ' + x.rev + (x.aktif ? '' : ' · nonaktif') : '')
         + (x.cocok ? '<span class="mb-tag cocok" title="Teks bahaya baris ini ada di dokumen HIRA ini">cocok</span>' : '')
         + (x.kosong ? '<span class="mb-tag kosong" title="Dokumen HIRA ada tetapi belum berisi bahaya/site (tidak ada di mv_hira_master)">kosong</span>' : '')
+        + (x.ada && x.deptAktif === false ? '<span class="mb-tag hilang" title="Departemen pemilik dokumen HIRA ini sudah dinonaktifkan di OBDS — kemungkinan dokumen yatim/duplikat, lihat dokumen lain yang masih aktif">departemen nonaktif</span>' : '')
         + (!x.ada ? '<span class="mb-tag hilang">tidak ada</span>' : '') + '</span>').join('')).join('');
   }
 

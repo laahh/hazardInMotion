@@ -246,10 +246,11 @@
     isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
         <div class="dr-hira-dok-k"><b>HIRA ${esc(x.idh)}</b>${x.ada ? ` · rev ${esc(x.rev)}` : ''}
           ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.kosong ? '<span class="dr-pl-tag" style="background:#fff4e5;color:#9a5b00">dokumen kosong</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
-          ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
+          ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}
+          ${x.ada && x.deptAktif === false ? '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318" title="Departemen pemilik dokumen ini sudah dinonaktifkan di OBDS — kemungkinan dokumen yatim/duplikat, cek dokumen lain yang memuat bahaya ini">departemen nonaktif</span>' : ''}</div>
         ${x.kosong ? '<p class="dr-mute" style="margin:0 0 6px">Dokumen ini ada di HIRA (hira_master) tetapi belum berisi bahaya-risiko, site, maupun section, sehingga tidak muncul di mv_hira_master. Nilai risiko baris baseline ini tidak berasal dari dokumen ini.</p>' : ''}
         ${x.ada ? `<table class="pr-tbl dr-tbl"><tbody>
-          ${baris('Departemen', esc(x.dept))}${baris('Aktivitas spesifik', esc(x.spesifik))}
+          ${baris('Departemen', esc(x.dept) + (x.deptAktif === false ? ' <span class="br-red">(nonaktif)</span>' : ''))}${baris('Aktivitas spesifik', esc(x.spesifik))}
           ${baris('Aktivitas · sub', esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site', esc((x.site || []).join(', ')))}
           ${baris('Bagian', esc(x.bagian))}${baris('Perusahaan', esc(x.perusahaan))}${baris('Klasifikasi', esc(x.rutin))}${baris('Diperbarui', esc(x.diperbarui))}
         </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di HIRA (hira_master maupun mv_hira_master).</p>'}</div>`).join('')

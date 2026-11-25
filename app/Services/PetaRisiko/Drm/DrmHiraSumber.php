@@ -82,7 +82,11 @@ class DrmHiraSumber
                 unset($d['bahaya']);
                 $daftar[] = [...$d, 'idh' => $id, 'ada' => true, 'cocok' => $cocok];
             }
-            usort($daftar, fn ($x, $y) => [$y['cocok'], $y['ada'], (int) ($y['aktif'] ?? 0)] <=> [$x['cocok'], $x['ada'], (int) ($x['aktif'] ?? 0)] ?: $x['idh'] <=> $y['idh']);
+            // deptAktif didahulukan tepat setelah cocok (sebelum ada/aktif dokumennya sendiri): dokumen yang
+            // departemennya sudah dibekukan kemungkinan dokumen yatim/duplikat, jadi jangan sampai mengalahkan
+            // dokumen lain yang departemennya masih aktif walau skor "aktif dokumen"-nya kalah (lihat DrmSql.php, sc).
+            usort($daftar, fn ($x, $y) => [$y['cocok'], (int) ($y['deptAktif'] ?? true), $y['ada'], (int) ($y['aktif'] ?? 0)]
+                <=> [$x['cocok'], (int) ($x['deptAktif'] ?? true), $x['ada'], (int) ($x['aktif'] ?? 0)] ?: $x['idh'] <=> $y['idh']);
             $hasil[$b['ri']] = $daftar;
         }
 
@@ -105,17 +109,26 @@ class DrmHiraSumber
             return [];
         }
 
-        return Cache::remember('peta-risiko:hira-sumber:v2:'.md5(implode(',', $idh)), self::CACHE_DETIK, function () use ($idh) {
+        return Cache::remember('peta-risiko:hira-sumber:v3:'.md5(implode(',', $idh)), self::CACHE_DETIK, function () use ($idh) {
+            // deptAktif: status aktif DEPARTEMEN pemilik dokumen (obds.hira_master.hira_dept_id → obds.hira_department
+            // .is_active) — BEDA dengan status_aktif dokumen HIRA itu sendiri. mv_hira_master tidak membawa ID
+            // departemen (cuma nama teks), jadi join lewat obds.hira_master mentah via id_hira_master. Dokumen bisa
+            // berstatus aktif tetapi departemennya sudah dibekukan (dokumen "yatim"/duplikat) — temuan user 25 Nov
+            // 2026 (HIRA 5156 "Human Resources Operation Dept." id 25, dept nonaktif, duplikat aktivitas HIRA 884
+            // milik Port and Barging Operation Dept. yang masih aktif).
             $rows = $this->ch->select('
-SELECT id_hira_master AS idh, any(ifNull(revisi, 0)) AS rev, any(ifNull(departemen, \'\')) AS dept,
-       any(ifNull(nama_aktivitas_spesifik, \'\')) AS spesifik, any(ifNull(nama_aktivitas, \'\')) AS aktivitas,
-       any(ifNull(nama_sub_aktivitas, \'\')) AS sub, any(ifNull(bagian, \'\')) AS bagian, any(ifNull(perusahaan, \'\')) AS perusahaan,
-       any(ifNull(site, \'[]\')) AS site, any(ifNull(status_aktif, \'\')) AS aktif, any(ifNull(klasifikasi_rutin, \'\')) AS rutin,
-       any(ifNull(toString(toDate(tanggal_update)), \'\')) AS diperbarui,
-       any(arrayMap(c -> JSONExtractString(c, \'bahaya_penyebab_potensial\'), JSONExtractArrayRaw(ifNull(causes, \'[]\')))) AS bahaya
-FROM obds.mv_hira_master
-WHERE id_hira_master IN ('.implode(', ', $idh).')
-GROUP BY id_hira_master', 60);
+SELECT h.id_hira_master AS idh, any(ifNull(h.revisi, 0)) AS rev, any(ifNull(h.departemen, \'\')) AS dept,
+       any(ifNull(h.nama_aktivitas_spesifik, \'\')) AS spesifik, any(ifNull(h.nama_aktivitas, \'\')) AS aktivitas,
+       any(ifNull(h.nama_sub_aktivitas, \'\')) AS sub, any(ifNull(h.bagian, \'\')) AS bagian, any(ifNull(h.perusahaan, \'\')) AS perusahaan,
+       any(ifNull(h.site, \'[]\')) AS site, any(ifNull(h.status_aktif, \'\')) AS aktif, any(ifNull(h.klasifikasi_rutin, \'\')) AS rutin,
+       any(ifNull(toString(toDate(h.tanggal_update)), \'\')) AS diperbarui,
+       any(arrayMap(c -> JSONExtractString(c, \'bahaya_penyebab_potensial\'), JSONExtractArrayRaw(ifNull(h.causes, \'[]\')))) AS bahaya,
+       any(ifNull(dd.is_active, \'1\')) AS dept_aktif
+FROM obds.mv_hira_master h
+LEFT JOIN obds.hira_master hm2 ON hm2.id = h.id_hira_master
+LEFT JOIN obds.hira_department dd ON dd.id = hm2.hira_dept_id
+WHERE h.id_hira_master IN ('.implode(', ', $idh).')
+GROUP BY h.id_hira_master', 60);
             $peta = [];
             foreach ($rows as $r) {
                 $situs = json_decode((string) $r['site'], true);
@@ -125,6 +138,7 @@ GROUP BY id_hira_master', 60);
                     'perusahaan' => trim((string) $r['perusahaan']), 'site' => is_array($situs) ? array_values(array_map('strval', $situs)) : [],
                     'aktif' => (string) $r['aktif'] === '1', 'rutin' => (string) $r['rutin'], 'diperbarui' => (string) $r['diperbarui'],
                     'bahaya' => array_values(array_map('strval', (array) $r['bahaya'])),
+                    'deptAktif' => (string) $r['dept_aktif'] !== '0',
                     'kosong' => false,
                 ];
             }
@@ -150,7 +164,7 @@ GROUP BY id_hira_master', 60);
         $rows = $this->ch->select('
 SELECT h.id AS idh, any(ifNull(h.rev, 0)) AS rev, any(ifNull(d.name, \'\')) AS dept, any(ifNull(a.name, \'\')) AS spesifik,
        any(ifNull(a2.name, \'\')) AS sub, any(ifNull(a3.name, \'\')) AS aktivitas, any(ifNull(h.is_active, \'\')) AS aktif,
-       any(ifNull(toString(toDate(h.updated_date)), \'\')) AS diperbarui
+       any(ifNull(toString(toDate(h.updated_date)), \'\')) AS diperbarui, any(ifNull(d.is_active, \'1\')) AS dept_aktif
 FROM obds.hira_master h
 LEFT JOIN obds.hira_department d ON d.id = h.hira_dept_id
 LEFT JOIN obds.hira_activity a ON a.id = h.hira_activity_id
@@ -164,7 +178,7 @@ GROUP BY h.id', 60);
                 'rev' => (int) $r['rev'], 'dept' => trim((string) $r['dept']), 'spesifik' => trim((string) $r['spesifik']),
                 'aktivitas' => trim((string) $r['aktivitas']), 'sub' => trim((string) $r['sub']), 'bagian' => '', 'perusahaan' => '',
                 'site' => [], 'aktif' => (string) $r['aktif'] === '1', 'rutin' => '', 'diperbarui' => (string) $r['diperbarui'],
-                'bahaya' => [], 'kosong' => true,
+                'bahaya' => [], 'deptAktif' => (string) $r['dept_aktif'] !== '0', 'kosong' => true,
             ];
         }
 

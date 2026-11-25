@@ -773,11 +773,20 @@ hraw AS (
          arrayStringConcat(arrayMap(x -> concat(JSONExtractString(x, \'tipe_pengendalian\'), \': \', JSONExtractString(x, \'pengendalian_dilakukan\')),
                                     JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' | \') AS kt,
          arrayStringConcat(arrayMap(x -> JSONExtractString(x, \'pengendalian_dilakukan\'), JSONExtractArrayRaw(c, \'pengendalian_ada\')), \' \') AS kd,
-         toUInt8(ifNull(h.status_aktif, \'\') = \'1\') * 10000
+         -- Status aktif DEPARTEMEN pemilik dokumen (BUKAN status_aktif dokumen itu sendiri) didahulukan paling
+         -- atas: dokumen HIRA bisa berstatus aktif tetapi departemennya sudah dibekukan (dokumen yatim/duplikat
+         -- dari dept lain yang masih aktif) — mv_hira_master tidak membawa ID departemen, jadi lewat
+         -- obds.hira_master.hira_dept_id → obds.hira_department.is_active. Temuan user 25 Nov 2026 (HIRA 5156
+         -- "Human Resources Operation Dept." id 25 nonaktif, duplikat aktivitas HIRA 884 milik Port and Barging
+         -- Operation Dept. yang masih aktif) — tanpa ini, 5156 bisa mengalahkan 884 sebagai sumber atribut baseline.
+         toUInt8(ifNull(hd.is_active, \'1\') = \'1\') * 1000000
+           + toUInt8(ifNull(h.status_aktif, \'\') = \'1\') * 10000
            + multiIf(n1 = \'Significant\', 4, n1 = \'High\', 3, n1 = \'Medium\', 2, n1 = \'Low\', 1, 0) * 100
            + indexOf([\'Langka\', \'Kemungkinan Kecil\', \'Mungkin\', \'Sangat Mungkin\', \'Hampir Pasti\'], k1)
            * indexOf([\'Tidak Signifikan\', \'Minor\', \'Sedang\', \'Major\', \'Bencana\'], c1) AS sc
   FROM obds.mv_hira_master h ARRAY JOIN JSONExtractArrayRaw(assumeNotNull(h.causes)) AS c
+  LEFT JOIN obds.hira_master hm2 ON hm2.id = h.id_hira_master
+  LEFT JOIN obds.hira_department hd ON hd.id = hm2.hira_dept_id
   WHERE h.id_hira_master IN (SELECT arrayJoin(idh) FROM mh0)
 ),
 hm AS (
