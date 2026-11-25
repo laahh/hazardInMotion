@@ -358,6 +358,7 @@ final class DrmKorelasi
         $pusat = $this->simpulLabel($jenis, $teks);
         $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
         $grupPerRi = $this->grupPerBaris($baris->pluck('ri')->all());
+        $grupDipakai = [];
         foreach ($this->batasi('bahaya', $baris) as $b) {
             $a = $akt[$b->aid] ?? null;
             $na = $this->simpulAktivitas((int) $b->aid, (string) ($a->aktivitas ?? $b->aktivitas), (string) ($a->kelompok ?? 'K0'));
@@ -368,8 +369,10 @@ final class DrmKorelasi
             $this->sambung($nb, $pusat);
             foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $nama]) {
                 $this->sambung($nb, $this->simpulGrup($gid, $nama));
+                $grupDipakai[$gid] = true;
             }
         }
+        $this->lanjutDariGrup(array_keys($grupDipakai));
 
         return $pusat;
     }
