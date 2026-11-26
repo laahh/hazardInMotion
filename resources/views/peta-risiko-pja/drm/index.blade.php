@@ -222,6 +222,7 @@
     .catch(() => { $('#dr-kpi4').innerHTML = '<div class="pr-card"><div class="pr-empty">Gagal memuat data.</div></div>'; });
 
   function init() {
+    KEPALA_VEK = kepalaVek(); // M sudah siap di sini — pakai status3 (idk/idg/tid) kalau snapshot sudah punya.
     $('#dr-site').innerHTML += M.sites.map((s) => `<option value="${DR.esc(s)}">${DR.esc(s)}</option>`).join('');
     $('#dr-perusahaan').innerHTML += (M.perusahaan || []).map((p) => `<option value="${DR.esc(p)}">${DR.esc(p)}</option>`).join('');
     if (state.perusahaan !== 'ALL' && !(M.perusahaan || []).includes(state.perusahaan)) state.perusahaan = 'ALL';
@@ -1647,12 +1648,31 @@
     return `<div class="br-wb">${col.join('')}</div><div class="dr-mute" style="font-size:12px;margin-top:6px">Angka di dalam batang = porsi bahaya-risiko per status SAP (sama dengan kartu di atas). Angka di bawah = porsi teridentifikasi &amp; terkontrol.${wBerjalan(0) ? ' · * minggu berjalan, belum penuh' : ''}</div>`;
   }
 
+  /** true bila snapshot punya status gabungan (idk/idg/tid) — sama syarat dengan trenStatus() di atas tabel ini. */
+  const adaStatus3 = () => !!(M && M.beranda && M.beranda.kolomMgmt && M.beranda.kolomMgmt.includes('idk'));
+
+  /**
+   * Kolom status: 3 kategori (Teridentifikasi & Terkontrol / Ada Gap / Tidak Teridentifikasi) — keputusan user
+   * 26 Nov 2026, menyamakan dengan kartu KPI & tren di atas tabel ini (sebelumnya 4 kolom pita %DL yang beda
+   * istilah). "Komposisi" (bar 4 warna) tetap dipertahankan apa adanya, cuma kolom teks di sebelahnya yang
+   * berubah. Snapshot lama tanpa idk/idg/tid tetap jatuh balik ke label pita %DL lama.
+   */
   function barisVek(v, v0) {
-    return `<td>${DR.sb4(v.full, v.part, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td><td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
+    const status = `<td>${DR.sb4(v.full, v.part, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td>`
+      + STATUS3.map(([k]) => `<td class="r">${k === 'idk' ? `<b>${pctI(v.idk, v.t)}</b>${v0 ? '<br>' + delta(v.idk, v.t, v0.idk, v0.t, true) : ''}` : pctI(v[k], v.t)}</td>`).join('');
+    const lama = `<td>${DR.sb4(v.full, v.part, v.gapo, v.none)}</td><td class="r">${DR.fmt(v.t)}</td><td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
       <td class="r">${pctI(v.part, v.t)}</td><td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td>`;
+    return adaStatus3() ? status : lama;
   }
-  const kepalaVek = (L = LBL_SPEC) => `<th style="min-width:200px">Komposisi</th><th class="r">Baris</th><th class="r">${L.kFull === 'Terkontrol penuh' ? 'Terkontrol penuh' : 'Terkontrol ' + L.kFull}</th><th class="r">${L.kPart}</th><th class="r">${L.kGapo}</th><th class="r">${L.kNone}</th>`;
-  const KEPALA_VEK = kepalaVek();
+  function kepalaVek(L = LBL_SPEC) {
+    const kolom = adaStatus3() ? STATUS3.map(([, , nama]) => `<th class="r">${nama}</th>`).join('')
+      : `<th class="r">${L.kFull === 'Terkontrol penuh' ? 'Terkontrol penuh' : 'Terkontrol ' + L.kFull}</th><th class="r">${L.kPart}</th><th class="r">${L.kGapo}</th><th class="r">${L.kNone}</th>`;
+    return `<th style="min-width:200px">Komposisi</th><th class="r">Baris</th>${kolom}`;
+  }
+  // Dipakai tabel "Identifikasi per periode" (disembunyikan sementara) — dihitung ulang di init() setelah M
+  // siap, supaya ikut status3 juga begitu ada (sebelumnya dihitung sekali sebelum M termuat, selalu jatuh ke
+  // label lama).
+  let KEPALA_VEK = kepalaVek();
 
   function tabelSitePeriode(w) {
     const NW = M.beranda.minggu.length, semua = M.beranda.mgmt;
