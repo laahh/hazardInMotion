@@ -31,8 +31,8 @@
 
   @section('header-aksi')
     <div class="dr-bar">
-      <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="site">Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
+      <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
       <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label>Perusahaan <select id="dr-perusahaan"><option value="ALL">Semua perusahaan</option></select></label>
       <label><span class="material-symbols-outlined" style="font-size:18px;color:var(--primary)">calendar_month</span> Periode <select id="dr-w"></select></label>
@@ -229,15 +229,15 @@
     $('#dr-perusahaan').addEventListener('change', (e) => { state.perusahaan = e.target.value; render(); });
     // Grup lokasi tanpa baris baseline sama sekali (mis. grup master dengan 0 baris HIRA) tidak ditampilkan.
     M.grup = grupBerisi();
-    $('#dr-grup').innerHTML = M.grup.map((g) => `<option value="${DR.esc(g)}">${DR.esc(g)}</option>`).join('');
-    if (!state.grup || !M.grup.includes(state.grup)) state.grup = M.grup[0];
-    $('#dr-site').value = state.site; $('#dr-grup').value = state.grup; $('#dr-lv').value = state.lv;
-    // Kelompok aktivitas tergantung site terpilih (keputusan user 26 Nov 2026) — isi SETELAH #dr-site di atas
-    // punya nilai, supaya daftar kelompok yang muncul memang sesuai site yang sedang aktif saat halaman dibuka.
+    $('#dr-site').value = state.site; $('#dr-lv').value = state.lv;
+    // Group Lokasi & Kelompok Aktivitas tergantung site terpilih (keputusan user 26 Nov 2026) — isi SETELAH
+    // #dr-site di atas punya nilai, supaya daftar yang muncul memang sesuai site yang sedang aktif saat halaman
+    // dibuka; kalau site itu tidak punya grup/kelompok tertentu, opsinya tidak muncul sama sekali.
+    isiGrup();
     isiProses();
     $('#dr-proses').addEventListener('change', (e) => { state.proses = e.target.value; render(); });
     document.querySelectorAll('.dr-tabs button').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
-    $('#dr-site').addEventListener('change', (e) => { state.site = e.target.value; isiProses(); render(); });
+    $('#dr-site').addEventListener('change', (e) => { state.site = e.target.value; isiGrup(); isiProses(); render(); });
     $('#dr-grup').addEventListener('change', (e) => { state.grup = e.target.value; render(); });
     $('#dr-lv').addEventListener('change', (e) => { state.lv = e.target.value; render(); });
     $('#dr-cari').addEventListener('input', (e) => { state.cari = e.target.value.toLowerCase(); renderPja(); });
@@ -261,18 +261,44 @@
     return hasil.length ? hasil : M.grup;
   }
 
+  /** Baris ringkasan ("p"-shaped, punya .grp/.kel) buat site itu: pakai pita cakupan kalau ada, kalau tidak gabung per-PJA. */
+  function sumberSite(site) {
+    return site === 'ALL'
+      ? (M.beranda && M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL ? [M.beranda.ringkas.ALL.ALL] : ((M.beranda || {}).mgmt || []))
+      : (M.beranda && M.beranda.ringkas && M.beranda.ringkas[site] && M.beranda.ringkas[site].ALL ? [M.beranda.ringkas[site].ALL]
+        : ((M.beranda || {}).mgmt || []).filter((p) => p.site === site));
+  }
+
+  /**
+   * Group Lokasi (dari M.grup, sudah difilter global non-kosong) yang punya minimal satu baris baseline DI SITE
+   * itu (keputusan user 26 Nov 2026: filter Group Lokasi tergantung site terpilih — mis. site tanpa grup
+   * tertentu tidak menampilkan grup itu). site === 'ALL' → semua grup yang punya data di mana pun.
+   */
+  function grupBerisiSite(site) {
+    const ada = new Set();
+    sumberSite(site).forEach((p) => (p.grp || []).forEach((perLv) => Object.values(perLv || {}).forEach((m) => Object.entries(m || {}).forEach(([g, v]) => {
+      if ((v || [])[0] > 0) ada.add(g);
+    }))));
+    const hasil = M.grup.filter((g) => ada.has(g));
+    return hasil.length ? hasil : M.grup;
+  }
+
+  /** Isi/perbarui dropdown Group Lokasi sesuai site terpilih, pertahankan pilihan kalau masih tersedia. */
+  function isiGrup() {
+    const opsi = grupBerisiSite(state.site);
+    $('#dr-grup').innerHTML = opsi.map((g) => `<option value="${DR.esc(g)}">${DR.esc(g)}</option>`).join('');
+    if (!state.grup || !opsi.includes(state.grup)) state.grup = opsi[0];
+    $('#dr-grup').value = state.grup;
+  }
+
   /**
    * Kelompok aktivitas yang punya minimal satu baris baseline DI SITE itu (keputusan user 26 Nov 2026: filter
    * Kelompok Aktivitas tergantung site terpilih — mis. HO cuma menampilkan kelompok yang benar ada di HO).
    * site === 'ALL' → sama dengan tidak difilter (semua kelompok yang punya data di mana pun).
    */
   function prosesBerisi(site) {
-    const sumber = site === 'ALL'
-      ? (M.beranda && M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL ? [M.beranda.ringkas.ALL.ALL] : ((M.beranda || {}).mgmt || []))
-      : (M.beranda && M.beranda.ringkas && M.beranda.ringkas[site] && M.beranda.ringkas[site].ALL ? [M.beranda.ringkas[site].ALL]
-        : ((M.beranda || {}).mgmt || []).filter((p) => p.site === site));
     const ada = new Set();
-    sumber.forEach((p) => (p.kel || []).forEach((perLv) => Object.values(perLv || {}).forEach((m) => Object.entries(m || {}).forEach(([k, v]) => {
+    sumberSite(site).forEach((p) => (p.kel || []).forEach((perLv) => Object.values(perLv || {}).forEach((m) => Object.entries(m || {}).forEach(([k, v]) => {
       if ((v || [])[0] > 0) ada.add(k);
     }))));
     const hasil = M.proses.filter((p) => ada.has(p.kode));
