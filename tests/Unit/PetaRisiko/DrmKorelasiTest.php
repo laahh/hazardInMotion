@@ -31,6 +31,8 @@ class DrmKorelasiTest extends TestCase
         (require base_path('database/migrations/2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table.php'))->up();
         // Kolom pja_anak dipakai simpulPja() sejak fitur kolom "PJA Child" 26 Nov 2026.
         (require base_path('database/migrations/2026_11_26_100000_add_pja_anak_to_drm_master_lokasi_pja_table.php'))->up();
+        // drm_master_lokasi_pic dipakai simpulDl() sejak fitur "PIC Perusahaan" di detail panel, 26 Nov 2026.
+        (require base_path('database/migrations/2026_11_26_110000_create_drm_master_lokasi_pic_table.php'))->up();
         $this->isi();
         Storage::fake('local');
         Storage::disk('local')->put('peta-risiko-drm/meta.json', '{"dibuat":"x","sampai":"2026-11-17"}');
@@ -70,6 +72,8 @@ class DrmKorelasiTest extends TestCase
         $this->assertContains(['from' => 'g:20', 'to' => 'd:1'], $a['edge']);
         // PJA Workshop punya 2 PJA Child (Mitra A & B, lihat isi()).
         $this->assertSame(['PJA Mitra A', 'PJA Mitra B'], $node->where('jenis', 'pja_anak')->pluck('label')->sort()->values()->all());
+        // PIC Perusahaan (drm_master_lokasi_pic) nempel di simpul Detail Lokasi BMO 1/Workshop.
+        $this->assertSame(['PT Mitra Jaya'], $node['d:1']['pic']);
         $this->assertContains(['from' => 'p:'.md5('PJA Workshop'), 'to' => 'pa:'.md5('PJA Mitra A')], $a['edge']);
         $this->assertSame('2026-11-08', $a['minggu']);
     }
@@ -153,6 +157,9 @@ class DrmKorelasiTest extends TestCase
         DB::table('drm_master_lokasi_pja')->insert([
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'perusahaan' => 'PT Bukit Makmur Mandiri Utama', 'pja_anak' => "PJA Mitra A\nPJA Mitra B", 'aktif' => true],
             ['site' => 'LMO', 'lokasi' => 'ROM', 'nama_pja' => 'PJA ROM LMO', 'perusahaan' => "PT Berau Coal\nPT Pama Persada", 'pja_anak' => null, 'aktif' => true],
+        ]);
+        DB::table('drm_master_lokasi_pic')->insert([
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic_perusahaan' => 'PT Mitra Jaya', 'aktif' => true],
         ]);
     }
 }

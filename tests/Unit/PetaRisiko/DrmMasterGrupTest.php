@@ -25,6 +25,8 @@ class DrmMasterGrupTest extends TestCase
         config(['database.connections.uji_drm' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         DB::setDefaultConnection('uji_drm');
         (require base_path('database/migrations/2026_11_17_100000_create_drm_master_tables.php'))->up();
+        // Kolom pic_perusahaan: kolom "PIC Perusahaan" di tabel Master Grup Lokasi & Aktivitas, 26 Nov 2026.
+        (require base_path('database/migrations/2026_11_26_110000_create_drm_master_lokasi_pic_table.php'))->up();
         $this->isi();
     }
 
@@ -145,5 +147,20 @@ class DrmMasterGrupTest extends TestCase
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'gid' => 20, 'aktif' => true],
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 2', 'gid' => 20, 'aktif' => true],
         ]);
+        DB::table('drm_master_lokasi_pic')->insert([
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic_perusahaan' => "PT Mitra A\nPT Mitra B", 'aktif' => true],
+        ]);
+    }
+
+    public function test_pic_per_ri_dari_lokasi_pic(): void
+    {
+        $svc = app(DrmMasterGrup::class);
+
+        $hasil = $svc->picPerRi();
+
+        // ri 1 & 2 (grup 20, BMO 1/Workshop) dapat PIC; ri 754 di grup 20 juga (Jetty-nya ri 755 tidak ada PIC).
+        $this->assertSame(['PT Mitra A', 'PT Mitra B'], $hasil[1]);
+        $this->assertSame(['PT Mitra A', 'PT Mitra B'], $hasil[754]);
+        $this->assertArrayNotHasKey(755, $hasil);
     }
 }

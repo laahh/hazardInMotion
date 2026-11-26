@@ -37,7 +37,10 @@ final class PetaRisikoMasterGrupController extends Controller
         // Site & Perusahaan (lewat PJA): FILTER di tabel, bukan kolom (koreksi user 25 Nov 2026 — awalnya
         // ditampilkan sebagai kolom info, tapi yang dimaksud adalah dropdown filter seperti risiko/kelompok/grup).
         $lokasi = $this->grup->lokasiRingkasPerBaris();
-        $rows = array_map(fn (array $r) => $r + ['lok' => $lokasi[$r['ri']] ?? []], $this->grup->semuaBaris());
+        // PIC Perusahaan: ditampilkan sebagai KOLOM (bukan filter) — keputusan user 26 Nov 2026, beda perlakuan
+        // dengan Site/Perusahaan di atas.
+        $pic = $this->grup->picPerRi();
+        $rows = array_map(fn (array $r) => $r + ['lok' => $lokasi[$r['ri']] ?? [], 'pic' => $pic[$r['ri']] ?? []], $this->grup->semuaBaris());
 
         return view('peta-risiko-pja.drm.master-grup', $data + [
             'daftarGrup' => $this->grup->daftarGrup(),
@@ -50,7 +53,7 @@ final class PetaRisikoMasterGrupController extends Controller
     }
 
     /** Header unduhan grup, dipakai di unduh(). */
-    private const HEADER_UNDUH = ['ID baris', 'Aktivitas HIRA', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal', 'Kelompok aktivitas', 'Grup lokasi', 'Site', 'Detail lokasi', 'Perusahaan'];
+    private const HEADER_UNDUH = ['ID baris', 'Aktivitas HIRA', 'Sub aktivitas', 'Bahaya - risiko', 'Risiko awal', 'Kelompok aktivitas', 'Grup lokasi', 'Site', 'Detail lokasi', 'Perusahaan', 'PIC Perusahaan'];
 
     /**
      * Unduh CSV flat (1 baris = 1 grup × site/lokasi/detail × perusahaan, lihat DrmMasterGrup::eksporBarisLazy),
@@ -80,7 +83,7 @@ final class PetaRisikoMasterGrupController extends Controller
             fputcsv($out, self::HEADER_UNDUH, ';');
             $ditulis = 0;
             foreach ($this->grup->eksporBarisLazy($v) as $b) {
-                fputcsv($out, [$b['ri'], $b['aktivitas'], $b['sub'], $b['bahaya'], $b['kb'], $b['kelompok'], $b['grup'], $b['site'], $b['detail'], $b['perusahaan']], ';');
+                fputcsv($out, [$b['ri'], $b['aktivitas'], $b['sub'], $b['bahaya'], $b['kb'], $b['kelompok'], $b['grup'], $b['site'], $b['detail'], $b['perusahaan'], $b['pic']], ';');
                 if ((++$ditulis % 5000) === 0) {
                     flush();
                 }

@@ -56,6 +56,7 @@
   .al-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: -1px; }
   .al-leg b { display: block; width: 100%; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #8a8d90; }
   .al-edit-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .al-pic { display: inline-block; margin: 0 4px 4px 0; padding: 3px 9px; border-radius: 999px; background: #ecfeff; border: 1px solid #a5f3fc; color: #155e75; font-size: 11.5px; }
   .al-edit-btn[aria-pressed="true"] { background: #3952bc; color: #fff; border-color: #3952bc; }
   .al-sync { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 12px; background: #fff7e6; color: #8a5300; border: 1px solid rgba(217, 119, 6, .25); font-size: 13px; margin-bottom: 10px; }
   .al-mode-edit .al-n rect.kotak { stroke-dasharray: 4 3; }
@@ -384,10 +385,14 @@
     const st = STATUS[n.status];
     const tautan = n.jenis === 'grup' ? `<a class="al-btn sek" href="${URL_GRUP}?gid=${encodeURIComponent(n.id)}">Edit di master grup</a>`
       : n.jenis === 'bahaya' ? `<a class="al-btn sek" href="${URL_UBAH}&ubah=${encodeURIComponent(n.id)}">Ubah baris HIRA</a>` : '';
+    // PIC Perusahaan (dari PJA Child, drm_master_lokasi_pic) di Detail Lokasi — keputusan user 26 Nov 2026.
+    const pic = n.jenis === 'dl' && n.pic && n.pic.length
+      ? `<p class="pr-meta" style="margin:8px 0 4px"><b>PIC Perusahaan</b></p><div>${n.pic.map((p) => `<span class="al-pic">${esc(p)}</span>`).join('')}</div>` : '';
     $('al-detail').innerHTML = `<h3>${esc(NAMA_JENIS[n.jenis] || n.jenis)}</h3><h4>${esc(n.label)}</h4>
       <div class="sub">${esc(n.sub)}${st ? ` · <b style="color:${st[0]}">${st[1]}</b>` : ''}</div>
       <div class="al-aksi">${!n.pusat && FOKUS.includes(n.jenis) && n.jenis !== 'sub' ? '<button type="button" class="al-btn" id="al-fokus">Jadikan fokus</button>' : ''}${tautan}</div>
-      <p class="pr-meta" style="margin:0 0 4px"><b>Berasal dari</b></p>${daftar('kiri')}
+      ${pic}
+      <p class="pr-meta" style="margin:8px 0 4px"><b>Berasal dari</b></p>${daftar('kiri')}
       <p class="pr-meta" style="margin:8px 0 4px"><b>Mengarah ke</b></p>${daftar('kanan')}
       <div class="al-leg"><b>Bahaya-risiko</b>${Object.entries(LV).map(([l, c]) => `<span><i style="--c:${c};border-radius:2px"></i>${l}</span>`).join('')}
         ${Object.values(STATUS).map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</div>`;

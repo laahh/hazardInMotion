@@ -59,6 +59,9 @@ final class DrmKorelasi
     /** @var array<string, list<string>>|null nama_pja (huruf kecil) => daftar nama PJA Child (Mitra) */
     private ?array $anakPerPja = null;
 
+    /** @var array<string, list<string>>|null "site|lokasi" (huruf kecil) => daftar PIC Perusahaan */
+    private ?array $picPerLokasi = null;
+
     public function __construct(private readonly DrmRepository $repo)
     {
     }
@@ -551,7 +554,28 @@ final class DrmKorelasi
 
     private function simpulDl(object $d): string
     {
-        return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi, ['site' => (string) $d->site]);
+        return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi,
+            ['site' => (string) $d->site, 'pic' => $this->picUntukLokasi((string) $d->site, (string) $d->lokasi)]);
+    }
+
+    /**
+     * PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child — lihat migrasi 2026_11_26_110000) untuk
+     * Detail Lokasi di diagram Alur Baseline (keputusan user 26 Nov 2026). Di-cache sekali per alur(), bukan
+     * query per simpul.
+     *
+     * @return list<string>
+     */
+    private function picUntukLokasi(string $site, string $lokasi): array
+    {
+        if ($this->picPerLokasi === null) {
+            $this->picPerLokasi = [];
+            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->select('site', 'lokasi', 'pic_perusahaan')->get() as $p) {
+                $k = mb_strtolower(trim((string) $p->site).'|'.trim((string) $p->lokasi));
+                $this->picPerLokasi[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
+            }
+        }
+
+        return $this->picPerLokasi[mb_strtolower(trim($site).'|'.trim($lokasi))] ?? [];
     }
 
     /**

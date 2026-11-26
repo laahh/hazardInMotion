@@ -37,6 +37,8 @@
   .mg-chip button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
   .mg-chip button:hover { color: #b91c1c; }
   .mg-kosong { color: #b0b3b6; font-size: 12px; font-style: italic; }
+  .mg-tbl td.pic { min-width: 200px; }
+  .mg-pic { display: inline-block; margin: 0 4px 4px 0; padding: 3px 9px; border-radius: 999px; background: #ecfeff; border: 1px solid #a5f3fc; color: #155e75; font-size: 11.5px; }
   .mg-tambah summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #3952bc; list-style: none; }
   .mg-tambah summary::-webkit-details-marker { display: none; }
   .mg-tambah form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
@@ -142,7 +144,7 @@
       <table class="mg-tbl" id="mg-tabel" style="width:100%">
         <thead><tr>
           @if ($bolehUbah)<th style="width:30px"><input type="checkbox" id="mg-semua" aria-label="Pilih semua baris yang tampil"></th>@endif
-          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Asal HIRA</th><th>Kelompok aktivitas</th><th>Grup lokasi</th>
+          <th>Aktivitas</th><th>Sub aktivitas</th><th>Bahaya - risiko</th><th>Asal HIRA</th><th>Kelompok aktivitas</th><th>Grup lokasi</th><th>PIC Perusahaan</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -283,6 +285,13 @@
     return isi + (BOLEH ? formTambahGrup(r.ri, d.map((g) => g.gid)) : '');
   } };
 
+  // PIC Perusahaan: dari PJA Child (drm_master_lokasi_pic), bukan dari PJA induk — murni tampilan (tidak bisa
+  // diedit di sini), keputusan user 26 Nov 2026.
+  const kolomPic = { data: 'pic', orderable: false, className: 'pic', render: (d, type) => {
+    if (type !== 'display') return d.join(' | ');
+    return d.length ? d.map((p) => '<span class="mg-pic">' + esc(p) + '</span>').join('') : '<div class="mg-kosong">Belum ada PIC</div>';
+  } };
+
   // Asal HIRA: chip "id · rev" + departemen singkat (diisi lewat AJAX setelah draw, lihat isiHira); klik → detail dokumen.
   const kolomHira = { data: 'ri', orderable: false, className: 'hira2',
     render: (d, type) => type === 'display' ? '<span class="dr-mute">…</span>' : d,
@@ -318,7 +327,7 @@
       { data: 's', className: 'hira', render: (d, type) => type === 'display' ? (d ? esc(d) : '—') : d },
       { data: 'b', className: 'hira', render: (d, type, r) => type === 'display'
           ? esc(d) + '<br><span class="mg-lv ' + esc(r.kb) + '">' + esc(r.kb || '-') + '</span>' : d + ' ' + r.kb },
-      kolomHira, kolomKelompok, kolomGrup,
+      kolomHira, kolomKelompok, kolomGrup, kolomPic,
     ],
     // Isi chip "Asal HIRA" halaman yang sedang tampil setiap draw (termasuk draw pertama saat tabel dibuat;
     // .on('draw', …) SETELAH new DataTable() sudah kelewat draw pertama karena draw itu terjadi sinkron di konstruktor).

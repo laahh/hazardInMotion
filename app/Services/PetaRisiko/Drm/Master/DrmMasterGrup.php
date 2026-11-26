@@ -133,10 +133,12 @@ final class DrmMasterGrup
     /**
      * Detail lokasi aktif (lewat grup M05) per baris HIRA, plus perusahaan yang terhubung di site+lokasi itu
      * (lewat PJA, drm_master_lokasi_pja — sama rantai dengan DrmMasterBarisUnggah::perusahaanPerBaris, tapi di
-     * sini DIRINCI PER GRUP juga karena halaman ini mengedit keanggotaan grup per baris). Batch (3 query), bukan
-     * N+1 — sumber kolom info Site/Perusahaan di tabel dan unduhan Excel (keputusan user 25 Nov 2026).
+     * sini DIRINCI PER GRUP juga karena halaman ini mengedit keanggotaan grup per baris), plus PIC Perusahaan
+     * (drm_master_lokasi_pic — khusus personil PJA Child, lihat migrasi 2026_11_26_110000, kolom baru di tabel
+     * keputusan user 26 Nov 2026). Batch (4 query), bukan N+1 — sumber kolom info Site/Perusahaan/PIC di tabel
+     * dan unduhan Excel.
      *
-     * @return array<int, list<array{gid: int, grup: string, site: string, lokasi: string, detail: string, perusahaan: list<string>}>>
+     * @return array<int, list<array{gid: int, grup: string, site: string, lokasi: string, detail: string, perusahaan: list<string>, pic: list<string>}>>
      */
     private function lokasiPerRi(): array
     {
@@ -168,13 +170,21 @@ final class DrmMasterGrup
                 }
             }
         }
+        // PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child — beda sumber dengan $pjaPerLokasi).
+        $picPerLokasi = [];
+        if ($sites !== []) {
+            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'pic_perusahaan']) as $p) {
+                $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
+                $picPerLokasi[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
+            }
+        }
         $hasil = [];
         foreach ($grupPerRi as $ri => $gidSet) {
             foreach (array_keys($gidSet) as $gid) {
                 $nama = (string) ($namaGrup[$gid] ?? ('#'.$gid));
                 $dlList = $dlPerGrup[$gid] ?? [];
                 if ($dlList === []) {
-                    $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => '', 'lokasi' => '', 'detail' => '', 'perusahaan' => []];
+                    $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => '', 'lokasi' => '', 'detail' => '', 'perusahaan' => [], 'pic' => []];
 
                     continue;
                 }
@@ -182,9 +192,37 @@ final class DrmMasterGrup
                     $k = mb_strtolower(trim($d->site).'|'.trim($d->lokasi));
                     $perusahaan = array_keys($pjaPerLokasi[$k] ?? []);
                     sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
-                    $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail, 'perusahaan' => $perusahaan];
+                    $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail,
+                        'perusahaan' => $perusahaan, 'pic' => $picPerLokasi[$k] ?? []];
                 }
             }
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child) digabung dari SEMUA grup+lokasi baris ini
+     * — kolom "PIC Perusahaan" di tabel Master Grup Lokasi & Aktivitas (keputusan user 26 Nov 2026).
+     *
+     * @return array<int, list<string>>
+     */
+    public function picPerRi(): array
+    {
+        $hasil = [];
+        foreach ($this->lokasiPerRi() as $ri => $list) {
+            $set = [];
+            foreach ($list as $l) {
+                foreach ($l['pic'] as $nama) {
+                    $set[$nama] = true;
+                }
+            }
+            if ($set === []) {
+                continue;
+            }
+            $daftar = array_keys($set);
+            sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[$ri] = $daftar;
         }
 
         return $hasil;
@@ -294,19 +332,20 @@ final class DrmMasterGrup
                 'sub' => (string) ($b->sub ?? ''), 'bahaya' => (string) $b->bahaya, 'kb' => (string) ($b->kb ?? ''),
             ];
             if ($list === []) {
-                yield $dasar + ['grup' => '', 'site' => '', 'detail' => '', 'perusahaan' => ''];
+                yield $dasar + ['grup' => '', 'site' => '', 'detail' => '', 'perusahaan' => '', 'pic' => ''];
 
                 continue;
             }
             foreach ($list as $l) {
                 $detail = $l['lokasi'] !== '' ? $l['lokasi'].($l['detail'] !== '' ? ' ('.$l['detail'].')' : '') : '';
+                $pic = implode('; ', $l['pic']);
                 if ($l['perusahaan'] === []) {
-                    yield $dasar + ['grup' => $l['grup'], 'site' => $l['site'], 'detail' => $detail, 'perusahaan' => ''];
+                    yield $dasar + ['grup' => $l['grup'], 'site' => $l['site'], 'detail' => $detail, 'perusahaan' => '', 'pic' => $pic];
 
                     continue;
                 }
                 foreach ($l['perusahaan'] as $p) {
-                    yield $dasar + ['grup' => $l['grup'], 'site' => $l['site'], 'detail' => $detail, 'perusahaan' => $p];
+                    yield $dasar + ['grup' => $l['grup'], 'site' => $l['site'], 'detail' => $detail, 'perusahaan' => $p, 'pic' => $pic];
                 }
             }
         }
