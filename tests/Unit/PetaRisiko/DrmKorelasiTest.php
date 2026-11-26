@@ -141,6 +141,61 @@ class DrmKorelasiTest extends TestCase
         $svc->alur('site_perusahaan', 'BMO 1||PT Berau Coal');
     }
 
+    /**
+     * Bug ditemukan user 26 Nov 2026 lewat filter Site BMO 2 × Perusahaan: grup lokasi "Hauling Road" (aslinya)
+     * kosong total di kolom Aktivitas HIRA/Sub Aktivitas/Bahaya-risiko/Label SAP — panel Rincian menunjukkan
+     * "Berasal dari: —" — padahal grupnya sendiri tetap tampil lewat Detail Lokasi/PJA. Penyebabnya:
+     * dariSitePerusahaan() dulu nge-cap bahaya-risiko dengan take(60) FLAT GLOBAL sebelum tahu baris itu milik
+     * grup mana, jadi grup yang baris-nya kebetulan "telat" di urutan hasil query bisa kebagian nol. Fixture ini
+     * mereproduksi persis: grup besar (60 baris, di-insert LEBIH DULU) vs grup kecil (1 baris, di-insert
+     * TERAKHIR) dalam satu filter site+perusahaan yang sama — tanpa jatah PER GRUP, baris grup kecil itu akan
+     * selalu tersisih oleh take(60) global (SQLite tanpa ORDER BY mengembalikan baris sesuai urutan insert).
+     */
+    public function test_alur_site_perusahaan_jatah_bahaya_per_grup_bukan_flat_global(): void
+    {
+        DB::table('drm_master_grup')->insert([
+            ['gid' => 900, 'nama' => 'Grup Starvasi Besar', 'aktif' => true],
+            ['gid' => 901, 'nama' => 'Grup Starvasi Kecil', 'aktif' => true],
+        ]);
+        DB::table('drm_master_aktivitas')->insert([
+            ['aid' => 900, 'aktivitas' => 'Aktivitas Starvasi Besar', 'kelompok' => 'K10'],
+            ['aid' => 901, 'aktivitas' => 'Aktivitas Starvasi Kecil', 'kelompok' => 'K10'],
+        ]);
+        foreach (range(2000, 2059) as $ri) {
+            DB::table('drm_master_baris')->insert(['ri' => $ri, 'aid' => 900, 'aktivitas' => 'x', 'sub' => 'Sub Besar', 'bahaya' => 'Bahaya Besar '.$ri, 'kb' => 'Low', 'aktif' => true,
+                'item_sumber_observasi' => null, 'item_sumber_oak' => null, 'item_sumber_ketidaksesuaian' => null]);
+            DB::table('drm_master_grup_baris')->insert(['gid' => 900, 'ri' => $ri]);
+        }
+        DB::table('drm_master_baris')->insert(['ri' => 2999, 'aid' => 901, 'aktivitas' => 'x', 'sub' => 'Sub Kecil', 'bahaya' => 'Bahaya Kecil', 'kb' => 'Low', 'aktif' => true,
+            'item_sumber_observasi' => null, 'item_sumber_oak' => null, 'item_sumber_ketidaksesuaian' => null]);
+        DB::table('drm_master_grup_baris')->insert(['gid' => 901, 'ri' => 2999]);
+        DB::table('drm_master_dl')->insert([
+            ['id' => 900, 'site' => 'BMO 2', 'lokasi' => 'Area Besar', 'detail' => 'AB 1', 'gid' => 900, 'aktif' => true],
+            ['id' => 901, 'site' => 'BMO 2', 'lokasi' => 'Area Kecil', 'detail' => 'AK 1', 'gid' => 901, 'aktif' => true],
+        ]);
+        DB::table('drm_master_lokasi_pja')->insert([
+            ['site' => 'BMO 2', 'lokasi' => 'Area Besar', 'nama_pja' => 'PJA Starvasi Besar', 'perusahaan' => 'PT Starvasi Test', 'pja_anak' => null, 'aktif' => true],
+            ['site' => 'BMO 2', 'lokasi' => 'Area Kecil', 'nama_pja' => 'PJA Starvasi Kecil', 'perusahaan' => 'PT Starvasi Test', 'pja_anak' => null, 'aktif' => true],
+        ]);
+
+        $r = app(DrmKorelasi::class)->alur('site_perusahaan', 'BMO 2||PT Starvasi Test');
+        $node = collect($r['node']);
+        $edge = collect($r['edge']);
+
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'grup' && $n['label'] === 'Grup Starvasi Kecil'));
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Starvasi Kecil'));
+        // Sebelum perbaikan: dua baris ini GAGAL (grup kecil nol bahaya-risiko sama sekali, persis laporan user).
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'aktivitas' && $n['label'] === 'Aktivitas Starvasi Kecil'));
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'bahaya' && $n['label'] === 'Bahaya Kecil'));
+        $grupKecil = $node->first(fn ($n) => $n['jenis'] === 'grup' && $n['label'] === 'Grup Starvasi Kecil');
+        $this->assertGreaterThan(0, $edge->where('to', $grupKecil['key'])->count(), 'Grup kecil harus punya garis masuk dari bahaya-risiko, bukan cuma dari DL/PJA.');
+
+        // Grup besar tetap dibatasi jatahnya (bukan sampai 60 semua), tapi tidak sampai nol juga.
+        $jumlahBahayaBesar = $node->where('jenis', 'bahaya')->filter(fn ($n) => str_starts_with($n['label'], 'Bahaya Besar'))->count();
+        $this->assertGreaterThan(0, $jumlahBahayaBesar);
+        $this->assertLessThan(60, $jumlahBahayaBesar);
+    }
+
     public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void
     {
         $svc = app(DrmKorelasi::class);

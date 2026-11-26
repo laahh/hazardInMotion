@@ -31,6 +31,10 @@ final class DrmKorelasi
 
     private const MAKS_DL_PER_GRUP = 12;
 
+    /** Sama alasannya dengan MAKS_DL_PER_GRUP: dipakai dariSitePerusahaan() supaya jatah bahaya-risiko per grup,
+     * bukan flat global, biar grup yang kebagian dikit baris tidak sampai NOL (lihat ambilPerGrup). */
+    private const MAKS_BAHAYA_PER_GRUP = 12;
+
     /** PJA Child (Mitra) per PJA bisa sangat banyak (ada yang puluhan) — dibatasi sama seperti DL per grup. */
     private const MAKS_ANAK_PER_PJA = 12;
 
@@ -461,10 +465,21 @@ final class DrmKorelasi
         if ($grupPerRi === []) {
             return null;
         }
-        $baris = DB::table('drm_master_baris')->whereIn('ri', array_keys($grupPerRi))->get();
+        // Jatah PER GRUP (bukan flat global take(60)) supaya grup yang kebagian dikit baris tidak sampai NOL
+        // bahaya-risiko (ditemukan user 26 Nov 2026: grup "Hauling Road" kosong total di kolom Aktivitas/Sub
+        // Aktivitas/Bahaya-risiko/Label SAP — "Berasal dari: —" — karena ri miliknya kebetulan tidak kebagian
+        // jatah 60 bahaya PERTAMA secara global, padahal grupnya sendiri tetap tampil lewat Detail Lokasi/PJA).
+        $riPerGid = [];
+        foreach ($grupPerRi as $ri => $gidList) {
+            foreach ($gidList as $gid) {
+                $riPerGid[$gid][] = $ri;
+            }
+        }
+        $risTerpilih = array_values(array_unique($this->ambilPerGrup('bahaya', $riPerGid, self::MAKS_BAHAYA_PER_GRUP)));
+        $baris = DB::table('drm_master_baris')->whereIn('ri', $risTerpilih)->get();
         $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
         $pusat = null;
-        foreach ($this->batasi('bahaya', $baris) as $b) {
+        foreach ($baris as $b) {
             $a = $akt[$b->aid] ?? null;
             $na = $this->simpulAktivitas((int) $b->aid, (string) ($a->aktivitas ?? $b->aktivitas), (string) ($a->kelompok ?? 'K0'));
             $pusat ??= $na;
@@ -485,7 +500,9 @@ final class DrmKorelasi
         if ($pusat === null) {
             return null;
         }
-        foreach ($this->batasi('dl', $dl) as $d) {
+        // Jatah per grup juga (sama alasannya dengan bahaya di atas) — satu DL cuma milik satu grup, jadi aman
+        // di-groupBy tanpa duplikat lintas grup (beda dengan ri yang bisa dipakai >1 grup).
+        foreach ($this->ambilPerGrup('dl', $dl->groupBy('gid')->all(), self::MAKS_DL_PER_GRUP) as $d) {
             if (! isset($namaGrup[$d->gid])) {
                 continue;
             }
@@ -498,6 +515,26 @@ final class DrmKorelasi
         }
 
         return $pusat;
+    }
+
+    /**
+     * Jatah per grup (bukan flat global cap lewat batasi() langsung) biar grup yang kebagian dikit item tidak
+     * sampai NOL — dipakai dariSitePerusahaan() untuk bahaya-risiko (jenisPotong='bahaya') dan Detail Lokasi
+     * (jenisPotong='dl'); label "+N lainnya" di kepala kolom tetap pakai jenisPotong yang sama (lihat batasi()).
+     *
+     * @param  array<int|string, iterable<mixed>>  $perGid  gid => daftar item milik grup itu
+     * @return list<mixed> gabungan semua item terpilih, urutan per-grup lalu per-item
+     */
+    private function ambilPerGrup(string $jenisPotong, array $perGid, int $maksPerGrup): array
+    {
+        $hasil = [];
+        foreach ($perGid as $item) {
+            foreach ($this->batasi($jenisPotong, $item, $maksPerGrup) as $x) {
+                $hasil[] = $x;
+            }
+        }
+
+        return $hasil;
     }
 
     /** Label SAP: baris yang ditangkap label ini, dengan aktivitas & sub di kiri dan grup lokasi di kanan. */
