@@ -392,7 +392,10 @@ final class DrmMasterDb
      * Nama PJA (dinormalisasi, normNamaPja) => daftar nama perusahaan personilnya, PJA itu sendiri DIGABUNG dengan
      * personil PJA Mitra anaknya (sama pola dengan DrmSnapshotBuilder::pjaBc()/berkasPja() di sync utama — "yang
      * parent atau BC atau Mitra Kerja semuanya masuk", keputusan user 24 Nov 2026: jangan cuma personil yang
-     * ditugaskan langsung ke ID PJA itu, anak Mitra-nya juga harus ikut).
+     * ditugaskan langsung ke ID PJA itu, anak Mitra-nya juga harus ikut) — KECUALI induk bertipe payung/
+     * koordinator (Superior/Inspektor/Koordinator, lihat pjaPayungKoordinator): anaknya tersebar di site lain
+     * jadi TIDAK digabung (ditemukan 26 Nov 2026, kasus sama dengan picPerusahaanPerNamaPja), tapi personil
+     * LANGSUNG induk itu sendiri tetap masuk — itu memang benar ditugaskan ke ID itu.
      *
      * @param  list<array{id: string, nama: string, parent: string, tipe?: string, id_site?: string}>  $pjaList  dari DrmSql::pja()
      * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
@@ -405,10 +408,12 @@ final class DrmMasterDb
         foreach ($pjaList as $p) {
             $id = (string) $p['id'];
             $gabung = $perIdLangsung[$id] ?? [];
-            foreach ($anak[$id] ?? [] as $idAnak) {
-                foreach ($perIdLangsung[$idAnak] ?? [] as $nama) {
-                    if (! in_array($nama, $gabung, true)) {
-                        $gabung[] = $nama;
+            if (! self::pjaPayungKoordinator((string) $p['nama'])) {
+                foreach ($anak[$id] ?? [] as $idAnak) {
+                    foreach ($perIdLangsung[$idAnak] ?? [] as $nama) {
+                        if (! in_array($nama, $gabung, true)) {
+                            $gabung[] = $nama;
+                        }
                     }
                 }
             }
@@ -458,10 +463,36 @@ final class DrmMasterDb
     }
 
     /**
+     * Kata kunci nama PJA "payung/koordinator" (Superior, Inspektor, Koordinator) — terdaftar di SATU lokasi
+     * administratif tapi anak Mitra-nya sebenarnya PJA operasional di site LAIN (ditemukan 26 Nov 2026: HO/
+     * Dermaga ber-PIC 32 perusahaan dari "SUPERIOR HO & TRANSPORTASI BC" dkk, padahal anaknya tersebar di
+     * BMO/GMO/LMO/dll — bukan benar-benar di Dermaga HO). 132 dari 338 lokasi (39%) punya PJA jenis ini.
+     * Dipakai di picPerusahaanPerNamaPja() (induk jenis ini dikecualikan TOTAL — PIC lokasi fisik tidak boleh
+     * dari anak yang tersebar) dan perusahaanPerNamaPja() (induk tetap masuk pakai personil LANGSUNGnya sendiri,
+     * cuma anaknya yang tidak digabung) — bukan dari pja_dikecualikan config, itu untuk ranking dashboard,
+     * beda tujuan.
+     */
+    private const PJA_PAYUNG_KOORDINATOR = ['superior', 'inspekt', 'inspector', 'koordinator'];
+
+    private static function pjaPayungKoordinator(string $nama): bool
+    {
+        $nama = mb_strtolower($nama);
+        foreach (self::PJA_PAYUNG_KOORDINATOR as $kata) {
+            if (mb_stripos($nama, $kata) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Nama PJA (dinormalisasi) => daftar perusahaan personil PJA Child-nya SAJA (BUKAN personil PJA induk itu
      * sendiri) — dasar kolom pic_perusahaan di drm_master_lokasi_pic (keputusan user 26 Nov 2026: "PIC Detlok =
      * perusahaan PJA Child / perusahaan dari personil PJA child-nya"). Beda dengan perusahaanPerNamaPja() yang
-     * menggabung induk+anak untuk kolom drm_master_lokasi_pja.perusahaan.
+     * menggabung induk+anak untuk kolom drm_master_lokasi_pja.perusahaan. PJA induk bertipe payung/koordinator
+     * (lihat pjaPayungKoordinator) TIDAK ikut jadi sumber SAMA SEKALI — anak-anaknya bukan representasi lokasi
+     * fisik ini.
      *
      * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
      * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
@@ -472,6 +503,9 @@ final class DrmMasterDb
         [$anak, $perIdLangsung] = self::anakDanPerusahaanLangsung($pjaList, $perusahaanPerPja);
         $hasil = [];
         foreach ($pjaList as $p) {
+            if (self::pjaPayungKoordinator((string) $p['nama'])) {
+                continue;
+            }
             $id = (string) $p['id'];
             $gabung = [];
             foreach ($anak[$id] ?? [] as $idAnak) {

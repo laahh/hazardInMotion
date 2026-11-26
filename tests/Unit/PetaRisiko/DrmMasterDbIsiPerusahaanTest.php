@@ -113,6 +113,32 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Tanpa Personil'), $hasil);
     }
 
+    public function test_perusahaan_pja_payung_koordinator_pakai_personil_sendiri_tanpa_anak_murni_tanpa_db(): void
+    {
+        // Kasus nyata 26 Nov 2026: "SUPERIOR HO & TRANSPORTASI BC" punya personil sendiri (PT Berau Coal) DAN
+        // puluhan anak yang sebenarnya PJA di site lain. Personil sendiri tetap masuk (benar ditugaskan ke ID
+        // itu), tapi anaknya TIDAK digabung (beda dari PJA biasa yang anaknya ikut digabung).
+        $pjaList = [
+            ['id' => '1', 'nama' => 'SUPERIOR HO & TRANSPORTASI BC', 'parent' => '0'],
+            ['id' => '2', 'nama' => 'PJA TRANSPORTASI BMC BMO', 'parent' => '1'],
+            ['id' => '3', 'nama' => 'PJA Pit A BC', 'parent' => '0'],
+            ['id' => '4', 'nama' => 'PJA Mitra Pit A', 'parent' => '3'],
+        ];
+        $perusahaanPerPja = [
+            ['pja_id' => '1', 'perusahaan' => 'PT Berau Coal'],
+            ['pja_id' => '2', 'perusahaan' => 'PT Transportasi Tersebar'],
+            ['pja_id' => '3', 'perusahaan' => 'BC'],
+            ['pja_id' => '4', 'perusahaan' => 'PT Mitra Jaya'],
+        ];
+
+        $hasil = DrmMasterDb::perusahaanPerNamaPja($pjaList, $perusahaanPerPja);
+
+        // Payung: cuma personil sendiri, "PT Transportasi Tersebar" (dari anak) TIDAK ikut.
+        $this->assertSame(['PT Berau Coal'], $hasil[DrmMasterDb::normNamaPja('SUPERIOR HO & TRANSPORTASI BC')]);
+        // PJA biasa: tetap digabung induk+anak seperti sebelumnya.
+        $this->assertSame(['BC', 'PT Mitra Jaya'], $hasil[DrmMasterDb::normNamaPja('PJA Pit A BC')]);
+    }
+
     public function test_anak_per_nama_pja_satu_level_murni_tanpa_db(): void
     {
         $pjaList = [
@@ -149,6 +175,37 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         $this->assertSame(['PT Anak'], $hasil[DrmMasterDb::normNamaPja('Induk A')]);
         // PJA tanpa anak: tidak ada PIC sama sekali, meski dia sendiri punya personil.
         $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Tanpa Anak'), $hasil);
+    }
+
+    public function test_pic_perusahaan_mengecualikan_pja_payung_koordinator_murni_tanpa_db(): void
+    {
+        // Kasus nyata 26 Nov 2026: "SUPERIOR HO & TRANSPORTASI BC" terdaftar di HO/Dermaga tapi anaknya PJA
+        // operasional di site lain (BMO/GMO/LMO) — PIC HO/Dermaga jadi 32 perusahaan tidak spesifik. PJA
+        // bertipe payung (Superior/Inspektor/Koordinator) harus dikecualikan sebagai sumber PIC.
+        $pjaList = [
+            ['id' => '1', 'nama' => 'SUPERIOR HO & TRANSPORTASI BC', 'parent' => '0'],
+            ['id' => '2', 'nama' => 'PJA TRANSPORTASI BMC BMO', 'parent' => '1'],
+            ['id' => '3', 'nama' => 'Inspektor Mining BC PMO', 'parent' => '0'],
+            ['id' => '4', 'nama' => 'Inspektor KDC', 'parent' => '3'],
+            ['id' => '5', 'nama' => 'KOORDINATOR PJA EKSPLORASI', 'parent' => '0'],
+            ['id' => '6', 'nama' => 'PJA AKTIFITAS LOGGING', 'parent' => '5'],
+            ['id' => '7', 'nama' => 'PJA IT SUPPORT & OPERATION HO', 'parent' => '0'],
+            ['id' => '8', 'nama' => 'PJA IT SUPPORT & OPERATION', 'parent' => '7'],
+        ];
+        $perusahaanPerPja = [
+            ['pja_id' => '2', 'perusahaan' => 'PT Bumi Mining Coal'],
+            ['pja_id' => '4', 'perusahaan' => 'PT Kaltim Diamond Coal'],
+            ['pja_id' => '6', 'perusahaan' => 'PT Eksplorasi Jaya'],
+            ['pja_id' => '8', 'perusahaan' => 'PT Unggul Jaya Berkah'],
+        ];
+
+        $hasil = DrmMasterDb::picPerusahaanPerNamaPja($pjaList, $perusahaanPerPja);
+
+        $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('SUPERIOR HO & TRANSPORTASI BC'), $hasil);
+        $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Inspektor Mining BC PMO'), $hasil);
+        $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('KOORDINATOR PJA EKSPLORASI'), $hasil);
+        // PJA non-payung tetap diproses normal.
+        $this->assertSame(['PT Unggul Jaya Berkah'], $hasil[DrmMasterDb::normNamaPja('PJA IT SUPPORT & OPERATION HO')]);
     }
 
     public function test_pic_perusahaan_per_lokasi_digabung_dari_semua_pja_pemilik_murni_tanpa_db(): void
