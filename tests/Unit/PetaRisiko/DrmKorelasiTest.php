@@ -196,6 +196,37 @@ class DrmKorelasiTest extends TestCase
         $this->assertLessThan(60, $jumlahBahayaBesar);
     }
 
+    /**
+     * Regresi dari percobaan perbaikan PERTAMA (jatah TETAP per grup, mis. 12/grup) yang ternyata salah arah:
+     * ditemukan user 26 Nov 2026 di site EKSPLORASI asli — cuma 1 grup tapi 63 baris mencakup 15 aktivitas,
+     * malah terpotong jadi ~2 aktivitas (lebih parah dari sebelum ada perbaikan apa pun, yang flat global
+     * take(60) justru meloloskan hampir semuanya). Fixture ini: 1 grup, 20 aktivitas × 3 baris = pas 60 baris —
+     * round-robin dengan cuma 1 grup di antrian harus berperilaku seperti take(60) biasa, jadi ke-20 aktivitas
+     * HARUS tetap muncul semua, TIDAK terpotong jadi segelintir gara-gara "jatah per grup".
+     */
+    public function test_alur_site_perusahaan_situs_grup_tunggal_tidak_terpotong_jatah_per_grup(): void
+    {
+        DB::table('drm_master_grup')->insert(['gid' => 950, 'nama' => 'Grup Tunggal', 'aktif' => true]);
+        $ri = 3000;
+        foreach (range(1, 20) as $aid) {
+            DB::table('drm_master_aktivitas')->insert(['aid' => 900 + $aid, 'aktivitas' => 'Aktivitas Tunggal '.$aid, 'kelompok' => 'K10']);
+            foreach (range(1, 3) as $n) {
+                DB::table('drm_master_baris')->insert(['ri' => $ri, 'aid' => 900 + $aid, 'aktivitas' => 'x', 'sub' => 'Sub '.$aid, 'bahaya' => 'Bahaya '.$aid.'-'.$n, 'kb' => 'Low', 'aktif' => true,
+                    'item_sumber_observasi' => null, 'item_sumber_oak' => null, 'item_sumber_ketidaksesuaian' => null]);
+                DB::table('drm_master_grup_baris')->insert(['gid' => 950, 'ri' => $ri]);
+                $ri++;
+            }
+        }
+        DB::table('drm_master_dl')->insert(['id' => 950, 'site' => 'BMO 3', 'lokasi' => 'Area Tunggal', 'detail' => 'AT 1', 'gid' => 950, 'aktif' => true]);
+        DB::table('drm_master_lokasi_pja')->insert(['site' => 'BMO 3', 'lokasi' => 'Area Tunggal', 'nama_pja' => 'PJA Tunggal', 'perusahaan' => 'PT Tunggal Test', 'pja_anak' => null, 'aktif' => true]);
+
+        $r = app(DrmKorelasi::class)->alur('site_perusahaan', 'BMO 3||PT Tunggal Test');
+        $node = collect($r['node']);
+
+        $this->assertSame(20, $node->where('jenis', 'aktivitas')->filter(fn ($n) => str_starts_with($n['label'], 'Aktivitas Tunggal '))->count());
+        $this->assertSame(60, $node->where('jenis', 'bahaya')->filter(fn ($n) => str_starts_with($n['label'], 'Bahaya '))->count());
+    }
+
     public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void
     {
         $svc = app(DrmKorelasi::class);

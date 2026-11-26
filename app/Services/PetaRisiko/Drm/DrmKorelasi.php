@@ -31,10 +31,6 @@ final class DrmKorelasi
 
     private const MAKS_DL_PER_GRUP = 12;
 
-    /** Sama alasannya dengan MAKS_DL_PER_GRUP: dipakai dariSitePerusahaan() supaya jatah bahaya-risiko per grup,
-     * bukan flat global, biar grup yang kebagian dikit baris tidak sampai NOL (lihat ambilPerGrup). */
-    private const MAKS_BAHAYA_PER_GRUP = 12;
-
     /** PJA Child (Mitra) per PJA bisa sangat banyak (ada yang puluhan) — dibatasi sama seperti DL per grup. */
     private const MAKS_ANAK_PER_PJA = 12;
 
@@ -465,17 +461,20 @@ final class DrmKorelasi
         if ($grupPerRi === []) {
             return null;
         }
-        // Jatah PER GRUP (bukan flat global take(60)) supaya grup yang kebagian dikit baris tidak sampai NOL
-        // bahaya-risiko (ditemukan user 26 Nov 2026: grup "Hauling Road" kosong total di kolom Aktivitas/Sub
-        // Aktivitas/Bahaya-risiko/Label SAP — "Berasal dari: —" — karena ri miliknya kebetulan tidak kebagian
-        // jatah 60 bahaya PERTAMA secara global, padahal grupnya sendiri tetap tampil lewat Detail Lokasi/PJA).
+        // Jatah round-robin ADIL lintas grup (bukan flat global take(60), dan BUKAN pula jatah tetap per grup —
+        // dua-duanya sempat dicoba dan sama-sama salah, lihat ambilAdilLintasGrup) supaya grup yang kebagian
+        // dikit baris tidak sampai NOL (ditemukan user 26 Nov 2026: grup "Hauling Road" kosong total di kolom
+        // Aktivitas/Sub/Bahaya-risiko/Label SAP — "Berasal dari: —"), TANPA memotong situs yang cuma punya
+        // sedikit grup jadi terlalu kecil (ditemukan user 26 Nov 2026 juga: EKSPLORASI cuma 1 grup tapi 63
+        // baris mencakup 15 aktivitas — jatah tetap 12/grup sempat memotongnya jadi cuma ~2 aktivitas, lebih
+        // parah dari sebelum ada perbaikan apa pun).
         $riPerGid = [];
         foreach ($grupPerRi as $ri => $gidList) {
             foreach ($gidList as $gid) {
                 $riPerGid[$gid][] = $ri;
             }
         }
-        $risTerpilih = array_values(array_unique($this->ambilPerGrup('bahaya', $riPerGid, self::MAKS_BAHAYA_PER_GRUP)));
+        $risTerpilih = array_values(array_unique($this->ambilAdilLintasGrup('bahaya', $riPerGid, self::MAKS)));
         $baris = DB::table('drm_master_baris')->whereIn('ri', $risTerpilih)->get();
         $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
         $pusat = null;
@@ -500,9 +499,9 @@ final class DrmKorelasi
         if ($pusat === null) {
             return null;
         }
-        // Jatah per grup juga (sama alasannya dengan bahaya di atas) — satu DL cuma milik satu grup, jadi aman
-        // di-groupBy tanpa duplikat lintas grup (beda dengan ri yang bisa dipakai >1 grup).
-        foreach ($this->ambilPerGrup('dl', $dl->groupBy('gid')->all(), self::MAKS_DL_PER_GRUP) as $d) {
+        // Round-robin adil juga (sama alasannya dengan bahaya di atas) — satu DL cuma milik satu grup, jadi
+        // aman di-groupBy tanpa duplikat lintas grup (beda dengan ri yang bisa dipakai >1 grup).
+        foreach ($this->ambilAdilLintasGrup('dl', $dl->groupBy('gid')->all(), self::MAKS) as $d) {
             if (! isset($namaGrup[$d->gid])) {
                 continue;
             }
@@ -518,20 +517,43 @@ final class DrmKorelasi
     }
 
     /**
-     * Jatah per grup (bukan flat global cap lewat batasi() langsung) biar grup yang kebagian dikit item tidak
-     * sampai NOL — dipakai dariSitePerusahaan() untuk bahaya-risiko (jenisPotong='bahaya') dan Detail Lokasi
-     * (jenisPotong='dl'); label "+N lainnya" di kepala kolom tetap pakai jenisPotong yang sama (lihat batasi()).
+     * Jatah ROUND-ROBIN lintas grup (giliran satu-satu per grup sampai jatah tiap grup habis atau total
+     * $maksTotal tercapai) — dipakai dariSitePerusahaan() untuk bahaya-risiko (jenisPotong='bahaya') dan Detail
+     * Lokasi (jenisPotong='dl'). Dua pendekatan lain sudah dicoba dan sama-sama salah (keduanya ditemukan user
+     * 26 Nov 2026):
+     * - Flat global take($maksTotal) SEBELUM tahu baris milik grup mana: grup yang baris-nya kebetulan "telat"
+     *   di urutan hasil query bisa kebagian NOL (kasus grup "Hauling Road").
+     * - Jatah TETAP per grup (mis. 12/grup): situs dengan SEDIKIT grup tapi BANYAK baris per grup jadi
+     *   terpotong parah dibanding sebelumnya (kasus EKSPLORASI: 1 grup, 63 baris/15 aktivitas, terpotong jadi
+     *   ~12 baris/2 aktivitas — lebih parah dari flat global take(60) yang justru meloloskan 60).
+     * Round-robin menjamin keduanya: grup manapun yang masih punya kandidat selalu dapat giliran (tidak nol
+     * selama $maksTotal >= jumlah grup), DAN grup yang sendirian (sedikit grup lain berebut jatah) tetap bisa
+     * tumbuh sampai $maksTotal — persis seperti flat global take() untuk kasus itu.
      *
-     * @param  array<int|string, iterable<mixed>>  $perGid  gid => daftar item milik grup itu
-     * @return list<mixed> gabungan semua item terpilih, urutan per-grup lalu per-item
+     * @param  array<int|string, iterable<mixed>>  $perGid  gid => daftar item milik grup itu (urutan apa adanya)
+     * @return list<mixed>
      */
-    private function ambilPerGrup(string $jenisPotong, array $perGid, int $maksPerGrup): array
+    private function ambilAdilLintasGrup(string $jenisPotong, array $perGid, int $maksTotal): array
     {
+        $antrian = array_values(array_filter(array_map(fn ($items) => array_values(is_array($items) ? $items : iterator_to_array($items)), $perGid), fn ($items) => $items !== []));
+        $totalKandidat = array_sum(array_map('count', $antrian));
         $hasil = [];
-        foreach ($perGid as $item) {
-            foreach ($this->batasi($jenisPotong, $item, $maksPerGrup) as $x) {
-                $hasil[] = $x;
+        while ($antrian !== [] && count($hasil) < $maksTotal) {
+            foreach ($antrian as $i => $items) {
+                if (count($hasil) >= $maksTotal) {
+                    break;
+                }
+                $hasil[] = array_shift($items);
+                if ($items === []) {
+                    unset($antrian[$i]);
+                } else {
+                    $antrian[$i] = $items;
+                }
             }
+            $antrian = array_values($antrian);
+        }
+        if ($totalKandidat > $maksTotal) {
+            $this->potong[$jenisPotong] = ($this->potong[$jenisPotong] ?? 0) + $totalKandidat - $maksTotal;
         }
 
         return $hasil;
