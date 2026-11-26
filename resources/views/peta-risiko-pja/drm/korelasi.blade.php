@@ -96,11 +96,17 @@
       <div class="al-hasil" id="al-hasil" hidden role="listbox" aria-label="Hasil pencarian"></div>
     </div>
     <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
-    <select id="al-f-site" aria-label="Site" title="Saring Detail Lokasi menurut site">
+    <select id="al-f-site" aria-label="Site" title="Tampilkan SEMUA aktivitas yang terhubung ke site ini (mengganti alur yang sedang dibuka, bukan menyaring)">
       <option value="">Semua site</option>
+      @foreach ($site as $st)
+        <option value="{{ $st }}">{{ $st }}</option>
+      @endforeach
     </select>
-    <select id="al-f-pja" aria-label="Perusahaan" title="Saring PJA menurut perusahaan" style="max-width:220px">
+    <select id="al-f-pja" aria-label="Perusahaan" title="Tampilkan SEMUA aktivitas yang terhubung ke perusahaan ini (mengganti alur yang sedang dibuka, bukan menyaring)" style="max-width:220px">
       <option value="">Semua perusahaan</option>
+      @foreach ($perusahaan as $p)
+        <option value="{{ $p }}">{{ $p }}</option>
+      @endforeach
     </select>
     @if ($bolehUbah)
       <button type="button" class="al-edit-btn" id="al-edit" aria-pressed="false"><span class="material-symbols-outlined" style="font-size:18px">edit</span> Mode edit</button>
@@ -161,23 +167,29 @@
     `<label><input type="checkbox" data-kol="${k}" checked><span class="al-dot" style="--c:${warna}"></span>${nama}</label>`).join('');
   $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; gambar(); }));
 
-  // Filter Site (simpul Detail Lokasi) & Perusahaan (simpul PJA, lewat drm_master_lokasi_pja.perusahaan — BUKAN
-  // nama_pja) — opsi dropdown diisi ulang dari simpul yang ADA DI DIAGRAM YANG SEDANG DIMUAT (bukan daftar
-  // global), supaya selalu relevan dengan fokus yang sedang dibuka. Filter cuma menyaring simpul DL/PJA; simpul
-  // lain tetap tampil apa adanya, dan jembatan() yang sudah ada otomatis menyambung lintas simpul yang tersaring.
+  // Filter Site & Perusahaan (keputusan user 26 Nov 2026): BUKAN menyaring simpul di alur yang sedang terbuka —
+  // memilih salah satu (atau dua-duanya) mengganti alur TOTAL jadi "semua aktivitas yang terhubung ke site/
+  // perusahaan ini", dibaca dari server lewat jenis fokus baru 'site_perusahaan' (lihat DrmKorelasi::
+  // dariSitePerusahaan). Opsi dropdown dari daftar global (dikirim server), bukan dari alur yang sedang dimuat.
   const fSite = $('al-f-site'), fPja = $('al-f-pja');
-  function isiOpsiFilter() {
-    const site = [...new Set((D ? D.node : []).filter((n) => n.jenis === 'dl').map((n) => n.site).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
-    const perusahaan = [...new Set((D ? D.node : []).filter((n) => n.jenis === 'pja').flatMap((n) => n.perusahaan || []))].sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
-    fSite.innerHTML = '<option value="">Semua site</option>' + site.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-    fPja.innerHTML = '<option value="">Semua perusahaan</option>' + perusahaan.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  const PEMISAH_SP = '||';
+  let fokusSebelumFilter = null;
+  function terapkanFilterSitePerusahaan() {
+    const site = fSite.value, perusahaan = fPja.value;
+    if (!site && !perusahaan) {
+      const f = fokusSebelumFilter;
+      fokusSebelumFilter = null;
+      if (f) muat(f.jenis, f.id, f.label);
+      return;
+    }
+    if (!fokusSebelumFilter) {
+      const terakhir = jejak[jejak.length - 1];
+      fokusSebelumFilter = terakhir && terakhir.jenis !== 'site_perusahaan' ? terakhir : (AWAL || { jenis: 'aktivitas', id: '0' });
+    }
+    const label = site && perusahaan ? `Site ${site} × ${perusahaan}` : site ? `Site ${site}` : `Perusahaan ${perusahaan}`;
+    muat('site_perusahaan', site + PEMISAH_SP + perusahaan, label);
   }
-  function cocokFilter(n) {
-    if (n.jenis === 'dl' && fSite.value && n.site !== fSite.value) return false;
-    if (n.jenis === 'pja' && fPja.value && !(n.perusahaan || []).includes(fPja.value)) return false;
-    return true;
-  }
-  [fSite, fPja].forEach((el) => el.addEventListener('change', gambar));
+  [fSite, fPja].forEach((el) => el.addEventListener('change', terapkanFilterSitePerusahaan));
 
   // ------------------------------------------------------------ tata letak
   /** Urutan simpul per kolom: kolom pertama urut abjad, berikutnya rata-rata posisi tetangga (barycenter), dua sapuan. */
@@ -218,7 +230,7 @@
     if (!D) return;
     const kolom = D.kolom.filter((k) => tampilKolom[k] && D.node.some((n) => n.kolomNama === k));
     const ci = Object.fromEntries(kolom.map((k, i) => [k, i]));
-    const nodes = D.node.filter((n) => n.kolomNama in ci && cocokFilter(n)).map((n) => ({ ...n, ci: ci[n.kolomNama] }));
+    const nodes = D.node.filter((n) => n.kolomNama in ci).map((n) => ({ ...n, ci: ci[n.kolomNama] }));
     const ada = new Set(nodes.map((n) => n.key));
     // Kolom tersembunyi: sambungkan langsung kiri ↔ kanan melewati simpul yang disembunyikan.
     const edges = jembatan(D.edge, ada);
@@ -383,12 +395,24 @@
       d.node.forEach((n) => { n.kolomNama = d.kolom[n.kolom]; });
       D = d;
       pilihan = null;
-      // Opsi filter Site/Perusahaan diisi ulang dari simpul alur yang baru dimuat (reset pilihan lama —
-      // site/perusahaan fokus sebelumnya belum tentu relevan/ada di alur yang baru).
-      isiOpsiFilter();
+      // Dropdown Site/Perusahaan direset kalau alur yang dimuat BUKAN hasil filter itu sendiri (navigasi biasa:
+      // klik kotak lain, pencarian, jejak, dst) — supaya tidak ada pilihan nyangkut yang tidak mewakili alur ini.
+      if (jenis !== 'site_perusahaan') {
+        fSite.value = '';
+        fPja.value = '';
+        fokusSebelumFilter = null;
+      } else {
+        // Sinkronkan dropdown dengan id (mis. dibuka lagi lewat klik jejak), tanpa memicu event change-nya.
+        const [s, p] = id.split(PEMISAH_SP);
+        fSite.value = s || '';
+        fPja.value = p || '';
+      }
       const pusat = d.node.find((n) => n.key === d.pusat);
       const i = jejak.findIndex((x) => x.jenis === jenis && x.id === id);
-      jejak = i >= 0 ? jejak.slice(0, i + 1) : [...jejak, { jenis, id, label: pusat ? pusat.label : (label || id) }].slice(-8);
+      // site_perusahaan: pusat cuma aktivitas pertama yang kebetulan ketemu, bukan representasi fokusnya —
+      // jejak pakai label "Site .../Perusahaan ..." yang dikirim terapkanFilterSitePerusahaan(), bukan pusat.label.
+      const labelJejak = jenis === 'site_perusahaan' ? (label || id) : (pusat ? pusat.label : (label || id));
+      jejak = i >= 0 ? jejak.slice(0, i + 1) : [...jejak, { jenis, id, label: labelJejak }].slice(-8);
       gambarJejak();
       gambar();
       history.replaceState(null, '', `${URL_SELF}?${new URLSearchParams({ jenis, id })}`);

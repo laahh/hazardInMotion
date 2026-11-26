@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\PetaRisiko\Drm\DrmKorelasi;
 use App\Services\PetaRisiko\Drm\Master\DrmAlurEdit;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
+use App\Services\PetaRisiko\Drm\Master\DrmMasterGrup;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class PetaRisikoKorelasiController extends Controller
 {
-    public function __construct(private readonly DrmKorelasi $korelasi, private readonly DrmAlurEdit $edit)
+    public function __construct(private readonly DrmKorelasi $korelasi, private readonly DrmAlurEdit $edit, private readonly DrmMasterGrup $grup)
     {
     }
 
@@ -31,7 +32,13 @@ final class PetaRisikoKorelasiController extends Controller
         $id = (string) $request->query('id', '');
         $awal = $siap && in_array($jenis, DrmKorelasi::JENIS, true) && $id !== '' ? ['jenis' => $jenis, 'id' => $id] : ($siap ? $this->korelasi->pusatBawaan() : null);
 
-        return view('peta-risiko-pja.drm.korelasi', ['siap' => $siap, 'awal' => $awal, 'bolehUbah' => $this->bolehUbah($request)]);
+        return view('peta-risiko-pja.drm.korelasi', [
+            'siap' => $siap, 'awal' => $awal, 'bolehUbah' => $this->bolehUbah($request),
+            // Opsi filter Site/Perusahaan di toolbar (keputusan user 26 Nov 2026): daftar GLOBAL (bukan dari satu
+            // alur saja), reuse DrmMasterGrup yang sudah dipakai untuk filter sama di Master Grup Lokasi & Aktivitas.
+            'site' => $siap ? $this->grup->daftarSite() : [],
+            'perusahaan' => $siap ? $this->grup->daftarPerusahaan() : [],
+        ]);
     }
 
     public function data(Request $request): JsonResponse

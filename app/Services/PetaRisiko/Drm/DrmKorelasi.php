@@ -19,7 +19,10 @@ use Throwable;
  */
 final class DrmKorelasi
 {
-    public const JENIS = ['grup', 'dl', 'pja', 'kelompok', 'aktivitas', 'bahaya', 'obs', 'oak', 'ket'];
+    public const JENIS = ['grup', 'dl', 'pja', 'kelompok', 'aktivitas', 'bahaya', 'obs', 'oak', 'ket', 'site_perusahaan'];
+
+    /** Pemisah site/perusahaan di parameter id milik jenis site_perusahaan (lihat dariSitePerusahaan). */
+    private const PEMISAH_SITE_PERUSAHAAN = '||';
 
     /** Kolom alur (indeks = posisi kiri → kanan). */
     public const KOLOM = ['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja'];
@@ -80,6 +83,7 @@ final class DrmKorelasi
             'grup' => $this->dariGrup((int) $id),
             'dl' => $this->dariDl((int) $id),
             'pja' => $this->dariPja($id),
+            'site_perusahaan' => $this->dariSitePerusahaan($id),
             default => $this->dariLabel(self::LABEL_JENIS[$jenis], $id),
         };
         if ($pusat === null) {
@@ -346,6 +350,72 @@ final class DrmKorelasi
             ->whereIn('gb.gid', $grup->keys())->selectRaw('gb.gid, a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('gb.gid', 'a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
         foreach ($this->batasi('aktivitas', $akt) as $a) {
             $this->sambung($this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (string) $a->kelompok), $this->simpulGrup((int) $a->gid, (string) $grup[$a->gid]));
+        }
+
+        return $pusat;
+    }
+
+    /**
+     * Site dan/atau Perusahaan (filter toolbar korelasi, keputusan user 26 Nov 2026): BUKAN menyaring simpul di
+     * alur yang sedang terbuka, tapi alur baru dari nol dibaca dari sisi lokasi — Site/Perusahaan (lewat PJA di
+     * drm_master_lokasi_pja, PERUSAHAAN ASLI bukan nama_pja) → Detail Lokasi yang cocok → Grup Lokasi → Aktivitas
+     * yang berlaku (dibaca ke kiri, sama pola dengan dariGrup/dariPja). DL/PJA DIBATASI ke yang benar-benar cocok
+     * site/perusahaan (TIDAK memakai lanjutDariGrup — itu akan menampilkan semua DL grup termasuk site lain).
+     * $id format "site||perusahaan" (salah satu boleh kosong = tidak dibatasi; tidak boleh dua-duanya kosong).
+     */
+    private function dariSitePerusahaan(string $id): ?string
+    {
+        [$site, $perusahaan] = array_pad(explode(self::PEMISAH_SITE_PERUSAHAAN, $id, 2), 2, '');
+        $site = trim($site);
+        $perusahaan = trim($perusahaan);
+        if ($site === '' && $perusahaan === '') {
+            return null;
+        }
+        $q = DB::table('drm_master_lokasi_pja')->where('aktif', true);
+        if ($site !== '') {
+            $q->where('site', $site);
+        }
+        $pjaPerLokasi = [];
+        foreach ($q->get(['site', 'lokasi', 'nama_pja', 'perusahaan']) as $p) {
+            if ($perusahaan !== '' && ! in_array($perusahaan, DrmMasterDb::pisahLabel($p->perusahaan ?? ''), true)) {
+                continue;
+            }
+            $k = mb_strtolower(trim((string) $p->site).'|'.trim((string) $p->lokasi));
+            $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
+        }
+        if ($pjaPerLokasi === []) {
+            return null;
+        }
+        $dl = DB::table('drm_master_dl')->where('aktif', true)->get()
+            ->filter(fn ($d) => isset($pjaPerLokasi[mb_strtolower(trim((string) $d->site).'|'.trim((string) $d->lokasi))]))->values();
+        if ($dl->isEmpty()) {
+            return null;
+        }
+        $gids = $dl->pluck('gid')->unique()->values()->all();
+        $namaGrup = DB::table('drm_master_grup')->whereIn('gid', $gids)->pluck('nama', 'gid');
+        $akt = DB::table('drm_master_grup_baris as gb')->join('drm_master_baris as b', 'b.ri', '=', 'gb.ri')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
+            ->whereIn('gb.gid', $gids)->selectRaw('gb.gid, a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('gb.gid', 'a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
+        $pusat = null;
+        foreach ($this->batasi('aktivitas', $akt) as $a) {
+            $na = $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (string) $a->kelompok);
+            $pusat ??= $na;
+            if (isset($namaGrup[$a->gid])) {
+                $this->sambung($na, $this->simpulGrup((int) $a->gid, (string) $namaGrup[$a->gid]));
+            }
+        }
+        if ($pusat === null) {
+            return null;
+        }
+        foreach ($this->batasi('dl', $dl) as $d) {
+            if (! isset($namaGrup[$d->gid])) {
+                continue;
+            }
+            $nd = $this->simpulDl($d);
+            $this->sambung($this->simpulGrup((int) $d->gid, (string) $namaGrup[$d->gid]), $nd);
+            $k = mb_strtolower(trim((string) $d->site).'|'.trim((string) $d->lokasi));
+            foreach (array_keys($pjaPerLokasi[$k] ?? []) as $nama) {
+                $this->sambung($nd, $this->simpulPja($nama));
+            }
         }
 
         return $pusat;

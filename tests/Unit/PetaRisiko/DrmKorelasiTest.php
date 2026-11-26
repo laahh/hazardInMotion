@@ -27,6 +27,8 @@ class DrmKorelasiTest extends TestCase
         DB::setDefaultConnection('uji_drm');
         (require base_path('database/migrations/2026_11_17_100000_create_drm_master_tables.php'))->up();
         (require base_path('database/migrations/2026_11_18_120000_add_item_sumber_to_drm_master_baris_table.php'))->up();
+        // Kolom perusahaan (ASLI, bukan nama_pja) dipakai simpulPja() sejak fitur filter Site/Perusahaan 26 Nov 2026.
+        (require base_path('database/migrations/2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table.php'))->up();
         $this->isi();
         Storage::fake('local');
         Storage::disk('local')->put('peta-risiko-drm/meta.json', '{"dibuat":"x","sampai":"2026-11-17"}');
@@ -82,6 +84,32 @@ class DrmKorelasiTest extends TestCase
         $this->assertContains(['from' => 'a:1', 'to' => 'g:20'], $pja['edge']);
     }
 
+    /**
+     * Filter Site/Perusahaan toolbar korelasi (fitur 26 Nov 2026): alur baru dari sisi lokasi, BUKAN menyaring
+     * alur yang sedang terbuka. BMO 1/Workshop cuma dipakai "PT Bukit Makmur Mandiri Utama"; LMO/ROM dipakai
+     * "PT Berau Coal" & "PT Pama Persada" — supaya filter site vs perusahaan bisa dibedakan hasilnya.
+     */
+    public function test_alur_site_perusahaan_dari_filter_toolbar(): void
+    {
+        $svc = app(DrmKorelasi::class);
+
+        $site = $svc->alur('site_perusahaan', 'BMO 1||');
+        $node = collect($site['node']);
+        $this->assertSame('a:1', $site['pusat']);
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
+        $this->assertFalse($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA ROM LMO'));
+
+        $perusahaan = $svc->alur('site_perusahaan', '||PT Berau Coal');
+        $node = collect($perusahaan['node']);
+        $this->assertSame('a:2', $perusahaan['pusat']);
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA ROM LMO'));
+        $this->assertFalse($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
+
+        // Irisan site BMO 1 × perusahaan yang cuma ada di LMO: kosong.
+        $this->expectException(InvalidArgumentException::class);
+        $svc->alur('site_perusahaan', 'BMO 1||PT Berau Coal');
+    }
+
     public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void
     {
         $svc = app(DrmKorelasi::class);
@@ -113,7 +141,13 @@ class DrmKorelasiTest extends TestCase
                 'item_sumber_observasi' => $ri === 1 ? 'Inspeksi unit' : null, 'item_sumber_oak' => null, 'item_sumber_ketidaksesuaian' => $ket]);
         }
         DB::table('drm_master_grup_baris')->insert([['gid' => 20, 'ri' => 1], ['gid' => 20, 'ri' => 2], ['gid' => 3, 'ri' => 3]]);
-        DB::table('drm_master_dl')->insert([['id' => 1, 'site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'gid' => 20, 'aktif' => true]]);
-        DB::table('drm_master_lokasi_pja')->insert([['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'aktif' => true]]);
+        DB::table('drm_master_dl')->insert([
+            ['id' => 1, 'site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'gid' => 20, 'aktif' => true],
+            ['id' => 2, 'site' => 'LMO', 'lokasi' => 'ROM', 'detail' => 'ROM 1', 'gid' => 3, 'aktif' => true],
+        ]);
+        DB::table('drm_master_lokasi_pja')->insert([
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'perusahaan' => 'PT Bukit Makmur Mandiri Utama', 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'ROM', 'nama_pja' => 'PJA ROM LMO', 'perusahaan' => "PT Berau Coal\nPT Pama Persada", 'aktif' => true],
+        ]);
     }
 }
