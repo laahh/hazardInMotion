@@ -59,6 +59,11 @@ Route::prefix('peta-risiko-pja')
             Route::post('/aktivitas/{aid}/kelompok', 'kelompok')->whereNumber('aid')->middleware('throttle:60,1')->name('kelompok');
         });
 
+        // Tabel ringkas lokasi → PJA → PIC Perusahaan (murni lihat), didaftarkan sebelum /{tabel}.
+        Route::prefix('master/pic')->name('master.pic.')->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoMasterPicController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+        });
+
         Route::prefix('master')->name('master.')->controller(PetaRisikoMasterController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/log', 'log')->name('log');

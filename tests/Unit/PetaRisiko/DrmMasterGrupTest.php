@@ -150,6 +150,9 @@ class DrmMasterGrupTest extends TestCase
         DB::table('drm_master_lokasi_pic')->insert([
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic_perusahaan' => "PT Mitra A\nPT Mitra B", 'aktif' => true],
         ]);
+        DB::table('drm_master_lokasi_pja')->insert([
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop BMO 1', 'aktif' => true],
+        ]);
     }
 
     public function test_pic_per_ri_dari_lokasi_pic(): void
@@ -162,6 +165,26 @@ class DrmMasterGrupTest extends TestCase
         $this->assertSame([['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic' => ['PT Mitra A', 'PT Mitra B']]], $hasil[1]);
         $this->assertSame($hasil[1], $hasil[754]);
         $this->assertArrayNotHasKey(755, $hasil);
+    }
+
+    /**
+     * PJA & PIC melekat di level lokasi (site + lokasi), tapi tabel ringkas "Lokasi & PIC" harus diturunkan
+     * sampai ke tiap Detail Lokasi (koreksi user 26 Nov 2026: "PJA kan lokasi besarannya, yg PIC detail lokasi
+     * kan sampe detlok2nya") — bukan berhenti di level lokasi seperti picPerRi() yang per-baris-HIRA.
+     */
+    public function test_semua_lokasi_pja_dan_pic_diturunkan_sampai_detlok(): void
+    {
+        $hasil = app(DrmMasterGrup::class)->semuaLokasiPjaDanPic();
+
+        // 2 detlok (WS 1 & WS 2) di BMO 1/Workshop, keduanya mewarisi PJA & PIC yang sama persis dari lokasinya.
+        $this->assertCount(2, $hasil);
+        foreach ($hasil as $baris) {
+            $this->assertSame('BMO 1', $baris['site']);
+            $this->assertSame('Workshop', $baris['lokasi']);
+            $this->assertSame(['PJA Workshop BMO 1'], $baris['pja']);
+            $this->assertSame(['PT Mitra A', 'PT Mitra B'], $baris['pic']);
+        }
+        $this->assertSame(['WS 1', 'WS 2'], array_column($hasil, 'detail'));
     }
 
     /**

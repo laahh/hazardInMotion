@@ -53,6 +53,7 @@
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.index') }}" @if (request()->routeIs('peta-risiko-pja.master.index')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">table_view</span> Tabel Master</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.baris.index') }}" @if (request()->routeIs('peta-risiko-pja.master.baris.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">view_list</span> Master per Baris</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}" @if (request()->routeIs('peta-risiko-pja.master.grup.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup Lokasi &amp; Aktivitas</a>
+          <a class="pr-back" href="{{ route('peta-risiko-pja.master.pic.index') }}" @if (request()->routeIs('peta-risiko-pja.master.pic.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">badge</span> Lokasi &amp; PIC</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}" @if (request()->routeIs('peta-risiko-pja.korelasi.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">alt_route</span> Alur Baseline</a>
         </nav>
       </div>

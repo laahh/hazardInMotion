@@ -234,6 +234,39 @@ final class DrmMasterGrup
     }
 
     /**
+     * Semua Detail Lokasi aktif (drm_master_dl) + PJA pemilik lokasinya (drm_master_lokasi_pja) + PIC Perusahaan
+     * dari PJA Child-nya (drm_master_lokasi_pic) — tabel ringkas "Detail Lokasi → PJA → PIC" (keputusan user 26
+     * Nov 2026: PJA/PIC melekat di level lokasi, tapi tabelnya harus diturunkan sampai ke detlok, bukan berhenti
+     * di lokasi). PJA & PIC yang sama akan terlihat berulang di tiap detlok yang mewarisinya dari lokasi yang
+     * sama — itu memang warisannya, bukan duplikat data.
+     *
+     * @return list<array{site: string, lokasi: string, detail: string, pja: list<string>, pic: list<string>}>
+     */
+    public function semuaLokasiPjaDanPic(): array
+    {
+        $pjaPerLokasi = [];
+        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->orderBy('nama_pja')->get(['site', 'lokasi', 'nama_pja']) as $p) {
+            $k = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
+            $pjaPerLokasi[$k][] = (string) $p->nama_pja;
+        }
+        $picPerLokasi = [];
+        foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->get(['site', 'lokasi', 'pic_perusahaan']) as $p) {
+            $k = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
+            $picPerLokasi[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
+        }
+        $hasil = [];
+        foreach (DB::table('drm_master_dl')->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get(['site', 'lokasi', 'detail']) as $d) {
+            $k = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi));
+            $hasil[] = [
+                'site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail,
+                'pja' => $pjaPerLokasi[$k] ?? [], 'pic' => $picPerLokasi[$k] ?? [],
+            ];
+        }
+
+        return $hasil;
+    }
+
+    /**
      * Pasangan (site, perusahaan) ASLI per baris — BUKAN dua daftar terpisah (site unik + perusahaan unik),
      * supaya filter Site & Perusahaan bisa mensyaratkan keduanya cocok di lokasi yang SAMA (pelajaran dari
      * koreksi "Per Perusahaan" Master per Baris 24-25 Nov 2026: menggabungkan rata membuat BMO3 kelihatan
