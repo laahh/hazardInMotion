@@ -39,8 +39,10 @@
   .al-n:focus-visible rect.kotak { stroke: #3952bc; stroke-width: 2.5; }
   .al-n:focus { outline: none; }
   .al-e { fill: none; stroke: rgba(100, 116, 139, .32); stroke-width: 1.2; transition: opacity .15s, stroke .15s; }
-  svg.sorot .al-n:not(.on) { opacity: .16; }
-  svg.sorot .al-e:not(.on) { opacity: .06; }
+  {{-- Redup dinaikkan dari .16/.06 (keputusan user 26 Nov 2026): label & rantai kotak di luar jalur yang
+       disorot tetap harus kebaca, bukan nyaris hilang — sorot jalur cukup lewat warna+tebal garis .on. --}}
+  svg.sorot .al-n:not(.on) { opacity: .5; }
+  svg.sorot .al-e:not(.on) { opacity: .22; }
   svg.sorot .al-e.on { stroke: #3952bc; stroke-width: 2; }
   .al-detail { background: #fff; border: 1px solid rgba(0, 0, 0, .08); border-radius: 16px; padding: 16px; position: sticky; top: 90px; }
   .al-detail h3 { margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: #595c5e; }
