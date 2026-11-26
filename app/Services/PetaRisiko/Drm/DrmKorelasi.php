@@ -25,11 +25,14 @@ final class DrmKorelasi
     private const PEMISAH_SITE_PERUSAHAAN = '||';
 
     /** Kolom alur (indeks = posisi kiri → kanan). */
-    public const KOLOM = ['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja'];
+    public const KOLOM = ['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja', 'pja_anak'];
 
     private const MAKS = 60;
 
     private const MAKS_DL_PER_GRUP = 12;
+
+    /** PJA Child (Mitra) per PJA bisa sangat banyak (ada yang puluhan) — dibatasi sama seperti DL per grup. */
+    private const MAKS_ANAK_PER_PJA = 12;
 
     private const LABEL_JENIS = ['obs' => 'OBS', 'oak' => 'OAK', 'ket' => 'KET'];
 
@@ -52,6 +55,9 @@ final class DrmKorelasi
 
     /** @var array<string, list<string>>|null nama_pja (huruf kecil) => daftar nama perusahaan */
     private ?array $perusahaanPerPja = null;
+
+    /** @var array<string, list<string>>|null nama_pja (huruf kecil) => daftar nama PJA Child (Mitra) */
+    private ?array $anakPerPja = null;
 
     public function __construct(private readonly DrmRepository $repo)
     {
@@ -548,9 +554,29 @@ final class DrmKorelasi
         return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi, ['site' => (string) $d->site]);
     }
 
+    /**
+     * Simpul PJA; menyambung PJA Child-nya (Mitra, satu level) sekali saja saat simpul ini PERTAMA dibuat —
+     * simpulPja() dipanggil berkali-kali untuk PJA yang sama dari banyak tempat (lanjutDariGrup per DL, dariPja,
+     * dariSitePerusahaan, dst), jadi wiring anak tidak boleh diulang atau "potong" (batasi()) akan salah hitung.
+     */
     private function simpulPja(string $nama): string
     {
-        return $this->simpul('p:'.md5($nama), 'pja', 6, $nama, $nama, 'PJA', ['perusahaan' => $this->perusahaanUntukPja($nama)]);
+        $kunci = 'p:'.md5($nama);
+        $baru = ! isset($this->node[$kunci]);
+        $kunci = $this->simpul($kunci, 'pja', 6, $nama, $nama, 'PJA', ['perusahaan' => $this->perusahaanUntukPja($nama)]);
+        if ($baru) {
+            foreach ($this->batasi('pja_anak', $this->anakUntukPja($nama), self::MAKS_ANAK_PER_PJA) as $nm) {
+                $this->sambung($kunci, $this->simpulPjaAnak($nm));
+            }
+        }
+
+        return $kunci;
+    }
+
+    /** Leaf, bukan fokus (lihat FOKUS di korelasi.blade.php) — identitas PJA anaknya sendiri, bukan atribut gabungan. */
+    private function simpulPjaAnak(string $nama): string
+    {
+        return $this->simpul('pa:'.md5($nama), 'pja_anak', 7, $nama, $nama, 'PJA Child');
     }
 
     /**
@@ -573,6 +599,30 @@ final class DrmKorelasi
             }
         }
         $daftar = array_keys($this->perusahaanPerPja[mb_strtolower(trim($nama))] ?? []);
+        sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $daftar;
+    }
+
+    /**
+     * Nama PJA Child (Mitra, satu level, id_parent di obds.m_pja) untuk kolom "PJA Child" di diagram (keputusan
+     * user 26 Nov 2026). Sumbernya kolom pja_anak (lihat migrasi 2026_11_26_100000_add_pja_anak_to_drm_master_
+     * lokasi_pja_table), sama pola cache dengan perusahaanUntukPja().
+     *
+     * @return list<string>
+     */
+    private function anakUntukPja(string $nama): array
+    {
+        if ($this->anakPerPja === null) {
+            $this->anakPerPja = [];
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->select('nama_pja', 'pja_anak')->get() as $p) {
+                $k = mb_strtolower(trim((string) $p->nama_pja));
+                foreach (DrmMasterDb::pisahLabel($p->pja_anak ?? '') as $nm) {
+                    $this->anakPerPja[$k][$nm] = true;
+                }
+            }
+        }
+        $daftar = array_keys($this->anakPerPja[mb_strtolower(trim($nama))] ?? []);
         sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
 
         return $daftar;

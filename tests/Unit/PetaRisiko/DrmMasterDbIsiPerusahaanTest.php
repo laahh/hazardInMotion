@@ -26,7 +26,8 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         $this->koneksiAsal = (string) config('database.default');
         config(['database.connections.uji_drm' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         DB::setDefaultConnection('uji_drm');
-        foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table'] as $m) {
+        foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table',
+            '2026_11_26_100000_add_pja_anak_to_drm_master_lokasi_pja_table'] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
     }
@@ -71,6 +72,8 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         $this->assertSame('PJA   Pit A BC', $baris->nama_pja);
         // Personil langsung PJA Pit A BC (BC) + personil anak Mitra-nya (PT Mitra Jaya) — bukan "PT Lain" (tidak terkait).
         $this->assertSame("BC\nPT Mitra Jaya", $baris->perusahaan);
+        // PJA Child (kolom pja_anak): identitas PJA anak itu sendiri, bukan perusahaan gabungan.
+        $this->assertSame('PJA Mitra Pit A', $baris->pja_anak);
     }
 
     public function test_tanpa_data_personil_kolom_tetap_kosong_bukan_error(): void
@@ -101,5 +104,22 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         // Anak sendiri hanya punya perusahaannya sendiri (rollup satu arah, turun ke anak — bukan naik ke induk).
         $this->assertSame(['PT Anak'], $hasil[DrmMasterDb::normNamaPja('Anak A1')]);
         $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Tanpa Personil'), $hasil);
+    }
+
+    public function test_anak_per_nama_pja_satu_level_murni_tanpa_db(): void
+    {
+        $pjaList = [
+            ['id' => '1', 'nama' => 'Induk A', 'parent' => '0'],
+            ['id' => '2', 'nama' => 'Anak A1', 'parent' => '1'],
+            ['id' => '3', 'nama' => 'Cucu A1a', 'parent' => '2'],
+            ['id' => '4', 'nama' => 'Tanpa Anak', 'parent' => '0'],
+        ];
+
+        $hasil = DrmMasterDb::anakPerNamaPja($pjaList);
+
+        $this->assertSame(['Anak A1'], $hasil[DrmMasterDb::normNamaPja('Induk A')]);
+        // Satu level saja — cucu TIDAK ikut naik ke induk (beda dengan perusahaanPerNamaPja yang menggabung anak).
+        $this->assertSame(['Cucu A1a'], $hasil[DrmMasterDb::normNamaPja('Anak A1')]);
+        $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Tanpa Anak'), $hasil);
     }
 }

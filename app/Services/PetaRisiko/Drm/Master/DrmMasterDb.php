@@ -107,6 +107,8 @@ final class DrmMasterDb
         $kelBaris = $master->kelompokBaris($cfg['proses_bisnis']);
         // nama PJA (dinormalisasi) => daftar nama perusahaan unik personilnya (PJA itu + mitra anaknya digabung).
         $perusahaanPerNamaPja = self::perusahaanPerNamaPja($pjaList, $perusahaanPerPja);
+        // nama PJA (dinormalisasi) => daftar nama PJA anak (Mitra) SATU level, untuk kolom "PJA Child" di Alur Baseline.
+        $anakPerNamaPja = self::anakPerNamaPja($pjaList);
 
         $isi = [
             'drm_master_baris' => array_map(fn ($b) => $cap([
@@ -124,7 +126,8 @@ final class DrmMasterDb
             'drm_master_grup_baris' => $this->rata($d['grupBaris'], fn ($gid, $ri) => $cap(['gid' => (int) $gid, 'ri' => $ri])),
             'drm_master_dl' => array_map(fn ($x) => $cap(['site' => $x['site'], 'lokasi' => $x['lokasi'], 'detail' => $x['detail'], 'gid' => $x['gid'], 'aktif' => true]), $d['dl']),
             'drm_master_lokasi_pja' => array_map(fn ($x) => $cap(['site' => $x[0], 'lokasi' => $x[1], 'nama_pja' => $x[2], 'aktif' => true,
-                'perusahaan' => implode("\n", $perusahaanPerNamaPja[self::normNamaPja($x[2])] ?? [])]), $lokasiPja),
+                'perusahaan' => implode("\n", $perusahaanPerNamaPja[self::normNamaPja($x[2])] ?? []),
+                'pja_anak' => implode("\n", $anakPerNamaPja[self::normNamaPja($x[2])] ?? [])]), $lokasiPja),
             'drm_master_label' => array_merge([], ...array_map(fn ($l) => array_map(fn ($ri) => $cap([
                 'ketidaksesuaian' => mb_substr($l['k'], 0, 300), 'subketidaksesuaian' => mb_substr($l['sk'], 0, 300), 'ri' => $ri, 'sumber' => mb_substr($l['sumber'], 0, 100), 'aktif' => true,
             ]), $l['ri']), $d['label'])),
@@ -389,6 +392,41 @@ final class DrmMasterDb
             sort($gabung, SORT_NATURAL | SORT_FLAG_CASE);
             $hasil[self::normNamaPja((string) $p['nama'])] = $gabung;
         }
+
+        return $hasil;
+    }
+
+    /**
+     * Nama PJA (dinormalisasi, normNamaPja) => daftar nama PJA anak (Mitra) SATU level langsung di bawahnya
+     * (id_parent di obds.m_pja) — BUKAN digabung rekursif seperti perusahaanPerNamaPja, karena di sini yang
+     * ditampilkan adalah identitas PJA anaknya sendiri (kolom "PJA Child" di Alur Baseline, keputusan user
+     * 26 Nov 2026), bukan atribut gabungan.
+     *
+     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
+     * @return array<string, list<string>>
+     */
+    public static function anakPerNamaPja(array $pjaList): array
+    {
+        $namaPerId = [];
+        foreach ($pjaList as $p) {
+            $namaPerId[(string) $p['id']] = (string) $p['nama'];
+        }
+        $hasil = [];
+        foreach ($pjaList as $p) {
+            $parent = (string) ($p['parent'] ?? '0');
+            if ($parent === '0' || $parent === '' || ! isset($namaPerId[$parent])) {
+                continue;
+            }
+            $kunci = self::normNamaPja($namaPerId[$parent]);
+            $nama = trim((string) $p['nama']);
+            if ($nama !== '' && ! in_array($nama, $hasil[$kunci] ?? [], true)) {
+                $hasil[$kunci][] = $nama;
+            }
+        }
+        foreach ($hasil as &$list) {
+            sort($list, SORT_NATURAL | SORT_FLAG_CASE);
+        }
+        unset($list);
 
         return $hasil;
     }

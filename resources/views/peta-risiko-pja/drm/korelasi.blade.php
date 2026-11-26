@@ -146,10 +146,11 @@
   const KOLOM = {
     aktivitas: ['Aktivitas HIRA', '#16a34a'], sub: ['Sub aktivitas', '#65a30d'], bahaya: ['Bahaya-risiko', '#dc2626'],
     label: ['Label SAP', '#db2777'], grup: ['Grup lokasi', '#2563eb'], dl: ['Detail lokasi', '#60a5fa'], pja: ['PJA', '#0891b2'],
+    pja_anak: ['PJA Child', '#0e7490'],
   };
-  const JENIS_KOLOM = { aktivitas: 'aktivitas', sub: 'sub', bahaya: 'bahaya', obs: 'label', oak: 'label', ket: 'label', grup: 'grup', dl: 'dl', pja: 'pja', kelompok: 'aktivitas' };
+  const JENIS_KOLOM = { aktivitas: 'aktivitas', sub: 'sub', bahaya: 'bahaya', obs: 'label', oak: 'label', ket: 'label', grup: 'grup', dl: 'dl', pja: 'pja', pja_anak: 'pja_anak', kelompok: 'aktivitas' };
   const WARNA_LABEL = { obs: '#db2777', oak: '#0284c7', ket: '#f59e0b' };
-  const NAMA_JENIS = { aktivitas: 'Aktivitas HIRA', sub: 'Sub aktivitas', bahaya: 'Bahaya-risiko', obs: 'Label Observasi', oak: 'Label OAK', ket: 'Label Ketidaksesuaian', grup: 'Grup lokasi', dl: 'Detail lokasi', pja: 'PJA', kelompok: 'Kelompok aktivitas' };
+  const NAMA_JENIS = { aktivitas: 'Aktivitas HIRA', sub: 'Sub aktivitas', bahaya: 'Bahaya-risiko', obs: 'Label Observasi', oak: 'Label OAK', ket: 'Label Ketidaksesuaian', grup: 'Grup lokasi', dl: 'Detail lokasi', pja: 'PJA', pja_anak: 'PJA Child', kelompok: 'Kelompok aktivitas' };
   const LV = { Significant: '#b91c1c', High: '#ea580c', Medium: '#ca8a04', Low: '#15803d' };
   const STATUS = { K: ['#16a34a', 'Terkontrol'], G: ['#d97706', 'Ada gap'], T: ['#9ca3af', 'Tidak teridentifikasi'] };
   const FOKUS = ['aktivitas', 'bahaya', 'obs', 'oak', 'ket', 'grup', 'dl', 'pja', 'kelompok'];

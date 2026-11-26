@@ -29,6 +29,8 @@ class DrmKorelasiTest extends TestCase
         (require base_path('database/migrations/2026_11_18_120000_add_item_sumber_to_drm_master_baris_table.php'))->up();
         // Kolom perusahaan (ASLI, bukan nama_pja) dipakai simpulPja() sejak fitur filter Site/Perusahaan 26 Nov 2026.
         (require base_path('database/migrations/2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table.php'))->up();
+        // Kolom pja_anak dipakai simpulPja() sejak fitur kolom "PJA Child" 26 Nov 2026.
+        (require base_path('database/migrations/2026_11_26_100000_add_pja_anak_to_drm_master_lokasi_pja_table.php'))->up();
         $this->isi();
         Storage::fake('local');
         Storage::disk('local')->put('peta-risiko-drm/meta.json', '{"dibuat":"x","sampai":"2026-11-17"}');
@@ -52,20 +54,23 @@ class DrmKorelasiTest extends TestCase
         $kolom = fn (string $k) => $node[$k]['kolom'];
 
         $this->assertSame('a:1', $a['pusat']);
-        $this->assertSame(['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja'], $a['kolom']);
+        $this->assertSame(['aktivitas', 'sub', 'bahaya', 'label', 'grup', 'dl', 'pja', 'pja_anak'], $a['kolom']);
         // Dua sub aktivitas berbeda, dua bahaya, status SAP dari snapshot.
         $this->assertSame(2, $node->where('jenis', 'sub')->count());
         $this->assertSame('K', $node['b:1']['status']);
         $this->assertSame('G', $node['b:2']['status']);
         // Label Ketidaksesuaian yang sama (beda huruf/spasi) = satu simpul untuk kedua bahaya.
         $this->assertSame(2, $node->where('jenis', 'ket')->count());
-        // Grup → detail lokasi → PJA.
-        $this->assertSame([0, 1, 2, 4, 5, 6], [$kolom('a:1'), $node->firstWhere('jenis', 'sub')['kolom'], $kolom('b:1'), $kolom('g:20'), $kolom('d:1'), $kolom('p:'.md5('PJA Workshop'))]);
+        // Grup → detail lokasi → PJA → PJA Child.
+        $this->assertSame([0, 1, 2, 4, 5, 6, 7], [$kolom('a:1'), $node->firstWhere('jenis', 'sub')['kolom'], $kolom('b:1'), $kolom('g:20'), $kolom('d:1'), $kolom('p:'.md5('PJA Workshop')), $kolom('pa:'.md5('PJA Mitra A'))]);
         // Semua relasi berarah kiri → kanan.
         foreach ($a['edge'] as $e) {
             $this->assertLessThan($node[$e['to']]['kolom'], $node[$e['from']]['kolom']);
         }
         $this->assertContains(['from' => 'g:20', 'to' => 'd:1'], $a['edge']);
+        // PJA Workshop punya 2 PJA Child (Mitra A & B, lihat isi()).
+        $this->assertSame(['PJA Mitra A', 'PJA Mitra B'], $node->where('jenis', 'pja_anak')->pluck('label')->sort()->values()->all());
+        $this->assertContains(['from' => 'p:'.md5('PJA Workshop'), 'to' => 'pa:'.md5('PJA Mitra A')], $a['edge']);
         $this->assertSame('2026-11-08', $a['minggu']);
     }
 
@@ -146,8 +151,8 @@ class DrmKorelasiTest extends TestCase
             ['id' => 2, 'site' => 'LMO', 'lokasi' => 'ROM', 'detail' => 'ROM 1', 'gid' => 3, 'aktif' => true],
         ]);
         DB::table('drm_master_lokasi_pja')->insert([
-            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'perusahaan' => 'PT Bukit Makmur Mandiri Utama', 'aktif' => true],
-            ['site' => 'LMO', 'lokasi' => 'ROM', 'nama_pja' => 'PJA ROM LMO', 'perusahaan' => "PT Berau Coal\nPT Pama Persada", 'aktif' => true],
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'perusahaan' => 'PT Bukit Makmur Mandiri Utama', 'pja_anak' => "PJA Mitra A\nPJA Mitra B", 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'ROM', 'nama_pja' => 'PJA ROM LMO', 'perusahaan' => "PT Berau Coal\nPT Pama Persada", 'pja_anak' => null, 'aktif' => true],
         ]);
     }
 }
