@@ -62,6 +62,17 @@ final class DrmKorelasi
     /** @var array<string, list<string>>|null "site|lokasi" (huruf kecil) => daftar PIC Perusahaan */
     private ?array $picPerLokasi = null;
 
+    /** @var array<string, list<string>>|null nama_pja (huruf kecil) => perusahaan LANGSUNG (bukan gabungan) */
+    private ?array $perusahaanLangsungPerPja = null;
+
+    /**
+     * Perusahaan yang sedang jadi filter PJA Child (fitur Site/Perusahaan, keputusan user 26 Nov 2026) — diset
+     * oleh dariSitePerusahaan() SEBELUM memanggil simpulPja(), supaya PJA Child yang tampil hanya yang
+     * perusahaannya sendiri cocok filter (bukan semua anak PJA induk yang kebetulan cocok). Null = tidak
+     * menyaring (tampilkan semua anak, perilaku lama — dipakai fokus lain selain site_perusahaan).
+     */
+    private ?string $filterPerusahaanAnak = null;
+
     public function __construct(private readonly DrmRepository $repo)
     {
     }
@@ -85,6 +96,7 @@ final class DrmKorelasi
             throw new InvalidArgumentException('Jenis simpul tidak dikenal.');
         }
         $this->node = $this->edge = $this->potong = [];
+        $this->filterPerusahaanAnak = null;
         $pusat = match ($jenis) {
             'aktivitas' => $this->dariAktivitas((int) $id),
             'bahaya' => $this->dariBaris(DB::table('drm_master_baris')->where('ri', (int) $id)->get(), 'bahaya'),
@@ -415,6 +427,9 @@ final class DrmKorelasi
         if ($site === '' && $perusahaan === '') {
             return null;
         }
+        // PJA Child disaring ke perusahaan ini saja (lihat simpulPja/$filterPerusahaanAnak) — ditemukan user 26
+        // Nov 2026: tanpa ini, PJA Child yang tampil masih ikut subkontraktor lain yang kebetulan satu induk PJA.
+        $this->filterPerusahaanAnak = $perusahaan !== '' ? $perusahaan : null;
         $q = DB::table('drm_master_lokasi_pja')->where('aktif', true);
         if ($site !== '') {
             $q->where('site', $site);
@@ -610,7 +625,17 @@ final class DrmKorelasi
         $baru = ! isset($this->node[$kunci]);
         $kunci = $this->simpul($kunci, 'pja', 6, $nama, $nama, 'PJA', ['perusahaan' => $this->perusahaanUntukPja($nama)]);
         if ($baru) {
-            foreach ($this->batasi('pja_anak', $this->anakUntukPja($nama), self::MAKS_ANAK_PER_PJA) as $nm) {
+            $anak = $this->anakUntukPja($nama);
+            // Filter Perusahaan aktif (lihat $filterPerusahaanAnak): cuma anak yang perusahaan LANGSUNGnya
+            // sendiri cocok — bukan semua anak PJA induk ini (ditemukan user 26 Nov 2026: filter BUMA BMO1
+            // masih menampilkan anak dari PT lain yang kebetulan satu induk).
+            if ($this->filterPerusahaanAnak !== null) {
+                $anak = array_values(array_filter(
+                    $anak,
+                    fn ($nm) => in_array($this->filterPerusahaanAnak, $this->perusahaanLangsungUntukPja($nm), true)
+                ));
+            }
+            foreach ($this->batasi('pja_anak', $anak, self::MAKS_ANAK_PER_PJA) as $nm) {
                 $this->sambung($kunci, $this->simpulPjaAnak($nm));
             }
         }
@@ -671,6 +696,28 @@ final class DrmKorelasi
         sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
 
         return $daftar;
+    }
+
+    /**
+     * Perusahaan LANGSUNG (bukan gabungan induk/anak) milik nama PJA ini sendiri — dari drm_master_pja_perusahaan
+     * (keputusan user 26 Nov 2026). Dipakai simpulPja() untuk menyaring PJA Child ke perusahaan filter yang
+     * sedang aktif ($filterPerusahaanAnak); bisa dipakai untuk PJA induk maupun anak (satu tabel, satu pola).
+     *
+     * @return list<string>
+     */
+    private function perusahaanLangsungUntukPja(string $nama): array
+    {
+        if ($this->perusahaanLangsungPerPja === null) {
+            $this->perusahaanLangsungPerPja = [];
+            foreach (DB::table('drm_master_pja_perusahaan')->select('nama_pja', 'perusahaan')->get() as $p) {
+                $k = mb_strtolower(trim((string) $p->nama_pja));
+                foreach (DrmMasterDb::pisahLabel($p->perusahaan ?? '') as $nm) {
+                    $this->perusahaanLangsungPerPja[$k][$nm] = true;
+                }
+            }
+        }
+
+        return array_keys($this->perusahaanLangsungPerPja[mb_strtolower(trim($nama))] ?? []);
     }
 
     /** @param array<string, mixed> $ekstra */

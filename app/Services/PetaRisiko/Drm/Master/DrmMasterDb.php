@@ -30,6 +30,9 @@ final class DrmMasterDb
     /** PIC Perusahaan per lokasi, dari PJA Child (migrasi terpisah 2026_11_26_110000). */
     public const TABEL_LOKASI_PIC = 'drm_master_lokasi_pic';
 
+    /** Perusahaan langsung (tidak digabung) per nama PJA apa pun — buat saring PJA Child per perusahaan di Alur Baseline. */
+    public const TABEL_PJA_PERUSAHAAN = 'drm_master_pja_perusahaan';
+
     /**
      * Seed awal daftar IKK (keputusan user 25 Nov 2026, dari daftar "aktivitas/sub aktivitas pekerjaan OAK terkait
      * IKK"): [aktivitas, sub aktivitas, cek_luar_workshop]. cek_luar_workshop = true untuk kategori "Perbaikan,
@@ -154,6 +157,12 @@ final class DrmMasterDb
                 $rows[] = $cap(['site' => $site, 'lokasi' => $lokasi, 'pic_perusahaan' => implode("\n", $perusahaan), 'aktif' => true]);
             }
             $isi[self::TABEL_LOKASI_PIC] = $rows;
+        }
+        if (Schema::hasTable(self::TABEL_PJA_PERUSAHAAN)) {
+            $isi[self::TABEL_PJA_PERUSAHAAN] = array_map(
+                fn ($r) => $cap(['nama_pja' => $r['nama'], 'perusahaan' => implode("\n", $r['perusahaan'])]),
+                self::perusahaanLangsungPerNamaPja($pjaList, $perusahaanPerPja)
+            );
         }
 
         DB::transaction(function () use ($isi) {
@@ -386,6 +395,40 @@ final class DrmMasterDb
         }
 
         return [$anak, $perIdLangsung];
+    }
+
+    /**
+     * Nama PJA (APAPUN — induk maupun anak) => perusahaan personil LANGSUNG id itu saja, TIDAK digabung dengan
+     * siapa pun (bukan induk, bukan anak). Dasar tabel drm_master_pja_perusahaan — supaya diagram Alur Baseline
+     * bisa menyaring PJA Child ke perusahaan tertentu (keputusan user 26 Nov 2026, ditemukan lewat filter
+     * Perusahaan=BUMA BMO1: PJA Child yang tampil masih ikut subkontraktor lain yang kebetulan anak dari PJA
+     * induk yang sama, karena sebelumnya cuma tahu NAMA anak, tidak tahu perusahaan anak itu sendiri).
+     * Nama dikembalikan APA ADANYA (trim saja, BUKAN dinormalisasi) supaya tetap terbaca di tabel — pencocokan
+     * di sisi pembaca pakai normNamaPja() (sama pola dengan drm_master_lokasi_pja.nama_pja). Kalau beberapa ID
+     * kebetulan punya nama sama persis (mis. "Non PJA" dipakai berkali-kali), cuma yang pertama diambil.
+     *
+     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
+     * @return list<array{nama: string, perusahaan: list<string>}>
+     */
+    public static function perusahaanLangsungPerNamaPja(array $pjaList, array $perusahaanPerPja): array
+    {
+        [, $perIdLangsung] = self::anakDanPerusahaanLangsung($pjaList, $perusahaanPerPja);
+        $hasil = [];
+        $terpakai = [];
+        foreach ($pjaList as $p) {
+            $perusahaan = $perIdLangsung[(string) $p['id']] ?? [];
+            $nama = trim((string) $p['nama']);
+            $kunci = self::normNamaPja($nama);
+            if ($perusahaan === [] || $nama === '' || isset($terpakai[$kunci])) {
+                continue;
+            }
+            $terpakai[$kunci] = true;
+            sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[] = ['nama' => $nama, 'perusahaan' => $perusahaan];
+        }
+
+        return $hasil;
     }
 
     /**

@@ -33,6 +33,8 @@ class DrmKorelasiTest extends TestCase
         (require base_path('database/migrations/2026_11_26_100000_add_pja_anak_to_drm_master_lokasi_pja_table.php'))->up();
         // drm_master_lokasi_pic dipakai simpulDl() sejak fitur "PIC Perusahaan" di detail panel, 26 Nov 2026.
         (require base_path('database/migrations/2026_11_26_110000_create_drm_master_lokasi_pic_table.php'))->up();
+        // drm_master_pja_perusahaan dipakai simpulPja() utk menyaring PJA Child per perusahaan, 26 Nov 2026.
+        (require base_path('database/migrations/2026_11_26_120000_create_drm_master_pja_perusahaan_table.php'))->up();
         $this->isi();
         Storage::fake('local');
         Storage::disk('local')->put('peta-risiko-drm/meta.json', '{"dibuat":"x","sampai":"2026-11-17"}');
@@ -107,6 +109,8 @@ class DrmKorelasiTest extends TestCase
         $this->assertSame('a:1', $site['pusat']);
         $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
         $this->assertFalse($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA ROM LMO'));
+        // Tanpa filter Perusahaan: PJA Child tampil semua (Mitra A & B), tidak disaring.
+        $this->assertSame(['PJA Mitra A', 'PJA Mitra B'], $node->where('jenis', 'pja_anak')->pluck('label')->sort()->values()->all());
         // Sub aktivitas, Bahaya-risiko & Label SAP sebelumnya hilang di alur ini (ditemukan user 26 Nov 2026 —
         // cuma Aktivitas langsung ke Grup); sekarang harus ikut tampil seperti alur fokus lain.
         $this->assertSame(2, $node->where('jenis', 'sub')->count());
@@ -115,6 +119,14 @@ class DrmKorelasiTest extends TestCase
         $this->assertSame(2, $node->where('jenis', 'ket')->count());
         $this->assertContains(['from' => 'a:1', 'to' => $node->firstWhere('jenis', 'sub')['key']], $site['edge']);
         $this->assertContains(['from' => 'b:1', 'to' => 'g:20'], $site['edge']);
+
+        // Filter Site + Perusahaan sekaligus (koreksi user 26 Nov 2026): PJA Child disaring ke perusahaan
+        // LANGSUNG-nya sendiri (drm_master_pja_perusahaan) — cuma Mitra A, bukan Mitra B meski keduanya anak
+        // PJA Workshop yang sama.
+        $sitePerusahaan = $svc->alur('site_perusahaan', 'BMO 1||PT Bukit Makmur Mandiri Utama');
+        $node = collect($sitePerusahaan['node']);
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
+        $this->assertSame(['PJA Mitra A'], $node->where('jenis', 'pja_anak')->pluck('label')->values()->all());
 
         $perusahaan = $svc->alur('site_perusahaan', '||PT Berau Coal');
         $node = collect($perusahaan['node']);
@@ -170,6 +182,12 @@ class DrmKorelasiTest extends TestCase
         ]);
         DB::table('drm_master_lokasi_pic')->insert([
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic_perusahaan' => 'PT Mitra Jaya', 'aktif' => true],
+        ]);
+        // PJA Mitra A = PT Bukit Makmur Mandiri Utama (BUMA); PJA Mitra B = perusahaan lain — supaya filter
+        // Perusahaan=BUMA di simpulPja() cuma loloskan Mitra A, bukan keduanya (koreksi user 26 Nov 2026).
+        DB::table('drm_master_pja_perusahaan')->insert([
+            ['nama_pja' => 'PJA Mitra A', 'perusahaan' => 'PT Bukit Makmur Mandiri Utama'],
+            ['nama_pja' => 'PJA Mitra B', 'perusahaan' => 'PT Lain Saja'],
         ]);
     }
 }
