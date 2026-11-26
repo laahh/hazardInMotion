@@ -47,6 +47,9 @@ final class DrmKorelasi
     /** @var array{minggu: ?string, hid: array<string, string>}|null */
     private ?array $status = null;
 
+    /** @var array<string, list<string>>|null nama_pja (huruf kecil) => daftar nama perusahaan */
+    private ?array $perusahaanPerPja = null;
+
     public function __construct(private readonly DrmRepository $repo)
     {
     }
@@ -438,12 +441,37 @@ final class DrmKorelasi
 
     private function simpulDl(object $d): string
     {
-        return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi);
+        return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi, ['site' => (string) $d->site]);
     }
 
     private function simpulPja(string $nama): string
     {
-        return $this->simpul('p:'.md5($nama), 'pja', 6, $nama, $nama, 'PJA');
+        return $this->simpul('p:'.md5($nama), 'pja', 6, $nama, $nama, 'PJA', ['perusahaan' => $this->perusahaanUntukPja($nama)]);
+    }
+
+    /**
+     * Nama perusahaan (BUKAN nama PJA/nama_pja — itu judul dokumen, bukan perusahaan; lihat migrasi
+     * 2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table) untuk filter Perusahaan di diagram.
+     * Satu nama PJA bisa dipakai di banyak lokasi, jadi digabung semua perusahaan yang pernah tercatat untuknya
+     * (di-cache sekali per alur(), bukan query per simpul).
+     *
+     * @return list<string>
+     */
+    private function perusahaanUntukPja(string $nama): array
+    {
+        if ($this->perusahaanPerPja === null) {
+            $this->perusahaanPerPja = [];
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->select('nama_pja', 'perusahaan')->get() as $p) {
+                $k = mb_strtolower(trim((string) $p->nama_pja));
+                foreach (DrmMasterDb::pisahLabel($p->perusahaan ?? '') as $nm) {
+                    $this->perusahaanPerPja[$k][$nm] = true;
+                }
+            }
+        }
+        $daftar = array_keys($this->perusahaanPerPja[mb_strtolower(trim($nama))] ?? []);
+        sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $daftar;
     }
 
     /** @param array<string, mixed> $ekstra */

@@ -18,6 +18,7 @@
   .al-hasil button:hover, .al-hasil button:focus-visible { background: #f1f4fb; outline: none; }
   .al-hasil small { display: block; color: #8a8d90; font-size: 11.5px; }
   .al-dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 3px; background: var(--c); }
+  .al-alat select { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; }
   .al-kol { display: flex; flex-wrap: wrap; gap: 6px; }
   .al-kol label { display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border-radius: 999px; background: #fff; border: 1px solid rgba(171, 173, 175, .4); font-size: 12.5px; cursor: pointer; }
   .al-kol input { accent-color: #3952bc; }
@@ -95,6 +96,12 @@
       <div class="al-hasil" id="al-hasil" hidden role="listbox" aria-label="Hasil pencarian"></div>
     </div>
     <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
+    <select id="al-f-site" aria-label="Site" title="Saring Detail Lokasi menurut site">
+      <option value="">Semua site</option>
+    </select>
+    <select id="al-f-pja" aria-label="Perusahaan" title="Saring PJA menurut perusahaan" style="max-width:220px">
+      <option value="">Semua perusahaan</option>
+    </select>
     @if ($bolehUbah)
       <button type="button" class="al-edit-btn" id="al-edit" aria-pressed="false"><span class="material-symbols-outlined" style="font-size:18px">edit</span> Mode edit</button>
     @endif
@@ -154,6 +161,24 @@
     `<label><input type="checkbox" data-kol="${k}" checked><span class="al-dot" style="--c:${warna}"></span>${nama}</label>`).join('');
   $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; gambar(); }));
 
+  // Filter Site (simpul Detail Lokasi) & Perusahaan (simpul PJA, lewat drm_master_lokasi_pja.perusahaan — BUKAN
+  // nama_pja) — opsi dropdown diisi ulang dari simpul yang ADA DI DIAGRAM YANG SEDANG DIMUAT (bukan daftar
+  // global), supaya selalu relevan dengan fokus yang sedang dibuka. Filter cuma menyaring simpul DL/PJA; simpul
+  // lain tetap tampil apa adanya, dan jembatan() yang sudah ada otomatis menyambung lintas simpul yang tersaring.
+  const fSite = $('al-f-site'), fPja = $('al-f-pja');
+  function isiOpsiFilter() {
+    const site = [...new Set((D ? D.node : []).filter((n) => n.jenis === 'dl').map((n) => n.site).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+    const perusahaan = [...new Set((D ? D.node : []).filter((n) => n.jenis === 'pja').flatMap((n) => n.perusahaan || []))].sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
+    fSite.innerHTML = '<option value="">Semua site</option>' + site.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    fPja.innerHTML = '<option value="">Semua perusahaan</option>' + perusahaan.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  }
+  function cocokFilter(n) {
+    if (n.jenis === 'dl' && fSite.value && n.site !== fSite.value) return false;
+    if (n.jenis === 'pja' && fPja.value && !(n.perusahaan || []).includes(fPja.value)) return false;
+    return true;
+  }
+  [fSite, fPja].forEach((el) => el.addEventListener('change', gambar));
+
   // ------------------------------------------------------------ tata letak
   /** Urutan simpul per kolom: kolom pertama urut abjad, berikutnya rata-rata posisi tetangga (barycenter), dua sapuan. */
   function tataLetak(kolom, nodes, edges) {
@@ -193,7 +218,7 @@
     if (!D) return;
     const kolom = D.kolom.filter((k) => tampilKolom[k] && D.node.some((n) => n.kolomNama === k));
     const ci = Object.fromEntries(kolom.map((k, i) => [k, i]));
-    const nodes = D.node.filter((n) => n.kolomNama in ci).map((n) => ({ ...n, ci: ci[n.kolomNama] }));
+    const nodes = D.node.filter((n) => n.kolomNama in ci && cocokFilter(n)).map((n) => ({ ...n, ci: ci[n.kolomNama] }));
     const ada = new Set(nodes.map((n) => n.key));
     // Kolom tersembunyi: sambungkan langsung kiri ↔ kanan melewati simpul yang disembunyikan.
     const edges = jembatan(D.edge, ada);
@@ -358,6 +383,9 @@
       d.node.forEach((n) => { n.kolomNama = d.kolom[n.kolom]; });
       D = d;
       pilihan = null;
+      // Opsi filter Site/Perusahaan diisi ulang dari simpul alur yang baru dimuat (reset pilihan lama —
+      // site/perusahaan fokus sebelumnya belum tentu relevan/ada di alur yang baru).
+      isiOpsiFilter();
       const pusat = d.node.find((n) => n.key === d.pusat);
       const i = jejak.findIndex((x) => x.jenis === jenis && x.id === id);
       jejak = i >= 0 ? jejak.slice(0, i + 1) : [...jejak, { jenis, id, label: pusat ? pusat.label : (label || id) }].slice(-8);
