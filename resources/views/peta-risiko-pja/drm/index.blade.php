@@ -32,8 +32,8 @@
   @section('header-aksi')
     <div class="dr-bar">
       <label data-ctl="grup" hidden>Group Lokasi <select id="dr-grup"></select></label>
-      <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label data-ctl="site">Site <select id="dr-site"><option value="ALL">Semua site</option></select></label>
+      <label data-ctl="proses" hidden>Kelompok aktivitas <select id="dr-proses"></select></label>
       <label>Perusahaan <select id="dr-perusahaan"><option value="ALL">Semua perusahaan</option></select></label>
       <label><span class="material-symbols-outlined" style="font-size:18px;color:var(--primary)">calendar_month</span> Periode <select id="dr-w"></select></label>
       <label>Risiko awal <select id="dr-lv"><option value="SH">Significant + High</option><option value="ALL">Semua level</option></select></label>
@@ -231,13 +231,13 @@
     M.grup = grupBerisi();
     $('#dr-grup').innerHTML = M.grup.map((g) => `<option value="${DR.esc(g)}">${DR.esc(g)}</option>`).join('');
     if (!state.grup || !M.grup.includes(state.grup)) state.grup = M.grup[0];
-    $('#dr-proses').innerHTML = M.proses.map((p) => `<option value="${DR.esc(p.kode)}">${DR.esc(p.nama)}</option>`).join('');
-    if (!state.proses) state.proses = M.proses[0].kode;
-    $('#dr-proses').value = state.proses;
-    $('#dr-proses').addEventListener('change', (e) => { state.proses = e.target.value; render(); });
     $('#dr-site').value = state.site; $('#dr-grup').value = state.grup; $('#dr-lv').value = state.lv;
+    // Kelompok aktivitas tergantung site terpilih (keputusan user 26 Nov 2026) — isi SETELAH #dr-site di atas
+    // punya nilai, supaya daftar kelompok yang muncul memang sesuai site yang sedang aktif saat halaman dibuka.
+    isiProses();
+    $('#dr-proses').addEventListener('change', (e) => { state.proses = e.target.value; render(); });
     document.querySelectorAll('.dr-tabs button').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
-    $('#dr-site').addEventListener('change', (e) => { state.site = e.target.value; render(); });
+    $('#dr-site').addEventListener('change', (e) => { state.site = e.target.value; isiProses(); render(); });
     $('#dr-grup').addEventListener('change', (e) => { state.grup = e.target.value; render(); });
     $('#dr-lv').addEventListener('change', (e) => { state.lv = e.target.value; render(); });
     $('#dr-cari').addEventListener('input', (e) => { state.cari = e.target.value.toLowerCase(); renderPja(); });
@@ -259,6 +259,32 @@
     }))));
     const hasil = M.grup.filter((g) => ada.has(g));
     return hasil.length ? hasil : M.grup;
+  }
+
+  /**
+   * Kelompok aktivitas yang punya minimal satu baris baseline DI SITE itu (keputusan user 26 Nov 2026: filter
+   * Kelompok Aktivitas tergantung site terpilih — mis. HO cuma menampilkan kelompok yang benar ada di HO).
+   * site === 'ALL' → sama dengan tidak difilter (semua kelompok yang punya data di mana pun).
+   */
+  function prosesBerisi(site) {
+    const sumber = site === 'ALL'
+      ? (M.beranda && M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL ? [M.beranda.ringkas.ALL.ALL] : ((M.beranda || {}).mgmt || []))
+      : (M.beranda && M.beranda.ringkas && M.beranda.ringkas[site] && M.beranda.ringkas[site].ALL ? [M.beranda.ringkas[site].ALL]
+        : ((M.beranda || {}).mgmt || []).filter((p) => p.site === site));
+    const ada = new Set();
+    sumber.forEach((p) => (p.kel || []).forEach((perLv) => Object.values(perLv || {}).forEach((m) => Object.entries(m || {}).forEach(([k, v]) => {
+      if ((v || [])[0] > 0) ada.add(k);
+    }))));
+    const hasil = M.proses.filter((p) => ada.has(p.kode));
+    return hasil.length ? hasil : M.proses;
+  }
+
+  /** Isi/perbarui dropdown Kelompok aktivitas sesuai site terpilih, pertahankan pilihan kalau masih tersedia. */
+  function isiProses() {
+    const opsi = prosesBerisi(state.site);
+    $('#dr-proses').innerHTML = opsi.map((p) => `<option value="${DR.esc(p.kode)}">${DR.esc(p.nama)}</option>`).join('');
+    if (!state.proses || !opsi.some((p) => p.kode === state.proses)) state.proses = opsi[0].kode;
+    $('#dr-proses').value = state.proses;
   }
 
   function simpanUrl() {
