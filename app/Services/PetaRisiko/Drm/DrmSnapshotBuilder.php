@@ -2,9 +2,11 @@
 
 namespace App\Services\PetaRisiko\Drm;
 
+use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use App\Services\SportEvaluation\RfidClickHouseClient;
 use Carbon\CarbonImmutable;
 use Closure;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Menyusun snapshot Peta Risiko PJA (DRM 2.1) dari ClickHouse OBDS.
@@ -79,6 +81,12 @@ class DrmSnapshotBuilder
             'brc' => $this->ambil('beranda: insiden & root cause', $sql->berandaInsiden()),
             'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [], 'pasangan' => [], 'bkel' => [], 'bspe' => [],
         ];
+        // PIC Perusahaan per lokasi (drm_master_lokasi_pic, MySQL — bukan ClickHouse) untuk filter "Perusahaan"
+        // di Beranda PJA (keputusan user 26 Nov 2026): tabel detail lokasi & coverage SAP per PJA sebelumnya
+        // tidak bisa disaring per perusahaan karena snapshot lama tidak membawa info perusahaan per lokasi.
+        $mulaiPic = microtime(true);
+        $d['pic'] = DB::table('drm_master_lokasi_pic')->where('aktif', true)->get(['site', 'lokasi', 'pic_perusahaan'])->map(fn ($r) => (array) $r)->all();
+        ($this->log)(sprintf('%-45s %7s baris  %5.1f dtk', 'PIC Perusahaan per lokasi (MySQL)', number_format(count($d['pic']), 0, ',', '.'), microtime(true) - $mulaiPic));
         foreach ($d['sites'] as $site) {
             $s = $sql->untukSite($site);
             array_push($d['akt'], ...$this->ambil("aktivitas × detail lokasi {$site}", $s->aktivitasDetailLokasi()));
@@ -146,6 +154,17 @@ class DrmSnapshotBuilder
         $sites = $d['sites'];
         $hira = $this->indeks($d['hira'], 'hid');
         $dl = $this->indeks($d['dl'], 'dl');
+        // PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child) per site+lokasi, dilekatkan ke tiap
+        // detail lokasi yang mewarisinya — dasar filter "Perusahaan" di Beranda PJA (keputusan user 26 Nov 2026).
+        $picPerLokasi = [];
+        foreach ($d['pic'] ?? [] as $p) {
+            $k = mb_strtolower(trim((string) ($p['site'] ?? ''))).'|'.mb_strtolower(trim((string) ($p['lokasi'] ?? '')));
+            $picPerLokasi[$k] = DrmMasterDb::pisahLabel((string) ($p['pic_perusahaan'] ?? ''));
+        }
+        foreach ($dl as $id => $row) {
+            $k = mb_strtolower(trim((string) ($row['site'] ?? ''))).'|'.mb_strtolower(trim((string) ($row['lokasi'] ?? '')));
+            $dl[$id]['pic'] = $picPerLokasi[$k] ?? [];
+        }
         $pja = $this->indeks($d['pja'], 'id');
         ['insiden' => $insiden, 'personil' => $personil, 'bearc' => $bearc, 'coverage' => $coverage,
             'akt' => $akt, 'sorot' => $sorot, 'temuan' => $temuan] = $d;
@@ -746,6 +765,7 @@ class DrmSnapshotBuilder
             'info' => [...$info, 'dl' => null],
             'lokasi' => array_map(fn ($id) => [
                 'dl' => $id, 'lokasi' => $dl[$id]['lokasi'], 'detlok' => $dl[$id]['detlok'], 'grp' => $dl[$id]['grp'], 'site' => $dl[$id]['site'],
+                'pic' => $dl[$id]['pic'] ?? [],
             ], $info['dl']),
             'akt' => array_map(fn ($r) => [
                 (string) $r['dl'], $r['a'], (int) $r['bahaya'], (int) $r['k'], (int) $r['g'], (int) $r['t'], (int) $r['x'],

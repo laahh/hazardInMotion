@@ -251,7 +251,7 @@ window.BerandaPoin = (function () {
    * Coverage dipisah: oleh tim PJA (personil PJA ini + PJA Mitra anaknya) dan dari luar PJA (semua − tim PJA).
    */
   function personil(X) {
-    const D = X.D, akhir = {};
+    const D = X.D, akhir = {}, filPerusahaan = C.perusahaan !== 'ALL';
     (D.bearc || []).forEach((b) => { if (!akhir[b.sid] || akhir[b.sid].mulai < b.mulai) akhir[b.sid] = b; });
     const gabung = (rows) => Object.values(rows.reduce((acc, p) => {
       const k = p.pja_id + '|' + p.sid;
@@ -259,11 +259,15 @@ window.BerandaPoin = (function () {
       if (p.kategori) acc[k].kat.add(String(p.kategori).trim());
       return acc;
     }, {})).map(performa).sort((x, y) => y.tot - x.tot || String(x.nama).localeCompare(String(y.nama)));
-    const bc = gabung(D.personil.filter((p) => p.bc)), mk = gabung(D.personil.filter((p) => !p.bc));
-    const cov = D.coverage.map((c) => ({ ...c, l: X.dl[String(c.dl)], s: Number(c.semua), d: Number(c.dedicated) })).filter((c) => c.l);
+    // Filter "Perusahaan" (keputusan user 26 Nov 2026): personil dari field p.perusahaan-nya sendiri (akurat,
+    // bukan tebakan); coverage dari PIC Perusahaan lokasinya (drm_master_lokasi_pic, lihat X.dl[...].pic).
+    const personilFilter = filPerusahaan ? D.personil.filter((p) => p.perusahaan === C.perusahaan) : D.personil;
+    const bc = gabung(personilFilter.filter((p) => p.bc)), mk = gabung(personilFilter.filter((p) => !p.bc));
+    let cov = D.coverage.map((c) => ({ ...c, l: X.dl[String(c.dl)], s: Number(c.semua), d: Number(c.dedicated) })).filter((c) => c.l);
+    if (filPerusahaan) cov = cov.filter((c) => (c.l.pic || []).includes(C.perusahaan));
     const sCov = cov.reduce((a, c) => a + c.s, 0), dCov = cov.reduce((a, c) => a + c.d, 0);
     const semua = [...bc, ...mk];
-    const ringkas = `<div class="pr-card-body"><div class="bp-sum">${[
+    const ringkas = `<div class="pr-card-body">${filPerusahaan ? `<p class="dr-mute" style="margin:0 0 10px">Tersaring ke personil &amp; lokasi dengan PIC Perusahaan <b>${E(C.perusahaan)}</b> saja.</p>` : ''}<div class="bp-sum">${[
       ['#3952bc', 'Personil PJA', F(semua.length), `${bc.length} BC · ${mk.length} Mitra`],
       ['#1a7f37', 'Aktif lapor 7 hari terakhir', F(semua.filter((p) => p.tot7 > 0).length), `${semua.filter((p) => !p.tot).length} personil tanpa laporan 14 hari`],
       ['#0891b2', 'Laporan SAP personil 14 hari', F(semua.reduce((a, p) => a + p.tot, 0)), `rata-rata ${(semua.reduce((a, p) => a + p.tot, 0) / Math.max(1, semua.length) / 14).toFixed(1)} per orang per hari`],
@@ -520,7 +524,10 @@ window.BerandaPoin = (function () {
   }
 
   return function (cfg) {
-    C = { el: cfg.el, M: cfg.meta, id: String(cfg.id), w: cfg.w, lv: cfg.lv };
+    // perusahaan: filter "Perusahaan" di bilah atas (keputusan user 26 Nov 2026) — menyaring tabel personil
+    // (a/b, dari field p.perusahaan masing-masing orang) dan Lokasi/coverage SAP (c, dari PIC Perusahaan
+    // drm_master_lokasi_pic yang dilekatkan ke tiap detail lokasi sejak fitur ini).
+    C = { el: cfg.el, M: cfg.meta, id: String(cfg.id), w: cfg.w, lv: cfg.lv, perusahaan: cfg.perusahaan || 'ALL' };
     render();
   };
 })();

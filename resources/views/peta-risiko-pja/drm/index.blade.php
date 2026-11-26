@@ -329,7 +329,9 @@
     const V = vekPja(p, state.w), V0 = state.w + 1 < NW ? vekPja(p, state.w + 1) : null;
     isi.innerHTML = kartu4(V, V0, `${DR.esc(p.nama)} · ${wk}`) + (o ? tabelSatuPja(o, wk) : '') + '<div id="dr-bpja-poin"></div>';
     // Poin Beranda PJA (lokasi & risiko, insiden, personil, identifikasi harian, open risk, temuan): _beranda-poin.
-    BerandaPoin({ el: $('#dr-bpja-poin'), meta: M, id: String(p.id), w: state.w, lv: state.lv });
+    // perusahaan: supaya tabel detail lokasi/coverage & personil di dalamnya ikut tersaring (keputusan user 26
+    // Nov 2026) — bukan cuma daftar pemilih PJA di atas yang sudah tersaring sejak awal.
+    BerandaPoin({ el: $('#dr-bpja-poin'), meta: M, id: String(p.id), w: state.w, lv: state.lv, perusahaan: state.perusahaan });
   }
 
   function tabelSatuPja(o, wk) {
