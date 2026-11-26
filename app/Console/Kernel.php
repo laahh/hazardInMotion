@@ -147,32 +147,32 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(15)
             ->appendOutputTo(storage_path('logs/roster-generate-planning.log'));
 
-        // HSECM: 2 shift / hari (email saja; WA Fonnte sudah dihapus)
-        // Midshift  → 01:00 (slot 00) & 13:00 (slot 12)
-        // Endshift  → 07:30 & 20:30 (snapshot latest batch_slot, setelah scrape cut-off)
-        $schedule->command('hsecm:send-midshift-email --shift=night --channel=email')
-            ->timezone('Asia/Makassar')
-            ->dailyAt('01:00')
-            ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
-
-        $schedule->command('hsecm:send-midshift-email --shift=day --channel=email')
-            ->timezone('Asia/Makassar')
-            ->dailyAt('13:00')
-            ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
-
-        $schedule->command('hsecm:send-endshift-email --shift=night --channel=email')
-            ->timezone('Asia/Makassar')
-            ->dailyAt('07:30')
-            ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
-
-        $schedule->command('hsecm:send-endshift-email --shift=day --channel=email')
-            ->timezone('Asia/Makassar')
-            ->dailyAt('20:30')
-            ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
+        // HSECM email (midshift + endshift, pagi & malam) DIMATIKAN atas permintaan user 26 Nov 2026 —
+        // jangan kirim email lagi untuk project ini. Perintah artisan-nya (hsecm:send-midshift-email,
+        // hsecm:send-endshift-email) tetap ada, cuma tidak lagi dijadwalkan di sini.
+        // $schedule->command('hsecm:send-midshift-email --shift=night --channel=email')
+        //     ->timezone('Asia/Makassar')
+        //     ->dailyAt('01:00')
+        //     ->withoutOverlapping()
+        //     ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
+        //
+        // $schedule->command('hsecm:send-midshift-email --shift=day --channel=email')
+        //     ->timezone('Asia/Makassar')
+        //     ->dailyAt('13:00')
+        //     ->withoutOverlapping()
+        //     ->appendOutputTo(storage_path('logs/hsecm-midshift-email.log'));
+        //
+        // $schedule->command('hsecm:send-endshift-email --shift=night --channel=email')
+        //     ->timezone('Asia/Makassar')
+        //     ->dailyAt('07:30')
+        //     ->withoutOverlapping()
+        //     ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
+        //
+        // $schedule->command('hsecm:send-endshift-email --shift=day --channel=email')
+        //     ->timezone('Asia/Makassar')
+        //     ->dailyAt('20:30')
+        //     ->withoutOverlapping()
+        //     ->appendOutputTo(storage_path('logs/hsecm-endshift-email.log'));
 
         // Pra Operasi: pre-warm cache roster operator tiap 6 jam supaya scan berat
         // m_karyawan (6GB, tanpa index kode_sid/id_jabatan) tidak terjadi sinkron
