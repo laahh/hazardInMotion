@@ -122,6 +122,7 @@
     <section class="al-kanvas" id="al-kanvas" aria-label="Alur baseline">
       <svg id="al-svg" role="img" aria-label="Diagram alur baseline"></svg>
       <div class="al-muat" id="al-muat">Memuat alur…</div>
+      <div class="al-muat" id="al-kosong" hidden>Tidak ada data untuk kombinasi filter ini.</div>
     </section>
     <aside class="al-detail" id="al-detail" aria-live="polite">
       <h3>Rincian</h3>
@@ -411,6 +412,7 @@
 
   async function muat(jenis, id, label) {
     $('al-muat').hidden = false;
+    $('al-kosong').hidden = true;
     try {
       const r = await fetch(`${URL_DATA}?${new URLSearchParams({ jenis, id })}`, { headers: { Accept: 'application/json' } });
       const d = await r.json();
@@ -443,6 +445,17 @@
       if (pusat) detail(pusat.key, jembatan(D.edge, new Set(Object.keys(posisi))));
       $('al-kanvas').scrollTo({ top: 0, left: 0 });
     } catch (e) {
+      // Diagram dikosongkan (bukan dibiarkan menampilkan hasil sebelumnya) supaya kombinasi filter yang tidak
+      // beririsan tidak kelihatan seperti "masih menampilkan semua" (ditemukan user 26 Nov 2026 lewat filter
+      // Site × Perusahaan yang tidak nyambung — error-nya benar, tapi diagram lama tetap nongol di kanvas).
+      D = null;
+      posisi = {};
+      pilihan = null;
+      edgesKini = [];
+      $('al-svg').innerHTML = '';
+      $('al-svg').removeAttribute('width');
+      $('al-svg').removeAttribute('height');
+      $('al-kosong').hidden = false;
       $('al-detail').innerHTML = `<h3>Rincian</h3><p class="br-red" style="margin:0">Alur gagal dimuat: ${esc(e.message)}</p>`;
     } finally {
       $('al-muat').hidden = true;
