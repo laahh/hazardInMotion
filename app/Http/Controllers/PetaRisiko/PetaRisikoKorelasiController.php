@@ -60,7 +60,10 @@ final class PetaRisikoKorelasiController extends Controller
 
     /**
      * Unduh CSV flat (1 baris = 1 label / 1 jalur lokasi, tidak ada sel digabung — lihat
-     * DrmKorelasi::eksporSemuaLazy), SEMUA aktivitas, bukan cuma fokus yang sedang dibuka di diagram.
+     * DrmKorelasi::eksporSemuaLazy). Tanpa filter site/perusahaan: SEMUA aktivitas, bukan cuma fokus yang
+     * sedang dibuka di diagram. Dengan filter (query site/perusahaan, dikirim dari dropdown toolbar yang
+     * sedang aktif — keputusan user 26 Nov 2026): hanya baris yang cocok filter itu, sama seperti alur yang
+     * tampil di canvas saat filter itu dipilih.
      *
      * CSV streaming, BUKAN Xlsx (koreksi 2026-11-25, setelah unduhan Xlsx kehabisan memori 2 GB): seluruh
      * baseline × grup × lokasi × PJA bisa pecah jadi jutaan baris, dan PhpSpreadsheet (Xlsx) selalu menyimpan
@@ -68,17 +71,24 @@ final class PetaRisikoKorelasiController extends Controller
      * fputcsv per baris dari generator ini membuat memori tetap datar berapa pun totalnya (pola yang sama dengan
      * RoadSummaryController::streamCsv() untuk ekspor besar lain di aplikasi ini).
      */
-    public function unduh(): StreamedResponse
+    public function unduh(Request $request): StreamedResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
+        $v = $request->validate([
+            'site' => ['nullable', 'string', 'max:60'],
+            'perusahaan' => ['nullable', 'string', 'max:200'],
+        ]);
+        $site = (string) ($v['site'] ?? '');
+        $perusahaan = (string) ($v['perusahaan'] ?? '');
+        $namaBerkas = $site !== '' || $perusahaan !== '' ? 'peta-risiko-korelasi-filter' : 'peta-risiko-korelasi-semua';
 
-        return response()->stream(function (): void {
+        return response()->stream(function () use ($site, $perusahaan): void {
             set_time_limit(0);
             $out = fopen('php://output', 'wb');
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, self::HEADER_UNDUH, ';');
             $ditulis = 0;
-            foreach ($this->korelasi->eksporSemuaLazy() as $b) {
+            foreach ($this->korelasi->eksporSemuaLazy($site, $perusahaan) as $b) {
                 fputcsv($out, [$b['ri'], $b['aktivitas'], $b['kelompok'], $b['sub'], $b['bahaya'], $b['kb'],
                     $b['jenis_label'], $b['label'], $b['grup'], $b['dl'], $b['pja']], ';');
                 if ((++$ditulis % 5000) === 0) {
@@ -88,7 +98,7 @@ final class PetaRisikoKorelasiController extends Controller
             fclose($out);
         }, 200, [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="peta-risiko-korelasi-semua-'.now()->format('Ymd-His').'.csv"',
+            'Content-Disposition' => 'attachment; filename="'.$namaBerkas.'-'.now()->format('Ymd-His').'.csv"',
             'Cache-Control' => 'no-store, no-cache',
             'X-Accel-Buffering' => 'no',
         ]);

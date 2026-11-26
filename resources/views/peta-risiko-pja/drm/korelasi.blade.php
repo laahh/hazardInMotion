@@ -111,7 +111,7 @@
     @if ($bolehUbah)
       <button type="button" class="al-edit-btn" id="al-edit" aria-pressed="false"><span class="material-symbols-outlined" style="font-size:18px">edit</span> Mode edit</button>
     @endif
-    <a class="al-edit-btn" href="{{ route('peta-risiko-pja.korelasi.unduh') }}" title="Unduh SEMUA aktivitas (bukan cuma yang sedang difokuskan) sebagai CSV (bisa dibuka di Excel), satu baris satu bahaya-risiko — bisa jadi berkas besar"><span class="material-symbols-outlined" style="font-size:18px">download</span><span>Unduh CSV (semua)</span></a>
+    <a class="al-edit-btn" id="al-unduh" href="{{ route('peta-risiko-pja.korelasi.unduh') }}" data-base-href="{{ route('peta-risiko-pja.korelasi.unduh') }}" title="Unduh SEMUA aktivitas (bukan cuma yang sedang difokuskan) sebagai CSV (bisa dibuka di Excel), satu baris satu bahaya-risiko — bisa jadi berkas besar"><span class="material-symbols-outlined" style="font-size:18px">download</span><span>Unduh CSV (semua)</span></a>
     <button type="button" class="al-edit-btn" id="al-penuh" aria-pressed="false" title="Perbesar diagram memenuhi layar (Esc untuk kembali)"><span class="material-symbols-outlined" style="font-size:18px">open_in_full</span><span>Perbesar</span></button>
   </div>
   <div class="al-sync" id="al-sync" hidden><span class="material-symbols-outlined">sync_problem</span><span>Master sudah diubah. Status SAP dan angka dashboard baru ikut berubah setelah <code>php artisan peta-risiko:sync</code>.</span></div>
@@ -174,6 +174,23 @@
   const fSite = $('al-f-site'), fPja = $('al-f-pja');
   const PEMISAH_SP = '||';
   let fokusSebelumFilter = null;
+  // Tombol "Unduh" mengikuti filter yang sedang aktif di dropdown (keputusan user 26 Nov 2026) — bukan selalu
+  // SEMUA aktivitas. Dipanggil setiap kali fSite/fPja berubah, baik lewat klik user maupun disetel dari muat().
+  function perbaruiHrefUnduh() {
+    const unduh = $('al-unduh'), base = unduh.dataset.baseHref, site = fSite.value, perusahaan = fPja.value;
+    const teks = unduh.querySelector('span:last-child');
+    if (!site && !perusahaan) {
+      unduh.href = base;
+      teks.textContent = 'Unduh CSV (semua)';
+      unduh.title = 'Unduh SEMUA aktivitas (bukan cuma yang sedang difokuskan) sebagai CSV (bisa dibuka di Excel), satu baris satu bahaya-risiko — bisa jadi berkas besar';
+
+      return;
+    }
+    const label = site && perusahaan ? `Site ${site} × ${perusahaan}` : site ? `Site ${site}` : `Perusahaan ${perusahaan}`;
+    unduh.href = `${base}?${new URLSearchParams({ site, perusahaan })}`;
+    teks.textContent = `Unduh CSV (${label})`;
+    unduh.title = `Unduh aktivitas yang cocok filter ${label} sebagai CSV (bisa dibuka di Excel), satu baris satu bahaya-risiko`;
+  }
   function terapkanFilterSitePerusahaan() {
     const site = fSite.value, perusahaan = fPja.value;
     if (!site && !perusahaan) {
@@ -407,6 +424,7 @@
         fSite.value = s || '';
         fPja.value = p || '';
       }
+      perbaruiHrefUnduh();
       const pusat = d.node.find((n) => n.key === d.pusat);
       const i = jejak.findIndex((x) => x.jenis === jenis && x.id === id);
       // site_perusahaan: pusat cuma aktivitas pertama yang kebetulan ketemu, bukan representasi fokusnya —

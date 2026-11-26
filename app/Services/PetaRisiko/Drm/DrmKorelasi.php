@@ -117,8 +117,19 @@ final class DrmKorelasi
      *
      * @return \Generator<int, array<string, string>>
      */
-    public function eksporSemuaLazy(): \Generator
+    /**
+     * SEMUA aktivitas (bukan cuma fokus yang sedang dibuka), opsional disaring site/perusahaan — sama seperti
+     * filter toolbar alur (lihat dariSitePerusahaan): hanya baris yang grup-lokasinya punya detail lokasi +
+     * PJA yang cocok site/perusahaan itu yang ikut diekspor. Saat filter aktif, baris label SAP (tidak terkait
+     * lokasi) dan grup/DL yang tidak cocok filter DIHILANGKAN sepenuhnya (bukan baris kosong), supaya unduhan
+     * cuma berisi apa yang relevan dengan filter — keputusan user 26 Nov 2026.
+     */
+    public function eksporSemuaLazy(?string $site = null, ?string $perusahaan = null): \Generator
     {
+        $site = trim((string) $site);
+        $perusahaan = trim((string) $perusahaan);
+        $filterAktif = $site !== '' || $perusahaan !== '';
+
         $this->namaKelompok ??= DB::table('drm_master_kelompok')->pluck('nama', 'kode')->all();
         $akt = DB::table('drm_master_aktivitas')->get()->keyBy('aid');
         $namaGrup = DB::table('drm_master_grup')->pluck('nama', 'gid');
@@ -127,8 +138,12 @@ final class DrmKorelasi
             $grupPerRi[(int) $g->ri][] = [(int) $g->gid, (string) ($namaGrup[$g->gid] ?? ('#'.$g->gid))];
         }
         $gids = collect($grupPerRi)->flatten(1)->map(fn ($g) => $g[0])->unique()->values()->all();
+        $dlQuery = DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true);
+        if ($site !== '') {
+            $dlQuery->where('site', $site);
+        }
         $dlPerGrup = [];
-        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get() as $d) {
+        foreach ($dlQuery->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get() as $d) {
             $dlPerGrup[(int) $d->gid][] = $d;
         }
         $sites = [];
@@ -139,9 +154,24 @@ final class DrmKorelasi
         }
         $pjaPerLokasi = [];
         if ($sites !== []) {
-            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'nama_pja']) as $p) {
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'nama_pja', 'perusahaan']) as $p) {
+                if ($perusahaan !== '' && ! in_array($perusahaan, DrmMasterDb::pisahLabel($p->perusahaan ?? ''), true)) {
+                    continue;
+                }
                 $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
                 $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
+            }
+        }
+        if ($filterAktif) {
+            // DL yang lokasinya tidak punya PJA cocok filter: buang (bukan DL tanpa PJA pada umumnya, lihat di bawah).
+            foreach ($dlPerGrup as $gid => $list) {
+                $dlPerGrup[$gid] = array_values(array_filter(
+                    $list,
+                    fn ($d) => isset($pjaPerLokasi[mb_strtolower(trim((string) $d->site).'|'.trim((string) $d->lokasi))])
+                ));
+                if ($dlPerGrup[$gid] === []) {
+                    unset($dlPerGrup[$gid]);
+                }
             }
         }
         foreach (DB::table('drm_master_baris')->orderBy('aid')->orderBy('sub')->orderBy('bahaya')->cursor() as $b) {
@@ -155,19 +185,23 @@ final class DrmKorelasi
                 'kb' => (string) ($b->kb ?? ''),
             ];
             $adaBaris = false;
-            $label = [];
-            foreach ($this->labelBaris($b) as [$j, $teks]) {
-                $label[$j.'|'.$teks] = [$j, $teks];
-            }
-            foreach ($label as [$j, $teks]) {
-                $adaBaris = true;
-                yield $dasar + ['jenis_label' => self::NAMA_JENIS_LABEL[$j] ?? $j, 'label' => $teks, 'grup' => '', 'dl' => '', 'pja' => ''];
+            if (! $filterAktif) {
+                $label = [];
+                foreach ($this->labelBaris($b) as [$j, $teks]) {
+                    $label[$j.'|'.$teks] = [$j, $teks];
+                }
+                foreach ($label as [$j, $teks]) {
+                    $adaBaris = true;
+                    yield $dasar + ['jenis_label' => self::NAMA_JENIS_LABEL[$j] ?? $j, 'label' => $teks, 'grup' => '', 'dl' => '', 'pja' => ''];
+                }
             }
             foreach ($grupPerRi[(int) $b->ri] ?? [] as [$gid, $namaG]) {
                 $dlList = $dlPerGrup[$gid] ?? [];
                 if ($dlList === []) {
-                    $adaBaris = true;
-                    yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaG, 'dl' => '', 'pja' => ''];
+                    if (! $filterAktif) {
+                        $adaBaris = true;
+                        yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => $namaG, 'dl' => '', 'pja' => ''];
+                    }
 
                     continue;
                 }
@@ -187,7 +221,7 @@ final class DrmKorelasi
                     }
                 }
             }
-            if (! $adaBaris) {
+            if (! $adaBaris && ! $filterAktif) {
                 yield $dasar + ['jenis_label' => '', 'label' => '', 'grup' => '', 'dl' => '', 'pja' => ''];
             }
         }
