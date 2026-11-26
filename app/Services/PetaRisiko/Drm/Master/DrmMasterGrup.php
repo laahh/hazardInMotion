@@ -202,26 +202,31 @@ final class DrmMasterGrup
     }
 
     /**
-     * PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child) digabung dari SEMUA grup+lokasi baris ini
-     * — kolom "PIC Perusahaan" di tabel Master Grup Lokasi & Aktivitas (keputusan user 26 Nov 2026).
+     * PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child) DIKELOMPOKKAN per site+lokasi — kolom
+     * "PIC Perusahaan" di tabel Master Grup Lokasi & Aktivitas. BUKAN digabung rata jadi satu daftar (koreksi
+     * user 26 Nov 2026): satu baris baris bisa masuk grup yang mencakup banyak lokasi fisik se-perusahaan (mis.
+     * grup "Jetty/Port/Beaching Point" mencakup 8 lokasi di 6 site berbeda), jadi perusahaan harus tetap terlihat
+     * relevan untuk lokasi yang mana — bukan satu gumpalan tanpa konteks lokasi.
      *
-     * @return array<int, list<string>>
+     * @return array<int, list<array{site: string, lokasi: string, pic: list<string>}>>
      */
     public function picPerRi(): array
     {
         $hasil = [];
         foreach ($this->lokasiPerRi() as $ri => $list) {
-            $set = [];
+            $perLokasi = [];
             foreach ($list as $l) {
-                foreach ($l['pic'] as $nama) {
-                    $set[$nama] = true;
+                if ($l['pic'] === [] || $l['site'] === '') {
+                    continue;
                 }
+                $k = $l['site'].'|'.$l['lokasi'];
+                $perLokasi[$k] = ['site' => $l['site'], 'lokasi' => $l['lokasi'], 'pic' => $l['pic']];
             }
-            if ($set === []) {
+            if ($perLokasi === []) {
                 continue;
             }
-            $daftar = array_keys($set);
-            sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+            $daftar = array_values($perLokasi);
+            usort($daftar, fn ($a, $b) => strcmp($a['site'], $b['site']) ?: strcmp($a['lokasi'], $b['lokasi']));
             $hasil[$ri] = $daftar;
         }
 

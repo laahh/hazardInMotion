@@ -37,7 +37,10 @@
   .mg-chip button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
   .mg-chip button:hover { color: #b91c1c; }
   .mg-kosong { color: #b0b3b6; font-size: 12px; font-style: italic; }
-  .mg-tbl td.pic { min-width: 200px; }
+  .mg-tbl td.pic { min-width: 220px; }
+  .mg-pic-grp { margin: 0 0 8px; }
+  .mg-pic-grp:last-child { margin-bottom: 0; }
+  .mg-pic-grp > small { display: block; color: #64748b; font-weight: 600; margin-bottom: 3px; }
   .mg-pic { display: inline-block; margin: 0 4px 4px 0; padding: 3px 9px; border-radius: 999px; background: #ecfeff; border: 1px solid #a5f3fc; color: #155e75; font-size: 11.5px; }
   .mg-tambah summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #3952bc; list-style: none; }
   .mg-tambah summary::-webkit-details-marker { display: none; }
@@ -286,10 +289,14 @@
   } };
 
   // PIC Perusahaan: dari PJA Child (drm_master_lokasi_pic), bukan dari PJA induk — murni tampilan (tidak bisa
-  // diedit di sini), keputusan user 26 Nov 2026.
+  // diedit di sini). DIKELOMPOKKAN per site+lokasi, BUKAN digabung rata (koreksi user 26 Nov 2026): satu baris
+  // bisa masuk grup yang mencakup banyak lokasi fisik se-perusahaan, jadi perusahaan harus tetap terlihat
+  // relevan untuk lokasi yang mana.
   const kolomPic = { data: 'pic', orderable: false, className: 'pic', render: (d, type) => {
-    if (type !== 'display') return d.join(' | ');
-    return d.length ? d.map((p) => '<span class="mg-pic">' + esc(p) + '</span>').join('') : '<div class="mg-kosong">Belum ada PIC</div>';
+    if (type !== 'display') return d.map((g) => g.site + ' ' + g.lokasi + ' ' + g.pic.join(' ')).join(' | ');
+    if (!d.length) return '<div class="mg-kosong">Belum ada PIC</div>';
+    return d.map((g) => '<div class="mg-pic-grp"><small>' + esc(g.site) + ' · ' + esc(g.lokasi) + '</small><div>'
+      + g.pic.map((p) => '<span class="mg-pic">' + esc(p) + '</span>').join('') + '</div></div>').join('');
   } };
 
   // Asal HIRA: chip "id · rev" + departemen singkat (diisi lewat AJAX setelah draw, lihat isiHira); klik → detail dokumen.

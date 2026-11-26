@@ -159,8 +159,31 @@ class DrmMasterGrupTest extends TestCase
         $hasil = $svc->picPerRi();
 
         // ri 1 & 2 (grup 20, BMO 1/Workshop) dapat PIC; ri 754 di grup 20 juga (Jetty-nya ri 755 tidak ada PIC).
-        $this->assertSame(['PT Mitra A', 'PT Mitra B'], $hasil[1]);
-        $this->assertSame(['PT Mitra A', 'PT Mitra B'], $hasil[754]);
+        $this->assertSame([['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic' => ['PT Mitra A', 'PT Mitra B']]], $hasil[1]);
+        $this->assertSame($hasil[1], $hasil[754]);
         $this->assertArrayNotHasKey(755, $hasil);
+    }
+
+    /**
+     * Satu grup bisa mencakup BANYAK lokasi fisik se-perusahaan (mis. grup kategori seperti "Jetty/Port/Beaching
+     * Point" nyatanya mencakup 8 lokasi di 6 site) — PIC harus tetap dikelompokkan per lokasi, BUKAN digabung
+     * rata jadi satu daftar tanpa konteks (koreksi user 26 Nov 2026, ditemukan lewat screenshot: PIC "Jetty/
+     * Port/Beaching Point" tadinya satu gumpalan ~35 perusahaan tanpa jelas yang mana relevan untuk lokasi mana).
+     */
+    public function test_pic_per_ri_dikelompokkan_per_lokasi_saat_grup_mencakup_banyak_lokasi(): void
+    {
+        DB::table('drm_master_baris')->insert(['ri' => 900, 'aid' => 1, 'aktivitas' => 'x', 'sub' => 'Multi lokasi', 'bahaya' => 'Uji', 'kb' => 'High', 'aktif' => true]);
+        DB::table('drm_master_grup_baris')->insert(['gid' => 20, 'ri' => 900]);
+        DB::table('drm_master_dl')->insert(['site' => 'LMO', 'lokasi' => 'Pit Stop', 'detail' => 'PS 1', 'gid' => 20, 'aktif' => true]);
+        DB::table('drm_master_lokasi_pic')->insert(['site' => 'LMO', 'lokasi' => 'Pit Stop', 'pic_perusahaan' => 'PT Mitra C', 'aktif' => true]);
+
+        $hasil = app(DrmMasterGrup::class)->picPerRi();
+
+        // ri 900 di grup 20 yang sama dengan ri 1, tapi grup 20 sekarang mencakup 2 lokasi (BMO 1/Workshop &
+        // LMO/Pit Stop) — keduanya harus tampil terpisah, masing-masing dengan PIC-nya sendiri.
+        $this->assertSame([
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic' => ['PT Mitra A', 'PT Mitra B']],
+            ['site' => 'LMO', 'lokasi' => 'Pit Stop', 'pic' => ['PT Mitra C']],
+        ], $hasil[900]);
     }
 }
