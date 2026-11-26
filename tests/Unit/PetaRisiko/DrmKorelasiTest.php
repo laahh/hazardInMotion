@@ -107,12 +107,22 @@ class DrmKorelasiTest extends TestCase
         $this->assertSame('a:1', $site['pusat']);
         $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
         $this->assertFalse($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA ROM LMO'));
+        // Sub aktivitas, Bahaya-risiko & Label SAP sebelumnya hilang di alur ini (ditemukan user 26 Nov 2026 —
+        // cuma Aktivitas langsung ke Grup); sekarang harus ikut tampil seperti alur fokus lain.
+        $this->assertSame(2, $node->where('jenis', 'sub')->count());
+        $this->assertTrue($node->contains('key', 'b:1'));
+        $this->assertTrue($node->contains('key', 'b:2'));
+        $this->assertSame(2, $node->where('jenis', 'ket')->count());
+        $this->assertContains(['from' => 'a:1', 'to' => $node->firstWhere('jenis', 'sub')['key']], $site['edge']);
+        $this->assertContains(['from' => 'b:1', 'to' => 'g:20'], $site['edge']);
 
         $perusahaan = $svc->alur('site_perusahaan', '||PT Berau Coal');
         $node = collect($perusahaan['node']);
         $this->assertSame('a:2', $perusahaan['pusat']);
         $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA ROM LMO'));
         $this->assertFalse($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
+        $this->assertTrue($node->contains('key', 'b:3'));
+        $this->assertContains(['from' => 'b:3', 'to' => 'g:3'], $perusahaan['edge']);
 
         // Irisan site BMO 1 × perusahaan yang cuma ada di LMO: kosong.
         $this->expectException(InvalidArgumentException::class);

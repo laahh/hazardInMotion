@@ -401,9 +401,10 @@ final class DrmKorelasi
     /**
      * Site dan/atau Perusahaan (filter toolbar korelasi, keputusan user 26 Nov 2026): BUKAN menyaring simpul di
      * alur yang sedang terbuka, tapi alur baru dari nol dibaca dari sisi lokasi — Site/Perusahaan (lewat PJA di
-     * drm_master_lokasi_pja, PERUSAHAAN ASLI bukan nama_pja) → Detail Lokasi yang cocok → Grup Lokasi → Aktivitas
-     * yang berlaku (dibaca ke kiri, sama pola dengan dariGrup/dariPja). DL/PJA DIBATASI ke yang benar-benar cocok
-     * site/perusahaan (TIDAK memakai lanjutDariGrup — itu akan menampilkan semua DL grup termasuk site lain).
+     * drm_master_lokasi_pja, PERUSAHAAN ASLI bukan nama_pja) → Detail Lokasi yang cocok → Grup Lokasi → Bahaya
+     * (lewat Sub aktivitas & Label SAP, sama pola dengan dariBaris) → Aktivitas yang berlaku (dibaca ke kiri,
+     * sama pola dengan dariGrup/dariPja). DL/PJA DIBATASI ke yang benar-benar cocok site/perusahaan (TIDAK
+     * memakai lanjutDariGrup — itu akan menampilkan semua DL grup termasuk site lain).
      * $id format "site||perusahaan" (salah satu boleh kosong = tidak dibatasi; tidak boleh dua-duanya kosong).
      */
     private function dariSitePerusahaan(string $id): ?string
@@ -436,14 +437,34 @@ final class DrmKorelasi
         }
         $gids = $dl->pluck('gid')->unique()->values()->all();
         $namaGrup = DB::table('drm_master_grup')->whereIn('gid', $gids)->pluck('nama', 'gid');
-        $akt = DB::table('drm_master_grup_baris as gb')->join('drm_master_baris as b', 'b.ri', '=', 'gb.ri')->join('drm_master_aktivitas as a', 'a.aid', '=', 'b.aid')
-            ->whereIn('gb.gid', $gids)->selectRaw('gb.gid, a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('gb.gid', 'a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
+        // Sub aktivitas, Bahaya-risiko & Label SAP (sebelumnya hilang di alur ini — cuma Aktivitas langsung ke
+        // Grup — ditemukan user 26 Nov 2026 lewat filter Site: kolom Bahaya-risiko/Label SAP kosong).
+        $grupPerRi = [];
+        foreach (DB::table('drm_master_grup_baris')->whereIn('gid', $gids)->get(['ri', 'gid']) as $g) {
+            $grupPerRi[(int) $g->ri][] = (int) $g->gid;
+        }
+        if ($grupPerRi === []) {
+            return null;
+        }
+        $baris = DB::table('drm_master_baris')->whereIn('ri', array_keys($grupPerRi))->get();
+        $akt = DB::table('drm_master_aktivitas')->whereIn('aid', $baris->pluck('aid')->unique())->get()->keyBy('aid');
         $pusat = null;
-        foreach ($this->batasi('aktivitas', $akt) as $a) {
-            $na = $this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (string) $a->kelompok);
+        foreach ($this->batasi('bahaya', $baris) as $b) {
+            $a = $akt[$b->aid] ?? null;
+            $na = $this->simpulAktivitas((int) $b->aid, (string) ($a->aktivitas ?? $b->aktivitas), (string) ($a->kelompok ?? 'K0'));
             $pusat ??= $na;
-            if (isset($namaGrup[$a->gid])) {
-                $this->sambung($na, $this->simpulGrup((int) $a->gid, (string) $namaGrup[$a->gid]));
+            $ns = $this->simpulSub((int) $b->aid, (string) $b->sub);
+            $nb = $this->simpulBahaya($b);
+            $this->sambung($na, $ns);
+            $this->sambung($ns, $nb);
+            foreach ($this->labelBaris($b) as [$jenis, $teks]) {
+                $this->sambung($nb, $this->simpulLabel($jenis, $teks));
+            }
+            foreach ($grupPerRi[(int) $b->ri] ?? [] as $gid) {
+                if (! isset($namaGrup[$gid])) {
+                    continue;
+                }
+                $this->sambung($nb, $this->simpulGrup($gid, (string) $namaGrup[$gid]));
             }
         }
         if ($pusat === null) {
