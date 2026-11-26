@@ -206,7 +206,8 @@ ORDER BY akt, sub', 120) as $r) {
     private function status(): int
     {
         $tabel = [...self::TABEL, ...(Schema::hasTable(DrmMasterDb::TABEL_OAK_AKTIVITAS) ? [DrmMasterDb::TABEL_OAK_AKTIVITAS] : []),
-            ...(Schema::hasTable(DrmMasterDb::TABEL_IKK) ? [DrmMasterDb::TABEL_IKK] : [])];
+            ...(Schema::hasTable(DrmMasterDb::TABEL_IKK) ? [DrmMasterDb::TABEL_IKK] : []),
+            ...(Schema::hasTable(DrmMasterDb::TABEL_LOKASI_PIC) ? [DrmMasterDb::TABEL_LOKASI_PIC] : [])];
         $this->table(['Tabel', 'Baris'], array_map(fn ($t) => [$t, number_format(DB::table($t)->count(), 0, ',', '.')], $tabel));
         $terakhir = DB::table('drm_master_log')->orderByDesc('id')->first();
         $this->line(DrmMasterDb::terisi()

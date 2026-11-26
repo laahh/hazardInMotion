@@ -27,7 +27,7 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         config(['database.connections.uji_drm' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
         DB::setDefaultConnection('uji_drm');
         foreach (['2026_11_17_100000_create_drm_master_tables', '2026_11_24_100000_add_perusahaan_to_drm_master_lokasi_pja_table',
-            '2026_11_26_100000_add_pja_anak_to_drm_master_lokasi_pja_table'] as $m) {
+            '2026_11_26_100000_add_pja_anak_to_drm_master_lokasi_pja_table', '2026_11_26_110000_create_drm_master_lokasi_pic_table'] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
     }
@@ -74,6 +74,13 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         $this->assertSame("BC\nPT Mitra Jaya", $baris->perusahaan);
         // PJA Child (kolom pja_anak): identitas PJA anak itu sendiri, bukan perusahaan gabungan.
         $this->assertSame('PJA Mitra Pit A', $baris->pja_anak);
+
+        // Master baru drm_master_lokasi_pic: PIC Perusahaan CUMA dari anak (PT Mitra Jaya) — "BC" (induk sendiri)
+        // dan "PT Lain" (PJA tidak terkait) TIDAK ikut.
+        $pic = DB::table('drm_master_lokasi_pic')->first();
+        $this->assertSame('LMO', $pic->site);
+        $this->assertSame('Pit A', $pic->lokasi);
+        $this->assertSame('PT Mitra Jaya', $pic->pic_perusahaan);
     }
 
     public function test_tanpa_data_personil_kolom_tetap_kosong_bukan_error(): void
@@ -121,5 +128,54 @@ class DrmMasterDbIsiPerusahaanTest extends TestCase
         // Satu level saja — cucu TIDAK ikut naik ke induk (beda dengan perusahaanPerNamaPja yang menggabung anak).
         $this->assertSame(['Cucu A1a'], $hasil[DrmMasterDb::normNamaPja('Anak A1')]);
         $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Tanpa Anak'), $hasil);
+    }
+
+    public function test_pic_perusahaan_per_nama_pja_cuma_dari_anak_murni_tanpa_db(): void
+    {
+        $pjaList = [
+            ['id' => '1', 'nama' => 'Induk A', 'parent' => '0'],
+            ['id' => '2', 'nama' => 'Anak A1', 'parent' => '1'],
+            ['id' => '3', 'nama' => 'Tanpa Anak', 'parent' => '0'],
+        ];
+        $perusahaanPerPja = [
+            ['pja_id' => '1', 'perusahaan' => 'BC'], // perusahaan INDUK sendiri — tidak boleh ikut hasil PIC.
+            ['pja_id' => '2', 'perusahaan' => 'PT Anak'],
+            ['pja_id' => '3', 'perusahaan' => 'PT Tanpa Anak'],
+        ];
+
+        $hasil = DrmMasterDb::picPerusahaanPerNamaPja($pjaList, $perusahaanPerPja);
+
+        // Beda dengan perusahaanPerNamaPja: "BC" (perusahaan Induk A sendiri) TIDAK ikut, cuma anaknya.
+        $this->assertSame(['PT Anak'], $hasil[DrmMasterDb::normNamaPja('Induk A')]);
+        // PJA tanpa anak: tidak ada PIC sama sekali, meski dia sendiri punya personil.
+        $this->assertArrayNotHasKey(DrmMasterDb::normNamaPja('Tanpa Anak'), $hasil);
+    }
+
+    public function test_pic_perusahaan_per_lokasi_digabung_dari_semua_pja_pemilik_murni_tanpa_db(): void
+    {
+        // Satu lokasi (LMO, Area X) dimiliki 2 PJA berbeda (kasus nyata: 61% lokasi dimiliki >1 PJA) —
+        // PIC-nya digabung semua, bukan dipisah per PJA (keputusan user 26 Nov 2026).
+        $lokasiPja = [
+            ['LMO', 'Area X', 'PJA Satu'],
+            ['LMO', 'Area X', 'PJA Dua'],
+            ['LMO', 'Area Lain', 'PJA Tiga'],
+        ];
+        $pjaList = [
+            ['id' => '1', 'nama' => 'PJA Satu', 'parent' => '0'],
+            ['id' => '2', 'nama' => 'Anak Satu', 'parent' => '1'],
+            ['id' => '3', 'nama' => 'PJA Dua', 'parent' => '0'],
+            ['id' => '4', 'nama' => 'Anak Dua', 'parent' => '3'],
+            ['id' => '5', 'nama' => 'PJA Tiga', 'parent' => '0'],
+        ];
+        $perusahaanPerPja = [
+            ['pja_id' => '2', 'perusahaan' => 'PT Anak Satu'],
+            ['pja_id' => '4', 'perusahaan' => 'PT Anak Dua'],
+        ];
+
+        $hasil = DrmMasterDb::picPerusahaanPerLokasi($lokasiPja, $pjaList, $perusahaanPerPja);
+
+        $this->assertSame(['PT Anak Dua', 'PT Anak Satu'], $hasil['LMO|Area X']);
+        // PJA Tiga tidak punya anak sama sekali — Area Lain tidak muncul di hasil (bukan baris kosong).
+        $this->assertArrayNotHasKey('LMO|Area Lain', $hasil);
     }
 }

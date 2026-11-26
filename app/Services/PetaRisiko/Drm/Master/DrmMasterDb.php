@@ -27,6 +27,9 @@ final class DrmMasterDb
     /** Daftar aktivitas/sub aktivitas OAK terkait IKK (migrasi terpisah 2026_11_25_100000). */
     public const TABEL_IKK = 'drm_master_ikk';
 
+    /** PIC Perusahaan per lokasi, dari PJA Child (migrasi terpisah 2026_11_26_110000). */
+    public const TABEL_LOKASI_PIC = 'drm_master_lokasi_pic';
+
     /**
      * Seed awal daftar IKK (keputusan user 25 Nov 2026, dari daftar "aktivitas/sub aktivitas pekerjaan OAK terkait
      * IKK"): [aktivitas, sub aktivitas, cek_luar_workshop]. cek_luar_workshop = true untuk kategori "Perbaikan,
@@ -143,6 +146,14 @@ final class DrmMasterDb
 
         if (Schema::hasTable(self::TABEL_OAK_AKTIVITAS)) {
             $isi[self::TABEL_OAK_AKTIVITAS] = $this->barisOakAktivitas($cfg, $cap);
+        }
+        if (Schema::hasTable(self::TABEL_LOKASI_PIC)) {
+            $rows = [];
+            foreach (self::picPerusahaanPerLokasi($lokasiPja, $pjaList, $perusahaanPerPja) as $kunci => $perusahaan) {
+                [$site, $lokasi] = explode('|', $kunci, 2);
+                $rows[] = $cap(['site' => $site, 'lokasi' => $lokasi, 'pic_perusahaan' => implode("\n", $perusahaan), 'aktif' => true]);
+            }
+            $isi[self::TABEL_LOKASI_PIC] = $rows;
         }
 
         DB::transaction(function () use ($isi) {
@@ -349,16 +360,14 @@ final class DrmMasterDb
     }
 
     /**
-     * Nama PJA (dinormalisasi, normNamaPja) => daftar nama perusahaan personilnya, PJA itu sendiri DIGABUNG dengan
-     * personil PJA Mitra anaknya (sama pola dengan DrmSnapshotBuilder::pjaBc()/berkasPja() di sync utama — "yang
-     * parent atau BC atau Mitra Kerja semuanya masuk", keputusan user 24 Nov 2026: jangan cuma personil yang
-     * ditugaskan langsung ke ID PJA itu, anak Mitra-nya juga harus ikut).
+     * Dipakai bersama oleh perusahaanPerNamaPja() dan picPerusahaanPerNamaPja(): anak = parent id => [id anak
+     * langsung]; perIdLangsung = id PJA => daftar perusahaan personil LANGSUNG id itu (belum digabung apa pun).
      *
-     * @param  list<array{id: string, nama: string, parent: string, tipe?: string, id_site?: string}>  $pjaList  dari DrmSql::pja()
-     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
-     * @return array<string, list<string>>
+     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja
+     * @return array{0: array<string, list<string>>, 1: array<string, list<string>>}
      */
-    public static function perusahaanPerNamaPja(array $pjaList, array $perusahaanPerPja): array
+    private static function anakDanPerusahaanLangsung(array $pjaList, array $perusahaanPerPja): array
     {
         $anak = [];
         foreach ($pjaList as $p) {
@@ -375,6 +384,23 @@ final class DrmMasterDb
                 $perIdLangsung[$id][] = $nama;
             }
         }
+
+        return [$anak, $perIdLangsung];
+    }
+
+    /**
+     * Nama PJA (dinormalisasi, normNamaPja) => daftar nama perusahaan personilnya, PJA itu sendiri DIGABUNG dengan
+     * personil PJA Mitra anaknya (sama pola dengan DrmSnapshotBuilder::pjaBc()/berkasPja() di sync utama — "yang
+     * parent atau BC atau Mitra Kerja semuanya masuk", keputusan user 24 Nov 2026: jangan cuma personil yang
+     * ditugaskan langsung ke ID PJA itu, anak Mitra-nya juga harus ikut).
+     *
+     * @param  list<array{id: string, nama: string, parent: string, tipe?: string, id_site?: string}>  $pjaList  dari DrmSql::pja()
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
+     * @return array<string, list<string>>
+     */
+    public static function perusahaanPerNamaPja(array $pjaList, array $perusahaanPerPja): array
+    {
+        [$anak, $perIdLangsung] = self::anakDanPerusahaanLangsung($pjaList, $perusahaanPerPja);
         $hasil = [];
         foreach ($pjaList as $p) {
             $id = (string) $p['id'];
@@ -427,6 +453,75 @@ final class DrmMasterDb
             sort($list, SORT_NATURAL | SORT_FLAG_CASE);
         }
         unset($list);
+
+        return $hasil;
+    }
+
+    /**
+     * Nama PJA (dinormalisasi) => daftar perusahaan personil PJA Child-nya SAJA (BUKAN personil PJA induk itu
+     * sendiri) — dasar kolom pic_perusahaan di drm_master_lokasi_pic (keputusan user 26 Nov 2026: "PIC Detlok =
+     * perusahaan PJA Child / perusahaan dari personil PJA child-nya"). Beda dengan perusahaanPerNamaPja() yang
+     * menggabung induk+anak untuk kolom drm_master_lokasi_pja.perusahaan.
+     *
+     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
+     * @return array<string, list<string>>
+     */
+    public static function picPerusahaanPerNamaPja(array $pjaList, array $perusahaanPerPja): array
+    {
+        [$anak, $perIdLangsung] = self::anakDanPerusahaanLangsung($pjaList, $perusahaanPerPja);
+        $hasil = [];
+        foreach ($pjaList as $p) {
+            $id = (string) $p['id'];
+            $gabung = [];
+            foreach ($anak[$id] ?? [] as $idAnak) {
+                foreach ($perIdLangsung[$idAnak] ?? [] as $nama) {
+                    if (! in_array($nama, $gabung, true)) {
+                        $gabung[] = $nama;
+                    }
+                }
+            }
+            if ($gabung === []) {
+                continue;
+            }
+            sort($gabung, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[self::normNamaPja((string) $p['nama'])] = $gabung;
+        }
+
+        return $hasil;
+    }
+
+    /**
+     * (site, lokasi) => daftar PIC Perusahaan gabungan dari SEMUA PJA yang memiliki lokasi itu (keputusan user
+     * 26 Nov 2026: satu lokasi bisa dimiliki banyak PJA sekaligus — 61% kasus di data nyata — PIC-nya digabung
+     * semua pemilik lokasi itu, tidak dipisah per PJA dan tidak diprioritaskan/difilter) — dasar tabel
+     * drm_master_lokasi_pic.
+     *
+     * @param  list<array{0: string, 1: string, 2: string}>  $lokasiPja  [site, lokasi, nama PJA]
+     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
+     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
+     * @return array<string, list<string>>  kunci "site|lokasi"
+     */
+    public static function picPerusahaanPerLokasi(array $lokasiPja, array $pjaList, array $perusahaanPerPja): array
+    {
+        $picPerNamaPja = self::picPerusahaanPerNamaPja($pjaList, $perusahaanPerPja);
+        $set = [];
+        foreach ($lokasiPja as $x) {
+            $perusahaan = $picPerNamaPja[self::normNamaPja((string) $x[2])] ?? [];
+            if ($perusahaan === []) {
+                continue;
+            }
+            $kunci = $x[0].'|'.$x[1];
+            foreach ($perusahaan as $nama) {
+                $set[$kunci][$nama] = true;
+            }
+        }
+        $hasil = [];
+        foreach ($set as $kunci => $daftar) {
+            $list = array_keys($daftar);
+            sort($list, SORT_NATURAL | SORT_FLAG_CASE);
+            $hasil[$kunci] = $list;
+        }
 
         return $hasil;
     }
