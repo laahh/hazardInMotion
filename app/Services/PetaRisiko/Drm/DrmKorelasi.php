@@ -59,7 +59,7 @@ final class DrmKorelasi
     /** @var array<string, list<string>>|null nama_pja (huruf kecil) => daftar nama PJA Child (Mitra) */
     private ?array $anakPerPja = null;
 
-    /** @var array<string, list<string>>|null "site|lokasi" (huruf kecil) => daftar PIC Perusahaan */
+    /** @var array<string, list<string>>|null "site|lokasi|detail" (huruf kecil) => daftar PIC Perusahaan resmi */
     private ?array $picPerLokasi = null;
 
     /** @var array<string, list<string>>|null nama_pja (huruf kecil) => perusahaan LANGSUNG (bukan gabungan) */
@@ -434,11 +434,12 @@ final class DrmKorelasi
         if ($site !== '') {
             $q->where('site', $site);
         }
+        // PJA yang melekat ke tiap lokasi TIDAK disaring perusahaan di sini (koreksi user 27 Nov 2026) — PJA
+        // menaungi lokasi fisik terlepas dari subkontraktor mana yang ditugaskan di detlok mana saja di
+        // bawahnya; perusahaan diputuskan PER DETLOK lewat drm_master_lokasi_pic (PIC resmi) di bawah, bukan
+        // lewat kolom perusahaan (personil) milik PJA induknya.
         $pjaPerLokasi = [];
-        foreach ($q->get(['site', 'lokasi', 'nama_pja', 'perusahaan']) as $p) {
-            if ($perusahaan !== '' && ! in_array($perusahaan, DrmMasterDb::pisahLabel($p->perusahaan ?? ''), true)) {
-                continue;
-            }
+        foreach ($q->get(['site', 'lokasi', 'nama_pja']) as $p) {
             $k = mb_strtolower(trim((string) $p->site).'|'.trim((string) $p->lokasi));
             $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
         }
@@ -447,6 +448,23 @@ final class DrmKorelasi
         }
         $dl = DB::table('drm_master_dl')->where('aktif', true)->get()
             ->filter(fn ($d) => isset($pjaPerLokasi[mb_strtolower(trim((string) $d->site).'|'.trim((string) $d->lokasi))]))->values();
+        if ($perusahaan !== '') {
+            // PIC RESMI per detlok (drm_master_lokasi_pic, dari PIC_Detail_Lokasi ClickHouse — keputusan user 27
+            // Nov 2026, ditemukan lewat filter Site=BMO1 x Perusahaan=BUMA: Detail Lokasi "(B PMO) Warehouse KDC"
+            // masih tampil padahal PIC resminya KDC, bukan BUMA, cuma karena PJA induknya punya personil BUMA
+            // di detlok LAIN yang dinaunginya). Detlok tanpa data PIC sama sekali tidak ikut (bukan fallback ke
+            // personil) — "ganti total", bukan berdampingan.
+            $picPerDetlok = [];
+            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->select('site', 'lokasi', 'detail', 'pic_perusahaan')->get() as $p) {
+                $k = mb_strtolower(trim((string) $p->site).'|'.trim((string) $p->lokasi).'|'.trim((string) $p->detail));
+                $picPerDetlok[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
+            }
+            $dl = $dl->filter(function ($d) use ($picPerDetlok, $perusahaan) {
+                $k = mb_strtolower(trim((string) $d->site).'|'.trim((string) $d->lokasi).'|'.trim((string) $d->detail));
+
+                return in_array($perusahaan, $picPerDetlok[$k] ?? [], true);
+            })->values();
+        }
         if ($dl->isEmpty()) {
             return null;
         }
@@ -650,27 +668,27 @@ final class DrmKorelasi
     private function simpulDl(object $d): string
     {
         return $this->simpul('d:'.$d->id, 'dl', 5, (string) $d->id, (string) $d->detail, $d->site.' · '.$d->lokasi,
-            ['site' => (string) $d->site, 'pic' => $this->picUntukLokasi((string) $d->site, (string) $d->lokasi)]);
+            ['site' => (string) $d->site, 'pic' => $this->picUntukDetlok((string) $d->site, (string) $d->lokasi, (string) $d->detail)]);
     }
 
     /**
-     * PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child — lihat migrasi 2026_11_26_110000) untuk
-     * Detail Lokasi di diagram Alur Baseline (keputusan user 26 Nov 2026). Di-cache sekali per alur(), bukan
-     * query per simpul.
+     * PIC Perusahaan RESMI per detlok (drm_master_lokasi_pic, dari PIC_Detail_Lokasi ClickHouse — lihat migrasi
+     * 2026_11_27_100000, BUKAN dari personil PJA/Mitra sejak koreksi 27 Nov 2026) untuk Detail Lokasi di diagram
+     * Alur Baseline. Di-cache sekali per alur(), bukan query per simpul.
      *
      * @return list<string>
      */
-    private function picUntukLokasi(string $site, string $lokasi): array
+    private function picUntukDetlok(string $site, string $lokasi, string $detail): array
     {
         if ($this->picPerLokasi === null) {
             $this->picPerLokasi = [];
-            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->select('site', 'lokasi', 'pic_perusahaan')->get() as $p) {
-                $k = mb_strtolower(trim((string) $p->site).'|'.trim((string) $p->lokasi));
+            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->select('site', 'lokasi', 'detail', 'pic_perusahaan')->get() as $p) {
+                $k = mb_strtolower(trim((string) $p->site).'|'.trim((string) $p->lokasi).'|'.trim((string) $p->detail));
                 $this->picPerLokasi[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
             }
         }
 
-        return $this->picPerLokasi[mb_strtolower(trim($site).'|'.trim($lokasi))] ?? [];
+        return $this->picPerLokasi[mb_strtolower(trim($site).'|'.trim($lokasi).'|'.trim($detail))] ?? [];
     }
 
     /**

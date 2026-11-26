@@ -35,6 +35,9 @@ class DrmKorelasiTest extends TestCase
         (require base_path('database/migrations/2026_11_26_110000_create_drm_master_lokasi_pic_table.php'))->up();
         // drm_master_pja_perusahaan dipakai simpulPja() utk menyaring PJA Child per perusahaan, 26 Nov 2026.
         (require base_path('database/migrations/2026_11_26_120000_create_drm_master_pja_perusahaan_table.php'))->up();
+        // Kolom detail dipakai dariSitePerusahaan() & picUntukDetlok() sejak PIC pindah ke PIC_Detail_Lokasi
+        // resmi (ClickHouse), bukan personil, 27 Nov 2026.
+        (require base_path('database/migrations/2026_11_27_100000_add_detail_to_drm_master_lokasi_pic_table.php'))->up();
         $this->isi();
         Storage::fake('local');
         Storage::disk('local')->put('peta-risiko-drm/meta.json', '{"dibuat":"x","sampai":"2026-11-17"}');
@@ -74,8 +77,8 @@ class DrmKorelasiTest extends TestCase
         $this->assertContains(['from' => 'g:20', 'to' => 'd:1'], $a['edge']);
         // PJA Workshop punya 2 PJA Child (Mitra A & B, lihat isi()).
         $this->assertSame(['PJA Mitra A', 'PJA Mitra B'], $node->where('jenis', 'pja_anak')->pluck('label')->sort()->values()->all());
-        // PIC Perusahaan (drm_master_lokasi_pic) nempel di simpul Detail Lokasi BMO 1/Workshop.
-        $this->assertSame(['PT Mitra Jaya'], $node['d:1']['pic']);
+        // PIC Perusahaan RESMI (drm_master_lokasi_pic, per detlok) nempel di simpul Detail Lokasi BMO 1/Workshop.
+        $this->assertSame(['PT Bukit Makmur Mandiri Utama', 'PT Mitra Jaya'], $node['d:1']['pic']);
         $this->assertContains(['from' => 'p:'.md5('PJA Workshop'), 'to' => 'pa:'.md5('PJA Mitra A')], $a['edge']);
         $this->assertSame('2026-11-08', $a['minggu']);
     }
@@ -177,6 +180,12 @@ class DrmKorelasiTest extends TestCase
             ['site' => 'BMO 2', 'lokasi' => 'Area Besar', 'nama_pja' => 'PJA Starvasi Besar', 'perusahaan' => 'PT Starvasi Test', 'pja_anak' => null, 'aktif' => true],
             ['site' => 'BMO 2', 'lokasi' => 'Area Kecil', 'nama_pja' => 'PJA Starvasi Kecil', 'perusahaan' => 'PT Starvasi Test', 'pja_anak' => null, 'aktif' => true],
         ]);
+        // Filter Perusahaan di dariSitePerusahaan() sejak 27 Nov 2026 pakai PIC RESMI per detlok
+        // (drm_master_lokasi_pic), BUKAN lagi drm_master_lokasi_pja.perusahaan (personil).
+        DB::table('drm_master_lokasi_pic')->insert([
+            ['site' => 'BMO 2', 'lokasi' => 'Area Besar', 'detail' => 'AB 1', 'pic_perusahaan' => 'PT Starvasi Test', 'aktif' => true],
+            ['site' => 'BMO 2', 'lokasi' => 'Area Kecil', 'detail' => 'AK 1', 'pic_perusahaan' => 'PT Starvasi Test', 'aktif' => true],
+        ]);
 
         $r = app(DrmKorelasi::class)->alur('site_perusahaan', 'BMO 2||PT Starvasi Test');
         $node = collect($r['node']);
@@ -219,6 +228,8 @@ class DrmKorelasiTest extends TestCase
         }
         DB::table('drm_master_dl')->insert(['id' => 950, 'site' => 'BMO 3', 'lokasi' => 'Area Tunggal', 'detail' => 'AT 1', 'gid' => 950, 'aktif' => true]);
         DB::table('drm_master_lokasi_pja')->insert(['site' => 'BMO 3', 'lokasi' => 'Area Tunggal', 'nama_pja' => 'PJA Tunggal', 'perusahaan' => 'PT Tunggal Test', 'pja_anak' => null, 'aktif' => true]);
+        // Filter Perusahaan sejak 27 Nov 2026 pakai PIC RESMI per detlok, bukan personil (lihat test starvasi di atas).
+        DB::table('drm_master_lokasi_pic')->insert(['site' => 'BMO 3', 'lokasi' => 'Area Tunggal', 'detail' => 'AT 1', 'pic_perusahaan' => 'PT Tunggal Test', 'aktif' => true]);
 
         $r = app(DrmKorelasi::class)->alur('site_perusahaan', 'BMO 3||PT Tunggal Test');
         $node = collect($r['node']);
@@ -266,8 +277,13 @@ class DrmKorelasiTest extends TestCase
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop', 'perusahaan' => 'PT Bukit Makmur Mandiri Utama', 'pja_anak' => "PJA Mitra A\nPJA Mitra B", 'aktif' => true],
             ['site' => 'LMO', 'lokasi' => 'ROM', 'nama_pja' => 'PJA ROM LMO', 'perusahaan' => "PT Berau Coal\nPT Pama Persada", 'pja_anak' => null, 'aktif' => true],
         ]);
+        // PIC RESMI per detlok (sejak 27 Nov 2026, dari PIC_Detail_Lokasi ClickHouse — bukan lagi personil
+        // PJA Child): dipakai detail panel ('pic' di simpul DL) DAN filter Perusahaan di dariSitePerusahaan().
+        // BMO 1/Workshop/WS 1 sengaja punya 2 PIC supaya kedua test (detail panel 'PT Mitra Jaya' & filter
+        // 'PT Bukit Makmur Mandiri Utama') tetap jalan dari satu detlok yang sama.
         DB::table('drm_master_lokasi_pic')->insert([
-            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic_perusahaan' => 'PT Mitra Jaya', 'aktif' => true],
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'pic_perusahaan' => "PT Bukit Makmur Mandiri Utama\nPT Mitra Jaya", 'aktif' => true],
+            ['site' => 'LMO', 'lokasi' => 'ROM', 'detail' => 'ROM 1', 'pic_perusahaan' => "PT Berau Coal\nPT Pama Persada", 'aktif' => true],
         ]);
         // PJA Mitra A = PT Bukit Makmur Mandiri Utama (BUMA); PJA Mitra B = perusahaan lain — supaya filter
         // Perusahaan=BUMA di simpulPja() cuma loloskan Mitra A, bukan keduanya (koreksi user 26 Nov 2026).

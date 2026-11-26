@@ -624,6 +624,37 @@ FROM orang_pja
 WHERE ifNull(perusahaan, \'\') != \'\'';
     }
 
+    /** Tabel per-site "Coverage Area All Site" (sumber Google Sheet, lihat obds.Cek_Perusahaan_PIC untuk arti singkatan). */
+    private const TABEL_PIC_PER_SITE = ['BMO_1', 'BMO_2', 'BMO_3', 'GMO', 'HOTE', 'LMO', 'MARINE', 'SMO'];
+
+    /**
+     * PIC resmi per (site, lokasi, detail lokasi) dari sheet "Coverage Area All Site" (lewat Airbyte ke 8 tabel
+     * per-site obds.BMO_1/BMO_2/BMO_3/GMO/HOTE/LMO/MARINE/SMO — BUKAN personil PJA/Mitra; lihat
+     * DrmMasterDb::picDetlokPerLokasi untuk penggabungan + pemecahan singkatan jadi nama perusahaan). Satu
+     * (site,lokasi,detail) bisa muncul di lebih dari satu tabel (mis. MARINE memuat ulang detlok dari site lain)
+     * — digabung di PHP, bukan di sini. Nilai PIC_Lokasi/PIC_Detail_Lokasi berisi singkatan dipisah koma
+     * (mis. "BC,BUMA,CKB"), diterjemahkan lewat singkatanPerusahaan().
+     */
+    public function picDetailLokasi(): string
+    {
+        $satuTabel = fn (string $t) => "
+SELECT trim(Site) AS site, trim(ifNull(Lokasi, '')) AS lokasi, trim(ifNull(Detail_Lokasi, '')) AS detail,
+       ifNull(PIC_Lokasi, '') AS pic_lokasi, ifNull(PIC_Detail_Lokasi, '') AS pic_detail_lokasi
+FROM obds.{$t}
+WHERE ifNull(Site, '') != '' AND ifNull(Detail_Lokasi, '') != ''";
+
+        return implode("\nUNION ALL\n", array_map($satuTabel, self::TABEL_PIC_PER_SITE));
+    }
+
+    /** Singkatan perusahaan (mis. "BUMA") → nama lengkap (mis. "PT Bukit Makmur Mandiri Utama"), dari sheet yang sama. */
+    public function singkatanPerusahaan(): string
+    {
+        return '
+SELECT trim(Singkatan_Perusahaan) AS singkatan, trim(Perusahaan) AS perusahaan
+FROM obds.Cek_Perusahaan_PIC
+WHERE ifNull(Singkatan_Perusahaan, \'\') != \'\' AND ifNull(Perusahaan, \'\') != \'\'';
+    }
+
     /**
      * Personil per PJA dari penugasan resmi `m_pja_emp` (berdasarkan ID PJA, lengkap tipe BC/Mitra
      * dan kategori Layer/Superior/Inspector). id_employee diterjemahkan ke SID lewat

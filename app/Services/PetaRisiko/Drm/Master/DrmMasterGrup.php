@@ -134,8 +134,8 @@ final class DrmMasterGrup
      * Detail lokasi aktif (lewat grup M05) per baris HIRA, plus perusahaan yang terhubung di site+lokasi itu
      * (lewat PJA, drm_master_lokasi_pja — sama rantai dengan DrmMasterBarisUnggah::perusahaanPerBaris, tapi di
      * sini DIRINCI PER GRUP juga karena halaman ini mengedit keanggotaan grup per baris), plus PIC Perusahaan
-     * (drm_master_lokasi_pic — khusus personil PJA Child, lihat migrasi 2026_11_26_110000, kolom baru di tabel
-     * keputusan user 26 Nov 2026). Batch (4 query), bukan N+1 — sumber kolom info Site/Perusahaan/PIC di tabel
+     * RESMI per detlok (drm_master_lokasi_pic — dari PIC_Detail_Lokasi ClickHouse sejak migrasi 2026_11_27_100000,
+     * BUKAN personil PJA/Mitra). Batch (4 query), bukan N+1 — sumber kolom info Site/Perusahaan/PIC di tabel
      * dan unduhan Excel.
      *
      * @return array<int, list<array{gid: int, grup: string, site: string, lokasi: string, detail: string, perusahaan: list<string>, pic: list<string>}>>
@@ -170,12 +170,13 @@ final class DrmMasterGrup
                 }
             }
         }
-        // PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child — beda sumber dengan $pjaPerLokasi).
-        $picPerLokasi = [];
+        // PIC Perusahaan RESMI per detlok (drm_master_lokasi_pic, dari PIC_Detail_Lokasi ClickHouse sejak 27 Nov
+        // 2026 — beda sumber dengan $pjaPerLokasi yang dari personil).
+        $picPerDetlok = [];
         if ($sites !== []) {
-            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'pic_perusahaan']) as $p) {
-                $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi));
-                $picPerLokasi[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
+            foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'detail', 'pic_perusahaan']) as $p) {
+                $k = mb_strtolower(trim($p->site).'|'.trim($p->lokasi).'|'.trim($p->detail));
+                $picPerDetlok[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
             }
         }
         $hasil = [];
@@ -190,10 +191,11 @@ final class DrmMasterGrup
                 }
                 foreach ($dlList as $d) {
                     $k = mb_strtolower(trim($d->site).'|'.trim($d->lokasi));
+                    $kDetlok = $k.'|'.mb_strtolower(trim($d->detail));
                     $perusahaan = array_keys($pjaPerLokasi[$k] ?? []);
                     sort($perusahaan, SORT_NATURAL | SORT_FLAG_CASE);
                     $hasil[$ri][] = ['gid' => $gid, 'grup' => $nama, 'site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail,
-                        'perusahaan' => $perusahaan, 'pic' => $picPerLokasi[$k] ?? []];
+                        'perusahaan' => $perusahaan, 'pic' => $picPerDetlok[$kDetlok] ?? []];
                 }
             }
         }
@@ -202,7 +204,7 @@ final class DrmMasterGrup
     }
 
     /**
-     * PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child) DIKELOMPOKKAN per site+lokasi — kolom
+     * PIC Perusahaan RESMI per detlok (drm_master_lokasi_pic, dari PIC_Detail_Lokasi ClickHouse) DIKELOMPOKKAN per site+lokasi — kolom
      * "PIC Perusahaan" di tabel Master Grup Lokasi & Aktivitas. BUKAN digabung rata jadi satu daftar (koreksi
      * user 26 Nov 2026): satu baris baris bisa masuk grup yang mencakup banyak lokasi fisik se-perusahaan (mis.
      * grup "Jetty/Port/Beaching Point" mencakup 8 lokasi di 6 site berbeda), jadi perusahaan harus tetap terlihat
@@ -234,11 +236,12 @@ final class DrmMasterGrup
     }
 
     /**
-     * Semua Detail Lokasi aktif (drm_master_dl) + PJA pemilik lokasinya (drm_master_lokasi_pja) + PIC Perusahaan
-     * dari PJA Child-nya (drm_master_lokasi_pic) — tabel ringkas "Detail Lokasi → PJA → PIC" (keputusan user 26
+     * Semua Detail Lokasi aktif (drm_master_dl) + PJA pemilik lokasinya (drm_master_lokasi_pja, level lokasi) +
+     * PIC Perusahaan RESMI per detlok (drm_master_lokasi_pic, dari PIC_Detail_Lokasi ClickHouse sejak 27 Nov
+     * 2026 — tidak lagi dari personil PJA Child) — tabel ringkas "Detail Lokasi → PJA → PIC" (keputusan user 26
      * Nov 2026: PJA/PIC melekat di level lokasi, tapi tabelnya harus diturunkan sampai ke detlok, bukan berhenti
-     * di lokasi). PJA & PIC yang sama akan terlihat berulang di tiap detlok yang mewarisinya dari lokasi yang
-     * sama — itu memang warisannya, bukan duplikat data.
+     * di lokasi). PJA yang sama akan terlihat berulang di tiap detlok yang mewarisinya dari lokasi yang sama —
+     * itu memang warisannya, bukan duplikat data; PIC sekarang sudah cocok PERSIS per detlok, tidak diwariskan.
      *
      * @return list<array{site: string, lokasi: string, detail: string, pja: list<string>, pic: list<string>}>
      */
@@ -249,17 +252,18 @@ final class DrmMasterGrup
             $k = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
             $pjaPerLokasi[$k][] = (string) $p->nama_pja;
         }
-        $picPerLokasi = [];
-        foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->get(['site', 'lokasi', 'pic_perusahaan']) as $p) {
-            $k = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
-            $picPerLokasi[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
+        $picPerDetlok = [];
+        foreach (DB::table('drm_master_lokasi_pic')->where('aktif', true)->get(['site', 'lokasi', 'detail', 'pic_perusahaan']) as $p) {
+            $k = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi)).'|'.mb_strtolower(trim((string) $p->detail));
+            $picPerDetlok[$k] = DrmMasterDb::pisahLabel($p->pic_perusahaan ?? '');
         }
         $hasil = [];
         foreach (DB::table('drm_master_dl')->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get(['site', 'lokasi', 'detail']) as $d) {
             $k = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi));
+            $kDetlok = $k.'|'.mb_strtolower(trim((string) $d->detail));
             $hasil[] = [
                 'site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail,
-                'pja' => $pjaPerLokasi[$k] ?? [], 'pic' => $picPerLokasi[$k] ?? [],
+                'pja' => $pjaPerLokasi[$k] ?? [], 'pic' => $picPerDetlok[$kDetlok] ?? [],
             ];
         }
 

@@ -27,6 +27,8 @@ class DrmMasterGrupTest extends TestCase
         (require base_path('database/migrations/2026_11_17_100000_create_drm_master_tables.php'))->up();
         // Kolom pic_perusahaan: kolom "PIC Perusahaan" di tabel Master Grup Lokasi & Aktivitas, 26 Nov 2026.
         (require base_path('database/migrations/2026_11_26_110000_create_drm_master_lokasi_pic_table.php'))->up();
+        // Kolom detail: PIC sekarang per detlok (PIC_Detail_Lokasi resmi), bukan per lokasi dari personil, 27 Nov 2026.
+        (require base_path('database/migrations/2026_11_27_100000_add_detail_to_drm_master_lokasi_pic_table.php'))->up();
         $this->isi();
     }
 
@@ -147,8 +149,11 @@ class DrmMasterGrupTest extends TestCase
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'gid' => 20, 'aktif' => true],
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 2', 'gid' => 20, 'aktif' => true],
         ]);
+        // PIC sekarang per detlok (PIC_Detail_Lokasi resmi, 27 Nov 2026) — WS 1 & WS 2 kebetulan sama persis di
+        // fixture ini, tapi masing-masing butuh baris sendiri (tidak lagi diwariskan otomatis dari lokasi).
         DB::table('drm_master_lokasi_pic')->insert([
-            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pic_perusahaan' => "PT Mitra A\nPT Mitra B", 'aktif' => true],
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'pic_perusahaan' => "PT Mitra A\nPT Mitra B", 'aktif' => true],
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 2', 'pic_perusahaan' => "PT Mitra A\nPT Mitra B", 'aktif' => true],
         ]);
         DB::table('drm_master_lokasi_pja')->insert([
             ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'nama_pja' => 'PJA Workshop BMO 1', 'aktif' => true],
@@ -168,9 +173,10 @@ class DrmMasterGrupTest extends TestCase
     }
 
     /**
-     * PJA & PIC melekat di level lokasi (site + lokasi), tapi tabel ringkas "Lokasi & PIC" harus diturunkan
-     * sampai ke tiap Detail Lokasi (koreksi user 26 Nov 2026: "PJA kan lokasi besarannya, yg PIC detail lokasi
-     * kan sampe detlok2nya") — bukan berhenti di level lokasi seperti picPerRi() yang per-baris-HIRA.
+     * PJA melekat di level lokasi (site + lokasi), PIC melekat PERSIS per detlok (sejak 27 Nov 2026 dari
+     * PIC_Detail_Lokasi resmi — awalnya diwariskan dari lokasi, dikoreksi user 26 Nov 2026: "PJA kan lokasi
+     * besarannya, yg PIC detail lokasi kan sampe detlok2nya") — tabel ringkas "Lokasi & PIC" tetap diturunkan
+     * sampai ke tiap Detail Lokasi, bukan berhenti di level lokasi seperti picPerRi() yang per-baris-HIRA.
      */
     public function test_semua_lokasi_pja_dan_pic_diturunkan_sampai_detlok(): void
     {
@@ -198,7 +204,7 @@ class DrmMasterGrupTest extends TestCase
         DB::table('drm_master_baris')->insert(['ri' => 900, 'aid' => 1, 'aktivitas' => 'x', 'sub' => 'Multi lokasi', 'bahaya' => 'Uji', 'kb' => 'High', 'aktif' => true]);
         DB::table('drm_master_grup_baris')->insert(['gid' => 20, 'ri' => 900]);
         DB::table('drm_master_dl')->insert(['site' => 'LMO', 'lokasi' => 'Pit Stop', 'detail' => 'PS 1', 'gid' => 20, 'aktif' => true]);
-        DB::table('drm_master_lokasi_pic')->insert(['site' => 'LMO', 'lokasi' => 'Pit Stop', 'pic_perusahaan' => 'PT Mitra C', 'aktif' => true]);
+        DB::table('drm_master_lokasi_pic')->insert(['site' => 'LMO', 'lokasi' => 'Pit Stop', 'detail' => 'PS 1', 'pic_perusahaan' => 'PT Mitra C', 'aktif' => true]);
 
         $hasil = app(DrmMasterGrup::class)->picPerRi();
 

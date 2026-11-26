@@ -100,9 +100,11 @@ final class DrmMasterDb
      * @param  list<array{0: string, 1: string, 2: string}>  $lokasiPja  [site, lokasi, nama PJA]
      * @param  list<array{id: string, nama: string, parent: string, tipe?: string, id_site?: string}>  $pjaList  dari DrmSql::pja() (hierarki BC/Mitra)
      * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja() (ClickHouse, per ID PJA)
+     * @param  list<array{site: string, lokasi: string, detail: string, pic_lokasi: string, pic_detail_lokasi: string}>  $picMentah  dari DrmSql::picDetailLokasi()
+     * @param  list<array{singkatan: string, perusahaan: string}>  $singkatanPerusahaan  dari DrmSql::singkatanPerusahaan()
      * @return array<string, int>  jumlah baris per tabel
      */
-    public function isi(DrmMaster $master, array $cfg, array $lokasiPja, array $pjaList = [], array $perusahaanPerPja = []): array
+    public function isi(DrmMaster $master, array $cfg, array $lokasiPja, array $pjaList = [], array $perusahaanPerPja = [], array $picMentah = [], array $singkatanPerusahaan = []): array
     {
         if (! self::siap()) {
             throw new RuntimeException('Tabel master belum dimigrasi (2026_11_17_100000_create_drm_master_tables).');
@@ -152,9 +154,9 @@ final class DrmMasterDb
         }
         if (Schema::hasTable(self::TABEL_LOKASI_PIC)) {
             $rows = [];
-            foreach (self::picPerusahaanPerLokasi($lokasiPja, $pjaList, $perusahaanPerPja) as $kunci => $perusahaan) {
-                [$site, $lokasi] = explode('|', $kunci, 2);
-                $rows[] = $cap(['site' => $site, 'lokasi' => $lokasi, 'pic_perusahaan' => implode("\n", $perusahaan), 'aktif' => true]);
+            foreach (self::picDetlokPerLokasi($picMentah, $singkatanPerusahaan) as $kunci => $perusahaan) {
+                [$site, $lokasi, $detail] = explode('|', $kunci, 3);
+                $rows[] = $cap(['site' => $site, 'lokasi' => $lokasi, 'detail' => $detail, 'pic_perusahaan' => implode("\n", $perusahaan), 'aktif' => true]);
             }
             $isi[self::TABEL_LOKASI_PIC] = $rows;
         }
@@ -510,10 +512,10 @@ final class DrmMasterDb
      * administratif tapi anak Mitra-nya sebenarnya PJA operasional di site LAIN (ditemukan 26 Nov 2026: HO/
      * Dermaga ber-PIC 32 perusahaan dari "SUPERIOR HO & TRANSPORTASI BC" dkk, padahal anaknya tersebar di
      * BMO/GMO/LMO/dll — bukan benar-benar di Dermaga HO). 132 dari 338 lokasi (39%) punya PJA jenis ini.
-     * Dipakai di picPerusahaanPerNamaPja() (induk jenis ini dikecualikan TOTAL — PIC lokasi fisik tidak boleh
-     * dari anak yang tersebar) dan perusahaanPerNamaPja() (induk tetap masuk pakai personil LANGSUNGnya sendiri,
-     * cuma anaknya yang tidak digabung) — bukan dari pja_dikecualikan config, itu untuk ranking dashboard,
-     * beda tujuan.
+     * Dipakai di perusahaanPerNamaPja() (induk tetap masuk pakai personil LANGSUNGnya sendiri, cuma anaknya yang
+     * tidak digabung) — bukan dari pja_dikecualikan config, itu untuk ranking dashboard, beda tujuan. PIC lokasi
+     * fisik (drm_master_lokasi_pic) sejak 27 Nov 2026 tidak lagi bersumber dari personil sama sekali (lihat
+     * picDetlokPerLokasi), jadi kasus payung/koordinator ini otomatis tidak relevan lagi untuk PIC.
      */
     private const PJA_PAYUNG_KOORDINATOR = ['superior', 'inspekt', 'inspector', 'koordinator'];
 
@@ -530,67 +532,42 @@ final class DrmMasterDb
     }
 
     /**
-     * Nama PJA (dinormalisasi) => daftar perusahaan personil PJA Child-nya SAJA (BUKAN personil PJA induk itu
-     * sendiri) — dasar kolom pic_perusahaan di drm_master_lokasi_pic (keputusan user 26 Nov 2026: "PIC Detlok =
-     * perusahaan PJA Child / perusahaan dari personil PJA child-nya"). Beda dengan perusahaanPerNamaPja() yang
-     * menggabung induk+anak untuk kolom drm_master_lokasi_pja.perusahaan. PJA induk bertipe payung/koordinator
-     * (lihat pjaPayungKoordinator) TIDAK ikut jadi sumber SAMA SEKALI — anak-anaknya bukan representasi lokasi
-     * fisik ini.
+     * (site, lokasi, detail) => daftar nama perusahaan PIC RESMI, dari PIC_Detail_Lokasi di sheet "Coverage Area
+     * All Site" (lewat ClickHouse, DrmSql::picDetailLokasi()) — BUKAN dari personil PJA/Mitra (ditemukan user 27
+     * Nov 2026: filter Site=BMO1 x Perusahaan=BUMA di Alur Baseline masih menampilkan Detail Lokasi "(B PMO)
+     * Warehouse KDC" yang PIC resminya KDC, bukan BUMA — personil yang kebetulan tercatat di PJA induknya BUKAN
+     * representasi lokasi fisik ini). Mengganti picPerusahaanPerNamaPja()/picPerusahaanPerLokasi() yang
+     * sebelumnya bersumber dari personil (dihapus total, bukan dipertahankan berdampingan — keputusan user).
+     * Satu (site,lokasi,detail) bisa muncul di lebih dari satu tabel sumber (lihat DrmSql::picDetailLokasi) —
+     * PIC_Detail_Lokasi-nya digabung (union), bukan dari satu sumber "menang" begitu saja.
      *
-     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
-     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
-     * @return array<string, list<string>>
+     * @param  list<array{site: string, lokasi: string, detail: string, pic_lokasi: string, pic_detail_lokasi: string}>  $picMentah  dari DrmSql::picDetailLokasi()
+     * @param  list<array{singkatan: string, perusahaan: string}>  $singkatanPerusahaan  dari DrmSql::singkatanPerusahaan()
+     * @return array<string, list<string>>  kunci "site|lokasi|detail"
      */
-    public static function picPerusahaanPerNamaPja(array $pjaList, array $perusahaanPerPja): array
+    public static function picDetlokPerLokasi(array $picMentah, array $singkatanPerusahaan): array
     {
-        [$anak, $perIdLangsung] = self::anakDanPerusahaanLangsung($pjaList, $perusahaanPerPja);
-        $hasil = [];
-        foreach ($pjaList as $p) {
-            if (self::pjaPayungKoordinator((string) $p['nama'])) {
-                continue;
+        $namaPerSingkatan = [];
+        foreach ($singkatanPerusahaan as $s) {
+            $kode = mb_strtoupper(trim((string) ($s['singkatan'] ?? '')));
+            $nama = trim((string) ($s['perusahaan'] ?? ''));
+            if ($kode !== '' && $nama !== '') {
+                $namaPerSingkatan[$kode] = $nama;
             }
-            $id = (string) $p['id'];
-            $gabung = [];
-            foreach ($anak[$id] ?? [] as $idAnak) {
-                foreach ($perIdLangsung[$idAnak] ?? [] as $nama) {
-                    if (! in_array($nama, $gabung, true)) {
-                        $gabung[] = $nama;
-                    }
-                }
-            }
-            if ($gabung === []) {
-                continue;
-            }
-            sort($gabung, SORT_NATURAL | SORT_FLAG_CASE);
-            $hasil[self::normNamaPja((string) $p['nama'])] = $gabung;
         }
-
-        return $hasil;
-    }
-
-    /**
-     * (site, lokasi) => daftar PIC Perusahaan gabungan dari SEMUA PJA yang memiliki lokasi itu (keputusan user
-     * 26 Nov 2026: satu lokasi bisa dimiliki banyak PJA sekaligus — 61% kasus di data nyata — PIC-nya digabung
-     * semua pemilik lokasi itu, tidak dipisah per PJA dan tidak diprioritaskan/difilter) — dasar tabel
-     * drm_master_lokasi_pic.
-     *
-     * @param  list<array{0: string, 1: string, 2: string}>  $lokasiPja  [site, lokasi, nama PJA]
-     * @param  list<array{id: string, nama: string, parent: string}>  $pjaList  dari DrmSql::pja()
-     * @param  list<array{pja_id: string, perusahaan: string}>  $perusahaanPerPja  dari DrmSql::perusahaanPerPja()
-     * @return array<string, list<string>>  kunci "site|lokasi"
-     */
-    public static function picPerusahaanPerLokasi(array $lokasiPja, array $pjaList, array $perusahaanPerPja): array
-    {
-        $picPerNamaPja = self::picPerusahaanPerNamaPja($pjaList, $perusahaanPerPja);
         $set = [];
-        foreach ($lokasiPja as $x) {
-            $perusahaan = $picPerNamaPja[self::normNamaPja((string) $x[2])] ?? [];
-            if ($perusahaan === []) {
+        foreach ($picMentah as $r) {
+            $site = trim((string) ($r['site'] ?? ''));
+            $detail = trim((string) ($r['detail'] ?? ''));
+            if ($site === '' || $detail === '') {
                 continue;
             }
-            $kunci = $x[0].'|'.$x[1];
-            foreach ($perusahaan as $nama) {
-                $set[$kunci][$nama] = true;
+            $kunci = $site.'|'.trim((string) ($r['lokasi'] ?? '')).'|'.$detail;
+            foreach (preg_split('/[,\/]/', (string) ($r['pic_detail_lokasi'] ?? '')) as $kode) {
+                $kode = mb_strtoupper(trim($kode));
+                if ($kode !== '' && isset($namaPerSingkatan[$kode])) {
+                    $set[$kunci][$namaPerSingkatan[$kode]] = true;
+                }
             }
         }
         $hasil = [];

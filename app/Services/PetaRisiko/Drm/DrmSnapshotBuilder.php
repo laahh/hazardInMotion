@@ -81,11 +81,12 @@ class DrmSnapshotBuilder
             'brc' => $this->ambil('beranda: insiden & root cause', $sql->berandaInsiden()),
             'akt' => [], 'sorot' => [], 'temuan' => [], 'statusBahaya' => [], 'pasangan' => [], 'bkel' => [], 'bspe' => [],
         ];
-        // PIC Perusahaan per lokasi (drm_master_lokasi_pic, MySQL — bukan ClickHouse) untuk filter "Perusahaan"
-        // di Beranda PJA (keputusan user 26 Nov 2026): tabel detail lokasi & coverage SAP per PJA sebelumnya
-        // tidak bisa disaring per perusahaan karena snapshot lama tidak membawa info perusahaan per lokasi.
+        // PIC Perusahaan RESMI per detlok (drm_master_lokasi_pic — sejak 27 Nov 2026 dari PIC_Detail_Lokasi
+        // ClickHouse/sheet "Coverage Area All Site", BUKAN personil PJA/Mitra) untuk filter "Perusahaan" di
+        // Beranda PJA (keputusan user 26 Nov 2026): tabel detail lokasi & coverage SAP per PJA sebelumnya tidak
+        // bisa disaring per perusahaan karena snapshot lama tidak membawa info perusahaan per lokasi.
         $mulaiPic = microtime(true);
-        $d['pic'] = DB::table('drm_master_lokasi_pic')->where('aktif', true)->get(['site', 'lokasi', 'pic_perusahaan'])->map(fn ($r) => (array) $r)->all();
+        $d['pic'] = DB::table('drm_master_lokasi_pic')->where('aktif', true)->get(['site', 'lokasi', 'detail', 'pic_perusahaan'])->map(fn ($r) => (array) $r)->all();
         ($this->log)(sprintf('%-45s %7s baris  %5.1f dtk', 'PIC Perusahaan per lokasi (MySQL)', number_format(count($d['pic']), 0, ',', '.'), microtime(true) - $mulaiPic));
         foreach ($d['sites'] as $site) {
             $s = $sql->untukSite($site);
@@ -154,16 +155,17 @@ class DrmSnapshotBuilder
         $sites = $d['sites'];
         $hira = $this->indeks($d['hira'], 'hid');
         $dl = $this->indeks($d['dl'], 'dl');
-        // PIC Perusahaan (drm_master_lokasi_pic, khusus personil PJA Child) per site+lokasi, dilekatkan ke tiap
-        // detail lokasi yang mewarisinya — dasar filter "Perusahaan" di Beranda PJA (keputusan user 26 Nov 2026).
-        $picPerLokasi = [];
+        // PIC Perusahaan RESMI (drm_master_lokasi_pic, dari PIC_Detail_Lokasi ClickHouse sejak 27 Nov 2026) per
+        // site+lokasi+detlok, dilekatkan ke tiap detail lokasi yang cocok persis — dasar filter "Perusahaan" di
+        // Beranda PJA (keputusan user 26 Nov 2026).
+        $picPerDetlok = [];
         foreach ($d['pic'] ?? [] as $p) {
-            $k = mb_strtolower(trim((string) ($p['site'] ?? ''))).'|'.mb_strtolower(trim((string) ($p['lokasi'] ?? '')));
-            $picPerLokasi[$k] = DrmMasterDb::pisahLabel((string) ($p['pic_perusahaan'] ?? ''));
+            $k = mb_strtolower(trim((string) ($p['site'] ?? ''))).'|'.mb_strtolower(trim((string) ($p['lokasi'] ?? ''))).'|'.mb_strtolower(trim((string) ($p['detail'] ?? '')));
+            $picPerDetlok[$k] = DrmMasterDb::pisahLabel((string) ($p['pic_perusahaan'] ?? ''));
         }
         foreach ($dl as $id => $row) {
-            $k = mb_strtolower(trim((string) ($row['site'] ?? ''))).'|'.mb_strtolower(trim((string) ($row['lokasi'] ?? '')));
-            $dl[$id]['pic'] = $picPerLokasi[$k] ?? [];
+            $k = mb_strtolower(trim((string) ($row['site'] ?? ''))).'|'.mb_strtolower(trim((string) ($row['lokasi'] ?? ''))).'|'.mb_strtolower(trim((string) ($row['detlok'] ?? '')));
+            $dl[$id]['pic'] = $picPerDetlok[$k] ?? [];
         }
         $pja = $this->indeks($d['pja'], 'id');
         ['insiden' => $insiden, 'personil' => $personil, 'bearc' => $bearc, 'coverage' => $coverage,

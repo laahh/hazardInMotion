@@ -81,7 +81,10 @@ ORDER BY site, lokasi, pja', 120));
             $sql = new DrmSql((array) config('peta_risiko_drm'), now()->toImmutable(), []);
             $pjaList = $ch->select($sql->pja(), 120);
             $perusahaanPerPja = $ch->select($sql->perusahaanPerPja(), 120);
-            $jumlah = $db->isi($master, (array) config('peta_risiko_drm'), $lokasiPja, $pjaList, $perusahaanPerPja);
+            $this->line('Mengambil PIC resmi per detail lokasi dari sheet "Coverage Area All Site"…');
+            $picMentah = $ch->select($sql->picDetailLokasi(), 120);
+            $singkatanPerusahaan = $ch->select($sql->singkatanPerusahaan(), 120);
+            $jumlah = $db->isi($master, (array) config('peta_risiko_drm'), $lokasiPja, $pjaList, $perusahaanPerPja, $picMentah, $singkatanPerusahaan);
         } catch (Throwable $e) {
             $this->error('Gagal: '.$e->getMessage());
 
