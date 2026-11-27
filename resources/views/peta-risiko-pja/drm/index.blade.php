@@ -91,6 +91,19 @@
     .dr-pl > summary > :nth-child(n+3), .dr-pl-row > :nth-child(n+3) { display: none; }
   }
 
+  /* Ringkasan baris detail lokasi (keputusan user 27 Nov 2026): grid 2 kartu ringkas, detail lengkap di modal — */
+  /* mengganti 3 blok panjang (PJA pelapor, PJA lain, bahaya belum tercover) yang dulu langsung tampil penuh. */
+  .dr-ring-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+  @media (max-width: 700px) { .dr-ring-grid { grid-template-columns: 1fr; } }
+  .dr-ring-card { border: 1px solid rgba(0, 0, 0, .08); border-radius: 14px; background: #fff; padding: 14px 16px; cursor: pointer; text-align: left; width: 100%; }
+  .dr-ring-card:hover, .dr-ring-card:focus-visible { border-color: #3952bc; outline: none; }
+  .dr-ring-card b.dr-ring-judul { display: block; font-size: 12px; font-weight: 700; color: #595c5e; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+  .dr-ring-card .dr-ring-persen { font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .dr-ring-card .dr-ring-sub { font-size: 12.5px; color: #595c5e; margin-top: 2px; }
+  .dr-ring-card .dr-ring-lihat { font-size: 12px; color: #3952bc; font-weight: 700; margin-top: 8px; }
+  .dr-ring-laporan { margin-bottom: 16px; font-size: 13px; }
+  .dr-ring-laporan button { background: transparent; border: 0; color: #3952bc; font-weight: 700; font-size: 13px; cursor: pointer; padding: 0; }
+
   /* Treemap kelompok aktivitas */
   .dr-tm-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: stretch; }
   .dr-tm { position: relative; height: 420px; border-radius: 14px; overflow: hidden; background: #f5f7f9; }
@@ -955,9 +968,11 @@
           <td class="r"><b>${pctI(v.full, v.t)}</b>${v0 ? '<br>' + delta(v.full, v.t, v0.full, v0.t, true) : ''}</td>
           <td class="r">${pctI(v.gapo, v.t)}</td><td class="r">${pctI(v.none, v.t)}</td><td class="dr-mute">${gapTxt(v)}</td></tr>`
           + (buka ? `<tr class="br-sub br-buka"><td colspan="8" style="padding:12px 16px 16px 40px">
-              <div data-pjalap><span class="dr-mute">Memuat PJA yang melaporkan…</span></div>
-              <div data-belum="${DR.esc(d)}" data-pja-id="${DR.esc(pja[0].id)}" style="margin-bottom:16px"><span class="dr-mute">Memuat bahaya-risiko yang belum tercover SAP…</span></div>
-              <div data-sap="${DR.esc(d)}" data-pemilik="${DR.esc(JSON.stringify(pja.map((p) => [String(p.id), p.nama])))}"><span class="dr-mute">Memuat laporan SAP…</span></div></td></tr>` : '');
+              <div class="dr-ring-grid">
+                <div data-pjalap><span class="dr-mute">Memuat PJA yang melaporkan…</span></div>
+                <div data-belum="${DR.esc(d)}" data-pja-id="${DR.esc(pja[0].id)}"><span class="dr-mute">Memuat bahaya-risiko yang belum tercover SAP…</span></div>
+              </div>
+              <div class="dr-ring-laporan" data-sap="${DR.esc(d)}" data-pemilik="${DR.esc(JSON.stringify(pja.map((p) => [String(p.id), p.nama])))}"><span class="dr-mute">Memuat laporan SAP…</span></div></td></tr>` : '');
       }).join('')
         || `<tr><td colspan="8" class="pr-empty">Tidak ada detail lokasi ${DR.esc(state.grup)}${state.site === 'ALL' ? '' : ' di ' + DR.esc(state.site)} yang punya baris baseline${M.beranda.dl ? '' : ' (snapshot lama — jalankan ulang peta-risiko:sync)'}.</td></tr>`)
       + (kosongan ? `<tr><td colspan="8" class="dr-mute" style="font-size:12px">${kosongan} detail lokasi lain di grup ini tidak punya baris pada level risiko terpilih.</td></tr>` : '')
@@ -998,6 +1013,27 @@
     return hasil;
   }
 
+  /** Buka modal item (dialogItem() bersama) dengan judul + HTML siap pakai; afterShow(isi) opsional (mis. isiHira). */
+  function bukaRingkas(judul, html, afterShow) {
+    const d = dialogItem(), isi = d.querySelector('#dr-item-isi');
+    d.querySelector('#dr-item-judul').textContent = judul;
+    isi.innerHTML = html;
+    if (!d.open) d.showModal();
+    if (afterShow) afterShow(isi);
+  }
+
+  /**
+   * Kartu ringkas (keputusan user 27 Nov 2026): dulu tabel lengkap langsung tampil di baris yang dibuka — sekarang
+   * cuma persentase + 1 baris keterangan, detail lengkapnya pindah ke modal (klik kartu). `warna` opsional untuk
+   * angka persen (mis. merah untuk "belum tercover").
+   */
+  function kartuRingkas(judul, persen, sub, warna) {
+    return `<button type="button" class="dr-ring-card"><b class="dr-ring-judul">${DR.esc(judul)}</b>
+        <div class="dr-ring-persen"${warna ? ` style="color:${warna}"` : ''}>${persen}</div>
+        <div class="dr-ring-sub">${sub}</div>
+        <div class="dr-ring-lihat">Lihat detail →</div></button>`;
+  }
+
   function muatBelum(d, pjaId, w, el) {
     muatDataPja(pjaId).then((D) => {
       if (!el.isConnected) return;
@@ -1011,13 +1047,14 @@
           .map((x) => `<tr><td>${lvTag(x.n1)}</td><td>${DR.esc(namaKel[x.kel] || x.kel)}</td><td>${DR.esc(x.an)}${x.sn && x.sn !== x.an ? `<br><span class="dr-mute">${DR.esc(x.sn)}</span>` : ''}</td><td data-hira="${DR.esc(x.hid)}" data-bahaya="${DR.esc(x.bn)}"><span class="dr-mute">…</span></td><td><b>${DR.esc(x.bn)}</b></td>
             <td>${alasan ? [x.m & 4 && 'belum closed', x.m & 8 && 'berulang', x.m & 16 && 'OAK Stop', x.m & 32 && 'butir OAK tidak sesuai'].filter(Boolean).join(', ') : lvTag(x.n2)}</td></tr>`).join('')}</tbody></table></div>`;
       const lv = state.lv === 'ALL' ? 'semua level' : 'Significant + High';
-      el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;margin-bottom:8px;font-size:13px">
-          <b style="color:#b42318">● ${DR.fmt(H.none.length)} bahaya-risiko belum tercover SAP</b>
-          <span class="dr-mute">dari ${DR.fmt(H.n)} baris baseline (${pctI(H.none.length, H.n)}) · ${wKode(w)} · ${lv}</span></div>`
-        + (H.none.length ? tabel(H.none, false) : '<div class="dr-mute">Semua bahaya-risiko baseline di detail lokasi ini sudah tertangkap laporan SAP minggu ini.</div>')
+      const judul = 'Bahaya-Risiko Belum Tercover SAP';
+      const html = (H.none.length ? tabel(H.none, false) : '<div class="dr-mute">Semua bahaya-risiko baseline di detail lokasi ini sudah tertangkap laporan SAP minggu ini.</div>')
         + (H.bm.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#a07a00">● ${DR.fmt(H.bm.length)} sudah tertangkap SAP tetapi laporannya bermasalah</summary>${tabel(H.bm, true)}</details>` : '')
         + '<p class="dr-mute" style="font-size:12px;margin:8px 0 0">Baseline detail lokasi = semua baris HIRA grup lokasinya (M05), jadi sebagian baris bisa saja aktivitasnya memang tidak ada di lokasi ini. Klik kolom HIRA untuk melihat dokumen asalnya.</p>';
-      isiHira(el, [...H.none, ...H.bm].map((x) => x.hid));
+      el.innerHTML = kartuRingkas(judul, pctI(H.none.length, H.n), `${DR.fmt(H.none.length)} dari ${DR.fmt(H.n)} baris baseline · ${wKode(w)} · ${lv}`, H.none.length ? '#b42318' : '#1a7f37');
+      el.querySelector('button').addEventListener('click', () => {
+        bukaRingkas(judul, html, (isi) => isiHira(isi, [...H.none, ...H.bm].map((x) => x.hid)));
+      });
     }).catch((e) => { if (el.isConnected) el.innerHTML = `<span class="br-red">${DR.esc(e.message || 'Gagal memuat data PJA.')}</span>`; });
   }
 
@@ -1098,10 +1135,20 @@
     try { pemilik = JSON.parse(td.dataset.pemilik || '[]'); } catch (e) { pemilik = []; }
     // Urutan rincian: komposisi PJA pelapor → bahaya belum tercover → daftar laporan.
     const kotakPja = td.parentElement && td.parentElement.querySelector('[data-pjalap]');
+    // Keputusan user 27 Nov 2026: kartu ringkas (persentase PJA yang melapor) di baris, detail lengkap + daftar
+    // laporan mentah (dulu langsung tampil penuh) pindah ke modal, dibuka lewat klik kartu / tautan ringkas.
     const tulis = (data) => {
       if (!td.isConnected) return;
-      if (kotakPja) kotakPja.innerHTML = pjaPelapor(data, pemilik);
-      td.innerHTML = kotakPja ? isiSap(data) : pjaPelapor(data, pemilik) + isiSap(data);
+      if (kotakPja) {
+        const { persen, sub, html } = pjaPelapor(data, pemilik);
+        kotakPja.innerHTML = kartuRingkas('PJA Pelapor', persen, sub);
+        kotakPja.querySelector('button').addEventListener('click', () => bukaRingkas('PJA Pelapor', html));
+      }
+      const R = data.ringkas || {};
+      td.innerHTML = kotakPja
+        ? `<span class="dr-mute">${DR.fmt(R.total || 0)} laporan SAP minggu ini${R.total ? ` · ${pctI(R.lolos, R.total)} mengidentifikasi baris HIRA` : ''}</span> <button type="button">Lihat semua laporan →</button>`
+        : pjaPelapor(data, pemilik).html + isiSap(data);
+      if (kotakPja) td.querySelector('button').addEventListener('click', () => bukaRingkas('Laporan SAP Detail Lokasi', isiSap(data)));
     };
     if (sapCache[kunci]) { tulis(sapCache[kunci]); return; }
     const qPemilik = pemilik.map(([id]) => id).filter((id) => /^[0-9]+$/.test(id)).join(',');
@@ -1218,13 +1265,16 @@
           <span class="dr-mute">${DR.fmt(nLuar)} laporan oleh personil PJA yang bukan PJA lokasi ini, bukan child, dan bukan parent-nya</span></summary>
         ${KEPALA_PJA_PELAPOR}${LG.map(barisPjaPelapor).join('')}</details>` : '';
 
-    return `<div class="dr-pl-wrap">
+    const html = `<div class="dr-pl-wrap">
         <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA${nCp ? ` + ${DR.fmt(nCp)} PJA child/parent` : ''}</b>
           <span class="dr-mute">${DR.fmt(nMilik)} laporan oleh personil PJA lokasi ini${nCp ? ' beserta child/parent-nya' : ''}</span>
           <span class="dr-pl-leg">${JENIS_SAP.map(([, t, c]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</span></div>
         ${pemilik.length ? KEPALA_PJA_PELAPOR + utama : ''}
         ${bagianLuar}
         <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Bagian atas = PJA mapping lokasi ini beserta child-nya (m_pja.id_parent = PJA lokasi) dan parent-nya. Bagian "PJA lain" hanya berisi pelapor di luar itu; pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
+    // Keputusan user 27 Nov 2026: kartu ringkas (persentase) di baris, detail lengkap (termasuk "PJA lain") di modal.
+    const sub = `${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA melapor${nCp ? ` + ${DR.fmt(nCp)} child/parent` : ''}${nPjaLuar ? ` · ${DR.fmt(nPjaLuar)} PJA lain melapor` : ''}`;
+    return { persen: pctI(ada.size, pemilik.length), sub, html };
   }
 
   function isiSap(data) {
