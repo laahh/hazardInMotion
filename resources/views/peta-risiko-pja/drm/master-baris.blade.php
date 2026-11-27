@@ -204,11 +204,13 @@
   const urlUbah = (ri) => URL_UBAH.replace(/ubah=0$/, 'ubah=' + ri);
   const token = () => '<input type="hidden" name="_token" value="' + esc(CSRF) + '">';
 
-  function chip(l, ri) {
+  function chip(l, ri, kategori) {
     const kls = l.sumber === TURUNAN ? 'turunan' : (l.sumber === 'manual' ? 'manual' : '');
     const sumber = l.sumber ? '<em>' + esc(l.sumber) + '</em>' : '';
+    // class mb-form-hapus + data-kategori (keputusan user 27 Nov 2026): dipakai submit handler AJAX supaya
+    // hapus/tambah label TIDAK reload halaman (DataTables kehilangan posisi halaman/pencarian yang sedang aktif).
     const hapus = BOLEH
-      ? '<form method="post" action="' + esc(urlHapus(l.hapus.jenis, l.hapus.id)) + '" data-konfirmasi="Hapus label ini dari baris ' + ri + '?">'
+      ? '<form method="post" class="mb-form-hapus" data-kategori="' + kategori + '" action="' + esc(urlHapus(l.hapus.jenis, l.hapus.id)) + '" data-konfirmasi="Hapus label ini dari baris ' + ri + '?">'
         + token() + '<input type="hidden" name="label" value="' + esc(l.label) + '">'
         + '<button type="submit" title="Hapus label" aria-label="Hapus label">×</button></form>'
       : '';
@@ -221,7 +223,7 @@
       ? '<input name="k" list="mb-k" maxlength="300" required placeholder="Ketidaksesuaian"><input name="sk" list="mb-sk" maxlength="300" required placeholder="Sub ketidaksesuaian">'
       : '<input name="teks" list="' + j.dl + '" maxlength="500" required placeholder="' + esc(j.ph) + '">';
     return '<details class="mb-tambah"><summary>+ Tambah label ' + j.nama + '</summary>'
-      + '<form method="post" action="' + esc(urlTambah(ri)) + '">' + token()
+      + '<form method="post" class="mb-form-tambah" data-kategori="' + jenis + '" action="' + esc(urlTambah(ri)) + '">' + token()
       + '<input type="hidden" name="jenis" value="' + jenis + '">' + isian + '<button type="submit">Simpan</button></form></details>';
   }
 
@@ -231,7 +233,7 @@
     className: 'lbl',
     render: (d, type, r) => {
       if (type !== 'display') return d.map((l) => l.label).join(' | ');
-      const isi = d.length ? d.map((l) => chip(l, r.ri)).join('') : '<div class="mb-kosong">Belum ada label</div>';
+      const isi = d.length ? d.map((l) => chip(l, r.ri, jenis)).join('') : '<div class="mb-kosong">Belum ada label</div>';
       return isi + (BOLEH ? formTambah(jenis, r.ri) : '');
     },
   });
@@ -438,9 +440,40 @@
     if (tabel.search()) q.set('q', tabel.search());
     e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });
+  // Tambah/hapus label lewat AJAX (keputusan user 27 Nov 2026): form biasa (full page reload) membuat DataTables
+  // kembali ke halaman 1 & kehilangan pencarian/urutan yang sedang aktif — menjengkelkan kalau sedang di halaman
+  // jauh (mis. 30). Baris yang diubah di-invalidate+redraw tanpa reset posisi (draw(false)), bukan bangunTabel().
   document.getElementById('mb-tabel').addEventListener('submit', (e) => {
-    const pesan = e.target.dataset.konfirmasi;
-    if (pesan && !confirm(pesan)) e.preventDefault();
+    const form = e.target;
+    const pesan = form.dataset.konfirmasi;
+    if (pesan && !confirm(pesan)) { e.preventDefault(); return; }
+    e.preventDefault();
+    const kategori = form.dataset.kategori;
+    const tr = form.closest('tr');
+    const baris = (kategori && tr) ? tabel.row(tr).data() : null;
+    if (!baris) return;
+    const tambah = form.classList.contains('mb-form-tambah');
+    const tombol = form.querySelector('button[type="submit"]');
+    if (tombol) tombol.disabled = true;
+    const fd = new FormData(form);
+    fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' }, body: fd })
+      .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j))))
+      .then((j) => {
+        if (tambah) {
+          baris[kategori].push(j.label);
+          form.reset();
+          const det = form.closest('details');
+          if (det) det.open = false;
+        } else {
+          const teks = fd.get('label');
+          baris[kategori] = baris[kategori].filter((l) => l.label !== teks);
+        }
+        tabel.row(tr).invalidate('data').draw(false);
+      })
+      .catch((j) => {
+        alert((j && j.pesan) || 'Gagal menyimpan, coba lagi.');
+        if (tombol) tombol.disabled = false;
+      });
   });
 })();
 </script>

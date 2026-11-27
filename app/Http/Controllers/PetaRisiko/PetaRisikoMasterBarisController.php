@@ -9,6 +9,7 @@ use App\Services\PetaRisiko\Drm\Master\DrmMasterBarisExcel;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterBarisUnggah;
 use App\Services\PetaRisiko\Drm\Master\DrmMasterDb;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -220,7 +221,7 @@ final class PetaRisikoMasterBarisController extends Controller
     }
 
     /** Tambah satu label ke baris: jenis OBS / OAK (teks) atau KET (ketidaksesuaian + subketidaksesuaian). */
-    public function tambah(Request $request, int $ri): RedirectResponse
+    public function tambah(Request $request, int $ri): RedirectResponse|JsonResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
         abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
@@ -237,20 +238,44 @@ final class PetaRisikoMasterBarisController extends Controller
             $kolom = DrmMasterDb::KOLOM_LABEL[$v['jenis']];
             $ada = DrmMasterDb::pisahLabel($baris->{$kolom});
             if (in_array($this->kunci($v['jenis'], $label), array_map(fn ($l) => $this->kunci($v['jenis'], $l), $ada), true)) {
-                return back()->with('pesan', 'Label sudah ada di baris ini.');
+                return $this->gagal($request, 'Label sudah ada di baris ini.');
             }
             $baru = implode("\n", [...$ada, $label]);
             DB::table('drm_master_baris')->where('ri', $ri)->update([$kolom => $baru, 'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'updated_at' => now()]);
             $this->db->catat('drm_master_baris', (string) $ri, 'ubah', [$kolom => $baris->{$kolom}], [$kolom => $baru]);
 
-            return back()->with('pesan', 'Label ditambahkan ke baris '.$ri.'.');
+            return $this->balas($request, 'Label ditambahkan ke baris '.$ri.'.',
+                ['label' => ['label' => $label, 'sumber' => '', 'hapus' => ['jenis' => $v['jenis'], 'id' => $ri]]]);
         }
 
         return $this->tambahTabelLama($request, $ri, $v, $label);
     }
 
+    /**
+     * Respons sukses: JSON (dipakai AJAX toolbar master-baris, keputusan user 27 Nov 2026 — supaya tabel tidak
+     * reload/reset halaman DataTables) kalau klien minta JSON, redirect-back kalau form biasa (fallback non-JS).
+     */
+    private function balas(Request $request, string $pesan, array $tambahan = []): RedirectResponse|JsonResponse
+    {
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'pesan' => $pesan] + $tambahan);
+        }
+
+        return back()->with('pesan', $pesan);
+    }
+
+    /** Respons gagal (duplikat / tidak ditemukan): JSON 422 kalau klien minta JSON, redirect-back kalau form biasa. */
+    private function gagal(Request $request, string $pesan): RedirectResponse|JsonResponse
+    {
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => false, 'pesan' => $pesan], 422);
+        }
+
+        return back()->with('pesan', $pesan);
+    }
+
     /** Hapus satu label dari baris. Mode kolom: jenis OBS / OAK / KET + teks label; mode lama: tabel teks / label + id. */
-    public function hapus(Request $request, string $jenis, int $id): RedirectResponse
+    public function hapus(Request $request, string $jenis, int $id): RedirectResponse|JsonResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
         abort_unless($this->bolehUbah($request), 403, 'Anda tidak termasuk editor master mapping.');
@@ -262,12 +287,12 @@ final class PetaRisikoMasterBarisController extends Controller
             $ada = DrmMasterDb::pisahLabel($baris->{$kolom});
             $sisa = array_values(array_filter($ada, fn ($l) => $this->kunci($jenis, $l) !== $hapus));
             if (count($sisa) === count($ada)) {
-                return back()->with('pesan', 'Label tidak ditemukan di baris ini.');
+                return $this->gagal($request, 'Label tidak ditemukan di baris ini.');
             }
             DB::table('drm_master_baris')->where('ri', $id)->update([$kolom => implode("\n", $sisa), 'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'updated_at' => now()]);
             $this->db->catat('drm_master_baris', (string) $id, 'ubah', [$kolom => $baris->{$kolom}], [$kolom => implode("\n", $sisa)]);
 
-            return back()->with('pesan', 'Label dihapus dari baris '.$id.'.');
+            return $this->balas($request, 'Label dihapus dari baris '.$id.'.');
         }
 
         $tabel = ['teks' => 'drm_master_teks', 'label' => 'drm_master_label'][$jenis] ?? abort(404);
@@ -275,7 +300,7 @@ final class PetaRisikoMasterBarisController extends Controller
         DB::table($tabel)->where('id', $id)->delete();
         $this->db->catat($tabel, (string) $id, 'hapus', (array) $lama, null);
 
-        return back()->with('pesan', 'Label dihapus dari baris '.$lama->ri.'.');
+        return $this->balas($request, 'Label dihapus dari baris '.$lama->ri.'.');
     }
 
     /** Kunci pencocokan label (sama dengan sync): OBS/OAK = DrmMaster::normTeks, Ketidaksesuaian = norm "k / sk". */
@@ -356,7 +381,7 @@ final class PetaRisikoMasterBarisController extends Controller
     }
 
     /** Mode lama: tambah ke drm_master_teks / drm_master_label. */
-    private function tambahTabelLama(Request $request, int $ri, array $v, string $label): RedirectResponse
+    private function tambahTabelLama(Request $request, int $ri, array $v, string $label): RedirectResponse|JsonResponse
     {
         $sekarang = now();
         if ($v['jenis'] === 'KET') {
@@ -364,27 +389,30 @@ final class PetaRisikoMasterBarisController extends Controller
             $sama = DB::table('drm_master_label')->where('ri', $ri)->get()
                 ->first(fn ($l) => $this->kunci('KET', $l->ketidaksesuaian.' / '.$l->subketidaksesuaian) === $this->kunci('KET', $label));
             if ($sama !== null) {
-                return back()->with('pesan', 'Label sudah ada di baris ini.');
+                return $this->gagal($request, 'Label sudah ada di baris ini.');
             }
             $nilai = ['ketidaksesuaian' => $k, 'subketidaksesuaian' => $sk, 'ri' => $ri, 'sumber' => 'manual', 'aktif' => true,
                 'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'created_at' => $sekarang, 'updated_at' => $sekarang];
             $id = DB::table('drm_master_label')->insertGetId($nilai);
             $this->db->catat('drm_master_label', (string) $id, 'tambah', null, $nilai);
 
-            return back()->with('pesan', 'Label ketidaksesuaian ditambahkan ke baris '.$ri.'.');
+            return $this->balas($request, 'Label ketidaksesuaian ditambahkan ke baris '.$ri.'.',
+                ['label' => ['label' => $label, 'sumber' => 'manual', 'hapus' => ['jenis' => 'label', 'id' => $id]]]);
         }
         $sama = DB::table('drm_master_teks')->where('ri', $ri)->where('jenis', $v['jenis'])->get()
             ->first(fn ($t) => DrmMaster::crcTeks($t->teks) === DrmMaster::crcTeks($label));
         if ($sama !== null) {
-            return back()->with('pesan', 'Label sudah ada di baris ini.');
+            return $this->gagal($request, 'Label sudah ada di baris ini.');
         }
+        $adaSumber = Schema::hasColumn('drm_master_teks', 'sumber');
         $nilai = ['jenis' => $v['jenis'], 'teks' => $label, 'ri' => $ri, 'aktif' => true,
             'diubah_oleh' => $request->user()?->getAuthIdentifier(), 'created_at' => $sekarang, 'updated_at' => $sekarang]
-            + (Schema::hasColumn('drm_master_teks', 'sumber') ? ['sumber' => 'manual'] : []);
+            + ($adaSumber ? ['sumber' => 'manual'] : []);
         $id = DB::table('drm_master_teks')->insertGetId($nilai);
         $this->db->catat('drm_master_teks', (string) $id, 'tambah', null, $nilai);
 
-        return back()->with('pesan', 'Label '.$v['jenis'].' ditambahkan ke baris '.$ri.'.');
+        return $this->balas($request, 'Label '.$v['jenis'].' ditambahkan ke baris '.$ri.'.',
+            ['label' => ['label' => $label, 'sumber' => $adaSumber ? 'manual' : '', 'hapus' => ['jenis' => 'teks', 'id' => $id]]]);
     }
 
     private function bolehUbah(Request $request): bool
