@@ -689,7 +689,7 @@
     const baris = barisTersaring(d, R);
     if (!baris.length) return;
     const adaVol = baris.some((b) => b.gap !== undefined);
-    const NK = 19;
+    const NK = 21;
     const strip = '<span class="dr-nol" title="Belum ada di snapshot">–</span>';
     const gapSel = (ya, na, perluData = true) => (perluData && !adaVol ? strip : ya ? '<span class="dr-gap ya">YA - GAP</span>' : na ? '<span class="dr-gap na">N/A</span>' : '<span class="dr-gap">Tidak</span>');
     // Item Sumber = MAPPING master HIRA ↔ SAP (jumlah label yang terhubung ke baris), tetap walau tidak ada laporan.
@@ -716,6 +716,8 @@
         <td class="akt k1">${DR.esc(b.t[0] || '-')}</td>
         <td class="akt k2">${DR.esc(b.t[1] || '-')}</td>
         <td data-hira="${DR.esc(b.hid)}" data-bahaya="${DR.esc(b.t[2] || '')}"><span class="dr-mute">…</span></td>
+        <td data-lokasi="${DR.esc(b.hid)}"><span class="dr-mute">…</span></td>
+        <td data-pja-terkait="${DR.esc(b.hid)}"><span class="dr-mute">…</span></td>
         <td class="bhy k3"${b.t[3] ? ` title="${DR.esc(b.t[3])}"` : ''}>${DR.esc(b.t[2] || '(tanpa teks bahaya)')}${tanda ? `<div>${tanda}</div>` : ''}</td>
         <td class="c"><span class="dr-lv lv-${DR.esc(b.lv)}">${DR.esc(b.lv || '-')}</span></td>
         <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span>${T ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td>
@@ -738,7 +740,7 @@
     const wk = wKode(state.w);
     d.querySelector('#dr-modal-n').innerHTML += adaVol ? '' : ' · <b style="color:#b42318">Snapshot belum memuat gap &amp; volume per baris — jalankan <code>php artisan peta-risiko:sync</code></b>';
     isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-bl-tbl"><thead><tr>
-      <th class="k1">Aktivitas</th><th class="k2">Sub Aktivitas</th><th style="min-width:150px">HIRA</th><th class="k3">Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
+      <th class="k1">Aktivitas</th><th class="k2">Sub Aktivitas</th><th style="min-width:150px">HIRA</th><th style="min-width:140px">Lokasi</th><th style="min-width:160px">PJA</th><th class="k3">Bahaya - Risiko Terkait</th><th class="c">Risiko Baseline</th><th>Status SAP ${wk}</th><th class="c">Risiko Akhir</th>
       <th class="c">Gap1 Tdk Teridentifikasi</th><th class="c">Gap2 Belum Closed</th><th class="c">Gap3 Berulang</th><th class="c">Gap4 OAK Stop</th>
       <th class="c">Item Sumber Observasi <small>(label master)</small></th><th class="c">Item Sumber OAK <small>(label master)</small></th><th class="c">Item Sumber Ketidaksesuaian <small>(label master)</small></th>
       <th class="n">Vol. Obs</th><th class="n">Vol. OAK</th><th class="n">Vol. Ket</th><th class="n">Vol. Total</th><th class="c">Pernah Incident? <small>(12 bln)</small></th></tr></thead><tbody>${html}</tbody></table>`;
@@ -1088,22 +1090,33 @@
             <small>${d.ada ? (d.kosong ? '<span class="dr-hira-kosong">kosong</span> ' : '') + DR.esc(d.dept || '-') : 'tidak ditemukan di HIRA'}</small></button>`;
         td.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); bukaHira(td.dataset.hira, td.dataset.bahaya || ''); });
       });
+      // Lokasi & PJA Terkait (keputusan user 27 Nov 2026): keluar dari popup, jadi kolom sendiri di tabel
+      // baseline — satu fetch yang sama dengan HIRA (lokasiHiraCache), bukan panggilan terpisah.
+      const MAKS_RINGKAS = 2;
+      el.querySelectorAll('td[data-lokasi]').forEach((td) => {
+        const lok = lokasiHiraCache[td.dataset.lokasi] || [];
+        td.innerHTML = !lok.length ? '<span class="dr-mute">-</span>'
+          : lok.slice(0, MAKS_RINGKAS).map((x) => `${DR.esc(x.site)} · ${DR.esc(x.lokasi)}`).join('<br>')
+            + (lok.length > MAKS_RINGKAS ? `<br><span class="dr-mute">+${DR.fmt(lok.length - MAKS_RINGKAS)} lainnya</span>` : '');
+      });
+      el.querySelectorAll('td[data-pja-terkait]').forEach((td) => {
+        const pja = [...new Set((lokasiHiraCache[td.dataset.pjaTerkait] || []).flatMap((x) => x.pja || []))];
+        td.innerHTML = !pja.length ? '<span class="dr-mute">-</span>'
+          : pja.slice(0, MAKS_RINGKAS).map((p) => DR.esc(p)).join('<br>')
+            + (pja.length > MAKS_RINGKAS ? `<br><span class="dr-mute">+${DR.fmt(pja.length - MAKS_RINGKAS)} lainnya</span>` : '');
+      });
     }).catch((e) => {
-      el.querySelectorAll('td[data-hira]').forEach((td) => { td.innerHTML = `<span class="br-red" title="${DR.esc(e.message)}">gagal</span>`; });
+      el.querySelectorAll('td[data-hira], td[data-lokasi], td[data-pja-terkait]').forEach((td) => { td.innerHTML = `<span class="br-red" title="${DR.esc(e.message)}">gagal</span>`; });
     });
   }
 
   function bukaHira(hid, bahaya) {
-    const L = hiraCache[hid] || [], lok = lokasiHiraCache[hid] || [], d = dialogItem(), isi = d.querySelector('#dr-item-isi');
+    const L = hiraCache[hid] || [], d = dialogItem(), isi = d.querySelector('#dr-item-isi');
     d.querySelector('#dr-item-judul').textContent = `Asal HIRA${bahaya ? ' · ' + bahaya : ''}`;
     const baris = (k, v) => (v ? `<tr><th style="width:170px">${k}</th><td>${v}</td></tr>` : '');
-    const MAKS_LOKASI = 15;
-    const lokasiHtml = !lok.length
-      ? '<p class="dr-mute" style="margin:0 0 12px">Tidak ada grup lokasi (M05) yang mengaitkan baris ini ke lokasi fisik manapun.</p>'
-      : `<table class="pr-tbl dr-tbl" style="margin-bottom:4px"><thead><tr><th>Site</th><th>Lokasi</th><th>PJA</th></tr></thead><tbody>${
-          lok.slice(0, MAKS_LOKASI).map((x) => `<tr><td>${DR.esc(x.site)}</td><td>${DR.esc(x.lokasi)}</td><td>${DR.esc((x.pja || []).join(', ') || '-')}</td></tr>`).join('')
-        }</tbody></table>${lok.length > MAKS_LOKASI ? `<p class="dr-mute" style="margin:0 0 12px">+${DR.fmt(lok.length - MAKS_LOKASI)} lokasi lainnya</p>` : '<div style="margin-bottom:12px"></div>'}`;
-    const dokumenHtml = L.map((x) => `<div class="dr-hira-dok">
+    // Lokasi & PJA Terkait dipindah keluar dari popup ini (koreksi user 27 Nov 2026) — jadi kolom "Lokasi" /
+    // "PJA" sendiri di tabel Baseline, lihat isiHira() & isiModalBaseline().
+    isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
         <div class="dr-hira-dok-k"><b>HIRA ${DR.esc(x.idh)}</b>${x.ada ? ` · rev ${DR.esc(x.rev)}` : ''}
           ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.kosong ? '<span class="dr-pl-tag" style="background:#fff4e5;color:#9a5b00">dokumen kosong</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
           ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
@@ -1114,9 +1127,6 @@
           ${baris('Bagian', DR.esc(x.bagian))}${baris('Perusahaan', DR.esc(x.perusahaan))}${baris('Klasifikasi', DR.esc(x.rutin))}${baris('Diperbarui', DR.esc(x.diperbarui))}
         </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di HIRA (hira_master maupun mv_hira_master).</p>'}</div>`).join('')
       || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>';
-    // Dokumen HIRA DULUAN (koreksi user 27 Nov 2026), baru Lokasi & PJA Terkait di bawahnya.
-    isi.innerHTML = `<p style="margin:0 0 6px;font-weight:700;font-size:13px">Dokumen HIRA</p>${dokumenHtml}
-      <p style="margin:14px 0 6px;font-weight:700;font-size:13px">Lokasi &amp; PJA Terkait <small class="dr-mute" style="font-weight:400">(master DRM 2.1, bukan dari dokumen HIRA)</small></p>${lokasiHtml}`;
     if (!d.open) d.showModal();
   }
 
