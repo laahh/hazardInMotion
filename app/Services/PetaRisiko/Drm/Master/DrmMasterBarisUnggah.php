@@ -155,11 +155,15 @@ final class DrmMasterBarisUnggah
     }
 
     /**
-     * Flag IKK (Izin Kerja Khusus) per baris: true kalau salah satu Item Sumber OAK-nya cocok (DrmMaster::normTeks,
-     * format "aktivitas / sub aktivitas") dengan salah satu daftar drm_master_ikk aktif. Untuk entri yang ditandai
-     * cek_luar_workshop, baris yang teks aktivitas/sub/bahaya-risikonya SENDIRI menyebut "workshop" atau "pit stop"
-     * dikecualikan dari flag ini meski labelnya cocok — pekerjaan perbaikan/perawatan di workshop/pit stop dianggap
-     * bukan risiko lapangan IKK (keputusan user 25 Nov 2026).
+     * Flag IKK (Izin Kerja Khusus) per baris: true kalau salah satu Item Sumber OAK-nya (format "aktivitas / sub
+     * aktivitas") punya AKTIVITAS persis sama (DrmMaster::normTeks) dengan salah satu daftar drm_master_ikk aktif,
+     * DAN sub aktivitasnya saling MENGANDUNG (substring dua arah, bukan cocok persis) dengan sub aktivitas entri
+     * itu — keputusan user 27 Nov 2026: sub aktivitas di daftar cuma contoh representatif, teks asli OAK boleh beda
+     * redaksional asal masih mengandung/terkandung kata yang sama (mis. entri "Ketinggian" tetap cocok ke OAK
+     * "Ketinggian > 10 m"). Untuk entri yang ditandai cek_luar_workshop, baris yang teks aktivitas/sub/bahaya-
+     * risikonya SENDIRI menyebut "workshop" atau "pit stop" dikecualikan dari flag ini meski labelnya cocok —
+     * pekerjaan perbaikan/perawatan di workshop/pit stop dianggap bukan risiko lapangan IKK (keputusan user 25 Nov
+     * 2026, ditegaskan lagi 27 Nov 2026).
      *
      * @param  array<int, array{aktivitas: string, sub: string, bahaya: string, OAK: list<string>}>  $isianDb  ri => isian (lihat isianDb())
      * @return array<int, bool>  ri => true (hanya yang IKK; ri lain dianggap bukan IKK)
@@ -173,23 +177,34 @@ final class DrmMasterBarisUnggah
         if ($daftar->isEmpty()) {
             return [];
         }
+        // Per aktivitas (dinormalisasi) => daftar {sub aktivitas dinormalisasi, cek_luar_workshop}.
         $peta = [];
         foreach ($daftar as $d) {
-            $kunci = DrmMaster::normTeks($d->aktivitas.' / '.$d->sub_aktivitas);
-            $peta[$kunci] = ($peta[$kunci] ?? false) || (bool) $d->cek_luar_workshop;
+            $peta[DrmMaster::normTeks((string) $d->aktivitas)][] = [
+                'sub' => DrmMaster::normTeks((string) $d->sub_aktivitas),
+                'cek_luar_workshop' => (bool) $d->cek_luar_workshop,
+            ];
         }
+        $mengandung = static fn (string $a, string $b): bool => $a !== '' && $b !== '' && (str_contains($a, $b) || str_contains($b, $a));
         $hasil = [];
         foreach ($isianDb as $ri => $b) {
             foreach ($b['OAK'] as $label) {
-                $kunci = DrmMaster::normTeks($label);
-                if (! array_key_exists($kunci, $peta)) {
+                [$akt, $sub] = array_pad(explode(' / ', $label, 2), 2, '');
+                $entriAktivitas = $peta[DrmMaster::normTeks($akt)] ?? null;
+                if ($entriAktivitas === null) {
                     continue;
                 }
-                if ($peta[$kunci] && self::sebutWorkshop($b['aktivitas'].' '.$b['sub'].' '.$b['bahaya'])) {
-                    continue; // cek_luar_workshop: teks baris ini sendiri menyebut workshop/pit stop → dikecualikan
+                $subKunci = DrmMaster::normTeks($sub);
+                foreach ($entriAktivitas as $entri) {
+                    if (! $mengandung($subKunci, $entri['sub'])) {
+                        continue;
+                    }
+                    if ($entri['cek_luar_workshop'] && self::sebutWorkshop($b['aktivitas'].' '.$b['sub'].' '.$b['bahaya'])) {
+                        continue; // cek_luar_workshop: teks baris ini sendiri menyebut workshop/pit stop → dikecualikan
+                    }
+                    $hasil[$ri] = true;
+                    break 2;
                 }
-                $hasil[$ri] = true;
-                break;
             }
         }
 

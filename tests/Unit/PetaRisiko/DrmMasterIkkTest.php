@@ -90,6 +90,36 @@ class DrmMasterIkkTest extends TestCase
         $this->assertArrayNotHasKey(105, $hasil);
     }
 
+    /** Sub aktivitas OAK boleh beda redaksional dari daftar asal masih MENGANDUNG kata yang sama (keputusan user 27 Nov 2026). */
+    public function test_sub_aktivitas_oak_lebih_panjang_dari_daftar_tetap_ikk(): void
+    {
+        $hasil = $this->unggah()->ikkPerBaris([
+            108 => ['aktivitas' => 'Pengelasan pipa gas', 'sub' => '', 'bahaya' => 'Percikan api',
+                'OAK' => ['Bekerja dengan Panas / Pemotongan plat besi di area tambang']],
+        ]);
+        $this->assertSame([108 => true], $hasil);
+    }
+
+    /** Sebaliknya: sub aktivitas OAK lebih pendek/ringkas, tapi masih terkandung dalam teks daftar. */
+    public function test_sub_aktivitas_daftar_lebih_panjang_dari_oak_tetap_ikk(): void
+    {
+        $hasil = $this->unggah()->ikkPerBaris([
+            109 => ['aktivitas' => 'Perbaikan unit di lapangan', 'sub' => '', 'bahaya' => 'Tertimpa alat berat',
+                'OAK' => ['Perbaikan, Perawatan & Fabrikasi Unit/Fasilitas Tambang / CCV']],
+        ]);
+        $this->assertSame([109 => true], $hasil);
+    }
+
+    /** Aktivitas tetap harus cocok PERSIS — sub aktivitas yang kebetulan mengandung kata sama tidak cukup. */
+    public function test_aktivitas_beda_tidak_ikk_meski_sub_mengandung_kata_sama(): void
+    {
+        $hasil = $this->unggah()->ikkPerBaris([
+            110 => ['aktivitas' => 'Aktivitas lain', 'sub' => '', 'bahaya' => 'Tidak relevan',
+                'OAK' => ['Aktivitas Lain yang Tidak Terdaftar / Pemotongan rumput liar']],
+        ]);
+        $this->assertArrayNotHasKey(110, $hasil);
+    }
+
     public function test_entri_ikk_nonaktif_tidak_dipakai(): void
     {
         $hasil = $this->unggah()->ikkPerBaris([
