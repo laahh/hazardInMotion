@@ -198,6 +198,9 @@
   const URL_UNDUH = @json(route('peta-risiko-pja.master.baris.unduh'));
   const URL_RIWAYAT = @json(route('peta-risiko-pja.master.log', ['tabel' => 'drm_master_baris']));
   const TURUNAN = @json(\App\Services\PetaRisiko\Drm\Master\DrmMasterDb::SUMBER_TURUNAN_OAK);
+  // Sub ketidaksesuaian tersaran per ketidaksesuaian (keputusan user 27 Nov 2026) — lihat aturDatalistSk().
+  const SARAN_KSK = @json($saranKsk);
+  const SARAN_SK_SEMUA = @json($saranSk);
   const JENIS = {
     OBS: { nama: 'Observasi', dl: 'mb-obs', ph: 'Jenis kegiatan observasi' },
     OAK: { nama: 'OAK', dl: 'mb-oak', ph: 'Aktivitas OAK / Sub aktivitas' },
@@ -472,6 +475,26 @@
   });
   // Toast SweetAlert2 (keputusan user 27 Nov 2026), dipakai berhasil & gagal simpan/hapus label.
   const toast = Swal.mixin({ toast: true, position: 'top-end', timer: 2200, showConfirmButton: false });
+
+  // Sub ketidaksesuaian mengikuti Ketidaksesuaian yang diisi (keputusan user 27 Nov 2026): datalist "mb-sk"
+  // dibangun ulang dari SARAN_KSK tiap kali input "k" di form Tambah label Ketidaksesuaian berubah — hanya
+  // menampilkan sub yang pernah dipasangkan dengan ketidaksesuaian itu; kosong/tidak dikenal = tampilkan semua
+  // (datalist dipakai bersama semua baris, jadi hanya perlu diisi ulang saat sedang aktif diisi).
+  const dlSk = document.getElementById('mb-sk');
+  function aturDatalistSk(nilaiK) {
+    const kunci = String(nilaiK || '').trim().toLowerCase();
+    const daftar = SARAN_KSK[kunci] || SARAN_SK_SEMUA;
+    dlSk.innerHTML = daftar.map((s) => '<option value="' + esc(s) + '">').join('');
+  }
+  document.getElementById('mb-tabel').addEventListener('input', (e) => {
+    if (e.target.matches('input[name="k"]')) aturDatalistSk(e.target.value);
+  });
+  document.getElementById('mb-tabel').addEventListener('focusin', (e) => {
+    if (e.target.matches('input[name="sk"]')) {
+      const k = e.target.closest('form');
+      aturDatalistSk(k ? k.querySelector('input[name="k"]').value : '');
+    }
+  });
 
   // Tambah/hapus label lewat AJAX (keputusan user 27 Nov 2026): form biasa (full page reload) membuat DataTables
   // kembali ke halaman 1 & kehilangan pencarian/urutan yang sedang aktif — menjengkelkan kalau sedang di halaman

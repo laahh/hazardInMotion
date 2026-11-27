@@ -366,18 +366,51 @@ final class PetaRisikoMasterBarisController extends Controller
                 return array_slice($s, 0, 3000);
             };
             $ket = $kumpul(DrmMasterDb::KOLOM_LABEL['KET']);
+            $pasangan = array_map(fn ($l) => DrmMasterDb::pisahKet($l), $ket);
 
             return ['saranObs' => $kumpul('item_sumber_observasi'), 'saranOak' => $kumpul('item_sumber_oak'),
-                'saranK' => array_values(array_unique(array_map(fn ($l) => DrmMasterDb::pisahKet($l)[0], $ket))),
-                'saranSk' => array_values(array_unique(array_map(fn ($l) => DrmMasterDb::pisahKet($l)[1], $ket)))];
+                'saranK' => array_values(array_unique(array_map(fn ($p) => $p[0], $pasangan))),
+                'saranSk' => array_values(array_unique(array_map(fn ($p) => $p[1], $pasangan))),
+                'saranKsk' => $this->kelompokKsk($pasangan)];
         }
+
+        $pasangan = DB::table('drm_master_label')->distinct()->limit(5000)->get(['ketidaksesuaian', 'subketidaksesuaian'])
+            ->map(fn ($r) => [(string) $r->ketidaksesuaian, (string) $r->subketidaksesuaian])->all();
 
         return [
             'saranObs' => DB::table('drm_master_teks')->where('jenis', 'OBS')->distinct()->orderBy('teks')->limit(3000)->pluck('teks')->all(),
             'saranOak' => DB::table('drm_master_teks')->where('jenis', 'OAK')->distinct()->orderBy('teks')->limit(3000)->pluck('teks')->all(),
             'saranK' => DB::table('drm_master_label')->distinct()->orderBy('ketidaksesuaian')->limit(1000)->pluck('ketidaksesuaian')->all(),
             'saranSk' => DB::table('drm_master_label')->distinct()->orderBy('subketidaksesuaian')->limit(3000)->pluck('subketidaksesuaian')->all(),
+            'saranKsk' => $this->kelompokKsk($pasangan),
         ];
+    }
+
+    /**
+     * Sub ketidaksesuaian tersaran per ketidaksesuaian (keputusan user 27 Nov 2026): supaya datalist "Sub
+     * ketidaksesuaian" di form tambah label cuma menampilkan yang pernah dipasangkan dengan ketidaksesuaian yang
+     * sedang diisi, bukan semua sub ketidaksesuaian se-sistem.
+     *
+     * @param  list<array{0: string, 1: string}>  $pasangan  [ketidaksesuaian, subketidaksesuaian]
+     * @return array<string, list<string>>  ketidaksesuaian (huruf kecil, rapat) => daftar sub ketidaksesuaian
+     */
+    private function kelompokKsk(array $pasangan): array
+    {
+        $hasil = [];
+        foreach ($pasangan as [$k, $sk]) {
+            if ($k === '' || $sk === '') {
+                continue;
+            }
+            $kunci = mb_strtolower(trim($k));
+            $hasil[$kunci][$sk] = true;
+        }
+        foreach ($hasil as $kunci => $sk) {
+            $daftar = array_keys($sk);
+            sort($daftar);
+            $hasil[$kunci] = $daftar;
+        }
+
+        return $hasil;
     }
 
     /** Mode lama: tambah ke drm_master_teks / drm_master_label. */
