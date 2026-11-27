@@ -67,6 +67,8 @@
   .mb-switch-btn { border: 0; background: #fff; color: #595c5e; font-size: 12.5px; font-weight: 600; padding: 8px 14px; cursor: pointer; }
   .mb-switch-btn.mb-aktif { background: #3952bc; color: #fff; }
   tr.mb-grp td { background: #eef1f6; font-weight: 700; padding: 9px 14px; border-top: 2px solid #c7ccd6; font-size: 12.5px; color: #1f2937; }
+  .mb-muat-lagi { border: 1px solid rgba(171, 173, 175, .45); background: #fff; color: #3952bc; font-size: 12.5px; font-weight: 600; padding: 9px 18px; border-radius: 999px; cursor: pointer; }
+  .mb-muat-lagi:hover { background: #f1f4fd; }
 </style>
 
 @if (session('pesan'))
@@ -163,6 +165,10 @@
         </tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+    {{-- Ganti pagination bernomor jadi "Muat lebih banyak" (keputusan user 27 Nov 2026) — lihat bangunTabel(). --}}
+    <div style="display:flex;justify-content:center;padding:14px 0">
+      <button type="button" id="mb-muat-lagi" class="mb-muat-lagi" hidden></button>
     </div>
   </div>
 @endif
@@ -348,6 +354,9 @@
       lengthMenu: [10, 25, 50, 100, 250],
       order: mode === 'perusahaan' ? [] : [[0, 'asc']],
       autoWidth: false,
+      // Ganti pagination bernomor jadi tombol "Muat lebih banyak" (keputusan user 27 Nov 2026) —
+      // lihat tombolMuatLagi()/aturTombolMuat() di bawah.
+      layout: { bottomEnd: null },
       language: {
         search: 'Cari:', searchPlaceholder: 'aktivitas, bahaya, label, ID…',
         lengthMenu: 'Tampilkan _MENU_ baris', info: '_START_–_END_ dari _TOTAL_ baris',
@@ -374,8 +383,10 @@
             terakhir = d.perusahaan;
           }
         });
+        aturTombolMuat();
       },
     });
+    aturTombolMuat();
     DataTable.ext.search.length = 0;
     DataTable.ext.search.push((settings, _data, idx) => {
       if (settings.nTable.id !== 'mb-tabel') return true;
@@ -392,6 +403,23 @@
       return true;
     });
   }
+
+  const tombolMuat = document.getElementById('mb-muat-lagi');
+  const TAMBAHAN_MUAT = 25;
+  function aturTombolMuat() {
+    if (!tabel) return;
+    const info = tabel.page.info();
+    const sisa = info.recordsDisplay - info.end;
+    if (sisa <= 0) {
+      tombolMuat.hidden = true;
+      return;
+    }
+    tombolMuat.hidden = false;
+    tombolMuat.textContent = `Muat ${Math.min(TAMBAHAN_MUAT, sisa)} lagi (${sisa} tersisa)`;
+  }
+  tombolMuat.addEventListener('click', () => {
+    tabel.page.len(tabel.page.len() + TAMBAHAN_MUAT).draw(false);
+  });
 
   function gantiMode(baru) {
     if (mode === baru) return;
