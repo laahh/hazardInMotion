@@ -30,6 +30,10 @@
   .al-kol { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
   .al-kol label { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; cursor: pointer; }
   .al-kol label:hover { background: #f1f4fb; }
+  .al-tandai-cari { display: block; width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); font-size: 12.5px; }
+  .al-tandai-opsi { max-height: 280px; overflow: auto; min-width: 260px; }
+  .al-tandai-opsi label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .al-tandai-opsi label.al-tandai-sembunyi { display: none; }
   .al-kol input { accent-color: #3952bc; }
   .al-jejak { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: #8a8d90; }
   .al-jejak button { border: 1px solid rgba(171, 173, 175, .45); background: #fff; border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -45,6 +49,7 @@
   .al-n .t2 { font: 500 10.5px "Plus Jakarta Sans", system-ui, sans-serif; fill: #8a8d90; }
   .al-n { cursor: pointer; transition: opacity .15s; }
   .al-n.pusat rect.kotak { stroke: #1e293b; stroke-width: 2.2; }
+  .al-n.al-ditandai rect.kotak { stroke: #f59e0b; stroke-width: 2.6; fill: #fffbeb; }
   .al-n:focus-visible rect.kotak { stroke: #3952bc; stroke-width: 2.5; }
   .al-n:focus { outline: none; }
   .al-e { fill: none; stroke: rgba(100, 116, 139, .32); stroke-width: 1.2; transition: opacity .15s, stroke .15s; }
@@ -111,30 +116,20 @@
       <summary><span id="al-kol-label">Semua kolom</span> <span class="material-symbols-outlined">expand_more</span></summary>
       <div class="al-dd-panel"><div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div></div>
     </details>
-    <select id="al-lompat-aktivitas" aria-label="Lompat ke Aktivitas HIRA" title="Pindah fokus alur langsung ke Aktivitas HIRA ini">
-      <option value="">Aktivitas HIRA</option>
-      @foreach ($dropdown['aktivitas'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-    </select>
-    <select id="al-lompat-sub" aria-label="Lompat ke Sub Aktivitas" title="Pindah fokus alur ke Aktivitas HIRA induk Sub Aktivitas ini">
-      <option value="">Sub Aktivitas</option>
-      @foreach ($dropdown['sub'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-    </select>
-    <select id="al-lompat-grup" aria-label="Lompat ke Grup Lokasi" title="Pindah fokus alur langsung ke Grup Lokasi ini">
-      <option value="">Grup Lokasi</option>
-      @foreach ($dropdown['grup'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-    </select>
-    <select id="al-lompat-dl" aria-label="Lompat ke Detail Lokasi" title="Pindah fokus alur langsung ke Detail Lokasi ini">
-      <option value="">Detail Lokasi</option>
-      @foreach ($dropdown['dl'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-    </select>
-    <select id="al-lompat-pja" aria-label="Lompat ke PJA" title="Pindah fokus alur langsung ke PJA ini">
-      <option value="">PJA</option>
-      @foreach ($dropdown['pja'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-    </select>
-    <select id="al-lompat-pja_anak" aria-label="Lompat ke PJA Child" title="Pindah fokus alur ke PJA induk PJA Child ini">
-      <option value="">PJA Child</option>
-      @foreach ($dropdown['pja_anak'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-    </select>
+    @php $kategoriTandai = ['aktivitas' => 'Aktivitas HIRA', 'sub' => 'Sub Aktivitas', 'grup' => 'Grup Lokasi', 'dl' => 'Detail Lokasi', 'pja' => 'PJA', 'pja_anak' => 'PJA Child']; @endphp
+    @foreach ($kategoriTandai as $jenis => $nama)
+      <details class="al-dd" id="al-tandai-dd-{{ $jenis }}">
+        <summary><span id="al-tandai-label-{{ $jenis }}">{{ $nama }}</span> <span class="material-symbols-outlined">expand_more</span></summary>
+        <div class="al-dd-panel">
+          <input type="search" class="al-tandai-cari" placeholder="Cari {{ $nama }}…" autocomplete="off">
+          <div class="al-kol al-tandai-opsi" id="al-tandai-opsi-{{ $jenis }}" data-jenis="{{ $jenis }}" aria-label="Tandai {{ $nama }}">
+            @foreach ($dropdown[$jenis] ?? [] as $v)
+              <label><input type="checkbox" value="{{ $v }}"><span>{{ $v }}</span></label>
+            @endforeach
+          </div>
+        </div>
+      </details>
+    @endforeach
     <select id="al-f-site" aria-label="Site" title="Tampilkan SEMUA aktivitas yang terhubung ke site ini (mengganti alur yang sedang dibuka, bukan menyaring)">
       <option value="">Semua site</option>
       @foreach ($site as $st)
@@ -219,19 +214,34 @@
   }
   $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; perbaruiLabelKolom(); gambar(); }));
   perbaruiLabelKolom();
-  // Tutup dropdown Kolom saat klik di luar panelnya (pola sama dengan al-hasil pencarian).
-  document.addEventListener('click', (e) => { if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false; });
+  // Tutup SEMUA dropdown toolbar (Kolom + 6 Tandai) saat klik di luar panelnya masing-masing.
+  document.querySelectorAll('.al-dd').forEach((dd) => {
+    document.addEventListener('click', (e) => { if (!e.target.closest(`#${dd.id}`)) dd.open = false; });
+  });
 
-  // Dropdown "Lompat ke" per kategori (keputusan user 27 Nov 2026): pilih satu nilai langsung pindah fokus,
-  // seperti dropdown Site — BUKAN filter yang menempel (dikembalikan ke opsi label-nya lagi setelah lompat).
-  [['al-lompat-aktivitas', 'aktivitas'], ['al-lompat-sub', 'aktivitas'], ['al-lompat-grup', 'grup'],
-    ['al-lompat-dl', 'dl'], ['al-lompat-pja', 'pja'], ['al-lompat-pja_anak', 'pja']].forEach(([elId, jenis]) => {
-    $(elId).addEventListener('change', (e) => {
-      const { value } = e.target;
-      if (value === '') return;
-      const label = e.target.selectedOptions[0].textContent;
-      e.target.value = '';
-      muat(jenis, value, label);
+  // Dropdown multi-select "Tandai" per kategori (keputusan user 27 Nov 2026): centang satu atau lebih nilai —
+  // alur() cuma punya satu fokus, jadi ini TIDAK pindah fokus. Node yang labelnya cocok di alur yang SEDANG
+  // terbuka disorot (lihat gambar(): kelas al-ditandai), sisanya tidak berubah. Jalan di alur manapun yang lagi
+  // dibuka — kalau user pindah fokus lain, tanda yang cocok otomatis muncul lagi di situ kalau ada.
+  const tandai = Object.fromEntries(KOLOM_BISA_DISEMBUNYIKAN.map((k) => [k, new Set()]));
+  Object.keys(tandai).forEach((jenis) => {
+    const panel = document.getElementById(`al-tandai-opsi-${jenis}`);
+    if (!panel) return;
+    panel.querySelectorAll('input[type="checkbox"]').forEach((c) => c.addEventListener('change', () => {
+      if (c.checked) tandai[jenis].add(c.value); else tandai[jenis].delete(c.value);
+      const n = tandai[jenis].size;
+      const dasar = { aktivitas: 'Aktivitas HIRA', sub: 'Sub Aktivitas', grup: 'Grup Lokasi', dl: 'Detail Lokasi', pja: 'PJA', pja_anak: 'PJA Child' }[jenis];
+      $(`al-tandai-label-${jenis}`).textContent = n ? `${dasar} (${n})` : dasar;
+      gambar();
+    }));
+  });
+  // Cari di dalam satu panel tandai: sembunyikan label yang tidak cocok (bukan hapus, biar centang tidak hilang).
+  document.querySelectorAll('.al-tandai-cari').forEach((inp) => {
+    inp.addEventListener('input', () => {
+      const q = inp.value.trim().toLowerCase();
+      inp.nextElementSibling.querySelectorAll('label').forEach((lb) => {
+        lb.classList.toggle('al-tandai-sembunyi', q !== '' && !lb.textContent.toLowerCase().includes(q));
+      });
     });
   });
 
@@ -359,7 +369,8 @@
 
     const maksHuruf = Math.max(14, Math.floor((BW - 26) / 6.6));
     Object.values(posisi).forEach(({ x, y, n }) => {
-      const g = el('g', { class: 'al-n' + (n.pusat ? ' pusat' : ''), transform: `translate(${x},${y})`, tabindex: '0', role: 'button', 'data-key': n.key,
+      const ditandai = tandai[n.jenis] && tandai[n.jenis].has(n.label);
+      const g = el('g', { class: 'al-n' + (n.pusat ? ' pusat' : '') + (ditandai ? ' al-ditandai' : ''), transform: `translate(${x},${y})`, tabindex: '0', role: 'button', 'data-key': n.key,
         'aria-label': `${NAMA_JENIS[n.jenis] || n.jenis}: ${n.label}` }, svg);
       el('title', {}, g).textContent = `${NAMA_JENIS[n.jenis] || n.jenis}: ${n.label}\n${n.sub}${STATUS[n.status] ? '\nStatus SAP: ' + STATUS[n.status][1] : ''}`;
       el('rect', { class: 'kotak', width: BW, height: H, rx: 9 }, g);

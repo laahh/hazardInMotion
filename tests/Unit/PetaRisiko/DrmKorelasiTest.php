@@ -242,18 +242,17 @@ class DrmKorelasiTest extends TestCase
      * Dropdown "Lompat ke" toolbar (keputusan user 27 Nov 2026): Sub Aktivitas & PJA Child tidak punya fokus
      * sendiri di alur() (lihat JENIS), jadi id-nya sengaja id PARENT-nya (aid / nama PJA induk).
      */
-    public function test_daftar_dropdown_untuk_lompat_ke(): void
+    /** Dropdown multi-select "Tandai" toolbar (keputusan user 27 Nov 2026): daftar teks unik per kategori. */
+    public function test_daftar_dropdown_untuk_tandai_multi_select(): void
     {
         $d = app(DrmKorelasi::class)->daftarDropdown();
 
-        $this->assertSame([['id' => '2', 'label' => 'Fixed plant'], ['id' => '1', 'label' => 'Perawatan unit']], $d['aktivitas']);
-        $this->assertSame([['id' => '3', 'label' => 'CPP / ROM'], ['id' => '20', 'label' => 'Workshop/Pit Stop']], $d['grup']);
-        $this->assertSame('BMO 1 · Workshop · WS 1', $d['dl'][0]['label']);
-        $this->assertSame(['PJA ROM LMO', 'PJA Workshop'], array_column($d['pja'], 'label'));
-        // Sub Aktivitas: value = aid induknya, bukan jenis 'sub' (tidak ada di alur()).
-        $this->assertSame([['id' => '2', 'label' => 'Fixed plant'], ['id' => '1', 'label' => 'Ganti ban'], ['id' => '1', 'label' => 'Servis roller']], $d['sub']);
-        // PJA Child: value = nama PJA INDUK (PJA Workshop), bukan nama anak itu sendiri.
-        $this->assertSame([['id' => 'PJA Workshop', 'label' => 'PJA Mitra A'], ['id' => 'PJA Workshop', 'label' => 'PJA Mitra B']], $d['pja_anak']);
+        $this->assertSame(['Fixed plant', 'Perawatan unit'], $d['aktivitas']);
+        $this->assertSame(['CPP / ROM', 'Workshop/Pit Stop'], $d['grup']);
+        $this->assertSame(['ROM 1', 'WS 1'], $d['dl']);
+        $this->assertSame(['PJA ROM LMO', 'PJA Workshop'], $d['pja']);
+        $this->assertSame(['Fixed plant', 'Ganti ban', 'Servis roller'], $d['sub']);
+        $this->assertSame(['PJA Mitra A', 'PJA Mitra B'], $d['pja_anak']);
     }
 
     public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void
