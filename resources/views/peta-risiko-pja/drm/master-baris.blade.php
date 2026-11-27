@@ -371,18 +371,19 @@
       // Pov Perusahaan: suntik baris header "Perusahaan: NAMA (N baris)" di atas (data sudah 1 perusahaan saja,
       // lihat rowsUntukPerusahaan) — teknik resmi DataTables untuk grouping tanpa plugin RowGroup terpisah.
       drawCallback: function (settings) {
-        if (mode !== 'perusahaan') return;
-        const api = new DataTable.Api(settings);
-        let terakhir = null;
-        api.rows({ page: 'current' }).every(function () {
-          const d = this.data();
-          if (d.perusahaan !== terakhir) {
-            const total = api.rows({ search: 'applied' }).data().toArray().filter((x) => x.perusahaan === d.perusahaan).length;
-            $(this.node()).before('<tr class="mb-grp"><td colspan="7">Perusahaan: <b>' + esc(d.perusahaan)
-              + '</b> <span style="font-weight:400;color:#767a7d">(' + total + ' baris)</span></td></tr>');
-            terakhir = d.perusahaan;
-          }
-        });
+        if (mode === 'perusahaan') {
+          const api = new DataTable.Api(settings);
+          let terakhir = null;
+          api.rows({ page: 'current' }).every(function () {
+            const d = this.data();
+            if (d.perusahaan !== terakhir) {
+              const total = api.rows({ search: 'applied' }).data().toArray().filter((x) => x.perusahaan === d.perusahaan).length;
+              $(this.node()).before('<tr class="mb-grp"><td colspan="7">Perusahaan: <b>' + esc(d.perusahaan)
+                + '</b> <span style="font-weight:400;color:#767a7d">(' + total + ' baris)</span></td></tr>');
+              terakhir = d.perusahaan;
+            }
+          });
+        }
         aturTombolMuat();
       },
     });
