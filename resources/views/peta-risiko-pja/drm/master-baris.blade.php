@@ -180,6 +180,7 @@
 {{-- DataTables 2 tetap butuh jQuery; layout _layout-drm tidak memuatnya. --}}
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/datatables.net@2.1.8/js/dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 (function () {
   const ROWS = @json($rows);
@@ -440,6 +441,9 @@
     if (tabel.search()) q.set('q', tabel.search());
     e.currentTarget.href = URL_UNDUH + (q.toString() ? '?' + q : '');
   });
+  // Toast SweetAlert2 (keputusan user 27 Nov 2026), dipakai berhasil & gagal simpan/hapus label.
+  const toast = Swal.mixin({ toast: true, position: 'top-end', timer: 2200, showConfirmButton: false });
+
   // Tambah/hapus label lewat AJAX (keputusan user 27 Nov 2026): form biasa (full page reload) membuat DataTables
   // kembali ke halaman 1 & kehilangan pencarian/urutan yang sedang aktif — menjengkelkan kalau sedang di halaman
   // jauh (mis. 30). Baris yang diubah di-invalidate+redraw tanpa reset posisi (draw(false)), bukan bangunTabel().
@@ -469,9 +473,10 @@
           baris[kategori] = baris[kategori].filter((l) => l.label !== teks);
         }
         tabel.row(tr).invalidate('data').draw(false);
+        toast.fire({ icon: 'success', title: j.pesan || 'Berhasil disimpan.' });
       })
       .catch((j) => {
-        alert((j && j.pesan) || 'Gagal menyimpan, coba lagi.');
+        toast.fire({ icon: 'error', title: (j && j.pesan) || 'Gagal menyimpan, coba lagi.' });
         if (tombol) tombol.disabled = false;
       });
   });
