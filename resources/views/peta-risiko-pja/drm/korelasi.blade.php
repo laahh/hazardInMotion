@@ -19,16 +19,20 @@
   .al-hasil small { display: block; color: #8a8d90; font-size: 11.5px; }
   .al-dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 3px; background: var(--c); }
   .al-alat select { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; }
-  .al-kol-dd { position: relative; }
-  .al-kol-dd summary { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
-  .al-kol-dd summary::-webkit-details-marker { display: none; }
-  .al-kol-dd summary::marker { content: ''; }
-  .al-kol-dd summary .material-symbols-outlined { font-size: 18px; color: #8a8d90; }
-  .al-kol-dd[open] summary { border-color: #3952bc; color: #3952bc; }
-  .al-kol-dd[open] summary .material-symbols-outlined { color: #3952bc; transform: rotate(180deg); }
-  .al-kol { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid rgba(0, 0, 0, .1); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .14); padding: 6px; min-width: 190px; }
+  .al-dd { position: relative; }
+  .al-dd summary { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
+  .al-dd summary::-webkit-details-marker { display: none; }
+  .al-dd summary::marker { content: ''; }
+  .al-dd summary .material-symbols-outlined { font-size: 18px; color: #8a8d90; }
+  .al-dd[open] summary { border-color: #3952bc; color: #3952bc; }
+  .al-dd[open] summary .material-symbols-outlined { color: #3952bc; transform: rotate(180deg); }
+  .al-dd-panel { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; background: #fff; border: 1px solid rgba(0, 0, 0, .1); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .14); padding: 10px; }
+  .al-kol { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
   .al-kol label { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; cursor: pointer; }
   .al-kol label:hover { background: #f1f4fb; }
+  .al-lompat { display: flex; flex-direction: column; gap: 8px; min-width: 260px; }
+  .al-lompat label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 700; color: #595c5e; text-transform: uppercase; letter-spacing: .03em; }
+  .al-lompat select { width: 100%; max-width: none; }
   .al-kol input { accent-color: #3952bc; }
   .al-jejak { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: #8a8d90; }
   .al-jejak button { border: 1px solid rgba(171, 173, 175, .45); background: #fff; border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -106,9 +110,46 @@
       <input type="search" class="al-cari" id="al-cari" placeholder="Mulai dari aktivitas, bahaya, label SAP, grup lokasi, detail lokasi, atau PJA…" aria-label="Cari titik awal alur" autocomplete="off">
       <div class="al-hasil" id="al-hasil" hidden role="listbox" aria-label="Hasil pencarian"></div>
     </div>
-    <details class="al-kol-dd" id="al-kol-dd">
+    <details class="al-dd" id="al-kol-dd">
       <summary><span id="al-kol-label">Semua kolom</span> <span class="material-symbols-outlined">expand_more</span></summary>
-      <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
+      <div class="al-dd-panel"><div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div></div>
+    </details>
+    <details class="al-dd" id="al-lompat-dd">
+      <summary>Lompat ke <span class="material-symbols-outlined">expand_more</span></summary>
+      <div class="al-dd-panel">
+        <div class="al-lompat">
+          <label>Aktivitas HIRA
+            <select id="al-lompat-aktivitas"><option value="">Pilih…</option>
+              @foreach ($dropdown['aktivitas'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+            </select>
+          </label>
+          <label>Sub Aktivitas
+            <select id="al-lompat-sub"><option value="">Pilih…</option>
+              @foreach ($dropdown['sub'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+            </select>
+          </label>
+          <label>Grup Lokasi
+            <select id="al-lompat-grup"><option value="">Pilih…</option>
+              @foreach ($dropdown['grup'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+            </select>
+          </label>
+          <label>Detail Lokasi
+            <select id="al-lompat-dl"><option value="">Pilih…</option>
+              @foreach ($dropdown['dl'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+            </select>
+          </label>
+          <label>PJA
+            <select id="al-lompat-pja"><option value="">Pilih…</option>
+              @foreach ($dropdown['pja'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+            </select>
+          </label>
+          <label>PJA Child
+            <select id="al-lompat-pja_anak"><option value="">Pilih…</option>
+              @foreach ($dropdown['pja_anak'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+            </select>
+          </label>
+        </div>
+      </div>
     </details>
     <select id="al-f-site" aria-label="Site" title="Tampilkan SEMUA aktivitas yang terhubung ke site ini (mengganti alur yang sedang dibuka, bukan menyaring)">
       <option value="">Semua site</option>
@@ -195,7 +236,24 @@
   $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; perbaruiLabelKolom(); gambar(); }));
   perbaruiLabelKolom();
   // Tutup dropdown saat klik di luar panelnya (pola sama dengan al-hasil pencarian).
-  document.addEventListener('click', (e) => { if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false; });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false;
+    if (!e.target.closest('#al-lompat-dd')) $('al-lompat-dd').open = false;
+  });
+
+  // "Lompat ke" (keputusan user 27 Nov 2026): pilih satu nilai langsung pindah fokus, seperti dropdown Site —
+  // BUKAN filter yang menempel (dikembalikan ke "Pilih…" setelah lompat, bukan tetap terpilih).
+  [['al-lompat-aktivitas', 'aktivitas'], ['al-lompat-sub', 'aktivitas'], ['al-lompat-grup', 'grup'],
+    ['al-lompat-dl', 'dl'], ['al-lompat-pja', 'pja'], ['al-lompat-pja_anak', 'pja']].forEach(([elId, jenis]) => {
+    $(elId).addEventListener('change', (e) => {
+      const { value } = e.target;
+      if (value === '') return;
+      const label = e.target.selectedOptions[0].textContent;
+      e.target.value = '';
+      $('al-lompat-dd').open = false;
+      muat(jenis, value, label);
+    });
+  });
 
   // Filter Site & Perusahaan (keputusan user 26 Nov 2026): BUKAN menyaring simpul di alur yang sedang terbuka —
   // memilih salah satu (atau dua-duanya) mengganti alur TOTAL jadi "semua aktivitas yang terhubung ke site/

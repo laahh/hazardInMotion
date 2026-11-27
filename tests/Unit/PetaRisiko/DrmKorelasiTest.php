@@ -238,6 +238,24 @@ class DrmKorelasiTest extends TestCase
         $this->assertSame(60, $node->where('jenis', 'bahaya')->filter(fn ($n) => str_starts_with($n['label'], 'Bahaya '))->count());
     }
 
+    /**
+     * Dropdown "Lompat ke" toolbar (keputusan user 27 Nov 2026): Sub Aktivitas & PJA Child tidak punya fokus
+     * sendiri di alur() (lihat JENIS), jadi id-nya sengaja id PARENT-nya (aid / nama PJA induk).
+     */
+    public function test_daftar_dropdown_untuk_lompat_ke(): void
+    {
+        $d = app(DrmKorelasi::class)->daftarDropdown();
+
+        $this->assertSame([['id' => '2', 'label' => 'Fixed plant'], ['id' => '1', 'label' => 'Perawatan unit']], $d['aktivitas']);
+        $this->assertSame([['id' => '3', 'label' => 'CPP / ROM'], ['id' => '20', 'label' => 'Workshop/Pit Stop']], $d['grup']);
+        $this->assertSame('BMO 1 · Workshop · WS 1', $d['dl'][0]['label']);
+        $this->assertSame(['PJA ROM LMO', 'PJA Workshop'], array_column($d['pja'], 'label'));
+        // Sub Aktivitas: value = aid induknya, bukan jenis 'sub' (tidak ada di alur()).
+        $this->assertSame([['id' => '2', 'label' => 'Fixed plant'], ['id' => '1', 'label' => 'Ganti ban'], ['id' => '1', 'label' => 'Servis roller']], $d['sub']);
+        // PJA Child: value = nama PJA INDUK (PJA Workshop), bukan nama anak itu sendiri.
+        $this->assertSame([['id' => 'PJA Workshop', 'label' => 'PJA Mitra A'], ['id' => 'PJA Workshop', 'label' => 'PJA Mitra B']], $d['pja_anak']);
+    }
+
     public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void
     {
         $svc = app(DrmKorelasi::class);

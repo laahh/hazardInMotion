@@ -249,6 +249,56 @@ final class DrmKorelasi
     }
 
     /**
+     * Daftar nilai untuk dropdown "Lompat ke" per kategori di toolbar (keputusan user 27 Nov 2026) — beda dari
+     * cari() yang cocok substring sambil mengetik: dropdown ini daftar LENGKAP, dipilih langsung seperti dropdown
+     * Site, bukan diketik. Sub Aktivitas & PJA Child TIDAK punya fokus sendiri di alur() (lihat JENIS — tidak ada
+     * 'sub'/'pja_anak'), jadi value dropdownnya sengaja id PARENT-nya (aid untuk sub; nama PJA induk untuk PJA
+     * Child) — memilihnya melompat ke induknya (jenis 'aktivitas'/'pja'), bukan ke sub/anak itu sendiri.
+     *
+     * @return array{aktivitas: list<array{id: string, label: string}>, grup: list<array{id: string, label: string}>, dl: list<array{id: string, label: string}>, pja: list<array{id: string, label: string}>, sub: list<array{id: string, label: string}>, pja_anak: list<array{id: string, label: string}>}
+     */
+    public function daftarDropdown(): array
+    {
+        $aktivitas = DB::table('drm_master_aktivitas')->orderBy('aktivitas')->get(['aid', 'aktivitas'])
+            ->map(fn ($r) => ['id' => (string) $r->aid, 'label' => (string) $r->aktivitas])->all();
+        $grup = DB::table('drm_master_grup')->where('aktif', true)->orderBy('nama')->get(['gid', 'nama'])
+            ->map(fn ($r) => ['id' => (string) $r->gid, 'label' => (string) $r->nama])->all();
+        $dl = DB::table('drm_master_dl')->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get(['id', 'site', 'lokasi', 'detail'])
+            ->map(fn ($r) => ['id' => (string) $r->id, 'label' => $r->site.' · '.$r->lokasi.' · '.$r->detail])->all();
+        $pja = DB::table('drm_master_lokasi_pja')->where('aktif', true)->distinct()->orderBy('nama_pja')->pluck('nama_pja')
+            ->map(fn ($n) => ['id' => (string) $n, 'label' => (string) $n])->values()->all();
+
+        $sub = [];
+        $subUnik = [];
+        foreach (DB::table('drm_master_baris')->where('aktif', true)->get(['aid', 'sub']) as $b) {
+            $teks = trim((string) $b->sub);
+            $k = $b->aid.'|'.mb_strtolower($teks);
+            if ($teks === '' || isset($subUnik[$k])) {
+                continue;
+            }
+            $subUnik[$k] = true;
+            $sub[] = ['id' => (string) $b->aid, 'label' => $teks];
+        }
+        usort($sub, fn ($a, $b) => strcmp($a['label'], $b['label']));
+
+        $pjaAnak = [];
+        $anakUnik = [];
+        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->get(['nama_pja', 'pja_anak']) as $p) {
+            foreach (DrmMasterDb::pisahLabel($p->pja_anak ?? '') as $nama) {
+                $k = mb_strtolower($nama);
+                if (isset($anakUnik[$k])) {
+                    continue;
+                }
+                $anakUnik[$k] = true;
+                $pjaAnak[] = ['id' => (string) $p->nama_pja, 'label' => $nama];
+            }
+        }
+        usort($pjaAnak, fn ($a, $b) => strcmp($a['label'], $b['label']));
+
+        return ['aktivitas' => $aktivitas, 'grup' => $grup, 'dl' => $dl, 'pja' => $pja, 'sub' => $sub, 'pja_anak' => $pjaAnak];
+    }
+
+    /**
      * Cari simpul di semua jenis (maks 8 per jenis).
      *
      * @return list<array{jenis: string, id: string, label: string, sub: string}>

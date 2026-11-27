@@ -38,6 +38,8 @@ final class PetaRisikoKorelasiController extends Controller
             // alur saja), reuse DrmMasterGrup yang sudah dipakai untuk filter sama di Master Grup Lokasi & Aktivitas.
             'site' => $siap ? $this->grup->daftarSite() : [],
             'perusahaan' => $siap ? $this->grup->daftarPerusahaan() : [],
+            // Dropdown "Lompat ke" per kategori di toolbar (keputusan user 27 Nov 2026), lihat DrmKorelasi::daftarDropdown.
+            'dropdown' => $siap ? $this->korelasi->daftarDropdown() : null,
         ]);
     }
 
