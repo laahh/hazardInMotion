@@ -22,8 +22,10 @@
   .al-kol-dd { position: relative; }
   .al-kol-dd summary { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
   .al-kol-dd summary::-webkit-details-marker { display: none; }
-  .al-kol-dd summary::after { content: '▾'; font-size: 11px; color: #8a8d90; }
+  .al-kol-dd summary::marker { content: ''; }
+  .al-kol-dd summary .material-symbols-outlined { font-size: 18px; color: #8a8d90; }
   .al-kol-dd[open] summary { border-color: #3952bc; color: #3952bc; }
+  .al-kol-dd[open] summary .material-symbols-outlined { color: #3952bc; transform: rotate(180deg); }
   .al-kol { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid rgba(0, 0, 0, .1); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .14); padding: 6px; min-width: 190px; }
   .al-kol label { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; cursor: pointer; }
   .al-kol label:hover { background: #f1f4fb; }
@@ -105,7 +107,7 @@
       <div class="al-hasil" id="al-hasil" hidden role="listbox" aria-label="Hasil pencarian"></div>
     </div>
     <details class="al-kol-dd" id="al-kol-dd">
-      <summary>Kolom</summary>
+      <summary><span id="al-kol-label">Semua kolom</span> <span class="material-symbols-outlined">expand_more</span></summary>
       <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
     </details>
     <select id="al-f-site" aria-label="Site" title="Tampilkan SEMUA aktivitas yang terhubung ke site ini (mengganti alur yang sedang dibuka, bukan menyaring)">
@@ -185,7 +187,13 @@
 
     return `<label><input type="checkbox" data-kol="${k}" checked><span class="al-dot" style="--c:${warna}"></span>${nama}</label>`;
   }).join('');
-  $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; gambar(); }));
+  // Label tombol dropdown ikut jumlah kolom aktif — pola sama dengan "Semua site" / "Semua perusahaan".
+  function perbaruiLabelKolom() {
+    const n = KOLOM_BISA_DISEMBUNYIKAN.filter((k) => tampilKolom[k]).length;
+    $('al-kol-label').textContent = n === KOLOM_BISA_DISEMBUNYIKAN.length ? 'Semua kolom' : n === 0 ? 'Tanpa kolom' : `${n} kolom dipilih`;
+  }
+  $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; perbaruiLabelKolom(); gambar(); }));
+  perbaruiLabelKolom();
   // Tutup dropdown saat klik di luar panelnya (pola sama dengan al-hasil pencarian).
   document.addEventListener('click', (e) => { if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false; });
 
