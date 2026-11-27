@@ -19,8 +19,14 @@
   .al-hasil small { display: block; color: #8a8d90; font-size: 11.5px; }
   .al-dot { flex: none; width: 10px; height: 10px; margin-top: 4px; border-radius: 3px; background: var(--c); }
   .al-alat select { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; }
-  .al-kol { display: flex; flex-wrap: wrap; gap: 6px; }
-  .al-kol label { display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border-radius: 999px; background: #fff; border: 1px solid rgba(171, 173, 175, .4); font-size: 12.5px; cursor: pointer; }
+  .al-kol-dd { position: relative; }
+  .al-kol-dd summary { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(171, 173, 175, .45); background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
+  .al-kol-dd summary::-webkit-details-marker { display: none; }
+  .al-kol-dd summary::after { content: '▾'; font-size: 11px; color: #8a8d90; }
+  .al-kol-dd[open] summary { border-color: #3952bc; color: #3952bc; }
+  .al-kol { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid rgba(0, 0, 0, .1); border-radius: 14px; box-shadow: 0 16px 40px rgba(15, 23, 42, .14); padding: 6px; min-width: 190px; }
+  .al-kol label { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; cursor: pointer; }
+  .al-kol label:hover { background: #f1f4fb; }
   .al-kol input { accent-color: #3952bc; }
   .al-jejak { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: #8a8d90; }
   .al-jejak button { border: 1px solid rgba(171, 173, 175, .45); background: #fff; border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -98,7 +104,10 @@
       <input type="search" class="al-cari" id="al-cari" placeholder="Mulai dari aktivitas, bahaya, label SAP, grup lokasi, detail lokasi, atau PJA…" aria-label="Cari titik awal alur" autocomplete="off">
       <div class="al-hasil" id="al-hasil" hidden role="listbox" aria-label="Hasil pencarian"></div>
     </div>
-    <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
+    <details class="al-kol-dd" id="al-kol-dd">
+      <summary>Kolom</summary>
+      <div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div>
+    </details>
     <select id="al-f-site" aria-label="Site" title="Tampilkan SEMUA aktivitas yang terhubung ke site ini (mengganti alur yang sedang dibuka, bukan menyaring)">
       <option value="">Semua site</option>
       @foreach ($site as $st)
@@ -168,9 +177,17 @@
   // Kotak yang diklik: jalurnya (asal & tujuan) dinaikkan ke atas setiap kolom dan tetap disorot.
   let pilihan = null, edgesKini = [];
 
-  $('al-kol').innerHTML = Object.entries(KOLOM).map(([k, [nama, warna]]) =>
-    `<label><input type="checkbox" data-kol="${k}" checked><span class="al-dot" style="--c:${warna}"></span>${nama}</label>`).join('');
+  // Dropdown multi-select (keputusan user 27 Nov 2026): cuma 6 kolom ini yang bisa disembunyikan/ditampilkan —
+  // Bahaya-risiko & Label SAP sengaja tidak ikut jadi pilihan, selalu tampil.
+  const KOLOM_BISA_DISEMBUNYIKAN = ['aktivitas', 'sub', 'grup', 'dl', 'pja', 'pja_anak'];
+  $('al-kol').innerHTML = KOLOM_BISA_DISEMBUNYIKAN.map((k) => {
+    const [nama, warna] = KOLOM[k];
+
+    return `<label><input type="checkbox" data-kol="${k}" checked><span class="al-dot" style="--c:${warna}"></span>${nama}</label>`;
+  }).join('');
   $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; gambar(); }));
+  // Tutup dropdown saat klik di luar panelnya (pola sama dengan al-hasil pencarian).
+  document.addEventListener('click', (e) => { if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false; });
 
   // Filter Site & Perusahaan (keputusan user 26 Nov 2026): BUKAN menyaring simpul di alur yang sedang terbuka —
   // memilih salah satu (atau dua-duanya) mengganti alur TOTAL jadi "semua aktivitas yang terhubung ke site/
