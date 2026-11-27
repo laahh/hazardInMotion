@@ -144,6 +144,9 @@
   .dr-tm-skala > i { width: 180px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #fdd66e, #f8a024, #ea6216, #c42d1c, #7a1618); }
   @media (max-width: 1100px) { .dr-tm-wrap { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .dr-tm { height: 320px; } }
+  .dr-nonaktif-btn { border: 1px solid rgba(180, 35, 24, .35); background: #fff; color: #b42318; font-size: 11.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+  .dr-nonaktif-btn:hover { background: #fdecef; }
+  .dr-nonaktif-btn:disabled { opacity: .5; cursor: default; }
 </style>
 @if (! $meta)
   <div class="pr-card"><div class="pr-empty">
@@ -218,10 +221,18 @@
 @include('peta-risiko-pja.drm._beranda-poin')
 @endif
 @if ($meta)
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 (() => {
   const URL_META = @json(route('peta-risiko-pja.meta'));
   const URL_PJA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.pja', ['pja' => '__ID__'])) }};
+  // Pengecualian baseline (keputusan user 27 Nov 2026): nonaktifkan baris Open Risk dkk langsung dari modal, tanpa
+  // tunggu peta-risiko:sync — lihat muatPengecualian()/terapkanPatchRingkas()/tombolNonaktifkan().
+  const BOLEH_PENGECUALIAN = @json($bolehPengecualian);
+  const URL_PENGECUALIAN_AKTIF = @json(route('peta-risiko-pja.baseline-pengecualian.aktif'));
+  const URL_PENGECUALIAN_TANDAI = @json(route('peta-risiko-pja.baseline-pengecualian.tandai'));
+  const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+  const toast = Swal.mixin({ toast: true, position: 'top-end', timer: 2500, showConfirmButton: false });
   const $ = (s) => document.querySelector(s);
   const q = new URLSearchParams(location.search);
   // Tab "periode" sedang disembunyikan: tautan lama ?tab=periode diarahkan ke Overview.
@@ -230,9 +241,19 @@
     perusahaan: q.get('perusahaan') || 'ALL' };
   const TAB_W = ['pja', 'periode'];
   let M = null;
+  // Pengecualian baseline aktif (kel+hid+lv+kode+inc+tr), dimuat paralel dengan meta — tidak menghalangi tampilan
+  // pertama (M.beranda.ringkas dipakai dulu); begitu daftar ini siap, render() dipanggil ulang supaya kartu KPI &
+  // treemap langsung menambal baris yang dikecualikan (cakupan Semua perusahaan saja — lihat ringkasAktif()).
+  let pengecualianAktif = [];
+  const muatPengecualian = () => fetch(URL_PENGECUALIAN_AKTIF, { headers: { Accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : { daftar: [] })).then((j) => {
+      pengecualianAktif = j.daftar || [];
+      if (M) render();
+    }).catch(() => {});
 
   fetch(URL_META, { headers: { Accept: 'application/json' } }).then((r) => r.json()).then((m) => { M = m; init(); })
     .catch(() => { $('#dr-kpi4').innerHTML = '<div class="pr-card"><div class="pr-empty">Gagal memuat data.</div></div>'; });
+  muatPengecualian();
 
   function init() {
     KEPALA_VEK = kepalaVek(); // M sudah siap di sini — pakai status3 (idk/idg/tid) kalau snapshot sudah punya.
@@ -439,16 +460,44 @@
   const pjaDiSite = () => M.beranda.mgmt.filter((p) => state.site === 'ALL' || p.site === state.site);
   /** Snapshot punya ringkasan baseline unik (kelompok aktivitas × bahaya, tidak dipetakan ke PJA)? */
   const adaUnik = () => !!(M.beranda.ringkas && M.beranda.ringkas.ALL && M.beranda.ringkas.ALL.ALL);
+  // Index angka per nama kolom (urutan sama dengan DrmBeranda::KOLOM_MGMT) — dipakai menambal ringkas di bawah.
+  const ixMgmt = () => Object.fromEntries((M.beranda.kolomMgmt || []).map((k, i) => [k, i]));
+  /** Kurangi 1 baris pengecualian {kat K/G/T, inc, tr} dari satu vektor KOLOM_MGMT (tot + idk/idg/tid + turun/laten). */
+  function tambalVektor(v, ix, kat, inc, tr) {
+    if (!v) return;
+    v[ix.tot] -= 1;
+    if (kat === 'K') { v[ix.idk] -= 1; if (tr) v[ix.turun] -= 1; } else if (kat === 'G') v[ix.idg] -= 1; else { v[ix.tid] -= 1; if (inc) v[ix.laten] -= 1; }
+  }
+  /**
+   * Klon ringkas (plain JSON, aman di-deep-clone) lalu tambal (subtract) tiap baris pengecualian aktif dari
+   * .w[minggu][level] & .kel[minggu][level][kelompok] — supaya kartu KPI & treemap langsung mencerminkan baris
+   * yang baru dinonaktifkan (keputusan user 27 Nov 2026), TANPA menunggu peta-risiko:sync. TIDAK menambal .grp:
+   * perlu breakdown per grup lokasi yang tidak selalu tersedia saat baris di-flag dari tab lain — tab Per Group
+   * Lokasi tetap menampilkan angka snapshot sampai sync berikutnya (lihat catatan migrasi 2026_11_27_120000).
+   */
+  function terapkanPatchRingkas(ringkas) {
+    if (!ringkas || !pengecualianAktif.length) return ringkas;
+    const ix = ixMgmt(), klon = JSON.parse(JSON.stringify(ringkas));
+    pengecualianAktif.forEach((p) => {
+      const kode = p.kode || '';
+      for (let i = 0; i < kode.length; i++) {
+        tambalVektor(((klon.w || [])[i] || {})[p.lv], ix, kode[i], p.inc, p.tr);
+        tambalVektor((((klon.kel || [])[i] || {})[p.lv] || {})[p.kel], ix, kode[i], p.inc, p.tr);
+      }
+    });
+    return klon;
+  }
   /**
    * Entri ringkasan baseline unik untuk site × perusahaan terpilih. Pecahan per perusahaan HANYA dihitung di
    * cakupan 'ALL' (semua site) — menyilangkan tiap site × tiap perusahaan sempat membuat sync produksi kehabisan
    * memori (lihat DrmSnapshotBuilder::ringkasUnik) — jadi site tertentu + perusahaan tertentu sekaligus jatuh
-   * balik ke ringkasan 'ALL' site untuk perusahaan itu (lihat jatuhBalikSite()).
+   * balik ke ringkasan 'ALL' site untuk perusahaan itu (lihat jatuhBalikSite()). Cakupan Semua perusahaan ditambal
+   * pengecualian aktif (terapkanPatchRingkas) — perusahaan tertentu tidak, lihat catatan fungsi itu.
    */
   const ringkasAktif = () => {
     const langsung = (M.beranda.ringkas[state.site] || {})[state.perusahaan];
-    if (langsung !== undefined || state.perusahaan === 'ALL') return langsung;
-    return (M.beranda.ringkas.ALL || {})[state.perusahaan];
+    const hasil = (langsung !== undefined || state.perusahaan === 'ALL') ? langsung : (M.beranda.ringkas.ALL || {})[state.perusahaan];
+    return state.perusahaan === 'ALL' ? terapkanPatchRingkas(hasil) : hasil;
   };
   /** true bila kartu/tabel di atas sebenarnya gabungan SEMUA site (site spesifik + perusahaan tidak disilangkan di snapshot). */
   const jatuhBalikSite = () => state.perusahaan !== 'ALL' && state.site !== 'ALL'
@@ -550,25 +599,29 @@
   let modalBaris = [], modalKat = 't';
   /** "wi:obs:oak:ket:iobs:ioak:iket,..." → { wi: [6 angka] } */
   const uraiVol = (v) => Object.fromEntries((v || '').split(',').filter(Boolean).map((p) => { const x = p.split(':').map(Number); return [x[0], x.slice(1)]; }));
+  /** {kel, hid} baris yang sedang dikecualikan — dikeluarkan dari SEMUA daftar modal, apa pun tab/cakupannya. */
+  const dikecualikanSet = () => new Set(pengecualianAktif.map((p) => p.kel + '|' + p.hid));
   /** Baris rincian untuk cakupan & filter aktif (tab, site, grup, kelompok, level, minggu) — sama dengan angka kartu. */
   function barisModal(R, kat) {
     const L = R.lingkup[state.site];
     if (!L) return null;
     const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+    const kecuali = dikecualikanSet();
     const daftar = state.tab === 'grup'
       ? L.g.filter((x) => x[0] === state.grup).map(([, kel, hid, lv, inc, tr, kode, gap, vol]) => ({ kel, hid, lv, inc, tr, kode, gap, vol }))
       : L.u.map(([kel, hid, lv, inc, tr, kode, gap, vol]) => ({ kel, hid, lv, inc, tr, kode, gap, vol }));
     const f = KAT_MODAL[kat][3];
-    return daftar.filter((b) => (state.tab !== 'proses' || b.kel === state.proses) && (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
+    return daftar.filter((b) => !kecuali.has(b.kel + '|' + b.hid) && (state.tab !== 'proses' || b.kel === state.proses) && (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
   }
 
   /** Tab Beranda PJA: baris rincian satu PJA (format sama dengan lingkup u). Null bila snapshot belum menyimpannya. */
   function barisPja(rows, kat) {
     if (!rows) return null;
     const lvBoleh = state.lv === 'ALL' ? null : new Set(['Significant', 'High']);
+    const kecuali = dikecualikanSet();
     const f = KAT_MODAL[kat][3];
     return rows.map(([kel, hid, lv, inc, tr, kode, gap, vol]) => ({ kel, hid: String(hid), lv, inc, tr, kode, gap, vol }))
-      .filter((b) => (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
+      .filter((b) => !kecuali.has(b.kel + '|' + b.hid) && (!lvBoleh || lvBoleh.has(b.lv)) && f(b, b.kode[state.w] || 'T'));
   }
 
   async function bukaModal(kat) {
@@ -644,7 +697,7 @@
     // t.length > 11 = snapshot baru (k1/c1/k2/c2/kt ditambahkan setelah index 0-10 lama). Snapshot lama: tampilkan strip.
     const adaDetail = baris.some((b) => b.t.length > 11);
     const stripDetail = '<span class="dr-mute" title="Jalankan ulang php artisan peta-risiko:sync untuk mengisi ini">–</span>';
-    const NK = 7;
+    const NK = BOLEH_PENGECUALIAN ? 8 : 7;
     const jumlahKel = baris.reduce((a, b) => { a[b.kel] = (a[b.kel] || 0) + 1; return a; }, {});
     let kel = '', html = '';
     baris.forEach((b, i) => {
@@ -674,13 +727,43 @@
         <td>${residual}</td>
         <td><span class="dr-st ${kode}">${STATUS_SAP[kode]}</span>${alasan ? `<div>${alasan}</div>` : ''}</td>
         <td>${kontrol}</td>
-        <td>${sap}${kode === 'T' ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td></tr>
+        <td>${sap}${kode === 'T' ? '' : `<div><button type="button" class="dr-sap-btn" data-i="${i}" aria-expanded="false"><span class="material-symbols-outlined">description</span> Lihat SAP</button></div>`}</td>
+        ${BOLEH_PENGECUALIAN ? `<td><button type="button" class="dr-nonaktif-btn" data-i="${i}" title="Keluarkan baris ini dari hitungan Open Risk dkk (langsung, tanpa tunggu sync)">Nonaktifkan</button></td>` : ''}</tr>
         <tr class="dr-modal-sap" data-i="${i}" hidden><td colspan="${NK}"></td></tr>`;
     });
     const isi = d.querySelector('#dr-modal-isi');
     isi.innerHTML = `<table class="pr-tbl dr-tbl dr-modal-tbl dr-st-tbl"><thead><tr><th>Aktivitas HIRA</th><th>Bahaya - Risiko</th><th>Risiko Awal</th><th>Risiko Residual</th>
-      <th>Status SAP ${wKode(state.w)}</th><th>Pengendalian yang ada</th><th>SAP ${wKode(state.w)}</th></tr></thead><tbody>${html}</tbody></table>`;
+      <th>Status SAP ${wKode(state.w)}</th><th>Pengendalian yang ada</th><th>SAP ${wKode(state.w)}</th>${BOLEH_PENGECUALIAN ? '<th></th>' : ''}</tr></thead><tbody>${html}</tbody></table>`;
     isi.querySelectorAll('.dr-sap-btn').forEach((btn) => btn.addEventListener('click', () => bukaSapBahaya(baris[+btn.dataset.i], btn)));
+    isi.querySelectorAll('.dr-nonaktif-btn').forEach((btn) => btn.addEventListener('click', () => nonaktifkanBaris(baris[+btn.dataset.i], btn)));
+  }
+
+  /**
+   * Nonaktifkan satu baris (kel+hid) dari hitungan Open Risk dkk — keputusan user 27 Nov 2026: langsung berlaku
+   * (modal & kartu KPI/treemap cakupan Semua perusahaan ditambal seketika via pengecualianAktif/render()), tanpa
+   * tunggu peta-risiko:sync; riwayat (siapa, kapan, alasan) tersimpan di /peta-risiko-pja/baseline-pengecualian.
+   */
+  function nonaktifkanBaris(b, btn) {
+    const alasan = (prompt('Alasan menonaktifkan baris ini dari Open Risk dkk (wajib diisi):') || '').trim();
+    if (!alasan) return;
+    if (btn) btn.disabled = true;
+    fetch(URL_PENGECUALIAN_TANDAI, {
+      method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+      body: JSON.stringify({ kel: b.kel, hid: b.hid, aktivitas: (b.t || [])[0] || '', sub: (b.t || [])[1] || '', bahaya: (b.t || [])[2] || '',
+        alasan, lv: b.lv, kode: b.kode, inc: +b.inc > 0, tr: !!b.tr }),
+    })
+      .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(j))))
+      .then(() => {
+        pengecualianAktif.push({ kel: b.kel, hid: b.hid, lv: b.lv, kode: b.kode, inc: +b.inc > 0, tr: !!b.tr });
+        modalBaris = modalBaris.filter((x) => !(x.kel === b.kel && x.hid === b.hid));
+        isiModal();
+        render();
+        toast.fire({ icon: 'success', title: 'Baris dinonaktifkan dari Open Risk.' });
+      })
+      .catch((j) => {
+        toast.fire({ icon: 'error', title: (j && j.pesan) || 'Gagal menonaktifkan, coba lagi.' });
+        if (btn) btn.disabled = false;
+      });
   }
 
   function isiModalBaseline() {

@@ -71,6 +71,15 @@ Route::prefix('peta-risiko-pja')
             Route::post('/{tabel}/{id}/hapus', 'hapus')->where(['tabel' => '[a-z_]+', 'id' => '[A-Za-z0-9]+'])->middleware('throttle:60,1')->name('hapus');
         });
 
+        // Pengecualian baseline Overview (nonaktifkan baris Open Risk tanpa tunggu sync, riwayat tetap tersimpan).
+        Route::prefix('baseline-pengecualian')->name('baseline-pengecualian.')
+            ->controller(\App\Http\Controllers\PetaRisiko\PetaRisikoBaselinePengecualianController::class)->group(function () {
+                Route::get('/', 'riwayat')->name('index');
+                Route::get('/aktif', 'aktif')->middleware('throttle:120,1')->name('aktif');
+                Route::post('/', 'tandai')->middleware('throttle:60,1')->name('tandai');
+                Route::post('/{id}/kembalikan', 'kembalikan')->whereNumber('id')->middleware('throttle:60,1')->name('kembalikan');
+            });
+
         Route::controller(PetaRisikoFlagController::class)->group(function () {
             Route::get('/pja/{pja}/flag', 'index')->where('pja', '[0-9]+')->name('flag.index');
             Route::post('/pja/{pja}/flag', 'store')->where('pja', '[0-9]+')->middleware('throttle:30,1')->name('flag.store');

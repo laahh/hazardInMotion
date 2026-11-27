@@ -55,6 +55,7 @@
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.grup.index') }}" @if (request()->routeIs('peta-risiko-pja.master.grup.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">account_tree</span> Grup Lokasi &amp; Aktivitas</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.master.pic.index') }}" @if (request()->routeIs('peta-risiko-pja.master.pic.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">badge</span> Lokasi &amp; PIC</a>
           <a class="pr-back" href="{{ route('peta-risiko-pja.korelasi.index') }}" @if (request()->routeIs('peta-risiko-pja.korelasi.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">alt_route</span> Alur Baseline</a>
+          <a class="pr-back" href="{{ route('peta-risiko-pja.baseline-pengecualian.index') }}" @if (request()->routeIs('peta-risiko-pja.baseline-pengecualian.*')) aria-current="page" @endif><span class="material-symbols-outlined" style="font-size:18px">visibility_off</span> Riwayat Pengecualian</a>
         </nav>
       </div>
     </div>

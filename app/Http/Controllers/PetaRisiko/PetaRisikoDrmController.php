@@ -25,9 +25,24 @@ class PetaRisikoDrmController extends Controller
     {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('peta-risiko-pja.drm.index', ['meta' => $this->repo->meta(), 'adaExcel' => $this->repo->adaEkspor()]);
+        return view('peta-risiko-pja.drm.index', [
+            'meta' => $this->repo->meta(), 'adaExcel' => $this->repo->adaEkspor(),
+            'bolehPengecualian' => $this->bolehUbah($request),
+        ]);
+    }
+
+    /** Boleh menonaktifkan baris baseline dari Open Risk (pengecualian) — editor master mapping yang sama. */
+    private function bolehUbah(Request $request): bool
+    {
+        $editor = (array) config('peta_risiko_drm.master.editor', []);
+        $user = $request->user();
+        if ($user === null) {
+            return false;
+        }
+
+        return $editor === [] || in_array((string) $user->getAuthIdentifier(), $editor, true) || in_array((string) ($user->email ?? ''), $editor, true);
     }
 
     public function pja(string $pja): View
