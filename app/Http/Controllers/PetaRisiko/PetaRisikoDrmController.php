@@ -7,6 +7,7 @@ use App\Services\PetaRisiko\Drm\DrmHiraSumber;
 use App\Services\PetaRisiko\Drm\DrmRepository;
 use App\Services\PetaRisiko\Drm\DrmSapBahaya;
 use App\Services\PetaRisiko\Drm\DrmSapDetailLokasi;
+use App\Services\PetaRisiko\Drm\Master\DrmMasterGrup;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,16 +65,20 @@ class PetaRisikoDrmController extends Controller
      * pemetaan master DRM 2.1. Dipanggil saat baris detail lokasi di tab Group Lokasi dibuka.
      */
     /** Asal HIRA (dokumen id_hira_master, revisi, departemen, aktivitas spesifik) untuk daftar baris baseline ?ri=1,2,3. */
-    public function hiraSumber(Request $request, DrmHiraSumber $hira): JsonResponse
+    public function hiraSumber(Request $request, DrmHiraSumber $hira, DrmMasterGrup $grup): JsonResponse
     {
         $v = $request->validate(['ri' => ['required', 'string', 'max:3000', 'regex:/^[0-9,]+$/']]);
+        $ri = array_map('intval', explode(',', $v['ri']));
         try {
-            return response()->json(['baris' => $hira->untuk(array_map('intval', explode(',', $v['ri'])))]);
+            $baris = $hira->untuk($ri);
         } catch (\Throwable $e) {
             report($e);
 
             return response()->json(['pesan' => 'Data HIRA tidak bisa dimuat dari ClickHouse saat ini. Coba lagi beberapa saat.'], 503);
         }
+        // Lokasi & PJA terkait (keputusan user 27 Nov 2026): dari master DRM 2.1 sendiri (MySQL), BUKAN dari
+        // dokumen HIRA ClickHouse — lihat DrmMasterGrup::lokasiPjaUntukRi.
+        return response()->json(['baris' => $baris, 'lokasi' => $grup->lokasiPjaUntukRi($ri)]);
     }
 
     public function sapDetailLokasi(Request $request, string $dl, DrmSapDetailLokasi $sap): JsonResponse

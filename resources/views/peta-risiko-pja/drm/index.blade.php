@@ -1024,8 +1024,11 @@
   // ------------------------------------------------------------ Asal HIRA (dokumen id_hira_master) per baris baseline
   const URL_HIRA = {{ \Illuminate\Support\Js::from(route('peta-risiko-pja.hira.sumber')) }};
   const hiraCache = {};
+  // Lokasi & PJA terkait (keputusan user 27 Nov 2026): dari master DRM 2.1 sendiri (MySQL, lihat
+  // DrmMasterGrup::lokasiPjaUntukRi), BUKAN dari dokumen HIRA ClickHouse — satu respons yang sama dengan hiraCache.
+  const lokasiHiraCache = {};
 
-  /** Ambil asal HIRA untuk hid yang belum ada di cache (maks 300 per permintaan). */
+  /** Ambil asal HIRA + lokasi/PJA terkait untuk hid yang belum ada di cache (maks 300 per permintaan). */
   async function muatHira(hids) {
     const perlu = [...new Set(hids)].filter((h) => !(h in hiraCache));
     for (let i = 0; i < perlu.length; i += 300) {
@@ -1033,7 +1036,7 @@
       const r = await fetch(`${URL_HIRA}?ri=${potong.join(',')}`, { headers: { Accept: 'application/json' } });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.pesan || `Gagal memuat HIRA (HTTP ${r.status}).`);
-      potong.forEach((h) => { hiraCache[h] = (j.baris || {})[h] || []; });
+      potong.forEach((h) => { hiraCache[h] = (j.baris || {})[h] || []; lokasiHiraCache[h] = (j.lokasi || {})[h] || []; });
     }
   }
 
@@ -1054,20 +1057,28 @@
   }
 
   function bukaHira(hid, bahaya) {
-    const L = hiraCache[hid] || [], d = dialogItem(), isi = d.querySelector('#dr-item-isi');
+    const L = hiraCache[hid] || [], lok = lokasiHiraCache[hid] || [], d = dialogItem(), isi = d.querySelector('#dr-item-isi');
     d.querySelector('#dr-item-judul').textContent = `Asal HIRA${bahaya ? ' · ' + bahaya : ''}`;
     const baris = (k, v) => (v ? `<tr><th style="width:170px">${k}</th><td>${v}</td></tr>` : '');
-    isi.innerHTML = L.map((x) => `<div class="dr-hira-dok">
+    const MAKS_LOKASI = 15;
+    const lokasiHtml = !lok.length
+      ? '<p class="dr-mute" style="margin:0 0 12px">Tidak ada grup lokasi (M05) yang mengaitkan baris ini ke lokasi fisik manapun.</p>'
+      : `<table class="pr-tbl dr-tbl" style="margin-bottom:4px"><thead><tr><th>Site</th><th>Lokasi</th><th>PJA</th></tr></thead><tbody>${
+          lok.slice(0, MAKS_LOKASI).map((x) => `<tr><td>${DR.esc(x.site)}</td><td>${DR.esc(x.lokasi)}</td><td>${DR.esc((x.pja || []).join(', ') || '-')}</td></tr>`).join('')
+        }</tbody></table>${lok.length > MAKS_LOKASI ? `<p class="dr-mute" style="margin:0 0 12px">+${DR.fmt(lok.length - MAKS_LOKASI)} lokasi lainnya</p>` : '<div style="margin-bottom:12px"></div>'}`;
+    isi.innerHTML = `<p style="margin:0 0 6px;font-weight:700;font-size:13px">Lokasi &amp; PJA Terkait <small class="dr-mute" style="font-weight:400">(master DRM 2.1, bukan dari dokumen HIRA)</small></p>${lokasiHtml}
+      <p style="margin:0 0 6px;font-weight:700;font-size:13px">Dokumen HIRA</p>`
+      + (L.map((x) => `<div class="dr-hira-dok">
         <div class="dr-hira-dok-k"><b>HIRA ${DR.esc(x.idh)}</b>${x.ada ? ` · rev ${DR.esc(x.rev)}` : ''}
           ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.kosong ? '<span class="dr-pl-tag" style="background:#fff4e5;color:#9a5b00">dokumen kosong</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
           ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
         ${x.kosong ? '<p class="dr-mute" style="margin:0 0 6px">Dokumen ini ada di HIRA (hira_master) tetapi belum berisi bahaya-risiko, site, maupun section, sehingga tidak muncul di mv_hira_master. Nilai risiko baris baseline ini tidak berasal dari dokumen ini.</p>' : ''}
         ${x.ada ? `<table class="pr-tbl dr-tbl"><tbody>
-          ${baris('Departemen', DR.esc(x.dept))}${baris('Aktivitas spesifik', DR.esc(x.spesifik))}
-          ${baris('Aktivitas · sub', DR.esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site', DR.esc((x.site || []).join(', ')))}
+          ${baris('Departemen (owner)', DR.esc(x.dept))}${baris('Aktivitas spesifik', DR.esc(x.spesifik))}
+          ${baris('Aktivitas · sub', DR.esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site (dokumen HIRA)', DR.esc((x.site || []).join(', ')))}
           ${baris('Bagian', DR.esc(x.bagian))}${baris('Perusahaan', DR.esc(x.perusahaan))}${baris('Klasifikasi', DR.esc(x.rutin))}${baris('Diperbarui', DR.esc(x.diperbarui))}
         </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di HIRA (hira_master maupun mv_hira_master).</p>'}</div>`).join('')
-      || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>';
+      || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>');
     if (!d.open) d.showModal();
   }
 

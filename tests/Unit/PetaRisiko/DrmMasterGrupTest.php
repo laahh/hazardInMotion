@@ -215,4 +215,20 @@ class DrmMasterGrupTest extends TestCase
             ['site' => 'LMO', 'lokasi' => 'Pit Stop', 'pic' => ['PT Mitra C']],
         ], $hasil[900]);
     }
+
+    /**
+     * Popup "Asal HIRA" di Overview (keputusan user 27 Nov 2026): lokasi & PJA terkait dari master DRM 2.1
+     * sendiri (MySQL), BUKAN dari dokumen HIRA ClickHouse. Dikelompokkan per (site, lokasi), bukan sampai detlok.
+     */
+    public function test_lokasi_pja_untuk_ri_dari_master_bukan_clickhouse(): void
+    {
+        $hasil = app(DrmMasterGrup::class)->lokasiPjaUntukRi([1, 755, 999]);
+
+        // ri 1 (gid 20, BMO 1/Workshop) → PJA Workshop BMO 1; WS 1 & WS 2 digabung jadi satu baris (site, lokasi).
+        $this->assertSame([['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pja' => ['PJA Workshop BMO 1']]], $hasil[1]);
+        // ri 755 (gid 8, Jetty) tidak punya drm_master_dl sama sekali di fixture — tidak muncul di hasil.
+        $this->assertArrayNotHasKey(755, $hasil);
+        // ri yang tidak ada baris grup-nya sama sekali.
+        $this->assertArrayNotHasKey(999, $hasil);
+    }
 }

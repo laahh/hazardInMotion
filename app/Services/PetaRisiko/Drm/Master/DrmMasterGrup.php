@@ -316,6 +316,73 @@ final class DrmMasterGrup
     }
 
     /**
+     * Site/Lokasi FISIK + PJA yang menaunginya untuk sekumpulan ri (keputusan user 27 Nov 2026, popup "Asal HIRA"
+     * di Overview: selain dokumen HIRA ClickHouse, tampilkan juga lokasi & PJA terkait dari master DRM 2.1
+     * sendiri — grup lokasi M05 → detail lokasi → PJA, SAMA rantai dengan Alur Baseline). Disaring ke ri yang
+     * diminta saja (bukan recompute semua baris master seperti lokasiPerRi()), supaya murah dipanggil ad hoc dari
+     * satu klik popup. Dikelompokkan per (site, lokasi) — BUKAN sampai ke detlok — karena satu grup bisa
+     * mencakup ratusan detlok (sama alasan dengan picPerRi()), terlalu banyak untuk ditampilkan di satu popup.
+     *
+     * @param  list<int>  $ri
+     * @return array<int, list<array{site: string, lokasi: string, pja: list<string>}>>
+     */
+    public function lokasiPjaUntukRi(array $ri): array
+    {
+        $ri = array_values(array_unique(array_filter(array_map('intval', $ri), fn ($x) => $x > 0)));
+        if ($ri === []) {
+            return [];
+        }
+        $gidPerRi = [];
+        foreach (DB::table('drm_master_grup_baris')->whereIn('ri', $ri)->get(['ri', 'gid']) as $g) {
+            $gidPerRi[(int) $g->ri][] = (int) $g->gid;
+        }
+        $gids = array_values(array_unique(array_merge(...array_values($gidPerRi) ?: [[]])));
+        if ($gids === []) {
+            return [];
+        }
+        $lokasiPerGid = [];
+        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->get(['site', 'lokasi', 'gid']) as $d) {
+            $k = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi));
+            $lokasiPerGid[(int) $d->gid][$k] = ['site' => (string) $d->site, 'lokasi' => (string) $d->lokasi];
+        }
+        $sites = [];
+        foreach ($lokasiPerGid as $list) {
+            foreach ($list as $l) {
+                $sites[$l['site']] = true;
+            }
+        }
+        $pjaPerLokasi = [];
+        if ($sites !== []) {
+            foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->whereIn('site', array_keys($sites))->get(['site', 'lokasi', 'nama_pja']) as $p) {
+                $k = mb_strtolower(trim((string) $p->site)).'|'.mb_strtolower(trim((string) $p->lokasi));
+                $pjaPerLokasi[$k][(string) $p->nama_pja] = true;
+            }
+        }
+        $hasil = [];
+        foreach ($ri as $r) {
+            $lokasiUnik = [];
+            foreach ($gidPerRi[$r] ?? [] as $gid) {
+                foreach ($lokasiPerGid[$gid] ?? [] as $k => $l) {
+                    $lokasiUnik[$k] = $l;
+                }
+            }
+            if ($lokasiUnik === []) {
+                continue;
+            }
+            $daftar = [];
+            foreach ($lokasiUnik as $k => $l) {
+                $pja = array_keys($pjaPerLokasi[$k] ?? []);
+                sort($pja, SORT_NATURAL | SORT_FLAG_CASE);
+                $daftar[] = ['site' => $l['site'], 'lokasi' => $l['lokasi'], 'pja' => $pja];
+            }
+            usort($daftar, fn ($a, $b) => strcmp($a['site'], $b['site']) ?: strcmp($a['lokasi'], $b['lokasi']));
+            $hasil[$r] = $daftar;
+        }
+
+        return $hasil;
+    }
+
+    /**
      * Baris datar untuk unduhan CSV: SATU baris = SATU (grup lokasi × site/lokasi/detail × perusahaan), tidak
      * digabung jadi teks (keputusan user 25 Nov 2026, pola sama dengan unduhan Alur Baseline/Korelasi). Filter
      * sama dengan yang di tabel browser (kb, kelompok, grup/tanpa grup, kata cari) — HANYA menyaring baris HIRA
