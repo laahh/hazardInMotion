@@ -316,15 +316,15 @@ final class DrmMasterGrup
     }
 
     /**
-     * Site/Lokasi FISIK + PJA yang menaunginya untuk sekumpulan ri (keputusan user 27 Nov 2026, popup "Asal HIRA"
-     * di Overview: selain dokumen HIRA ClickHouse, tampilkan juga lokasi & PJA terkait dari master DRM 2.1
-     * sendiri — grup lokasi M05 → detail lokasi → PJA, SAMA rantai dengan Alur Baseline). Disaring ke ri yang
-     * diminta saja (bukan recompute semua baris master seperti lokasiPerRi()), supaya murah dipanggil ad hoc dari
-     * satu klik popup. Dikelompokkan per (site, lokasi) — BUKAN sampai ke detlok — karena satu grup bisa
-     * mencakup ratusan detlok (sama alasan dengan picPerRi()), terlalu banyak untuk ditampilkan di satu popup.
+     * Site/Lokasi/Detail Lokasi FISIK + PJA yang menaunginya untuk sekumpulan ri (keputusan user 27 Nov 2026,
+     * kolom "Lokasi" di modal Baseline Overview: selain dokumen HIRA ClickHouse, tampilkan juga lokasi & PJA
+     * terkait dari master DRM 2.1 sendiri — grup lokasi M05 → detail lokasi → PJA, SAMA rantai dengan Alur
+     * Baseline). Disaring ke ri yang diminta saja (bukan recompute semua baris master seperti lokasiPerRi()),
+     * supaya murah dipanggil ad hoc. Sampai ke detlok (bukan cuma site+lokasi seperti versi awal) — ditampilkan
+     * di modal yang bisa digulir, bukan sel tabel ringkas, jadi aman walau satu grup mencakup banyak detlok.
      *
      * @param  list<int>  $ri
-     * @return array<int, list<array{site: string, lokasi: string, pja: list<string>}>>
+     * @return array<int, list<array{site: string, lokasi: string, detail: string, pja: list<string>}>>
      */
     public function lokasiPjaUntukRi(array $ri): array
     {
@@ -340,13 +340,13 @@ final class DrmMasterGrup
         if ($gids === []) {
             return [];
         }
-        $lokasiPerGid = [];
-        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->get(['site', 'lokasi', 'gid']) as $d) {
-            $k = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi));
-            $lokasiPerGid[(int) $d->gid][$k] = ['site' => (string) $d->site, 'lokasi' => (string) $d->lokasi];
+        $dlPerGid = [];
+        foreach (DB::table('drm_master_dl')->whereIn('gid', $gids)->where('aktif', true)->get(['site', 'lokasi', 'detail', 'gid']) as $d) {
+            $k = mb_strtolower(trim((string) $d->site)).'|'.mb_strtolower(trim((string) $d->lokasi)).'|'.mb_strtolower(trim((string) $d->detail));
+            $dlPerGid[(int) $d->gid][$k] = ['site' => (string) $d->site, 'lokasi' => (string) $d->lokasi, 'detail' => (string) $d->detail];
         }
         $sites = [];
-        foreach ($lokasiPerGid as $list) {
+        foreach ($dlPerGid as $list) {
             foreach ($list as $l) {
                 $sites[$l['site']] = true;
             }
@@ -360,22 +360,23 @@ final class DrmMasterGrup
         }
         $hasil = [];
         foreach ($ri as $r) {
-            $lokasiUnik = [];
+            $dlUnik = [];
             foreach ($gidPerRi[$r] ?? [] as $gid) {
-                foreach ($lokasiPerGid[$gid] ?? [] as $k => $l) {
-                    $lokasiUnik[$k] = $l;
+                foreach ($dlPerGid[$gid] ?? [] as $k => $l) {
+                    $dlUnik[$k] = $l;
                 }
             }
-            if ($lokasiUnik === []) {
+            if ($dlUnik === []) {
                 continue;
             }
             $daftar = [];
-            foreach ($lokasiUnik as $k => $l) {
-                $pja = array_keys($pjaPerLokasi[$k] ?? []);
+            foreach ($dlUnik as $l) {
+                $kLokasi = mb_strtolower(trim($l['site'])).'|'.mb_strtolower(trim($l['lokasi']));
+                $pja = array_keys($pjaPerLokasi[$kLokasi] ?? []);
                 sort($pja, SORT_NATURAL | SORT_FLAG_CASE);
-                $daftar[] = ['site' => $l['site'], 'lokasi' => $l['lokasi'], 'pja' => $pja];
+                $daftar[] = ['site' => $l['site'], 'lokasi' => $l['lokasi'], 'detail' => $l['detail'], 'pja' => $pja];
             }
-            usort($daftar, fn ($a, $b) => strcmp($a['site'], $b['site']) ?: strcmp($a['lokasi'], $b['lokasi']));
+            usort($daftar, fn ($a, $b) => strcmp($a['site'], $b['site']) ?: strcmp($a['lokasi'], $b['lokasi']) ?: strcmp($a['detail'], $b['detail']));
             $hasil[$r] = $daftar;
         }
 

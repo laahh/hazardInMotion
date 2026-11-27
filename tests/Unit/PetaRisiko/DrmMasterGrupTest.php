@@ -224,8 +224,12 @@ class DrmMasterGrupTest extends TestCase
     {
         $hasil = app(DrmMasterGrup::class)->lokasiPjaUntukRi([1, 755, 999]);
 
-        // ri 1 (gid 20, BMO 1/Workshop) → PJA Workshop BMO 1; WS 1 & WS 2 digabung jadi satu baris (site, lokasi).
-        $this->assertSame([['site' => 'BMO 1', 'lokasi' => 'Workshop', 'pja' => ['PJA Workshop BMO 1']]], $hasil[1]);
+        // ri 1 (gid 20, BMO 1/Workshop) → PJA Workshop BMO 1; WS 1 & WS 2 TETAP 2 baris terpisah (sampai detlok,
+        // koreksi user 27 Nov 2026 — sebelumnya digabung jadi satu baris per site+lokasi saja).
+        $this->assertSame([
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 1', 'pja' => ['PJA Workshop BMO 1']],
+            ['site' => 'BMO 1', 'lokasi' => 'Workshop', 'detail' => 'WS 2', 'pja' => ['PJA Workshop BMO 1']],
+        ], $hasil[1]);
         // ri 755 (gid 8, Jetty) tidak punya drm_master_dl sama sekali di fixture — tidak muncul di hasil.
         $this->assertArrayNotHasKey(755, $hasil);
         // ri yang tidak ada baris grup-nya sama sekali.

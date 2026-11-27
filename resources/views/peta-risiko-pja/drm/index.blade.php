@@ -1091,13 +1091,22 @@
       });
       // Lokasi Terkait (keputusan user 27 Nov 2026): keluar dari popup, jadi kolom sendiri di tabel baseline —
       // satu fetch yang sama dengan HIRA (lokasiHiraCache), bukan panggilan terpisah. Kolom PJA sempat ikut
-      // ditambahkan tapi diminta dihapus lagi, jadi cuma site+lokasi yang ditampilkan.
+      // ditambahkan tapi diminta dihapus lagi di sel ringkas; klik sel membuka modal Site/Lokasi/Detail Lokasi/PJA
+      // lengkap (sampai detlok — aman di modal yang bisa digulir, beda dengan sel ringkas yang cuma 2 + "lainnya").
       const MAKS_RINGKAS = 2;
       el.querySelectorAll('td[data-lokasi]').forEach((td) => {
         const lok = lokasiHiraCache[td.dataset.lokasi] || [];
-        td.innerHTML = !lok.length ? '<span class="dr-mute">-</span>'
-          : lok.slice(0, MAKS_RINGKAS).map((x) => `${DR.esc(x.site)} · ${DR.esc(x.lokasi)}`).join('<br>')
-            + (lok.length > MAKS_RINGKAS ? `<br><span class="dr-mute">+${DR.fmt(lok.length - MAKS_RINGKAS)} lainnya</span>` : '');
+        if (!lok.length) { td.innerHTML = '<span class="dr-mute">-</span>'; return; }
+        const ringkas = lok.slice(0, MAKS_RINGKAS).map((x) => `${DR.esc(x.site)} · ${DR.esc(x.lokasi)}`).join('<br>')
+          + (lok.length > MAKS_RINGKAS ? `<br><span class="dr-mute">+${DR.fmt(lok.length - MAKS_RINGKAS)} lainnya</span>` : '');
+        td.innerHTML = `<button type="button" class="dr-hira" aria-haspopup="dialog" title="Lihat semua site, lokasi, detail lokasi, dan PJA terkait"><span>${ringkas}</span></button>`;
+        td.querySelector('button').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const html = `<table class="pr-tbl dr-tbl"><thead><tr><th>Site</th><th>Lokasi</th><th>Detail Lokasi</th><th>PJA</th></tr></thead><tbody>${
+            lok.map((x) => `<tr><td>${DR.esc(x.site)}</td><td>${DR.esc(x.lokasi)}</td><td>${DR.esc(x.detail)}</td><td>${DR.esc((x.pja || []).join(', ') || '-')}</td></tr>`).join('')
+          }</tbody></table>`;
+          bukaRingkas('Lokasi & PJA Terkait', html);
+        });
       });
     }).catch((e) => {
       el.querySelectorAll('td[data-hira], td[data-lokasi]').forEach((td) => { td.innerHTML = `<span class="br-red" title="${DR.esc(e.message)}">gagal</span>`; });
