@@ -1219,8 +1219,8 @@
   /** Satu baris PJA (bisa dibuka → komposisi jenis + daftar pelapor). */
   function barisPjaPelapor(g) {
     const tag = (g.tipe ? `<span class="dr-pl-tag">${DR.esc(g.tipe)}</span>` : '')
-      + (g.relasi === 'child' ? `<span class="dr-pl-tag milik" title="Child dari ${DR.esc(g.dari)}">child · ${DR.esc(g.dari)}</span>` : '')
-      + (g.relasi === 'parent' ? `<span class="dr-pl-tag milik" title="Parent dari ${DR.esc(g.dari)}">parent · ${DR.esc(g.dari)}</span>` : '');
+      + (g.relasi === 'child' ? `<span class="dr-pl-tag milik" title="PJA Mitra Kerja dari ${DR.esc(g.dari)}">PJA Mitra Kerja · ${DR.esc(g.dari)}</span>` : '')
+      + (g.relasi === 'parent' ? `<span class="dr-pl-tag milik" title="PJA BC dari ${DR.esc(g.dari)}">PJA BC · ${DR.esc(g.dari)}</span>` : '');
     const masalah = [g.belum_closed && `${DR.fmt(g.belum_closed)} belum closed`, g.oak_stop && `${DR.fmt(g.oak_stop)} OAK Stop`].filter(Boolean).join(' · ') || '<span class="dr-mute">-</span>';
     const isi = `<div class="dr-pl-isi">
         <div>${JENIS_SAP.filter(([k]) => g.jenis[k]).map(([k, t, c]) => `<span class="dr-pl-chip"><i style="--c:${c}"></i>${t} <b>${DR.fmt(g.jenis[k])}</b> <span class="dr-mute">${pctI(g.jenis[k], g.n)}</span></span>`).join('')}</div>
@@ -1245,7 +1245,7 @@
     const norm = (t) => String(t || '').trim().toLowerCase();
     const idMilik = new Set(pemilik.map(([id]) => id));
     const namaMilik = new Map(pemilik.map(([, nama]) => [norm(nama), nama]));
-    // Parent PJA mapping (dari server, ?pemilik=…): id & nama parent → nama PJA mapping anaknya.
+    // PJA BC mapping (dari server, ?pemilik=…): id & nama PJA BC → nama PJA mapping anaknya.
     const indukP = data.induk_pemilik || {};
     const idInduk = new Map(), namaInduk = new Map();
     pemilik.forEach(([id, nama]) => { const x = indukP[id]; if (x && x.id) { idInduk.set(x.id, nama); namaInduk.set(norm(x.nama), nama); } });
@@ -1275,18 +1275,18 @@
       + diam.map(([, nama]) => `<div class="dr-pl-row kosong"><span><b>${DR.esc(nama)}</b></span><span class="r">0</span><span class="r">0</span><span class="dr-mute" style="grid-column:span 3">Tidak ada laporan di detail lokasi ini minggu ini</span></div>`).join('');
     const bagianLuar = LG.length ? `<details class="dr-pl-luar"${nPjaLuar <= 8 ? ' open' : ''}>
         <summary><b>PJA lain yang melaporkan di lokasi ini · ${DR.fmt(nPjaLuar)} PJA${LG.some((g) => g.id === '') ? ' + pelapor non-PJA' : ''}</b>
-          <span class="dr-mute">${DR.fmt(nLuar)} laporan oleh personil PJA yang bukan PJA lokasi ini, bukan child, dan bukan parent-nya</span></summary>
+          <span class="dr-mute">${DR.fmt(nLuar)} laporan oleh personil PJA yang bukan PJA lokasi ini, bukan PJA Mitra Kerja, dan bukan PJA BC-nya</span></summary>
         ${KEPALA_PJA_PELAPOR}${LG.map(barisPjaPelapor).join('')}</details>` : '';
 
     const html = `<div class="dr-pl-wrap">
-        <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA${nCp ? ` + ${DR.fmt(nCp)} PJA child/parent` : ''}</b>
-          <span class="dr-mute">${DR.fmt(nMilik)} laporan oleh personil PJA lokasi ini${nCp ? ' beserta child/parent-nya' : ''}</span>
+        <div class="dr-pl-head"><b>PJA lokasi ini yang melaporkan · ${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA${nCp ? ` + ${DR.fmt(nCp)} PJA Mitra Kerja/BC` : ''}</b>
+          <span class="dr-mute">${DR.fmt(nMilik)} laporan oleh personil PJA lokasi ini${nCp ? ' beserta PJA Mitra Kerja/BC-nya' : ''}</span>
           <span class="dr-pl-leg">${JENIS_SAP.map(([, t, c]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')}</span></div>
         ${pemilik.length ? KEPALA_PJA_PELAPOR + utama : ''}
         ${bagianLuar}
-        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Bagian atas = PJA mapping lokasi ini beserta child-nya (m_pja.id_parent = PJA lokasi) dan parent-nya. Bagian "PJA lain" hanya berisi pelapor di luar itu; pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
+        <p class="dr-mute" style="font-size:12px;margin:6px 0 0">PJA pelapor = penugasan aktif pelapor di master PJA (m_pja_emp). Bagian atas = PJA mapping lokasi ini beserta PJA Mitra Kerja-nya (m_pja.id_parent = PJA lokasi) dan PJA BC-nya. Bagian "PJA lain" hanya berisi pelapor di luar itu; pelapor yang terdaftar di beberapa PJA dihitung di setiap PJA-nya. Klik baris untuk melihat komposisi dan daftar pelapor.</p></div>`;
     // Keputusan user 27 Nov 2026: kartu ringkas (persentase) di baris, detail lengkap (termasuk "PJA lain") di modal.
-    const sub = `${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA melapor${nCp ? ` + ${DR.fmt(nCp)} child/parent` : ''}${nPjaLuar ? ` · ${DR.fmt(nPjaLuar)} PJA lain melapor` : ''}`;
+    const sub = `${DR.fmt(ada.size)} dari ${DR.fmt(pemilik.length)} PJA melapor${nCp ? ` + ${DR.fmt(nCp)} PJA Mitra Kerja/BC` : ''}${nPjaLuar ? ` · ${DR.fmt(nPjaLuar)} PJA lain melapor` : ''}`;
     return { persen: pctI(ada.size, pemilik.length), sub, html };
   }
 

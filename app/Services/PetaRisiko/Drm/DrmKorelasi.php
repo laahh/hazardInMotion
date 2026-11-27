@@ -790,7 +790,7 @@ final class DrmKorelasi
     {
         $kunci = 'p:'.md5($nama);
         $baru = ! isset($this->node[$kunci]);
-        $kunci = $this->simpul($kunci, 'pja', 6, $nama, $nama, 'PJA', ['perusahaan' => $this->perusahaanUntukPja($nama)]);
+        $kunci = $this->simpul($kunci, 'pja', 6, $nama, $nama, 'PJA BC', ['perusahaan' => $this->perusahaanUntukPja($nama)]);
         if ($baru) {
             $anak = $this->anakUntukPja($nama);
             // Filter Perusahaan aktif (lihat $filterPerusahaanAnak): cuma anak yang perusahaan LANGSUNGnya
@@ -813,7 +813,7 @@ final class DrmKorelasi
     /** Leaf, bukan fokus (lihat FOKUS di korelasi.blade.php) — identitas PJA anaknya sendiri, bukan atribut gabungan. */
     private function simpulPjaAnak(string $nama): string
     {
-        return $this->simpul('pa:'.md5($nama), 'pja_anak', 7, $nama, $nama, 'PJA Child');
+        return $this->simpul('pa:'.md5($nama), 'pja_anak', 7, $nama, $nama, 'PJA Mitra Kerja');
     }
 
     /**

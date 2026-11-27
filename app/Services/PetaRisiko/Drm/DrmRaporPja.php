@@ -403,7 +403,7 @@ final class DrmRaporPja
         $grup = [];
         foreach ($daftar as $d) {
             $g = &$grup[$d['grup']];
-            $g ??= ['nama' => $d['grup'] === '' ? (string) ($berkas['info']['nama'] ?? 'PJA utama') : $d['grup'], 'utama' => $d['grup'] === '',
+            $g ??= ['nama' => $d['grup'] === '' ? (string) ($berkas['info']['nama'] ?? 'PJA BC') : $d['grup'], 'utama' => $d['grup'] === '',
                 'n' => 0, 'laporan' => 0, 'aktif7' => 0];
             $g['n']++;
             $g['laporan'] += $d['tot'];

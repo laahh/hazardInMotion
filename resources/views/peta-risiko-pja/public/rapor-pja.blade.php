@@ -70,7 +70,7 @@
       .mini i { display: block; height: 100%; }
       tr.saya td { background: var(--brand-soft); }
       tbody.tutup tr.lebih { display: none; }
-      /* Kelompok personil: PJA utama lalu PJA child (Mitra), judul child bisa diklik untuk membuka personilnya. */
+      /* Kelompok personil: PJA BC lalu PJA Mitra Kerja, judul PJA Mitra Kerja bisa diklik untuk membuka personilnya. */
       tr.grp td { background: #f8fafc; border-bottom: 1px solid var(--line); padding: 0; }
       tr.grp.utama td { background: var(--brand-soft); }
       .grp-btn { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; padding: .6rem .5rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; cursor: pointer; }
@@ -428,7 +428,7 @@
          ['Rata-rata %SAP', p.rataPersen == null ? '–' : p.rataPersen.toLocaleString('id-ID') + '%', fmt(p.capai) + ' dari ' + fmt(p.adaBearc) + ' mencapai 100%'],
          ['Banned SAP', fmt(p.banned), 'minggu BeARC terakhir'],
       ]);
-      // Kelompok: PJA utama (selalu terbuka) → tiap PJA child + personilnya (tertutup, kecuali yang memuat "Anda").
+      // Kelompok: PJA BC (selalu terbuka) → tiap PJA Mitra Kerja + personilnya (tertutup, kecuali yang memuat "Anda").
       var grup = p.grup || [{ nama: '', utama: true }], idxGrup = {}, grupLama = null, html = '';
       grup.forEach(function (g, i) { idxGrup[g.utama ? '' : g.nama] = i; });
       var bukaAwal = {};
@@ -436,7 +436,7 @@
       var judul = function (g, i) {
          var buka = g.utama || !!bukaAwal[i];
          return '<tr class="grp' + (g.utama ? ' utama' : '') + '"><td colspan="6"><button type="button" class="grp-btn" data-g="' + i + '" aria-expanded="' + buka + '"' + (g.utama ? ' disabled' : '') + '>'
-            + '<span class="chip ' + (g.utama ? 'chip-brand' : 'chip-muted') + '">' + (g.utama ? 'PJA utama' : 'PJA child') + '</span><b>' + esc(g.nama) + '</b>'
+            + '<span class="chip ' + (g.utama ? 'chip-brand' : 'chip-muted') + '">' + (g.utama ? 'PJA BC' : 'PJA Mitra Kerja') + '</span><b>' + esc(g.nama) + '</b>'
             + '<em>' + fmt(g.n) + ' personil · ' + fmt(g.laporan) + ' laporan 14 hari · ' + fmt(g.aktif7) + ' aktif 7 hari</em>'
             + (g.utama ? '' : '<span class="material-symbols-outlined">expand_more</span>') + '</button></td></tr>';
       };
@@ -466,7 +466,7 @@
             + '<td class="r" data-label="%SAP BeARC">' + (!b || b.persen == null ? '–' : Math.round(b.persen) + '%') + '</td><td data-label="Target vs realisasi">' + tr + '</td><td data-label="Status">' + status + '</td></tr>';
    }
 
-   /** Buka / tutup personil satu PJA child. */
+   /** Buka / tutup personil satu PJA Mitra Kerja. */
    function bukaGrup(gi, buka) {
       var tb = $('ps-tbl'), btn = tb.querySelector('.grp-btn[data-g="' + gi + '"]');
       if (!btn || btn.disabled) return;
@@ -476,8 +476,8 @@
    function teksSemuaChild() {
       var btn = $('ps-lihat'), semuaBuka = ![].some.call($('ps-tbl').querySelectorAll('.grp-btn:not([disabled])'), function (b) { return b.getAttribute('aria-expanded') !== 'true'; });
       btn.setAttribute('aria-expanded', String(semuaBuka));
-      btn.innerHTML = semuaBuka ? '<span class="material-symbols-outlined">expand_less</span> Tutup semua PJA child'
-         : '<span class="material-symbols-outlined">expand_more</span> Buka semua ' + fmt(+btn.dataset.nChild) + ' PJA child';
+      btn.innerHTML = semuaBuka ? '<span class="material-symbols-outlined">expand_less</span> Tutup semua PJA Mitra Kerja'
+         : '<span class="material-symbols-outlined">expand_more</span> Buka semua ' + fmt(+btn.dataset.nChild) + ' PJA Mitra Kerja';
    }
 
    function temuan(t) {

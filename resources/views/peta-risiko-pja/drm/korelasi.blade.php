@@ -116,7 +116,7 @@
       <summary><span id="al-kol-label">Semua kolom</span> <span class="material-symbols-outlined">expand_more</span></summary>
       <div class="al-dd-panel"><div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div></div>
     </details>
-    @php $kategoriTandai = ['aktivitas' => 'Aktivitas HIRA', 'sub' => 'Sub Aktivitas', 'grup' => 'Grup Lokasi', 'dl' => 'Detail Lokasi', 'pja' => 'PJA', 'pja_anak' => 'PJA Child']; @endphp
+    @php $kategoriTandai = ['aktivitas' => 'Aktivitas HIRA', 'sub' => 'Sub Aktivitas', 'grup' => 'Grup Lokasi', 'dl' => 'Detail Lokasi', 'pja' => 'PJA', 'pja_anak' => 'PJA Mitra Kerja']; @endphp
     @foreach ($kategoriTandai as $jenis => $nama)
       <details class="al-dd" id="al-tandai-dd-{{ $jenis }}">
         <summary><span id="al-tandai-label-{{ $jenis }}">{{ $nama }}</span> <span class="material-symbols-outlined">expand_more</span></summary>
@@ -181,11 +181,11 @@
   const KOLOM = {
     aktivitas: ['Aktivitas HIRA', '#16a34a'], sub: ['Sub aktivitas', '#65a30d'], bahaya: ['Bahaya-risiko', '#dc2626'],
     label: ['Label SAP', '#db2777'], grup: ['Grup lokasi', '#2563eb'], dl: ['Detail lokasi', '#60a5fa'], pja: ['PJA', '#0891b2'],
-    pja_anak: ['PJA Child', '#0e7490'],
+    pja_anak: ['PJA Mitra Kerja', '#0e7490'],
   };
   const JENIS_KOLOM = { aktivitas: 'aktivitas', sub: 'sub', bahaya: 'bahaya', obs: 'label', oak: 'label', ket: 'label', grup: 'grup', dl: 'dl', pja: 'pja', pja_anak: 'pja_anak', kelompok: 'aktivitas' };
   const WARNA_LABEL = { obs: '#db2777', oak: '#0284c7', ket: '#f59e0b' };
-  const NAMA_JENIS = { aktivitas: 'Aktivitas HIRA', sub: 'Sub aktivitas', bahaya: 'Bahaya-risiko', obs: 'Label Observasi', oak: 'Label OAK', ket: 'Label Ketidaksesuaian', grup: 'Grup lokasi', dl: 'Detail lokasi', pja: 'PJA', pja_anak: 'PJA Child', kelompok: 'Kelompok aktivitas' };
+  const NAMA_JENIS = { aktivitas: 'Aktivitas HIRA', sub: 'Sub aktivitas', bahaya: 'Bahaya-risiko', obs: 'Label Observasi', oak: 'Label OAK', ket: 'Label Ketidaksesuaian', grup: 'Grup lokasi', dl: 'Detail lokasi', pja: 'PJA', pja_anak: 'PJA Mitra Kerja', kelompok: 'Kelompok aktivitas' };
   const LV = { Significant: '#b91c1c', High: '#ea580c', Medium: '#ca8a04', Low: '#15803d' };
   const STATUS = { K: ['#16a34a', 'Terkontrol'], G: ['#d97706', 'Ada gap'], T: ['#9ca3af', 'Tidak teridentifikasi'] };
   const FOKUS = ['aktivitas', 'bahaya', 'obs', 'oak', 'ket', 'grup', 'dl', 'pja', 'kelompok'];
@@ -227,7 +227,7 @@
   // utuh untuk menyorot (kelas al-ditandai di gambar()) node yang persis dicentang user, supaya beda kelihatan
   // dari node lain yang cuma ikut terbawa relasinya.
   const KUNCI_KIRIM_TANDAI = { aktivitas: 'aktivitas', sub: 'aktivitas', grup: 'grup', dl: 'dl', pja: 'pja', pja_anak: 'pja' };
-  const NAMA_TANDAI = { aktivitas: 'Aktivitas HIRA', sub: 'Sub Aktivitas', grup: 'Grup Lokasi', dl: 'Detail Lokasi', pja: 'PJA', pja_anak: 'PJA Child' };
+  const NAMA_TANDAI = { aktivitas: 'Aktivitas HIRA', sub: 'Sub Aktivitas', grup: 'Grup Lokasi', dl: 'Detail Lokasi', pja: 'PJA', pja_anak: 'PJA Mitra Kerja' };
   const tandaiLabel = Object.fromEntries(KOLOM_BISA_DISEMBUNYIKAN.map((k) => [k, new Set()]));
   let fokusSebelumTandai = null;
 

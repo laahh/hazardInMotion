@@ -5,7 +5,7 @@
 @section('hero')
   <p class="pr-kicker"><span>Dashboard</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span>Peta Risiko PJA</span><span class="material-symbols-outlined tp-crumb-sep">chevron_right</span><span class="tp-kini">Lokasi &amp; PIC</span></p>
   <h1 class="pr-title">Lokasi &rarr; PJA &rarr; PIC Perusahaan</h1>
-  <p class="pr-sub">Satu baris = satu Detail Lokasi. PJA &amp; PIC Perusahaan melekat di level lokasi (site + lokasi) lalu diwariskan ke semua detlok-nya — PJA dari <code>drm_master_lokasi_pja</code>, PIC Perusahaan dari personil PJA Child-nya saja (<code>drm_master_lokasi_pic</code>), bukan dari PJA induk. Halaman ini murni untuk dilihat.</p>
+  <p class="pr-sub">Satu baris = satu Detail Lokasi. PJA &amp; PIC Perusahaan melekat di level lokasi (site + lokasi) lalu diwariskan ke semua detlok-nya — PJA dari <code>drm_master_lokasi_pja</code>, PIC Perusahaan dari personil PJA Mitra Kerja-nya saja (<code>drm_master_lokasi_pic</code>), bukan dari PJA BC. Halaman ini murni untuk dilihat.</p>
 @endsection
 
 @section('content')
