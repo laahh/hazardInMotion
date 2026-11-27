@@ -30,9 +30,6 @@
   .al-kol { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
   .al-kol label { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; cursor: pointer; }
   .al-kol label:hover { background: #f1f4fb; }
-  .al-lompat { display: flex; flex-direction: column; gap: 8px; min-width: 260px; }
-  .al-lompat label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 700; color: #595c5e; text-transform: uppercase; letter-spacing: .03em; }
-  .al-lompat select { width: 100%; max-width: none; }
   .al-kol input { accent-color: #3952bc; }
   .al-jejak { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; font-size: 12.5px; color: #8a8d90; }
   .al-jejak button { border: 1px solid rgba(171, 173, 175, .45); background: #fff; border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -114,43 +111,30 @@
       <summary><span id="al-kol-label">Semua kolom</span> <span class="material-symbols-outlined">expand_more</span></summary>
       <div class="al-dd-panel"><div class="al-kol" id="al-kol" aria-label="Kolom yang ditampilkan"></div></div>
     </details>
-    <details class="al-dd" id="al-lompat-dd">
-      <summary>Lompat ke <span class="material-symbols-outlined">expand_more</span></summary>
-      <div class="al-dd-panel">
-        <div class="al-lompat">
-          <label>Aktivitas HIRA
-            <select id="al-lompat-aktivitas"><option value="">Pilih…</option>
-              @foreach ($dropdown['aktivitas'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-            </select>
-          </label>
-          <label>Sub Aktivitas
-            <select id="al-lompat-sub"><option value="">Pilih…</option>
-              @foreach ($dropdown['sub'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-            </select>
-          </label>
-          <label>Grup Lokasi
-            <select id="al-lompat-grup"><option value="">Pilih…</option>
-              @foreach ($dropdown['grup'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-            </select>
-          </label>
-          <label>Detail Lokasi
-            <select id="al-lompat-dl"><option value="">Pilih…</option>
-              @foreach ($dropdown['dl'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-            </select>
-          </label>
-          <label>PJA
-            <select id="al-lompat-pja"><option value="">Pilih…</option>
-              @foreach ($dropdown['pja'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-            </select>
-          </label>
-          <label>PJA Child
-            <select id="al-lompat-pja_anak"><option value="">Pilih…</option>
-              @foreach ($dropdown['pja_anak'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
-            </select>
-          </label>
-        </div>
-      </div>
-    </details>
+    <select id="al-lompat-aktivitas" aria-label="Lompat ke Aktivitas HIRA" title="Pindah fokus alur langsung ke Aktivitas HIRA ini">
+      <option value="">Aktivitas HIRA</option>
+      @foreach ($dropdown['aktivitas'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+    </select>
+    <select id="al-lompat-sub" aria-label="Lompat ke Sub Aktivitas" title="Pindah fokus alur ke Aktivitas HIRA induk Sub Aktivitas ini">
+      <option value="">Sub Aktivitas</option>
+      @foreach ($dropdown['sub'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+    </select>
+    <select id="al-lompat-grup" aria-label="Lompat ke Grup Lokasi" title="Pindah fokus alur langsung ke Grup Lokasi ini">
+      <option value="">Grup Lokasi</option>
+      @foreach ($dropdown['grup'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+    </select>
+    <select id="al-lompat-dl" aria-label="Lompat ke Detail Lokasi" title="Pindah fokus alur langsung ke Detail Lokasi ini">
+      <option value="">Detail Lokasi</option>
+      @foreach ($dropdown['dl'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+    </select>
+    <select id="al-lompat-pja" aria-label="Lompat ke PJA" title="Pindah fokus alur langsung ke PJA ini">
+      <option value="">PJA</option>
+      @foreach ($dropdown['pja'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+    </select>
+    <select id="al-lompat-pja_anak" aria-label="Lompat ke PJA Child" title="Pindah fokus alur ke PJA induk PJA Child ini">
+      <option value="">PJA Child</option>
+      @foreach ($dropdown['pja_anak'] ?? [] as $o)<option value="{{ $o['id'] }}">{{ $o['label'] }}</option>@endforeach
+    </select>
     <select id="al-f-site" aria-label="Site" title="Tampilkan SEMUA aktivitas yang terhubung ke site ini (mengganti alur yang sedang dibuka, bukan menyaring)">
       <option value="">Semua site</option>
       @foreach ($site as $st)
@@ -235,14 +219,11 @@
   }
   $('al-kol').querySelectorAll('input').forEach((c) => c.addEventListener('change', () => { tampilKolom[c.dataset.kol] = c.checked; perbaruiLabelKolom(); gambar(); }));
   perbaruiLabelKolom();
-  // Tutup dropdown saat klik di luar panelnya (pola sama dengan al-hasil pencarian).
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false;
-    if (!e.target.closest('#al-lompat-dd')) $('al-lompat-dd').open = false;
-  });
+  // Tutup dropdown Kolom saat klik di luar panelnya (pola sama dengan al-hasil pencarian).
+  document.addEventListener('click', (e) => { if (!e.target.closest('#al-kol-dd')) $('al-kol-dd').open = false; });
 
-  // "Lompat ke" (keputusan user 27 Nov 2026): pilih satu nilai langsung pindah fokus, seperti dropdown Site —
-  // BUKAN filter yang menempel (dikembalikan ke "Pilih…" setelah lompat, bukan tetap terpilih).
+  // Dropdown "Lompat ke" per kategori (keputusan user 27 Nov 2026): pilih satu nilai langsung pindah fokus,
+  // seperti dropdown Site — BUKAN filter yang menempel (dikembalikan ke opsi label-nya lagi setelah lompat).
   [['al-lompat-aktivitas', 'aktivitas'], ['al-lompat-sub', 'aktivitas'], ['al-lompat-grup', 'grup'],
     ['al-lompat-dl', 'dl'], ['al-lompat-pja', 'pja'], ['al-lompat-pja_anak', 'pja']].forEach(([elId, jenis]) => {
     $(elId).addEventListener('change', (e) => {
@@ -250,7 +231,6 @@
       if (value === '') return;
       const label = e.target.selectedOptions[0].textContent;
       e.target.value = '';
-      $('al-lompat-dd').open = false;
       muat(jenis, value, label);
     });
   });
