@@ -64,11 +64,11 @@ final class PetaRisikoMasterBarisController extends Controller
         $sitePer = $unggah->sitePerBaris($hira);
         // Perusahaan = nama perusahaan personil PJA di lokasi tempat grup baris itu punya detail lokasi (M07/M08 + personil).
         $pjaPer = $unggah->perusahaanPerBaris();
-        // Flag IKK: Item Sumber OAK baris ini cocok daftar drm_master_ikk (lihat DrmMasterBarisUnggah::ikkPerBaris()).
+        // Flag IKK: aktivitas HIRA baris ini terkurasi (drm_master_oak_aktivitas) ke daftar drm_master_ikk
+        // (lihat DrmMasterBarisUnggah::ikkPerBaris()).
         $ikkInput = [];
         foreach ($baris as $b) {
-            $ikkInput[(int) $b->ri] = ['aktivitas' => (string) $b->aktivitas, 'sub' => (string) ($b->sub ?? ''), 'bahaya' => (string) $b->bahaya,
-                'OAK' => array_column($label[(int) $b->ri]['OAK'] ?? [], 'label')];
+            $ikkInput[(int) $b->ri] = ['aktivitas' => (string) $b->aktivitas, 'sub' => (string) ($b->sub ?? ''), 'bahaya' => (string) $b->bahaya];
         }
         $ikkPer = $unggah->ikkPerBaris($ikkInput);
         $rows = array_map(fn ($b) => [
