@@ -1066,9 +1066,7 @@
       : `<table class="pr-tbl dr-tbl" style="margin-bottom:4px"><thead><tr><th>Site</th><th>Lokasi</th><th>PJA</th></tr></thead><tbody>${
           lok.slice(0, MAKS_LOKASI).map((x) => `<tr><td>${DR.esc(x.site)}</td><td>${DR.esc(x.lokasi)}</td><td>${DR.esc((x.pja || []).join(', ') || '-')}</td></tr>`).join('')
         }</tbody></table>${lok.length > MAKS_LOKASI ? `<p class="dr-mute" style="margin:0 0 12px">+${DR.fmt(lok.length - MAKS_LOKASI)} lokasi lainnya</p>` : '<div style="margin-bottom:12px"></div>'}`;
-    isi.innerHTML = `<p style="margin:0 0 6px;font-weight:700;font-size:13px">Lokasi &amp; PJA Terkait <small class="dr-mute" style="font-weight:400">(master DRM 2.1, bukan dari dokumen HIRA)</small></p>${lokasiHtml}
-      <p style="margin:0 0 6px;font-weight:700;font-size:13px">Dokumen HIRA</p>`
-      + (L.map((x) => `<div class="dr-hira-dok">
+    const dokumenHtml = L.map((x) => `<div class="dr-hira-dok">
         <div class="dr-hira-dok-k"><b>HIRA ${DR.esc(x.idh)}</b>${x.ada ? ` · rev ${DR.esc(x.rev)}` : ''}
           ${x.cocok ? '<span class="dr-pl-tag milik">memuat bahaya ini</span>' : x.kosong ? '<span class="dr-pl-tag" style="background:#fff4e5;color:#9a5b00">dokumen kosong</span>' : x.ada ? '<span class="dr-pl-tag">tidak memuat teks bahaya ini</span>' : ''}
           ${x.ada ? (x.aktif ? '<span class="dr-pl-tag">aktif</span>' : '<span class="dr-pl-tag" style="background:#fdecea;color:#b42318">tidak aktif</span>') : ''}</div>
@@ -1078,7 +1076,10 @@
           ${baris('Aktivitas · sub', DR.esc([x.aktivitas, x.sub].filter(Boolean).join(' · ')))}${baris('Site (dokumen HIRA)', DR.esc((x.site || []).join(', ')))}
           ${baris('Bagian', DR.esc(x.bagian))}${baris('Perusahaan', DR.esc(x.perusahaan))}${baris('Klasifikasi', DR.esc(x.rutin))}${baris('Diperbarui', DR.esc(x.diperbarui))}
         </tbody></table>` : '<p class="dr-mute">ID ini tercatat di master baseline tetapi tidak ditemukan di HIRA (hira_master maupun mv_hira_master).</p>'}</div>`).join('')
-      || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>');
+      || '<p class="dr-mute">Baris baseline ini tidak punya id_hira_master di master.</p>';
+    // Dokumen HIRA DULUAN (koreksi user 27 Nov 2026), baru Lokasi & PJA Terkait di bawahnya.
+    isi.innerHTML = `<p style="margin:0 0 6px;font-weight:700;font-size:13px">Dokumen HIRA</p>${dokumenHtml}
+      <p style="margin:14px 0 6px;font-weight:700;font-size:13px">Lokasi &amp; PJA Terkait <small class="dr-mute" style="font-weight:400">(master DRM 2.1, bukan dari dokumen HIRA)</small></p>${lokasiHtml}`;
     if (!d.open) d.showModal();
   }
 
