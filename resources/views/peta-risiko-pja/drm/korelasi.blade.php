@@ -123,8 +123,8 @@
         <div class="al-dd-panel">
           <input type="search" class="al-tandai-cari" placeholder="Cari {{ $nama }}…" autocomplete="off">
           <div class="al-kol al-tandai-opsi" id="al-tandai-opsi-{{ $jenis }}" data-jenis="{{ $jenis }}" aria-label="Tandai {{ $nama }}">
-            @foreach ($dropdown[$jenis] ?? [] as $v)
-              <label><input type="checkbox" value="{{ $v }}"><span>{{ $v }}</span></label>
+            @foreach ($dropdown[$jenis] ?? [] as $o)
+              <label><input type="checkbox" value="{{ $o['id'] }}" data-label="{{ $o['label'] }}"><span>{{ $o['label'] }}</span></label>
             @endforeach
           </div>
         </div>
@@ -219,20 +219,49 @@
     document.addEventListener('click', (e) => { if (!e.target.closest(`#${dd.id}`)) dd.open = false; });
   });
 
-  // Dropdown multi-select "Tandai" per kategori (keputusan user 27 Nov 2026): centang satu atau lebih nilai —
-  // alur() cuma punya satu fokus, jadi ini TIDAK pindah fokus. Node yang labelnya cocok di alur yang SEDANG
-  // terbuka disorot (lihat gambar(): kelas al-ditandai), sisanya tidak berubah. Jalan di alur manapun yang lagi
-  // dibuka — kalau user pindah fokus lain, tanda yang cocok otomatis muncul lagi di situ kalau ada.
-  const tandai = Object.fromEntries(KOLOM_BISA_DISEMBUNYIKAN.map((k) => [k, new Set()]));
-  Object.keys(tandai).forEach((jenis) => {
+  // Dropdown multi-select "Tandai" per kategori (keputusan user 27 Nov 2026, dikoreksi dari percobaan pertama
+  // yang cuma menyorot node yang kebetulan sudah tampil — centang beberapa nilai sekaligus harus benar-benar
+  // MENGGABUNGKAN pohon relasi semuanya ke satu kanvas, lihat DrmKorelasi::dariMulti). Sub Aktivitas & PJA Child
+  // dipetakan ke 'aktivitas'/'pja' saat dikirim ke server (value checkbox-nya sudah id PARENT, lihat
+  // daftarDropdown) karena keduanya tidak punya pembangun pohon sendiri. Label ASLI (data-label) tetap dipakai
+  // utuh untuk menyorot (kelas al-ditandai di gambar()) node yang persis dicentang user, supaya beda kelihatan
+  // dari node lain yang cuma ikut terbawa relasinya.
+  const KUNCI_KIRIM_TANDAI = { aktivitas: 'aktivitas', sub: 'aktivitas', grup: 'grup', dl: 'dl', pja: 'pja', pja_anak: 'pja' };
+  const NAMA_TANDAI = { aktivitas: 'Aktivitas HIRA', sub: 'Sub Aktivitas', grup: 'Grup Lokasi', dl: 'Detail Lokasi', pja: 'PJA', pja_anak: 'PJA Child' };
+  const tandaiLabel = Object.fromEntries(KOLOM_BISA_DISEMBUNYIKAN.map((k) => [k, new Set()]));
+  let fokusSebelumTandai = null;
+
+  function terapkanTandai() {
+    const payload = { aktivitas: [], grup: [], dl: [], pja: [] };
+    let total = 0;
+    KOLOM_BISA_DISEMBUNYIKAN.forEach((jenis) => {
+      document.querySelectorAll(`#al-tandai-opsi-${jenis} input:checked`).forEach((c) => {
+        payload[KUNCI_KIRIM_TANDAI[jenis]].push(c.value);
+        total++;
+      });
+    });
+    if (total === 0) {
+      const f = fokusSebelumTandai;
+      fokusSebelumTandai = null;
+      if (f) muat(f.jenis, f.id, f.label);
+
+      return;
+    }
+    if (!fokusSebelumTandai) {
+      const terakhir = jejak[jejak.length - 1];
+      fokusSebelumTandai = terakhir && terakhir.jenis !== 'multi' ? terakhir : (AWAL || { jenis: 'aktivitas', id: '0' });
+    }
+    muat('multi', JSON.stringify(payload), `${total} ditandai`);
+  }
+
+  KOLOM_BISA_DISEMBUNYIKAN.forEach((jenis) => {
     const panel = document.getElementById(`al-tandai-opsi-${jenis}`);
     if (!panel) return;
     panel.querySelectorAll('input[type="checkbox"]').forEach((c) => c.addEventListener('change', () => {
-      if (c.checked) tandai[jenis].add(c.value); else tandai[jenis].delete(c.value);
-      const n = tandai[jenis].size;
-      const dasar = { aktivitas: 'Aktivitas HIRA', sub: 'Sub Aktivitas', grup: 'Grup Lokasi', dl: 'Detail Lokasi', pja: 'PJA', pja_anak: 'PJA Child' }[jenis];
-      $(`al-tandai-label-${jenis}`).textContent = n ? `${dasar} (${n})` : dasar;
-      gambar();
+      if (c.checked) tandaiLabel[jenis].add(c.dataset.label); else tandaiLabel[jenis].delete(c.dataset.label);
+      const n = tandaiLabel[jenis].size;
+      $(`al-tandai-label-${jenis}`).textContent = n ? `${NAMA_TANDAI[jenis]} (${n})` : NAMA_TANDAI[jenis];
+      terapkanTandai();
     }));
   });
   // Cari di dalam satu panel tandai: sembunyikan label yang tidak cocok (bukan hapus, biar centang tidak hilang).
@@ -369,7 +398,7 @@
 
     const maksHuruf = Math.max(14, Math.floor((BW - 26) / 6.6));
     Object.values(posisi).forEach(({ x, y, n }) => {
-      const ditandai = tandai[n.jenis] && tandai[n.jenis].has(n.label);
+      const ditandai = tandaiLabel[n.jenis] && tandaiLabel[n.jenis].has(n.label);
       const g = el('g', { class: 'al-n' + (n.pusat ? ' pusat' : '') + (ditandai ? ' al-ditandai' : ''), transform: `translate(${x},${y})`, tabindex: '0', role: 'button', 'data-key': n.key,
         'aria-label': `${NAMA_JENIS[n.jenis] || n.jenis}: ${n.label}` }, svg);
       el('title', {}, g).textContent = `${NAMA_JENIS[n.jenis] || n.jenis}: ${n.label}\n${n.sub}${STATUS[n.status] ? '\nStatus SAP: ' + STATUS[n.status][1] : ''}`;
@@ -508,12 +537,22 @@
         fSite.value = s || '';
         fPja.value = p || '';
       }
+      // Dropdown "Tandai" direset kalau alur yang dimuat BUKAN hasil gabungannya sendiri (navigasi biasa) —
+      // sama alasannya dengan reset Site/Perusahaan di atas.
+      if (jenis !== 'multi') {
+        KOLOM_BISA_DISEMBUNYIKAN.forEach((j) => {
+          tandaiLabel[j].clear();
+          document.querySelectorAll(`#al-tandai-opsi-${j} input:checked`).forEach((c) => { c.checked = false; });
+          $(`al-tandai-label-${j}`).textContent = NAMA_TANDAI[j];
+        });
+        fokusSebelumTandai = null;
+      }
       perbaruiHrefUnduh();
       const pusat = d.node.find((n) => n.key === d.pusat);
       const i = jejak.findIndex((x) => x.jenis === jenis && x.id === id);
-      // site_perusahaan: pusat cuma aktivitas pertama yang kebetulan ketemu, bukan representasi fokusnya —
-      // jejak pakai label "Site .../Perusahaan ..." yang dikirim terapkanFilterSitePerusahaan(), bukan pusat.label.
-      const labelJejak = jenis === 'site_perusahaan' ? (label || id) : (pusat ? pusat.label : (label || id));
+      // site_perusahaan & multi: pusat cuma item pertama yang kebetulan ketemu, bukan representasi fokusnya —
+      // jejak pakai label yang dikirim pemanggilnya (terapkanFilterSitePerusahaan() / terapkanTandai()), bukan pusat.label.
+      const labelJejak = jenis === 'site_perusahaan' || jenis === 'multi' ? (label || id) : (pusat ? pusat.label : (label || id));
       jejak = i >= 0 ? jejak.slice(0, i + 1) : [...jejak, { jenis, id, label: labelJejak }].slice(-8);
       gambarJejak();
       gambar();

@@ -242,17 +242,47 @@ class DrmKorelasiTest extends TestCase
      * Dropdown "Lompat ke" toolbar (keputusan user 27 Nov 2026): Sub Aktivitas & PJA Child tidak punya fokus
      * sendiri di alur() (lihat JENIS), jadi id-nya sengaja id PARENT-nya (aid / nama PJA induk).
      */
-    /** Dropdown multi-select "Tandai" toolbar (keputusan user 27 Nov 2026): daftar teks unik per kategori. */
+    /** Dropdown multi-select "Tandai" toolbar (keputusan user 27 Nov 2026): daftar id+label per kategori. */
     public function test_daftar_dropdown_untuk_tandai_multi_select(): void
     {
         $d = app(DrmKorelasi::class)->daftarDropdown();
 
-        $this->assertSame(['Fixed plant', 'Perawatan unit'], $d['aktivitas']);
-        $this->assertSame(['CPP / ROM', 'Workshop/Pit Stop'], $d['grup']);
-        $this->assertSame(['ROM 1', 'WS 1'], $d['dl']);
-        $this->assertSame(['PJA ROM LMO', 'PJA Workshop'], $d['pja']);
-        $this->assertSame(['Fixed plant', 'Ganti ban', 'Servis roller'], $d['sub']);
-        $this->assertSame(['PJA Mitra A', 'PJA Mitra B'], $d['pja_anak']);
+        $this->assertSame([['id' => '2', 'label' => 'Fixed plant'], ['id' => '1', 'label' => 'Perawatan unit']], $d['aktivitas']);
+        $this->assertSame([['id' => '3', 'label' => 'CPP / ROM'], ['id' => '20', 'label' => 'Workshop/Pit Stop']], $d['grup']);
+        $this->assertSame('BMO 1 · Workshop · WS 1', $d['dl'][0]['label']);
+        $this->assertSame(['PJA ROM LMO', 'PJA Workshop'], array_column($d['pja'], 'label'));
+        $this->assertSame([['id' => '2', 'label' => 'Fixed plant'], ['id' => '1', 'label' => 'Ganti ban'], ['id' => '1', 'label' => 'Servis roller']], $d['sub']);
+        $this->assertSame([['id' => 'PJA Workshop', 'label' => 'PJA Mitra A'], ['id' => 'PJA Workshop', 'label' => 'PJA Mitra B']], $d['pja_anak']);
+    }
+
+    /**
+     * Centang beberapa nilai sekaligus di dropdown "Tandai" (koreksi user 27 Nov 2026, setelah percobaan
+     * sorot-saja tidak menampilkan relasi yang belum ada di alur yang sedang terbuka): hasilnya GABUNGAN pohon
+     * relasi semua yang dicentang dalam SATU kanvas, lintas kategori sekaligus — bukan cuma yang pertama.
+     */
+    public function test_alur_multi_menggabungkan_beberapa_kategori_sekaligus(): void
+    {
+        $svc = app(DrmKorelasi::class);
+
+        $r = $svc->alur('multi', json_encode(['aktivitas' => ['1', '2']]));
+        $node = collect($r['node']);
+        // Kedua aktivitas (bukan cuma yang pertama) harus ikut, dengan seluruh rantainya masing-masing.
+        $this->assertTrue($node->contains('key', 'a:1'));
+        $this->assertTrue($node->contains('key', 'a:2'));
+        $this->assertTrue($node->contains('key', 'g:20'));
+        $this->assertTrue($node->contains('key', 'g:3'));
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA Workshop'));
+        $this->assertTrue($node->contains(fn ($n) => $n['jenis'] === 'pja' && $n['label'] === 'PJA ROM LMO'));
+
+        // Lintas kategori: aktivitas 1 + grup 3 (punya PJA ROM LMO) digabung dalam satu panggilan juga.
+        $r2 = $svc->alur('multi', json_encode(['aktivitas' => ['1'], 'grup' => ['3']]));
+        $node2 = collect($r2['node']);
+        $this->assertTrue($node2->contains('key', 'a:1'));
+        $this->assertTrue($node2->contains('key', 'g:3'));
+
+        // Kosong semua kategori (tidak ada yang dicentang) = tidak ketemu simpul mana pun.
+        $this->expectException(InvalidArgumentException::class);
+        $svc->alur('multi', json_encode([]));
     }
 
     public function test_cari_pusat_bawaan_dan_simpul_tidak_dikenal(): void

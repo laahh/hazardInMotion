@@ -19,7 +19,7 @@ use Throwable;
  */
 final class DrmKorelasi
 {
-    public const JENIS = ['grup', 'dl', 'pja', 'kelompok', 'aktivitas', 'bahaya', 'obs', 'oak', 'ket', 'site_perusahaan'];
+    public const JENIS = ['grup', 'dl', 'pja', 'kelompok', 'aktivitas', 'bahaya', 'obs', 'oak', 'ket', 'site_perusahaan', 'multi'];
 
     /** Pemisah site/perusahaan di parameter id milik jenis site_perusahaan (lihat dariSitePerusahaan). */
     private const PEMISAH_SITE_PERUSAHAAN = '||';
@@ -105,6 +105,7 @@ final class DrmKorelasi
             'dl' => $this->dariDl((int) $id),
             'pja' => $this->dariPja($id),
             'site_perusahaan' => $this->dariSitePerusahaan($id),
+            'multi' => $this->dariMulti(is_array($dekode = json_decode($id, true)) ? $dekode : []),
             default => $this->dariLabel(self::LABEL_JENIS[$jenis], $id),
         };
         if ($pusat === null) {
@@ -249,45 +250,55 @@ final class DrmKorelasi
     }
 
     /**
-     * Daftar nilai UNIK per kategori untuk dropdown multi-select "Tandai" di toolbar (keputusan user 27 Nov
-     * 2026) — beda dari cari() yang cocok substring sambil mengetik: ini daftar LENGKAP, dicentang langsung.
-     * Nilai yang dicentang dipakai di FRONTEND untuk menyorot node yang labelnya cocok di alur yang SEDANG
-     * terbuka (bukan pindah fokus) — alur() cuma punya satu pusat, tidak bisa "lompat" ke banyak node sekaligus
-     * kalau lebih dari satu dicentang. Dicocokkan persis dengan field `label` tiap jenis simpul (lihat simpul()).
+     * Daftar nilai untuk dropdown multi-select "Tandai" di toolbar (keputusan user 27 Nov 2026): centang satu
+     * atau lebih nilai per kategori, lalu diagram menampilkan GABUNGAN relasi semua yang dicentang (lintas
+     * kategori sekaligus) dalam satu kanvas — lihat dariMulti(). `id` di sini adalah id yang dipakai dariMulti()
+     * untuk membangun pohonnya (aid untuk aktivitas, gid untuk grup, id baris drm_master_dl untuk dl, nama_pja
+     * untuk pja); Sub Aktivitas & PJA Child TIDAK punya pembangun pohon sendiri (lihat JENIS), jadi id-nya
+     * sengaja id PARENT-nya (aid induk / nama PJA induk) — mencentangnya ikut menarik SELURUH pohon induknya,
+     * bukan cuma baris sub/anak itu sendiri.
      *
-     * @return array{aktivitas: list<string>, sub: list<string>, grup: list<string>, dl: list<string>, pja: list<string>, pja_anak: list<string>}
+     * @return array{aktivitas: list<array{id: string, label: string}>, sub: list<array{id: string, label: string}>, grup: list<array{id: string, label: string}>, dl: list<array{id: string, label: string}>, pja: list<array{id: string, label: string}>, pja_anak: list<array{id: string, label: string}>}
      */
     public function daftarDropdown(): array
     {
-        $unikUrut = function (iterable $teks): array {
-            $hasil = [];
-            foreach ($teks as $t) {
-                $t = trim((string) $t);
-                if ($t !== '') {
-                    $hasil[$t] = true;
-                }
-            }
-            $daftar = array_keys($hasil);
-            sort($daftar, SORT_NATURAL | SORT_FLAG_CASE);
+        $aktivitas = DB::table('drm_master_aktivitas')->orderBy('aktivitas')->get(['aid', 'aktivitas'])
+            ->map(fn ($r) => ['id' => (string) $r->aid, 'label' => (string) $r->aktivitas])->all();
+        $grup = DB::table('drm_master_grup')->where('aktif', true)->orderBy('nama')->get(['gid', 'nama'])
+            ->map(fn ($r) => ['id' => (string) $r->gid, 'label' => (string) $r->nama])->all();
+        $dl = DB::table('drm_master_dl')->where('aktif', true)->orderBy('site')->orderBy('lokasi')->orderBy('detail')->get(['id', 'site', 'lokasi', 'detail'])
+            ->map(fn ($r) => ['id' => (string) $r->id, 'label' => $r->site.' · '.$r->lokasi.' · '.$r->detail])->all();
+        $pja = DB::table('drm_master_lokasi_pja')->where('aktif', true)->distinct()->orderBy('nama_pja')->pluck('nama_pja')
+            ->map(fn ($n) => ['id' => (string) $n, 'label' => (string) $n])->values()->all();
 
-            return $daftar;
-        };
+        $sub = [];
+        $subUnik = [];
+        foreach (DB::table('drm_master_baris')->where('aktif', true)->get(['aid', 'sub']) as $b) {
+            $teks = trim((string) $b->sub);
+            $k = mb_strtolower($teks);
+            if ($teks === '' || isset($subUnik[$k])) {
+                continue;
+            }
+            $subUnik[$k] = true;
+            $sub[] = ['id' => (string) $b->aid, 'label' => $teks];
+        }
+        usort($sub, fn ($a, $b) => strcmp($a['label'], $b['label']));
 
         $pjaAnak = [];
-        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->pluck('pja_anak') as $isi) {
-            foreach (DrmMasterDb::pisahLabel($isi ?? '') as $nama) {
-                $pjaAnak[] = $nama;
+        $anakUnik = [];
+        foreach (DB::table('drm_master_lokasi_pja')->where('aktif', true)->get(['nama_pja', 'pja_anak']) as $p) {
+            foreach (DrmMasterDb::pisahLabel($p->pja_anak ?? '') as $nama) {
+                $k = mb_strtolower($nama);
+                if (isset($anakUnik[$k])) {
+                    continue;
+                }
+                $anakUnik[$k] = true;
+                $pjaAnak[] = ['id' => (string) $p->nama_pja, 'label' => $nama];
             }
         }
+        usort($pjaAnak, fn ($a, $b) => strcmp($a['label'], $b['label']));
 
-        return [
-            'aktivitas' => $unikUrut(DB::table('drm_master_aktivitas')->pluck('aktivitas')),
-            'sub' => $unikUrut(DB::table('drm_master_baris')->where('aktif', true)->pluck('sub')),
-            'grup' => $unikUrut(DB::table('drm_master_grup')->where('aktif', true)->pluck('nama')),
-            'dl' => $unikUrut(DB::table('drm_master_dl')->where('aktif', true)->pluck('detail')),
-            'pja' => $unikUrut(DB::table('drm_master_lokasi_pja')->where('aktif', true)->pluck('nama_pja')),
-            'pja_anak' => $unikUrut($pjaAnak),
-        ];
+        return ['aktivitas' => $aktivitas, 'grup' => $grup, 'dl' => $dl, 'pja' => $pja, 'sub' => $sub, 'pja_anak' => $pjaAnak];
     }
 
     /**
@@ -447,6 +458,43 @@ final class DrmKorelasi
             ->whereIn('gb.gid', $grup->keys())->selectRaw('gb.gid, a.aid, a.aktivitas, a.kelompok, count(*) n')->groupBy('gb.gid', 'a.aid', 'a.aktivitas', 'a.kelompok')->orderByDesc('n')->get();
         foreach ($this->batasi('aktivitas', $akt) as $a) {
             $this->sambung($this->simpulAktivitas((int) $a->aid, (string) $a->aktivitas, (string) $a->kelompok), $this->simpulGrup((int) $a->gid, (string) $grup[$a->gid]));
+        }
+
+        return $pusat;
+    }
+
+    /**
+     * Gabungan dari dropdown multi-select "Tandai" di toolbar (keputusan user 27 Nov 2026, dikoreksi dari
+     * percobaan pertama yang cuma menyorot node yang kebetulan sudah tampil — ternyata maksud user, centang
+     * banyak nilai harus benar-benar MENGGABUNGKAN pohon relasi semuanya ke satu kanvas). Memanggil dariAktivitas/
+     * dariGrup/dariDl/dariPja berkali-kali TANPA reset $this->node/$this->edge di antaranya — method-method itu
+     * sendiri sudah idempoten lewat simpul()/sambung() yang memoized per key, jadi gabungannya otomatis tanpa
+     * duplikat, tidak perlu logika penggabungan khusus.
+     *
+     * @param  array{aktivitas?: list<string>, grup?: list<string>, dl?: list<string>, pja?: list<string>}  $jenisId  id per kategori (lihat daftarDropdown)
+     */
+    private function dariMulti(array $jenisId): ?string
+    {
+        // PENTING: setiap item HARUS tetap dipanggil meski $pusat sudah terisi — `??=` cuma menahan hasil
+        // panggilan sebelumnya, BUKAN alasan untuk melewati panggilan berikutnya (kalau pakai `$pusat ??= f()`
+        // langsung, `f()` untuk item ke-2 dst tidak akan pernah jalan karena null-coalescing-assignment
+        // short-circuit begitu $pusat sudah bukan null — baris itu sendiri yang membangun pohonnya).
+        $pusat = null;
+        foreach ((array) ($jenisId['aktivitas'] ?? []) as $aid) {
+            $hasil = $this->dariAktivitas((int) $aid);
+            $pusat ??= $hasil;
+        }
+        foreach ((array) ($jenisId['grup'] ?? []) as $gid) {
+            $hasil = $this->dariGrup((int) $gid);
+            $pusat ??= $hasil;
+        }
+        foreach ((array) ($jenisId['dl'] ?? []) as $id) {
+            $hasil = $this->dariDl((int) $id);
+            $pusat ??= $hasil;
+        }
+        foreach ((array) ($jenisId['pja'] ?? []) as $nama) {
+            $hasil = $this->dariPja((string) $nama);
+            $pusat ??= $hasil;
         }
 
         return $pusat;

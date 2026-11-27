@@ -46,7 +46,10 @@ final class PetaRisikoKorelasiController extends Controller
     public function data(Request $request): JsonResponse
     {
         abort_unless(DrmMasterDb::terisi(), 404);
-        $v = $request->validate(['jenis' => ['required', 'in:'.implode(',', DrmKorelasi::JENIS)], 'id' => ['required', 'string', 'max:600']]);
+        // max:8000 (bukan 600 seperti jenis lain) — jenis 'multi' (dropdown "Tandai", keputusan user 27 Nov
+        // 2026) mengirim id gabungan berupa JSON {aktivitas:[...], grup:[...], dl:[...], pja:[...]}, bisa
+        // panjang kalau user mencentang banyak nilai sekaligus.
+        $v = $request->validate(['jenis' => ['required', 'in:'.implode(',', DrmKorelasi::JENIS)], 'id' => ['required', 'string', 'max:8000']]);
         try {
             return response()->json($this->korelasi->alur($v['jenis'], $v['id']));
         } catch (InvalidArgumentException $e) {
